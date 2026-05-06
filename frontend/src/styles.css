@@ -1,0 +1,476 @@
+@import './tailwind-generated.css';
+@import 'primeicons/primeicons.css';
+
+:root {
+  --wa-primary: #25D366;
+  --wa-primary-dark: #128C7E;
+  --wa-primary-darker: #075E54;
+  --wa-accent: #34B7F1;
+  --wa-bg: #f0f2f5;
+  --wa-surface: #ffffff;
+  --wa-text: #111b21;
+  --wa-text-secondary: #667781;
+  --wa-border: #e9edef;
+  --wa-success: #00a884;
+  --wa-danger: #ea0038;
+  --wa-warning: #f59f00;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  background-color: var(--wa-bg);
+  color: var(--wa-text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   PrimeNG + Tailwind v4 Compatibility Overrides
+   Tailwind v4 preflight resets border, padding, margin to 0
+   on all elements. We restore them for PrimeNG components.
+   ============================================================ */
+
+/* --- Inputs (pInputText, p-password inner input) --- */
+.p-inputtext {
+  padding: 0.5rem 0.75rem !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  background: #fff !important;
+  color: #111827 !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+  width: 100%;
+}
+.p-inputtext:focus {
+  border-color: var(--wa-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.15) !important;
+  outline: none !important;
+}
+.p-inputtext::placeholder {
+  color: #9ca3af !important;
+}
+
+/* --- Textarea --- */
+textarea.p-inputtextarea,
+textarea.p-textarea,
+textarea[pTextarea] {
+  padding: 0.5rem 0.75rem !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  background: #fff !important;
+}
+
+/* --- IconField (search icon + input wrapper) --- */
+.p-iconfield {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  width: 100%;
+}
+.p-iconfield .p-inputicon {
+  position: absolute !important;
+  left: 0.75rem !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  color: #9ca3af !important;
+  z-index: 1 !important;
+}
+.p-iconfield .p-inputtext {
+  padding-left: 2.25rem !important;
+}
+
+/* --- Select (p-select / dropdown) --- */
+.p-select {
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  background: #fff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s !important;
+}
+.p-select:hover {
+  border-color: #9ca3af !important;
+}
+.p-select.p-focus,
+.p-select:focus-within {
+  border-color: var(--wa-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.15) !important;
+}
+.p-select-label {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  color: #111827 !important;
+  white-space: nowrap !important;
+}
+.p-select-label.p-placeholder {
+  color: #9ca3af !important;
+}
+.p-select-dropdown {
+  padding: 0 0.5rem !important;
+  display: flex !important;
+  align-items: center !important;
+  color: #6b7280 !important;
+}
+
+/* --- Select overlay / panel --- */
+.p-select-overlay {
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+  background: #fff !important;
+  overflow: hidden !important;
+}
+.p-select-option {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  color: #374151 !important;
+  cursor: pointer !important;
+}
+.p-select-option:hover,
+.p-select-option.p-focus {
+  background: #f3f4f6 !important;
+}
+.p-select-option.p-selected {
+  background: #dcfce7 !important;
+  color: #065f46 !important;
+}
+
+/* --- Data Table --- */
+.p-datatable .p-datatable-thead > tr > th {
+  padding: 0.75rem 1rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  color: #6b7280 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.025em !important;
+  background: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+}
+.p-datatable .p-datatable-tbody > tr > td {
+  padding: 0.75rem 1rem !important;
+  font-size: 0.875rem !important;
+  border-bottom: 1px solid #f3f4f6 !important;
+  color: #374151 !important;
+  vertical-align: middle !important;
+}
+.p-datatable .p-datatable-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+.p-datatable .p-datatable-tbody > tr:hover > td {
+  background: #f9fafb !important;
+}
+.p-datatable .p-datatable-tbody > tr.bg-red-50 > td,
+.p-datatable .p-datatable-tbody > tr.bg-orange-50 > td {
+  background: inherit !important;
+}
+.p-datatable .p-datatable-tbody > tr.bg-red-50:hover > td,
+.p-datatable .p-datatable-tbody > tr.bg-orange-50:hover > td {
+  filter: brightness(0.97) !important;
+}
+
+/* Sort icons */
+.p-datatable .p-sortable-column .p-sortable-column-icon {
+  margin-left: 0.25rem !important;
+  font-size: 0.7rem !important;
+  color: #9ca3af !important;
+}
+.p-datatable .p-sortable-column:hover {
+  background: #f3f4f6 !important;
+  cursor: pointer !important;
+}
+
+/* Table checkbox */
+.p-datatable .p-checkbox .p-checkbox-box {
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+  border: 1.5px solid #d1d5db !important;
+  border-radius: 4px !important;
+}
+.p-datatable .p-checkbox .p-checkbox-box.p-checked {
+  background: var(--wa-primary) !important;
+  border-color: var(--wa-primary) !important;
+}
+
+/* --- Paginator --- */
+.p-paginator {
+  padding: 0.75rem 1rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.25rem !important;
+  border-top: 1px solid #f3f4f6 !important;
+  background: #fff !important;
+}
+.p-paginator .p-paginator-page,
+.p-paginator .p-paginator-first,
+.p-paginator .p-paginator-prev,
+.p-paginator .p-paginator-next,
+.p-paginator .p-paginator-last {
+  min-width: 2rem !important;
+  height: 2rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  font-size: 0.8rem !important;
+  color: #6b7280 !important;
+  cursor: pointer !important;
+  border: none !important;
+  background: transparent !important;
+  transition: background 0.15s !important;
+}
+.p-paginator .p-paginator-page:hover,
+.p-paginator .p-paginator-first:hover,
+.p-paginator .p-paginator-prev:hover,
+.p-paginator .p-paginator-next:hover,
+.p-paginator .p-paginator-last:hover {
+  background: #f3f4f6 !important;
+}
+.p-paginator .p-paginator-page.p-paginator-page-selected {
+  background: var(--wa-primary) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+.p-paginator .p-select {
+  margin-left: 0.5rem !important;
+}
+
+/* --- Tags / Badges --- */
+.p-tag {
+  padding: 0.2rem 0.6rem !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  border-radius: 9999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+/* --- Buttons --- */
+.p-button {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+  transition: background 0.15s, border-color 0.15s !important;
+  border: 1px solid transparent !important;
+  line-height: 1.5 !important;
+}
+.p-button.p-button-sm {
+  padding: 0.35rem 0.75rem !important;
+  font-size: 0.8rem !important;
+}
+.p-button.p-button-rounded {
+  border-radius: 50% !important;
+  padding: 0.5rem !important;
+  width: 2rem !important;
+  height: 2rem !important;
+}
+.p-button.p-button-text {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.p-button.p-button-outlined {
+  background: transparent !important;
+}
+.p-button .p-button-icon {
+  font-size: 0.875rem !important;
+}
+
+/* --- Dialog --- */
+.p-dialog {
+  border-radius: 12px !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12) !important;
+  overflow: hidden !important;
+  border: 1px solid #e5e7eb !important;
+}
+.p-dialog .p-dialog-header {
+  padding: 1.25rem 1.5rem !important;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid #f3f4f6 !important;
+  background: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+.p-dialog .p-dialog-content {
+  padding: 1.25rem 1.5rem !important;
+  background: #fff !important;
+}
+.p-dialog .p-dialog-footer {
+  padding: 1rem 1.5rem !important;
+  border-top: 1px solid #f3f4f6 !important;
+  background: #f9fafb !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.5rem !important;
+}
+
+/* --- Toast --- */
+.p-toast .p-toast-message {
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+/* --- Confirm Dialog --- */
+.p-confirmdialog .p-dialog-content {
+  padding: 1.5rem !important;
+}
+
+/* --- Avatar --- */
+.p-avatar {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.8rem !important;
+  border-radius: 50% !important;
+}
+
+/* --- Progress Bar --- */
+.p-progressbar {
+  height: 4px !important;
+  border-radius: 2px !important;
+  background: #e5e7eb !important;
+  overflow: hidden !important;
+}
+.p-progressbar .p-progressbar-value {
+  border-radius: 2px !important;
+}
+
+/* --- Tooltip --- */
+.p-tooltip {
+  font-size: 0.75rem !important;
+}
+.p-tooltip .p-tooltip-text {
+  padding: 0.35rem 0.6rem !important;
+  border-radius: 6px !important;
+  background: #1f2937 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+}
+
+/* --- Password component wrapper --- */
+p-password {
+  display: block !important;
+}
+.p-password {
+  display: flex !important;
+  width: 100% !important;
+  position: relative !important;
+}
+.p-password .p-inputtext {
+  flex: 1 !important;
+  padding-right: 2.5rem !important;
+}
+.p-password .p-password-toggle-icon,
+.p-password .p-icon {
+  position: absolute !important;
+  right: 0.75rem !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  cursor: pointer !important;
+  color: #9ca3af !important;
+}
+
+/* --- InputNumber --- */
+.p-inputnumber {
+  display: flex !important;
+  width: 100% !important;
+}
+.p-inputnumber .p-inputtext {
+  flex: 1 !important;
+}
+
+/* --- Message / Inline Message --- */
+.p-message {
+  padding: 0.75rem 1rem !important;
+  border-radius: 8px !important;
+  font-size: 0.875rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+/* --- Tab components (Settings / Customer detail) --- */
+.p-tabs .p-tablist {
+  border-bottom: 1px solid #e5e7eb !important;
+}
+.p-tabs .p-tab {
+  padding: 0.75rem 1rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: #6b7280 !important;
+  cursor: pointer !important;
+  border: none !important;
+  background: transparent !important;
+  border-bottom: 2px solid transparent !important;
+  margin-bottom: -1px !important;
+  transition: color 0.15s, border-color 0.15s !important;
+}
+.p-tabs .p-tab:hover {
+  color: #374151 !important;
+}
+.p-tabs .p-tab-active,
+.p-tabs .p-tab[data-p-active="true"] {
+  color: var(--wa-primary) !important;
+  border-bottom-color: var(--wa-primary) !important;
+}
+.p-tabs .p-tabpanels {
+  padding: 1rem 0 !important;
+}
+
+/* --- Toggle Switch --- */
+.p-toggleswitch .p-toggleswitch-slider {
+  width: 2.75rem !important;
+  height: 1.5rem !important;
+  border-radius: 9999px !important;
+  background: #d1d5db !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: background 0.2s !important;
+  position: relative !important;
+}
+.p-toggleswitch .p-toggleswitch-slider::before {
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 3px !important;
+  transform: translateY(-50%) !important;
+  transition: left 0.2s !important;
+  content: '' !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+}
+.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-slider {
+  background: var(--wa-primary) !important;
+}
+.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-slider::before {
+  left: calc(100% - 1.125rem - 3px) !important;
+}
+
+/* --- Loading spinner overlay --- */
+.p-datatable .p-datatable-loading-overlay {
+  background: rgba(255, 255, 255, 0.7) !important;
+}

@@ -1,0 +1,236 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e112]:
+    - complementary [ref=e113]:
+      - generic [ref=e114]:
+        - generic [ref=e116]: 
+        - generic [ref=e117]:
+          - generic [ref=e118]: WA Commerce
+          - generic [ref=e119]: My Store
+      - navigation [ref=e120]:
+        - link " Dashboard" [ref=e121] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e122]: 
+          - generic [ref=e123]: Dashboard
+        - link " Products" [ref=e124] [cursor=pointer]:
+          - /url: /products
+          - generic [ref=e125]: 
+          - generic [ref=e126]: Products
+        - link " Orders" [ref=e127] [cursor=pointer]:
+          - /url: /orders
+          - generic [ref=e128]: 
+          - generic [ref=e129]: Orders
+        - link " Inventory" [ref=e130] [cursor=pointer]:
+          - /url: /inventory
+          - generic [ref=e131]: 
+          - generic [ref=e132]: Inventory
+        - link " Payments 5" [ref=e133] [cursor=pointer]:
+          - /url: /payments
+          - generic [ref=e134]: 
+          - generic [ref=e135]: Payments
+          - generic [ref=e136]: "5"
+        - link " Deliveries" [ref=e137] [cursor=pointer]:
+          - /url: /deliveries
+          - generic [ref=e138]: 
+          - generic [ref=e139]: Deliveries
+        - link " Customers" [ref=e140] [cursor=pointer]:
+          - /url: /customers
+          - generic [ref=e141]: 
+          - generic [ref=e142]: Customers
+        - link " Campaigns" [ref=e143] [cursor=pointer]:
+          - /url: /campaigns
+          - generic [ref=e144]: 
+          - generic [ref=e145]: Campaigns
+        - link " Conversations 12" [ref=e146] [cursor=pointer]:
+          - /url: /conversations
+          - generic [ref=e147]: 
+          - generic [ref=e148]: Conversations
+          - generic [ref=e149]: "12"
+        - link " Workflow Builder" [ref=e150] [cursor=pointer]:
+          - /url: /workflow-builder
+          - generic [ref=e151]: 
+          - generic [ref=e152]: Workflow Builder
+        - link " Settings" [ref=e153] [cursor=pointer]:
+          - /url: /settings
+          - generic [ref=e154]: 
+          - generic [ref=e155]: Settings
+      - generic [ref=e157]:
+        - generic [ref=e159]: DS
+        - generic [ref=e160]:
+          - generic [ref=e161]: Demo Store
+          - generic [ref=e162]: Owner
+        - button [ref=e163] [cursor=pointer]:
+          - generic [ref=e164]: 
+    - generic [ref=e165]:
+      - banner [ref=e166]:
+        - button [ref=e167] [cursor=pointer]:
+          - generic [ref=e168]: 
+        - heading "Dashboard" [level=1] [ref=e170]
+        - generic [ref=e171]:
+          - button "3" [ref=e172] [cursor=pointer]:
+            - generic [ref=e173]: 
+            - generic [ref=e174]: "3"
+          - button [ref=e175] [cursor=pointer]:
+            - generic [ref=e176]: 
+          - generic [ref=e178] [cursor=pointer]: DS
+      - main [ref=e179]:
+        - generic [ref=e181]:
+          - generic [ref=e182]:
+            - generic [ref=e183]:
+              - heading "Dashboard" [level=1] [ref=e184]
+              - paragraph [ref=e185]: Welcome back! Here's what's happening today.
+            - generic [ref=e186]:
+              - button "Export" [ref=e187] [cursor=pointer]:
+                - generic [ref=e188]: 
+                - generic [ref=e189]: Export
+              - button "New Order" [ref=e190] [cursor=pointer]:
+                - generic [ref=e191]: 
+                - generic [ref=e192]: New Order
+          - generic [ref=e193]:
+            - generic [ref=e195]:
+              - generic [ref=e196]:
+                - paragraph [ref=e197]: Total Revenue
+                - paragraph [ref=e198]: ₦2,847,500
+                - generic [ref=e199]:
+                  - generic [ref=e200]: 
+                  - generic [ref=e201]: +12.5% vs yesterday
+              - generic [ref=e203]: 
+            - generic [ref=e205]:
+              - generic [ref=e206]:
+                - paragraph [ref=e207]: Orders Today
+                - paragraph [ref=e208]: "47"
+                - generic [ref=e209]:
+                  - generic [ref=e210]: 
+                  - generic [ref=e211]: +8 vs yesterday
+              - generic [ref=e213]: 
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - paragraph [ref=e217]: Pending Payments
+                - paragraph [ref=e218]: ₦384,200
+                - generic [ref=e219]:
+                  - generic [ref=e220]: 
+                  - generic [ref=e221]: "-3 vs yesterday"
+              - generic [ref=e223]: 
+            - generic [ref=e225]:
+              - generic [ref=e226]:
+                - paragraph [ref=e227]: Active Customers
+                - paragraph [ref=e228]: 1,284
+                - generic [ref=e229]:
+                  - generic [ref=e230]: 
+                  - generic [ref=e231]: +24 vs yesterday
+              - generic [ref=e233]: 
+          - generic [ref=e234]:
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - generic [ref=e237]:
+                  - heading "Revenue Overview" [level=3] [ref=e238]
+                  - paragraph [ref=e239]: Last 7 days
+                - generic [ref=e240]:
+                  - button "7D" [ref=e241] [cursor=pointer]:
+                    - generic [ref=e242]: 7D
+                  - button "30D" [ref=e243] [cursor=pointer]:
+                    - generic [ref=e244]: 30D
+              - img [ref=e246]
+            - generic [ref=e247]:
+              - generic [ref=e248]:
+                - heading "Low Stock Alerts" [level=3] [ref=e249]
+                - generic [ref=e250]: "4"
+              - generic [ref=e251]:
+                - generic [ref=e252]:
+                  - generic [ref=e253]:
+                    - paragraph [ref=e254]: Premium Wireless Earbuds
+                    - paragraph [ref=e255]: "SKU: SKU-001"
+                  - generic [ref=e256]:
+                    - text: "3"
+                    - paragraph [ref=e257]: / 10 min
+                - generic [ref=e258]:
+                  - generic [ref=e259]:
+                    - paragraph [ref=e260]: Phone Case iPhone 15
+                    - paragraph [ref=e261]: "SKU: SKU-042"
+                  - generic [ref=e262]:
+                    - text: "5"
+                    - paragraph [ref=e263]: / 15 min
+                - generic [ref=e264]:
+                  - generic [ref=e265]:
+                    - paragraph [ref=e266]: USB-C Cable 2m
+                    - paragraph [ref=e267]: "SKU: SKU-118"
+                  - generic [ref=e268]:
+                    - text: "2"
+                    - paragraph [ref=e269]: / 20 min
+                - generic [ref=e270]:
+                  - generic [ref=e271]:
+                    - paragraph [ref=e272]: Power Bank 20000mAh
+                    - paragraph [ref=e273]: "SKU: SKU-207"
+                  - generic [ref=e274]:
+                    - text: "7"
+                    - paragraph [ref=e275]: / 10 min
+                - button "View Inventory" [ref=e276] [cursor=pointer]:
+                  - generic [ref=e277]: 
+                  - generic [ref=e278]: View Inventory
+          - generic [ref=e279]:
+            - generic [ref=e280]:
+              - heading "Recent Orders" [level=3] [ref=e281]
+              - button "View all" [ref=e282] [cursor=pointer]:
+                - generic [ref=e283]: 
+                - generic [ref=e284]: View all
+            - table [ref=e287]:
+              - rowgroup [ref=e288]:
+                - row "Order Customer Amount Status Date" [ref=e289]:
+                  - columnheader "Order" [ref=e290]
+                  - columnheader "Customer" [ref=e291]
+                  - columnheader "Amount" [ref=e292]
+                  - columnheader "Status" [ref=e293]
+                  - columnheader "Date" [ref=e294]
+                  - columnheader [ref=e295]
+              - rowgroup [ref=e296]:
+                - row "ORD-0089 Amara Okonkwo ₦45,000 confirmed 2 mins ago" [ref=e297]:
+                  - cell "ORD-0089" [ref=e298]
+                  - cell "Amara Okonkwo" [ref=e299]
+                  - cell "₦45,000" [ref=e300]
+                  - cell "confirmed" [ref=e301]:
+                    - generic [ref=e303]: confirmed
+                  - cell "2 mins ago" [ref=e304]
+                  - cell [ref=e305]:
+                    - button [ref=e306] [cursor=pointer]:
+                      - generic [ref=e307]: 
+                - row "ORD-0088 Chidi Nwosu ₦12,500 pending 15 mins ago" [ref=e308]:
+                  - cell "ORD-0088" [ref=e309]
+                  - cell "Chidi Nwosu" [ref=e310]
+                  - cell "₦12,500" [ref=e311]
+                  - cell "pending" [ref=e312]:
+                    - generic [ref=e314]: pending
+                  - cell "15 mins ago" [ref=e315]
+                  - cell [ref=e316]:
+                    - button [ref=e317] [cursor=pointer]:
+                      - generic [ref=e318]: 
+                - row "ORD-0087 Fatima Al-Hassan ₦89,000 completed 1 hour ago" [ref=e319]:
+                  - cell "ORD-0087" [ref=e320]
+                  - cell "Fatima Al-Hassan" [ref=e321]
+                  - cell "₦89,000" [ref=e322]
+                  - cell "completed" [ref=e323]:
+                    - generic [ref=e325]: completed
+                  - cell "1 hour ago" [ref=e326]
+                  - cell [ref=e327]:
+                    - button [ref=e328] [cursor=pointer]:
+                      - generic [ref=e329]: 
+                - row "ORD-0086 Emeka Eze ₦23,750 canceled 2 hours ago" [ref=e330]:
+                  - cell "ORD-0086" [ref=e331]
+                  - cell "Emeka Eze" [ref=e332]
+                  - cell "₦23,750" [ref=e333]
+                  - cell "canceled" [ref=e334]:
+                    - generic [ref=e336]: canceled
+                  - cell "2 hours ago" [ref=e337]
+                  - cell [ref=e338]:
+                    - button [ref=e339] [cursor=pointer]:
+                      - generic [ref=e340]: 
+                - row "ORD-0085 Ngozi Adeyemi ₦67,200 completed 3 hours ago" [ref=e341]:
+                  - cell "ORD-0085" [ref=e342]
+                  - cell "Ngozi Adeyemi" [ref=e343]
+                  - cell "₦67,200" [ref=e344]
+                  - cell "completed" [ref=e345]:
+                    - generic [ref=e347]: completed
+                  - cell "3 hours ago" [ref=e348]
+                  - cell [ref=e349]:
+                    - button [ref=e350] [cursor=pointer]:
+                      - generic [ref=e351]: 
+  - tooltip "Sign out":
+    - generic: Sign out

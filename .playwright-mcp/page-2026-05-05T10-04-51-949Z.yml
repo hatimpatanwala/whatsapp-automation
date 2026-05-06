@@ -1,0 +1,334 @@
+- generic [ref=e112]:
+  - complementary [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e116]: 
+      - generic [ref=e117]:
+        - generic [ref=e118]: WA Commerce
+        - generic [ref=e119]: My Store
+    - navigation [ref=e120]:
+      - link " Dashboard" [ref=e121] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e122]: 
+        - generic [ref=e123]: Dashboard
+      - link " Products" [active] [ref=e124] [cursor=pointer]:
+        - /url: /products
+        - generic [ref=e125]: 
+        - generic [ref=e126]: Products
+      - link " Orders" [ref=e127] [cursor=pointer]:
+        - /url: /orders
+        - generic [ref=e128]: 
+        - generic [ref=e129]: Orders
+      - link " Inventory" [ref=e130] [cursor=pointer]:
+        - /url: /inventory
+        - generic [ref=e131]: 
+        - generic [ref=e132]: Inventory
+      - link " Payments 5" [ref=e133] [cursor=pointer]:
+        - /url: /payments
+        - generic [ref=e134]: 
+        - generic [ref=e135]: Payments
+        - generic [ref=e136]: "5"
+      - link " Deliveries" [ref=e137] [cursor=pointer]:
+        - /url: /deliveries
+        - generic [ref=e138]: 
+        - generic [ref=e139]: Deliveries
+      - link " Customers" [ref=e140] [cursor=pointer]:
+        - /url: /customers
+        - generic [ref=e141]: 
+        - generic [ref=e142]: Customers
+      - link " Campaigns" [ref=e143] [cursor=pointer]:
+        - /url: /campaigns
+        - generic [ref=e144]: 
+        - generic [ref=e145]: Campaigns
+      - link " Conversations 12" [ref=e146] [cursor=pointer]:
+        - /url: /conversations
+        - generic [ref=e147]: 
+        - generic [ref=e148]: Conversations
+        - generic [ref=e149]: "12"
+      - link " Workflow Builder" [ref=e150] [cursor=pointer]:
+        - /url: /workflow-builder
+        - generic [ref=e151]: 
+        - generic [ref=e152]: Workflow Builder
+      - link " Settings" [ref=e153] [cursor=pointer]:
+        - /url: /settings
+        - generic [ref=e154]: 
+        - generic [ref=e155]: Settings
+    - generic [ref=e157]:
+      - generic [ref=e159]: DS
+      - generic [ref=e160]:
+        - generic [ref=e161]: Demo Store
+        - generic [ref=e162]: Owner
+      - button [ref=e163] [cursor=pointer]:
+        - generic [ref=e164]: 
+  - generic [ref=e165]:
+    - banner [ref=e166]:
+      - button [ref=e167] [cursor=pointer]:
+        - generic [ref=e168]: 
+      - heading "Dashboard" [level=1] [ref=e170]
+      - generic [ref=e171]:
+        - button "3" [ref=e172] [cursor=pointer]:
+          - generic [ref=e173]: 
+          - generic [ref=e174]: "3"
+        - button [ref=e175] [cursor=pointer]:
+          - generic [ref=e176]: 
+        - generic [ref=e178] [cursor=pointer]: DS
+    - main [ref=e179]:
+      - generic [ref=e353]:
+        - generic:
+          - alertdialog
+        - generic [ref=e354]:
+          - generic [ref=e355]:
+            - heading "Products" [level=1] [ref=e356]
+            - paragraph [ref=e357]: Manage your product catalog
+          - button "Add Product" [ref=e358] [cursor=pointer]:
+            - generic [ref=e359]: 
+            - generic [ref=e360]: Add Product
+        - generic [ref=e361]:
+          - generic [ref=e362]:
+            - generic [ref=e363]: 
+            - textbox "Search products..." [ref=e364]
+          - generic [ref=e365] [cursor=pointer]:
+            - combobox "All Statuses" [ref=e366]
+            - button "dropdown trigger" [ref=e367]:
+              - img [ref=e368]
+          - generic [ref=e370] [cursor=pointer]:
+            - combobox "All Categories" [ref=e371]
+            - button "dropdown trigger" [ref=e372]:
+              - img [ref=e373]
+          - button "Reset" [ref=e375] [cursor=pointer]:
+            - generic [ref=e376]: 
+            - generic [ref=e377]: Reset
+        - generic [ref=e379]:
+          - table [ref=e381]:
+            - rowgroup [ref=e382]:
+              - row "All items unselected Product Category Price Stock Status Actions" [ref=e383]:
+                - columnheader "All items unselected" [ref=e384]:
+                  - checkbox "All items unselected" [ref=e387] [cursor=pointer]
+                - columnheader "Product" [ref=e389] [cursor=pointer]:
+                  - text: Product
+                  - img [ref=e391]
+                - columnheader "Category" [ref=e397]
+                - columnheader "Price" [ref=e398] [cursor=pointer]:
+                  - text: Price
+                  - img [ref=e400]
+                - columnheader "Stock" [ref=e406] [cursor=pointer]:
+                  - text: Stock
+                  - img [ref=e408]
+                - columnheader "Status" [ref=e414]
+                - columnheader "Actions" [ref=e415]
+            - rowgroup [ref=e416]:
+              - row "Premium Wireless Earbuds Premium Wireless Earbuds SKU-001 Electronics ₦45,000 3 active" [ref=e417]:
+                - cell [ref=e418]:
+                  - checkbox [ref=e421] [cursor=pointer]
+                - cell "Premium Wireless Earbuds Premium Wireless Earbuds SKU-001" [ref=e423]:
+                  - generic [ref=e424]:
+                    - img "Premium Wireless Earbuds" [ref=e425]
+                    - generic [ref=e426]:
+                      - paragraph [ref=e427]: Premium Wireless Earbuds
+                      - paragraph [ref=e428]: SKU-001
+                - cell "Electronics" [ref=e429]
+                - cell "₦45,000" [ref=e430]
+                - cell "3" [ref=e431]
+                - cell "active" [ref=e432]:
+                  - generic [ref=e434]: active
+                - cell [ref=e435]:
+                  - generic [ref=e436]:
+                    - button [ref=e437] [cursor=pointer]:
+                      - generic [ref=e438]: 
+                    - button [ref=e439] [cursor=pointer]:
+                      - generic [ref=e440]: 
+              - row "iPhone 15 Phone Case iPhone 15 Phone Case SKU-042 Accessories ₦8,500 5 active" [ref=e441]:
+                - cell [ref=e442]:
+                  - checkbox [ref=e445] [cursor=pointer]
+                - cell "iPhone 15 Phone Case iPhone 15 Phone Case SKU-042" [ref=e447]:
+                  - generic [ref=e448]:
+                    - img "iPhone 15 Phone Case" [ref=e449]
+                    - generic [ref=e450]:
+                      - paragraph [ref=e451]: iPhone 15 Phone Case
+                      - paragraph [ref=e452]: SKU-042
+                - cell "Accessories" [ref=e453]
+                - cell "₦8,500" [ref=e454]
+                - cell "5" [ref=e455]
+                - cell "active" [ref=e456]:
+                  - generic [ref=e458]: active
+                - cell [ref=e459]:
+                  - generic [ref=e460]:
+                    - button [ref=e461] [cursor=pointer]:
+                      - generic [ref=e462]: 
+                    - button [ref=e463] [cursor=pointer]:
+                      - generic [ref=e464]: 
+              - row "USB-C Cable 2m Braided USB-C Cable 2m Braided SKU-118 Electronics ₦3,500 2 active" [ref=e465]:
+                - cell [ref=e466]:
+                  - checkbox [ref=e469] [cursor=pointer]
+                - cell "USB-C Cable 2m Braided USB-C Cable 2m Braided SKU-118" [ref=e471]:
+                  - generic [ref=e472]:
+                    - img "USB-C Cable 2m Braided" [ref=e473]
+                    - generic [ref=e474]:
+                      - paragraph [ref=e475]: USB-C Cable 2m Braided
+                      - paragraph [ref=e476]: SKU-118
+                - cell "Electronics" [ref=e477]
+                - cell "₦3,500" [ref=e478]
+                - cell "2" [ref=e479]
+                - cell "active" [ref=e480]:
+                  - generic [ref=e482]: active
+                - cell [ref=e483]:
+                  - generic [ref=e484]:
+                    - button [ref=e485] [cursor=pointer]:
+                      - generic [ref=e486]: 
+                    - button [ref=e487] [cursor=pointer]:
+                      - generic [ref=e488]: 
+              - row "Power Bank 20000mAh Power Bank 20000mAh SKU-207 Electronics ₦25,000 7 active" [ref=e489]:
+                - cell [ref=e490]:
+                  - checkbox [ref=e493] [cursor=pointer]
+                - cell "Power Bank 20000mAh Power Bank 20000mAh SKU-207" [ref=e495]:
+                  - generic [ref=e496]:
+                    - img "Power Bank 20000mAh" [ref=e497]
+                    - generic [ref=e498]:
+                      - paragraph [ref=e499]: Power Bank 20000mAh
+                      - paragraph [ref=e500]: SKU-207
+                - cell "Electronics" [ref=e501]
+                - cell "₦25,000" [ref=e502]
+                - cell "7" [ref=e503]
+                - cell "active" [ref=e504]:
+                  - generic [ref=e506]: active
+                - cell [ref=e507]:
+                  - generic [ref=e508]:
+                    - button [ref=e509] [cursor=pointer]:
+                      - generic [ref=e510]: 
+                    - button [ref=e511] [cursor=pointer]:
+                      - generic [ref=e512]: 
+              - row "Laptop Sleeve 15\" Laptop Sleeve 15\" SKU-305 Accessories ₦12,000 22 active" [ref=e513]:
+                - cell [ref=e514]:
+                  - checkbox [ref=e517] [cursor=pointer]
+                - cell "Laptop Sleeve 15\" Laptop Sleeve 15\" SKU-305" [ref=e519]:
+                  - generic [ref=e520]:
+                    - img "Laptop Sleeve 15\"" [ref=e521]
+                    - generic [ref=e522]:
+                      - paragraph [ref=e523]: Laptop Sleeve 15"
+                      - paragraph [ref=e524]: SKU-305
+                - cell "Accessories" [ref=e525]
+                - cell "₦12,000" [ref=e526]
+                - cell "22" [ref=e527]
+                - cell "active" [ref=e528]:
+                  - generic [ref=e530]: active
+                - cell [ref=e531]:
+                  - generic [ref=e532]:
+                    - button [ref=e533] [cursor=pointer]:
+                      - generic [ref=e534]: 
+                    - button [ref=e535] [cursor=pointer]:
+                      - generic [ref=e536]: 
+              - row "Mechanical Keyboard TKL Mechanical Keyboard TKL SKU-412 Electronics ₦68,000 14 draft" [ref=e537]:
+                - cell [ref=e538]:
+                  - checkbox [ref=e541] [cursor=pointer]
+                - cell "Mechanical Keyboard TKL Mechanical Keyboard TKL SKU-412" [ref=e543]:
+                  - generic [ref=e544]:
+                    - img "Mechanical Keyboard TKL" [ref=e545]
+                    - generic [ref=e546]:
+                      - paragraph [ref=e547]: Mechanical Keyboard TKL
+                      - paragraph [ref=e548]: SKU-412
+                - cell "Electronics" [ref=e549]
+                - cell "₦68,000" [ref=e550]
+                - cell "14" [ref=e551]
+                - cell "draft" [ref=e552]:
+                  - generic [ref=e554]: draft
+                - cell [ref=e555]:
+                  - generic [ref=e556]:
+                    - button [ref=e557] [cursor=pointer]:
+                      - generic [ref=e558]: 
+                    - button [ref=e559] [cursor=pointer]:
+                      - generic [ref=e560]: 
+              - row "Wireless Mouse Ergonomic Wireless Mouse Ergonomic SKU-519 Electronics ₦22,000 0 out of_stock" [ref=e561]:
+                - cell [ref=e562]:
+                  - checkbox [ref=e565] [cursor=pointer]
+                - cell "Wireless Mouse Ergonomic Wireless Mouse Ergonomic SKU-519" [ref=e567]:
+                  - generic [ref=e568]:
+                    - img "Wireless Mouse Ergonomic" [ref=e569]
+                    - generic [ref=e570]:
+                      - paragraph [ref=e571]: Wireless Mouse Ergonomic
+                      - paragraph [ref=e572]: SKU-519
+                - cell "Electronics" [ref=e573]
+                - cell "₦22,000" [ref=e574]
+                - cell "0" [ref=e575]
+                - cell "out of_stock" [ref=e576]:
+                  - generic [ref=e578]: out of_stock
+                - cell [ref=e579]:
+                  - generic [ref=e580]:
+                    - button [ref=e581] [cursor=pointer]:
+                      - generic [ref=e582]: 
+                    - button [ref=e583] [cursor=pointer]:
+                      - generic [ref=e584]: 
+              - row "Monitor Stand Adjustable Monitor Stand Adjustable SKU-623 Accessories ₦35,000 18 active" [ref=e585]:
+                - cell [ref=e586]:
+                  - checkbox [ref=e589] [cursor=pointer]
+                - cell "Monitor Stand Adjustable Monitor Stand Adjustable SKU-623" [ref=e591]:
+                  - generic [ref=e592]:
+                    - img "Monitor Stand Adjustable" [ref=e593]
+                    - generic [ref=e594]:
+                      - paragraph [ref=e595]: Monitor Stand Adjustable
+                      - paragraph [ref=e596]: SKU-623
+                - cell "Accessories" [ref=e597]
+                - cell "₦35,000" [ref=e598]
+                - cell "18" [ref=e599]
+                - cell "active" [ref=e600]:
+                  - generic [ref=e602]: active
+                - cell [ref=e603]:
+                  - generic [ref=e604]:
+                    - button [ref=e605] [cursor=pointer]:
+                      - generic [ref=e606]: 
+                    - button [ref=e607] [cursor=pointer]:
+                      - generic [ref=e608]: 
+              - row "Webcam 4K HD Webcam 4K HD SKU-731 Electronics ₦55,000 9 active" [ref=e609]:
+                - cell [ref=e610]:
+                  - checkbox [ref=e613] [cursor=pointer]
+                - cell "Webcam 4K HD Webcam 4K HD SKU-731" [ref=e615]:
+                  - generic [ref=e616]:
+                    - img "Webcam 4K HD" [ref=e617]
+                    - generic [ref=e618]:
+                      - paragraph [ref=e619]: Webcam 4K HD
+                      - paragraph [ref=e620]: SKU-731
+                - cell "Electronics" [ref=e621]
+                - cell "₦55,000" [ref=e622]
+                - cell "9" [ref=e623]
+                - cell "active" [ref=e624]:
+                  - generic [ref=e626]: active
+                - cell [ref=e627]:
+                  - generic [ref=e628]:
+                    - button [ref=e629] [cursor=pointer]:
+                      - generic [ref=e630]: 
+                    - button [ref=e631] [cursor=pointer]:
+                      - generic [ref=e632]: 
+              - row "Desk Lamp LED USB Desk Lamp LED USB SKU-840 Office ₦15,000 31 active" [ref=e633]:
+                - cell [ref=e634]:
+                  - checkbox [ref=e637] [cursor=pointer]
+                - cell "Desk Lamp LED USB Desk Lamp LED USB SKU-840" [ref=e639]:
+                  - generic [ref=e640]:
+                    - img "Desk Lamp LED USB" [ref=e641]
+                    - generic [ref=e642]:
+                      - paragraph [ref=e643]: Desk Lamp LED USB
+                      - paragraph [ref=e644]: SKU-840
+                - cell "Office" [ref=e645]
+                - cell "₦15,000" [ref=e646]
+                - cell "31" [ref=e647]
+                - cell "active" [ref=e648]:
+                  - generic [ref=e650]: active
+                - cell [ref=e651]:
+                  - generic [ref=e652]:
+                    - button [ref=e653] [cursor=pointer]:
+                      - generic [ref=e654]: 
+                    - button [ref=e655] [cursor=pointer]:
+                      - generic [ref=e656]: 
+          - generic [ref=e657]:
+            - button "First Page":
+              - img
+            - button "Previous Page" [disabled]:
+              - img
+            - generic [ref=e658]:
+              - button "1" [ref=e659] [cursor=pointer]
+              - button "2" [ref=e660] [cursor=pointer]
+            - button "Next Page" [ref=e661] [cursor=pointer]:
+              - img [ref=e662]
+            - button "Last Page" [ref=e664] [cursor=pointer]:
+              - img [ref=e665]
+            - generic [ref=e667] [cursor=pointer]:
+              - combobox "Rows per page" [ref=e668]: "10"
+              - button "dropdown trigger" [ref=e669]:
+                - img [ref=e670]

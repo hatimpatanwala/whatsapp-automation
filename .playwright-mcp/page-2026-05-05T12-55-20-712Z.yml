@@ -1,0 +1,144 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e8]: 
+    - heading "Welcome to WA Commerce" [level=1] [ref=e9]
+    - paragraph [ref=e10]: Let's get your WhatsApp store set up in a few simple steps
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - generic [ref=e63]: 
+      - generic [ref=e14]: Phone Number
+    - generic [ref=e16]:
+      - generic [ref=e17]: "2"
+      - generic [ref=e18]: WhatsApp Business
+    - generic [ref=e20]:
+      - generic [ref=e21]: "3"
+      - generic [ref=e22]: Business Profile
+    - generic [ref=e24]:
+      - generic [ref=e25]: "4"
+      - generic [ref=e26]: Complete
+  - generic [ref=e64]:
+    - generic [ref=e65]:
+      - generic [ref=e67]: 
+      - generic [ref=e68]:
+        - heading "Connect WhatsApp Business" [level=2] [ref=e69]
+        - paragraph [ref=e70]:
+          - text: "Number verified:"
+          - strong [ref=e71]: "+91"
+    - generic [ref=e72]:
+      - generic [ref=e73] [cursor=pointer]:
+        - generic [ref=e75]: 
+        - heading "I already have WhatsApp Business API" [level=3] [ref=e76]
+        - paragraph [ref=e77]: I have my Phone Number ID, WABA ID, and Access Token from Meta
+      - generic [ref=e78] [cursor=pointer]:
+        - generic [ref=e80]: 
+        - heading "I need to set it up" [level=3] [ref=e81]
+        - paragraph [ref=e82]: Show me step-by-step how to create a WhatsApp Business account
+    - generic [ref=e113]:
+      - generic [ref=e114]:
+        - heading "How to Set Up WhatsApp Business API" [level=3] [ref=e115]
+        - generic [ref=e116]:
+          - generic [ref=e117]: 
+          - generic [ref=e118]: ~15-30 minutes
+      - generic [ref=e119]:
+        - paragraph [ref=e120]:
+          - generic [ref=e121]: 
+          - text: "Before you start, you'll need:"
+        - list [ref=e122]:
+          - listitem [ref=e123]:
+            - generic [ref=e124]: 
+            - text: A phone number that is NOT currently registered on WhatsApp or WhatsApp Business app
+          - listitem [ref=e125]:
+            - generic [ref=e126]: 
+            - text: A Facebook account
+          - listitem [ref=e127]:
+            - generic [ref=e128]: 
+            - text: A valid business with a website or social media presence
+      - generic [ref=e129]:
+        - button "1 Create a Meta Business Account " [ref=e130]:
+          - generic [ref=e131]: "1"
+          - paragraph [ref=e133]: Create a Meta Business Account
+          - generic [ref=e134]: 
+        - generic [ref=e135]:
+          - paragraph [ref=e136]: Go to Meta Business Suite and create a business account if you don't have one. This is free and takes about 5 minutes.
+          - generic [ref=e137]:
+            - paragraph [ref=e138]:
+              - generic [ref=e139]: 
+              - text: Tips
+            - list [ref=e140]:
+              - listitem [ref=e141]:
+                - generic [ref=e142]: •
+                - text: Use your real business name — Meta verifies this
+              - listitem [ref=e143]:
+                - generic [ref=e144]: •
+                - text: Add your business website or Facebook page
+              - listitem [ref=e145]:
+                - generic [ref=e146]: •
+                - text: You'll need to verify your email address
+          - link " Open Meta Business Suite" [ref=e147] [cursor=pointer]:
+            - /url: https://business.facebook.com/
+            - generic [ref=e148]: 
+            - text: Open Meta Business Suite
+          - button "Mark as Done" [ref=e150] [cursor=pointer]:
+            - generic [ref=e151]: Mark as Done
+      - button "2 Set Up a Meta Developer Account " [ref=e153]:
+        - generic [ref=e154]: "2"
+        - paragraph [ref=e156]: Set Up a Meta Developer Account
+        - generic [ref=e157]: 
+      - button "3 Create a Meta App for WhatsApp " [ref=e159]:
+        - generic [ref=e160]: "3"
+        - paragraph [ref=e162]: Create a Meta App for WhatsApp
+        - generic [ref=e163]: 
+      - button "4 Add Your Phone Number Important " [ref=e165]:
+        - generic [ref=e166]: "4"
+        - generic [ref=e167]:
+          - paragraph [ref=e168]: Add Your Phone Number
+          - generic [ref=e170]: Important
+        - generic [ref=e171]: 
+      - button "5 Get Your API Credentials " [ref=e173]:
+        - generic [ref=e174]: "5"
+        - paragraph [ref=e176]: Get Your API Credentials
+        - generic [ref=e177]: 
+      - button "6 Configure the Webhook " [ref=e179]:
+        - generic [ref=e180]: "6"
+        - paragraph [ref=e182]: Configure the Webhook
+        - generic [ref=e183]: 
+      - separator
+      - button " Troubleshooting " [ref=e185]:
+        - generic [ref=e186]: 
+        - text: Troubleshooting
+        - generic [ref=e187]: 
+      - separator
+      - generic [ref=e188]:
+        - paragraph [ref=e189]:
+          - generic [ref=e190]: 
+          - text: Got your credentials? Great!
+        - paragraph [ref=e191]: Once you have your Phone Number ID, WABA ID, and Access Token, click the button below to connect.
+        - button "I have my credentials — Connect Now" [ref=e192] [cursor=pointer]:
+          - generic [ref=e193]: 
+          - generic [ref=e194]: I have my credentials — Connect Now
+      - generic [ref=e195]:
+        - link " Meta Official Docs" [ref=e196] [cursor=pointer]:
+          - /url: https://developers.facebook.com/docs/whatsapp/cloud-api/get-started
+          - generic [ref=e197]: 
+          - text: Meta Official Docs
+        - link " Meta Support" [ref=e198] [cursor=pointer]:
+          - /url: https://business.facebook.com/direct-support
+          - generic [ref=e199]: 
+          - text: Meta Support
+        - link " Community Forum" [ref=e200] [cursor=pointer]:
+          - /url: https://developers.facebook.com/community/
+          - generic [ref=e201]: 
+          - text: Community Forum
+    - generic [ref=e83]:
+      - button "Back" [ref=e84] [cursor=pointer]:
+        - generic [ref=e85]: 
+        - generic [ref=e86]: Back
+      - button "Skip — I'll set up later" [ref=e202] [cursor=pointer]:
+        - generic [ref=e203]: 
+        - generic [ref=e204]: Skip — I'll set up later
+  - paragraph [ref=e60]:
+    - text: Need help?
+    - link "WhatsApp API Docs" [ref=e61] [cursor=pointer]:
+      - /url: https://developers.facebook.com/docs/whatsapp/cloud-api/get-started
+    - text: · You can also
+    - button "skip and set up later" [ref=e62] [cursor=pointer]

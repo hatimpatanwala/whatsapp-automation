@@ -1,0 +1,177 @@
+- generic [ref=e44]:
+  - complementary [ref=e45]:
+    - generic [ref=e46]:
+      - generic [ref=e48]: 
+      - generic [ref=e49]:
+        - paragraph [ref=e50]: WA Commerce
+        - paragraph [ref=e51]: Super Admin
+    - navigation [ref=e52]:
+      - paragraph [ref=e53]: Platform
+      - link " Dashboard" [ref=e54] [cursor=pointer]:
+        - /url: /admin/dashboard
+        - generic [ref=e55]: 
+        - generic [ref=e56]: Dashboard
+      - link " Tenants" [ref=e57] [cursor=pointer]:
+        - /url: /admin/tenants
+        - generic [ref=e58]: 
+        - generic [ref=e59]: Tenants
+      - link " Subscription Plans" [ref=e60] [cursor=pointer]:
+        - /url: /admin/subscriptions
+        - generic [ref=e61]: 
+        - generic [ref=e62]: Subscription Plans
+      - link " Billing" [ref=e63] [cursor=pointer]:
+        - /url: /admin/billing
+        - generic [ref=e64]: 
+        - generic [ref=e65]: Billing
+    - generic [ref=e67]:
+      - generic [ref=e68]: SA
+      - generic [ref=e69]:
+        - paragraph [ref=e70]: Super Admin
+        - paragraph [ref=e71]: admin@whatsapp-commerce.com
+      - button [ref=e72] [cursor=pointer]:
+        - generic [ref=e73]: 
+  - generic [ref=e74]:
+    - banner [ref=e75]:
+      - generic [ref=e77]: Admin Portal
+      - generic [ref=e78]:
+        - link " Back to Platform" [ref=e79] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e80]: 
+          - text: Back to Platform
+        - button [ref=e82] [cursor=pointer]:
+          - generic [ref=e83]: 
+    - main [ref=e84]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - heading "Platform Dashboard" [level=1] [ref=e88]
+          - paragraph [ref=e89]: Overview of all tenants and platform performance
+        - generic [ref=e90]:
+          - generic [ref=e92]:
+            - generic [ref=e93]:
+              - paragraph [ref=e94]: Total Tenants
+              - paragraph [ref=e95]: "47"
+              - paragraph [ref=e96]: 5 new this month
+              - generic [ref=e97]:
+                - generic [ref=e98]: 
+                - generic [ref=e99]: +12%
+            - generic [ref=e101]: 
+          - generic [ref=e103]:
+            - generic [ref=e104]:
+              - paragraph [ref=e105]: Active Subscriptions
+              - paragraph [ref=e106]: "42"
+              - paragraph [ref=e107]: 3 on trial
+              - generic [ref=e108]:
+                - generic [ref=e109]: 
+                - generic [ref=e110]: +8%
+            - generic [ref=e112]: 
+          - generic [ref=e114]:
+            - generic [ref=e115]:
+              - paragraph [ref=e116]: Platform MRR
+              - paragraph [ref=e117]: $8,940
+              - paragraph [ref=e118]: Monthly recurring
+              - generic [ref=e119]:
+                - generic [ref=e120]: 
+                - generic [ref=e121]: +15%
+            - generic [ref=e123]: 
+          - generic [ref=e125]:
+            - generic [ref=e126]:
+              - paragraph [ref=e127]: Total Conversations
+              - paragraph [ref=e128]: 124,820
+              - paragraph [ref=e129]: This month
+              - generic [ref=e130]:
+                - generic [ref=e131]: 
+                - generic [ref=e132]: +22%
+            - generic [ref=e134]: 
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - heading "Revenue (Last 30 days)" [level=3] [ref=e137]
+            - img [ref=e139]
+          - generic [ref=e140]:
+            - heading "Tenants by Plan" [level=3] [ref=e141]
+            - img [ref=e143]
+        - generic [ref=e144]:
+          - generic [ref=e145]:
+            - heading "Recent Tenants" [level=3] [ref=e146]
+            - button "View All" [ref=e147] [cursor=pointer]:
+              - generic [ref=e148]: View All
+          - table [ref=e151]:
+            - rowgroup [ref=e152]:
+              - row "Store Plan Status Conversations MRR Joined Actions" [ref=e153]:
+                - columnheader "Store" [ref=e154]
+                - columnheader "Plan" [ref=e155]
+                - columnheader "Status" [ref=e156]
+                - columnheader "Conversations" [ref=e157]
+                - columnheader "MRR" [ref=e158]
+                - columnheader "Joined" [ref=e159]
+                - columnheader "Actions" [ref=e160]
+            - rowgroup [ref=e161]:
+              - row "TechGadgets Store Growth active 847 $190 May 1, 2026" [ref=e162]:
+                - cell "TechGadgets Store" [ref=e163]
+                - cell "Growth" [ref=e164]
+                - cell "active" [ref=e165]:
+                  - generic [ref=e167]: active
+                - cell "847" [ref=e168]
+                - cell "$190" [ref=e169]
+                - cell "May 1, 2026" [ref=e170]
+                - cell [ref=e171]:
+                  - generic [ref=e172]:
+                    - button [ref=e173] [cursor=pointer]:
+                      - generic [ref=e174]: 
+                    - button [ref=e175] [cursor=pointer]:
+                      - generic [ref=e176]: 
+              - row "FashionHub NG Professional active 2,134 $390 Apr 28, 2026" [ref=e177]:
+                - cell "FashionHub NG" [ref=e178]
+                - cell "Professional" [ref=e179]
+                - cell "active" [ref=e180]:
+                  - generic [ref=e182]: active
+                - cell "2,134" [ref=e183]
+                - cell "$390" [ref=e184]
+                - cell "Apr 28, 2026" [ref=e185]
+                - cell [ref=e186]:
+                  - generic [ref=e187]:
+                    - button [ref=e188] [cursor=pointer]:
+                      - generic [ref=e189]: 
+                    - button [ref=e190] [cursor=pointer]:
+                      - generic [ref=e191]: 
+              - row "QuickMart Abuja Starter trialing 124 $49 Apr 25, 2026" [ref=e192]:
+                - cell "QuickMart Abuja" [ref=e193]
+                - cell "Starter" [ref=e194]
+                - cell "trialing" [ref=e195]:
+                  - generic [ref=e197]: trialing
+                - cell "124" [ref=e198]
+                - cell "$49" [ref=e199]
+                - cell "Apr 25, 2026" [ref=e200]
+                - cell [ref=e201]:
+                  - generic [ref=e202]:
+                    - button [ref=e203] [cursor=pointer]:
+                      - generic [ref=e204]: 
+                    - button [ref=e205] [cursor=pointer]:
+                      - generic [ref=e206]: 
+              - row "Lagos Foods Delivery Growth active 1,205 $190 Apr 20, 2026" [ref=e207]:
+                - cell "Lagos Foods Delivery" [ref=e208]
+                - cell "Growth" [ref=e209]
+                - cell "active" [ref=e210]:
+                  - generic [ref=e212]: active
+                - cell "1,205" [ref=e213]
+                - cell "$190" [ref=e214]
+                - cell "Apr 20, 2026" [ref=e215]
+                - cell [ref=e216]:
+                  - generic [ref=e217]:
+                    - button [ref=e218] [cursor=pointer]:
+                      - generic [ref=e219]: 
+                    - button [ref=e220] [cursor=pointer]:
+                      - generic [ref=e221]: 
+              - row "HealthPlus Pharmacy Enterprise active 4,821 $790 Apr 15, 2026" [ref=e222]:
+                - cell "HealthPlus Pharmacy" [ref=e223]
+                - cell "Enterprise" [ref=e224]
+                - cell "active" [ref=e225]:
+                  - generic [ref=e227]: active
+                - cell "4,821" [ref=e228]
+                - cell "$790" [ref=e229]
+                - cell "Apr 15, 2026" [ref=e230]
+                - cell [ref=e231]:
+                  - generic [ref=e232]:
+                    - button [ref=e233] [cursor=pointer]:
+                      - generic [ref=e234]: 
+                    - button [ref=e235] [cursor=pointer]:
+                      - generic [ref=e236]: 

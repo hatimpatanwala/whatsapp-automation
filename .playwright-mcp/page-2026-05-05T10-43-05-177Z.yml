@@ -1,0 +1,265 @@
+- generic [ref=e44]:
+  - complementary [ref=e45]:
+    - generic [ref=e46]:
+      - generic [ref=e48]: 
+      - generic [ref=e49]:
+        - paragraph [ref=e50]: WA Commerce
+        - paragraph [ref=e51]: Super Admin
+    - navigation [ref=e52]:
+      - paragraph [ref=e53]: Platform
+      - link " Dashboard" [ref=e54] [cursor=pointer]:
+        - /url: /admin/dashboard
+        - generic [ref=e55]: 
+        - generic [ref=e56]: Dashboard
+      - link " Tenants" [active] [ref=e57] [cursor=pointer]:
+        - /url: /admin/tenants
+        - generic [ref=e58]: 
+        - generic [ref=e59]: Tenants
+      - link " Subscription Plans" [ref=e60] [cursor=pointer]:
+        - /url: /admin/subscriptions
+        - generic [ref=e61]: 
+        - generic [ref=e62]: Subscription Plans
+      - link " Billing" [ref=e63] [cursor=pointer]:
+        - /url: /admin/billing
+        - generic [ref=e64]: 
+        - generic [ref=e65]: Billing
+    - generic [ref=e67]:
+      - generic [ref=e68]: SA
+      - generic [ref=e69]:
+        - paragraph [ref=e70]: Super Admin
+        - paragraph [ref=e71]: admin@whatsapp-commerce.com
+      - button [ref=e72] [cursor=pointer]:
+        - generic [ref=e73]: 
+  - generic [ref=e74]:
+    - banner [ref=e75]:
+      - generic [ref=e77]: Admin Portal
+      - generic [ref=e78]:
+        - link " Back to Platform" [ref=e79] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e80]: 
+          - text: Back to Platform
+        - button [ref=e82] [cursor=pointer]:
+          - generic [ref=e83]: 
+    - main [ref=e84]:
+      - generic [ref=e238]:
+        - generic:
+          - alertdialog
+        - generic [ref=e239]:
+          - generic [ref=e240]:
+            - heading "Tenants" [level=1] [ref=e241]
+            - paragraph [ref=e242]: 8 total tenants on the platform
+          - button "Add Tenant" [ref=e243] [cursor=pointer]:
+            - generic [ref=e244]: 
+            - generic [ref=e245]: Add Tenant
+        - generic [ref=e246]:
+          - generic [ref=e247]:
+            - paragraph [ref=e248]: "38"
+            - paragraph [ref=e249]: Active
+          - generic [ref=e250]:
+            - paragraph [ref=e251]: "4"
+            - paragraph [ref=e252]: Trialing
+          - generic [ref=e253]:
+            - paragraph [ref=e254]: "3"
+            - paragraph [ref=e255]: Suspended
+          - generic [ref=e256]:
+            - paragraph [ref=e257]: "2"
+            - paragraph [ref=e258]: Pending
+        - generic [ref=e259]:
+          - generic [ref=e260]:
+            - generic [ref=e261]: 
+            - textbox "Search tenants..." [ref=e262]
+          - generic [ref=e263] [cursor=pointer]:
+            - combobox "All Statuses" [ref=e264]
+            - button "dropdown trigger" [ref=e265]:
+              - img [ref=e266]
+          - generic [ref=e268] [cursor=pointer]:
+            - combobox "All Plans" [ref=e269]
+            - button "dropdown trigger" [ref=e270]:
+              - img [ref=e271]
+        - generic [ref=e274]:
+          - table [ref=e276]:
+            - rowgroup [ref=e277]:
+              - row "Tenant Owner Plan Status Conversations MRR Joined Actions" [ref=e278]:
+                - columnheader "Tenant" [ref=e279]
+                - columnheader "Owner" [ref=e280]
+                - columnheader "Plan" [ref=e281]
+                - columnheader "Status" [ref=e282]
+                - columnheader "Conversations" [ref=e283]
+                - columnheader "MRR" [ref=e284]
+                - columnheader "Joined" [ref=e285]
+                - columnheader "Actions" [ref=e286]
+            - rowgroup [ref=e287]:
+              - row "TechGadgets Store @techgadgets tech@gadgets.com growth active 847 / 2,000 $190 May 1, 2026" [ref=e288]:
+                - cell "TechGadgets Store @techgadgets" [ref=e289]:
+                  - generic [ref=e290]:
+                    - paragraph [ref=e291]: TechGadgets Store
+                    - paragraph [ref=e292]: "@techgadgets"
+                - cell "tech@gadgets.com" [ref=e293]
+                - cell "growth" [ref=e294]
+                - cell "active" [ref=e295]:
+                  - generic [ref=e297]: active
+                - cell "847 / 2,000" [ref=e298]:
+                  - generic [ref=e299]: 847 / 2,000
+                - cell "$190" [ref=e300]
+                - cell "May 1, 2026" [ref=e301]
+                - cell [ref=e302]:
+                  - generic [ref=e303]:
+                    - button [ref=e304] [cursor=pointer]:
+                      - generic [ref=e305]: 
+                    - button [ref=e306] [cursor=pointer]:
+                      - generic [ref=e307]: 
+                    - button [ref=e308] [cursor=pointer]:
+                      - generic [ref=e309]: 
+              - row "FashionHub NG @fashionhub admin@fashionhub.ng professional active 2,134 / 5,000 $390 Apr 28, 2026" [ref=e310]:
+                - cell "FashionHub NG @fashionhub" [ref=e311]:
+                  - generic [ref=e312]:
+                    - paragraph [ref=e313]: FashionHub NG
+                    - paragraph [ref=e314]: "@fashionhub"
+                - cell "admin@fashionhub.ng" [ref=e315]
+                - cell "professional" [ref=e316]
+                - cell "active" [ref=e317]:
+                  - generic [ref=e319]: active
+                - cell "2,134 / 5,000" [ref=e320]:
+                  - generic [ref=e321]: 2,134 / 5,000
+                - cell "$390" [ref=e322]
+                - cell "Apr 28, 2026" [ref=e323]
+                - cell [ref=e324]:
+                  - generic [ref=e325]:
+                    - button [ref=e326] [cursor=pointer]:
+                      - generic [ref=e327]: 
+                    - button [ref=e328] [cursor=pointer]:
+                      - generic [ref=e329]: 
+                    - button [ref=e330] [cursor=pointer]:
+                      - generic [ref=e331]: 
+              - row "QuickMart Abuja @quickmart quickmart@abuja.com starter trialing 124 / 500 $49 Apr 25, 2026" [ref=e332]:
+                - cell "QuickMart Abuja @quickmart" [ref=e333]:
+                  - generic [ref=e334]:
+                    - paragraph [ref=e335]: QuickMart Abuja
+                    - paragraph [ref=e336]: "@quickmart"
+                - cell "quickmart@abuja.com" [ref=e337]
+                - cell "starter" [ref=e338]
+                - cell "trialing" [ref=e339]:
+                  - generic [ref=e341]: trialing
+                - cell "124 / 500" [ref=e342]:
+                  - generic [ref=e343]: 124 / 500
+                - cell "$49" [ref=e344]
+                - cell "Apr 25, 2026" [ref=e345]
+                - cell [ref=e346]:
+                  - generic [ref=e347]:
+                    - button [ref=e348] [cursor=pointer]:
+                      - generic [ref=e349]: 
+                    - button [ref=e350] [cursor=pointer]:
+                      - generic [ref=e351]: 
+              - row "Lagos Foods Delivery @lagosfoods info@lagosfoods.com growth active 1,205 / 2,000 $190 Apr 20, 2026" [ref=e352]:
+                - cell "Lagos Foods Delivery @lagosfoods" [ref=e353]:
+                  - generic [ref=e354]:
+                    - paragraph [ref=e355]: Lagos Foods Delivery
+                    - paragraph [ref=e356]: "@lagosfoods"
+                - cell "info@lagosfoods.com" [ref=e357]
+                - cell "growth" [ref=e358]
+                - cell "active" [ref=e359]:
+                  - generic [ref=e361]: active
+                - cell "1,205 / 2,000" [ref=e362]:
+                  - generic [ref=e363]: 1,205 / 2,000
+                - cell "$190" [ref=e364]
+                - cell "Apr 20, 2026" [ref=e365]
+                - cell [ref=e366]:
+                  - generic [ref=e367]:
+                    - button [ref=e368] [cursor=pointer]:
+                      - generic [ref=e369]: 
+                    - button [ref=e370] [cursor=pointer]:
+                      - generic [ref=e371]: 
+                    - button [ref=e372] [cursor=pointer]:
+                      - generic [ref=e373]: 
+              - row "HealthPlus Pharmacy @healthplus info@healthplus.ng enterprise active 4,821 / ∞ $790 Apr 15, 2026" [ref=e374]:
+                - cell "HealthPlus Pharmacy @healthplus" [ref=e375]:
+                  - generic [ref=e376]:
+                    - paragraph [ref=e377]: HealthPlus Pharmacy
+                    - paragraph [ref=e378]: "@healthplus"
+                - cell "info@healthplus.ng" [ref=e379]
+                - cell "enterprise" [ref=e380]
+                - cell "active" [ref=e381]:
+                  - generic [ref=e383]: active
+                - cell "4,821 / ∞" [ref=e384]:
+                  - generic [ref=e385]: 4,821 / ∞
+                - cell "$790" [ref=e386]
+                - cell "Apr 15, 2026" [ref=e387]
+                - cell [ref=e388]:
+                  - generic [ref=e389]:
+                    - button [ref=e390] [cursor=pointer]:
+                      - generic [ref=e391]: 
+                    - button [ref=e392] [cursor=pointer]:
+                      - generic [ref=e393]: 
+                    - button [ref=e394] [cursor=pointer]:
+                      - generic [ref=e395]: 
+              - row "BooksNMore @booksnmore books@example.com starter suspended 231 / 500 $49 Mar 10, 2026" [ref=e396]:
+                - cell "BooksNMore @booksnmore" [ref=e397]:
+                  - generic [ref=e398]:
+                    - paragraph [ref=e399]: BooksNMore
+                    - paragraph [ref=e400]: "@booksnmore"
+                - cell "books@example.com" [ref=e401]
+                - cell "starter" [ref=e402]
+                - cell "suspended" [ref=e403]:
+                  - generic [ref=e405]: suspended
+                - cell "231 / 500" [ref=e406]:
+                  - generic [ref=e407]: 231 / 500
+                - cell "$49" [ref=e408]
+                - cell "Mar 10, 2026" [ref=e409]
+                - cell [ref=e410]:
+                  - generic [ref=e411]:
+                    - button [ref=e412] [cursor=pointer]:
+                      - generic [ref=e413]: 
+                    - button [ref=e414] [cursor=pointer]:
+                      - generic [ref=e415]: 
+                    - button [ref=e416] [cursor=pointer]:
+                      - generic [ref=e417]: 
+              - row "ElectroWorld @electroworld sales@electroworld.com growth active 1,876 / 2,000 $190 Mar 5, 2026" [ref=e418]:
+                - cell "ElectroWorld @electroworld" [ref=e419]:
+                  - generic [ref=e420]:
+                    - paragraph [ref=e421]: ElectroWorld
+                    - paragraph [ref=e422]: "@electroworld"
+                - cell "sales@electroworld.com" [ref=e423]
+                - cell "growth" [ref=e424]
+                - cell "active" [ref=e425]:
+                  - generic [ref=e427]: active
+                - cell "1,876 / 2,000" [ref=e428]:
+                  - generic [ref=e429]: 1,876 / 2,000
+                - cell "$190" [ref=e430]
+                - cell "Mar 5, 2026" [ref=e431]
+                - cell [ref=e432]:
+                  - generic [ref=e433]:
+                    - button [ref=e434] [cursor=pointer]:
+                      - generic [ref=e435]: 
+                    - button [ref=e436] [cursor=pointer]:
+                      - generic [ref=e437]: 
+                    - button [ref=e438] [cursor=pointer]:
+                      - generic [ref=e439]: 
+              - row "AgriSupply Hub @agrisupply admin@agrisupply.com starter pending 0 / 500 $0 May 4, 2026" [ref=e440]:
+                - cell "AgriSupply Hub @agrisupply" [ref=e441]:
+                  - generic [ref=e442]:
+                    - paragraph [ref=e443]: AgriSupply Hub
+                    - paragraph [ref=e444]: "@agrisupply"
+                - cell "admin@agrisupply.com" [ref=e445]
+                - cell "starter" [ref=e446]
+                - cell "pending" [ref=e447]:
+                  - generic [ref=e449]: pending
+                - cell "0 / 500" [ref=e450]:
+                  - generic [ref=e451]: 0 / 500
+                - cell "$0" [ref=e452]
+                - cell "May 4, 2026" [ref=e453]
+                - cell [ref=e454]:
+                  - generic [ref=e455]:
+                    - button [ref=e456] [cursor=pointer]:
+                      - generic [ref=e457]: 
+                    - button [ref=e458] [cursor=pointer]:
+                      - generic [ref=e459]: 
+          - generic [ref=e460]:
+            - button "First Page":
+              - img
+            - button "Previous Page" [disabled]:
+              - img
+            - button "1" [ref=e462] [cursor=pointer]
+            - button "Next Page" [disabled]:
+              - img
+            - button "Last Page" [disabled]:
+              - img

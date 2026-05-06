@@ -1,0 +1,44 @@
+- generic [ref=e4]:
+  - generic [ref=e6]:
+    - generic [ref=e8]: 
+    - heading "WA Commerce" [level=1] [ref=e9]
+    - paragraph [ref=e10]: The complete WhatsApp commerce platform for modern sellers. Manage products, orders, payments, and customer conversations — all in one place.
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: 
+        - generic [ref=e14]: Product Catalog & Orders
+      - generic [ref=e15]:
+        - generic [ref=e16]: 
+        - generic [ref=e17]: WhatsApp Conversations
+      - generic [ref=e18]:
+        - generic [ref=e19]: 
+        - generic [ref=e20]: Analytics & Campaigns
+      - generic [ref=e21]:
+        - generic [ref=e22]: 
+        - generic [ref=e23]: Workflow Automation
+  - generic [ref=e25]:
+    - heading "Welcome back" [level=2] [ref=e26]
+    - paragraph [ref=e27]: Sign in to your account
+    - generic [ref=e28]:
+      - button "Store Login" [ref=e29] [cursor=pointer]: Store Login
+      - button " Super Admin" [ref=e30] [cursor=pointer]:
+        - generic [ref=e31]: 
+        - text: Super Admin
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]: Store
+        - generic [ref=e35]:
+          - generic [ref=e36]: "@"
+          - textbox "your-store" [ref=e37]: demo-store
+      - generic [ref=e38]:
+        - generic [ref=e39]: Phone number
+        - textbox "+91 9999 999999" [ref=e40]: "+919999999999"
+      - generic [ref=e41]:
+        - generic [ref=e42]: Password
+        - generic [ref=e43]:
+          - textbox "Enter password" [ref=e44]: demo123456
+          - img [ref=e45]
+      - button "Sign in" [ref=e47] [cursor=pointer]:
+        - generic [ref=e48]: 
+        - generic [ref=e49]: Sign in
+    - paragraph [ref=e50]: © 2026 WA Commerce

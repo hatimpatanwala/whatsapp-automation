@@ -1,0 +1,307 @@
+- generic [ref=e112]:
+  - complementary [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e116]: 
+      - generic [ref=e117]:
+        - generic [ref=e118]: WA Commerce
+        - generic [ref=e119]: My Store
+    - navigation [ref=e120]:
+      - link " Dashboard" [ref=e121] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e122]: 
+        - generic [ref=e123]: Dashboard
+      - link " Products" [ref=e124] [cursor=pointer]:
+        - /url: /products
+        - generic [ref=e125]: 
+        - generic [ref=e126]: Products
+      - link " Orders" [active] [ref=e127] [cursor=pointer]:
+        - /url: /orders
+        - generic [ref=e128]: 
+        - generic [ref=e129]: Orders
+      - link " Inventory" [ref=e130] [cursor=pointer]:
+        - /url: /inventory
+        - generic [ref=e131]: 
+        - generic [ref=e132]: Inventory
+      - link " Payments 5" [ref=e133] [cursor=pointer]:
+        - /url: /payments
+        - generic [ref=e134]: 
+        - generic [ref=e135]: Payments
+        - generic [ref=e136]: "5"
+      - link " Deliveries" [ref=e137] [cursor=pointer]:
+        - /url: /deliveries
+        - generic [ref=e138]: 
+        - generic [ref=e139]: Deliveries
+      - link " Customers" [ref=e140] [cursor=pointer]:
+        - /url: /customers
+        - generic [ref=e141]: 
+        - generic [ref=e142]: Customers
+      - link " Campaigns" [ref=e143] [cursor=pointer]:
+        - /url: /campaigns
+        - generic [ref=e144]: 
+        - generic [ref=e145]: Campaigns
+      - link " Conversations 12" [ref=e146] [cursor=pointer]:
+        - /url: /conversations
+        - generic [ref=e147]: 
+        - generic [ref=e148]: Conversations
+        - generic [ref=e149]: "12"
+      - link " Workflow Builder" [ref=e150] [cursor=pointer]:
+        - /url: /workflow-builder
+        - generic [ref=e151]: 
+        - generic [ref=e152]: Workflow Builder
+      - link " Settings" [ref=e153] [cursor=pointer]:
+        - /url: /settings
+        - generic [ref=e154]: 
+        - generic [ref=e155]: Settings
+    - generic [ref=e157]:
+      - generic [ref=e159]: DS
+      - generic [ref=e160]:
+        - generic [ref=e161]: Demo Store
+        - generic [ref=e162]: Owner
+      - button [ref=e163] [cursor=pointer]:
+        - generic [ref=e164]: 
+  - generic [ref=e165]:
+    - banner [ref=e166]:
+      - button [ref=e167] [cursor=pointer]:
+        - generic [ref=e168]: 
+      - heading "Dashboard" [level=1] [ref=e170]
+      - generic [ref=e171]:
+        - button "3" [ref=e172] [cursor=pointer]:
+          - generic [ref=e173]: 
+          - generic [ref=e174]: "3"
+        - button [ref=e175] [cursor=pointer]:
+          - generic [ref=e176]: 
+        - generic [ref=e178] [cursor=pointer]: DS
+    - main [ref=e179]:
+      - generic [ref=e673]:
+        - generic [ref=e674]:
+          - generic [ref=e675]:
+            - heading "Orders" [level=1] [ref=e676]
+            - paragraph [ref=e677]: Track and manage customer orders
+          - button "Export" [ref=e679] [cursor=pointer]:
+            - generic [ref=e680]: 
+            - generic [ref=e681]: Export
+        - generic [ref=e682]:
+          - generic [ref=e683]:
+            - paragraph [ref=e684]: "18"
+            - paragraph [ref=e685]: Pending
+          - generic [ref=e686]:
+            - paragraph [ref=e687]: "9"
+            - paragraph [ref=e688]: Processing
+          - generic [ref=e689]:
+            - paragraph [ref=e690]: "24"
+            - paragraph [ref=e691]: Completed Today
+          - generic [ref=e692]:
+            - paragraph [ref=e693]: "3"
+            - paragraph [ref=e694]: Canceled
+        - generic [ref=e695]:
+          - generic [ref=e696]:
+            - generic [ref=e697]: 
+            - textbox "Search orders or customers..." [ref=e698]
+          - generic [ref=e699] [cursor=pointer]:
+            - combobox "All Statuses" [ref=e700]
+            - button "dropdown trigger" [ref=e701]:
+              - img [ref=e702]
+          - generic [ref=e704] [cursor=pointer]:
+            - combobox "All Payments" [ref=e705]
+            - button "dropdown trigger" [ref=e706]:
+              - img [ref=e707]
+          - button "Reset" [ref=e709] [cursor=pointer]:
+            - generic [ref=e710]: 
+            - generic [ref=e711]: Reset
+        - generic [ref=e713]:
+          - table [ref=e715]:
+            - rowgroup [ref=e716]:
+              - row "Order Customer Items Total Status Payment Date Actions" [ref=e717]:
+                - columnheader "Order" [ref=e718] [cursor=pointer]:
+                  - text: Order
+                  - img [ref=e720]
+                - columnheader "Customer" [ref=e726]
+                - columnheader "Items" [ref=e727]
+                - columnheader "Total" [ref=e728] [cursor=pointer]:
+                  - text: Total
+                  - img [ref=e730]
+                - columnheader "Status" [ref=e736]
+                - columnheader "Payment" [ref=e737]
+                - columnheader "Date" [ref=e738] [cursor=pointer]:
+                  - text: Date
+                  - img [ref=e740]
+                - columnheader "Actions" [ref=e746]
+            - rowgroup [ref=e747]:
+              - row "ORD-0089 Amara Okonkwo +234 812 345 6789 3 items ₦45,000 confirmed paid May 4, 2026" [ref=e748]:
+                - cell "ORD-0089" [ref=e749]:
+                  - link "ORD-0089" [ref=e750] [cursor=pointer]:
+                    - /url: /orders/1
+                - cell "Amara Okonkwo +234 812 345 6789" [ref=e751]:
+                  - generic [ref=e752]:
+                    - paragraph [ref=e753]: Amara Okonkwo
+                    - paragraph [ref=e754]: +234 812 345 6789
+                - cell "3 items" [ref=e755]
+                - cell "₦45,000" [ref=e756]
+                - cell "confirmed" [ref=e757]:
+                  - generic [ref=e759]: confirmed
+                - cell "paid" [ref=e760]:
+                  - generic [ref=e762]: paid
+                - cell "May 4, 2026" [ref=e763]
+                - cell [ref=e764]:
+                  - generic [ref=e765]:
+                    - button [ref=e766] [cursor=pointer]:
+                      - generic [ref=e767]: 
+                    - button [ref=e768] [cursor=pointer]:
+                      - generic [ref=e769]: 
+              - row "ORD-0088 Chidi Nwosu +234 803 456 7890 1 item ₦12,500 pending pending May 4, 2026" [ref=e770]:
+                - cell "ORD-0088" [ref=e771]:
+                  - link "ORD-0088" [ref=e772] [cursor=pointer]:
+                    - /url: /orders/2
+                - cell "Chidi Nwosu +234 803 456 7890" [ref=e773]:
+                  - generic [ref=e774]:
+                    - paragraph [ref=e775]: Chidi Nwosu
+                    - paragraph [ref=e776]: +234 803 456 7890
+                - cell "1 item" [ref=e777]
+                - cell "₦12,500" [ref=e778]
+                - cell "pending" [ref=e779]:
+                  - generic [ref=e781]: pending
+                - cell "pending" [ref=e782]:
+                  - generic [ref=e784]: pending
+                - cell "May 4, 2026" [ref=e785]
+                - cell [ref=e786]:
+                  - generic [ref=e787]:
+                    - button [ref=e788] [cursor=pointer]:
+                      - generic [ref=e789]: 
+                    - button [ref=e790] [cursor=pointer]:
+                      - generic [ref=e791]: 
+              - row "ORD-0087 Fatima Al-Hassan +234 701 567 8901 5 items ₦89,000 completed paid May 4, 2026" [ref=e792]:
+                - cell "ORD-0087" [ref=e793]:
+                  - link "ORD-0087" [ref=e794] [cursor=pointer]:
+                    - /url: /orders/3
+                - cell "Fatima Al-Hassan +234 701 567 8901" [ref=e795]:
+                  - generic [ref=e796]:
+                    - paragraph [ref=e797]: Fatima Al-Hassan
+                    - paragraph [ref=e798]: +234 701 567 8901
+                - cell "5 items" [ref=e799]
+                - cell "₦89,000" [ref=e800]
+                - cell "completed" [ref=e801]:
+                  - generic [ref=e803]: completed
+                - cell "paid" [ref=e804]:
+                  - generic [ref=e806]: paid
+                - cell "May 4, 2026" [ref=e807]
+                - cell [ref=e808]:
+                  - generic [ref=e809]:
+                    - button [ref=e810] [cursor=pointer]:
+                      - generic [ref=e811]: 
+                    - button [ref=e812] [cursor=pointer]:
+                      - generic [ref=e813]: 
+              - row "ORD-0086 Emeka Eze +234 814 678 9012 2 items ₦23,750 canceled refunded May 3, 2026" [ref=e814]:
+                - cell "ORD-0086" [ref=e815]:
+                  - link "ORD-0086" [ref=e816] [cursor=pointer]:
+                    - /url: /orders/4
+                - cell "Emeka Eze +234 814 678 9012" [ref=e817]:
+                  - generic [ref=e818]:
+                    - paragraph [ref=e819]: Emeka Eze
+                    - paragraph [ref=e820]: +234 814 678 9012
+                - cell "2 items" [ref=e821]
+                - cell "₦23,750" [ref=e822]
+                - cell "canceled" [ref=e823]:
+                  - generic [ref=e825]: canceled
+                - cell "refunded" [ref=e826]:
+                  - generic [ref=e828]: refunded
+                - cell "May 3, 2026" [ref=e829]
+                - cell [ref=e830]:
+                  - generic [ref=e831]:
+                    - button [ref=e832] [cursor=pointer]:
+                      - generic [ref=e833]: 
+                    - button [ref=e834] [cursor=pointer]:
+                      - generic [ref=e835]: 
+              - row "ORD-0085 Ngozi Adeyemi +234 705 789 0123 4 items ₦67,200 completed paid May 3, 2026" [ref=e836]:
+                - cell "ORD-0085" [ref=e837]:
+                  - link "ORD-0085" [ref=e838] [cursor=pointer]:
+                    - /url: /orders/5
+                - cell "Ngozi Adeyemi +234 705 789 0123" [ref=e839]:
+                  - generic [ref=e840]:
+                    - paragraph [ref=e841]: Ngozi Adeyemi
+                    - paragraph [ref=e842]: +234 705 789 0123
+                - cell "4 items" [ref=e843]
+                - cell "₦67,200" [ref=e844]
+                - cell "completed" [ref=e845]:
+                  - generic [ref=e847]: completed
+                - cell "paid" [ref=e848]:
+                  - generic [ref=e850]: paid
+                - cell "May 3, 2026" [ref=e851]
+                - cell [ref=e852]:
+                  - generic [ref=e853]:
+                    - button [ref=e854] [cursor=pointer]:
+                      - generic [ref=e855]: 
+                    - button [ref=e856] [cursor=pointer]:
+                      - generic [ref=e857]: 
+              - row "ORD-0084 Ibrahim Bello +234 816 890 1234 1 item ₦8,500 processing paid May 3, 2026" [ref=e858]:
+                - cell "ORD-0084" [ref=e859]:
+                  - link "ORD-0084" [ref=e860] [cursor=pointer]:
+                    - /url: /orders/6
+                - cell "Ibrahim Bello +234 816 890 1234" [ref=e861]:
+                  - generic [ref=e862]:
+                    - paragraph [ref=e863]: Ibrahim Bello
+                    - paragraph [ref=e864]: +234 816 890 1234
+                - cell "1 item" [ref=e865]
+                - cell "₦8,500" [ref=e866]
+                - cell "processing" [ref=e867]:
+                  - generic [ref=e869]: processing
+                - cell "paid" [ref=e870]:
+                  - generic [ref=e872]: paid
+                - cell "May 3, 2026" [ref=e873]
+                - cell [ref=e874]:
+                  - generic [ref=e875]:
+                    - button [ref=e876] [cursor=pointer]:
+                      - generic [ref=e877]: 
+                    - button [ref=e878] [cursor=pointer]:
+                      - generic [ref=e879]: 
+              - row "ORD-0083 Aisha Mohammed +234 807 901 2345 2 items ₦33,000 shipped paid May 2, 2026" [ref=e880]:
+                - cell "ORD-0083" [ref=e881]:
+                  - link "ORD-0083" [ref=e882] [cursor=pointer]:
+                    - /url: /orders/7
+                - cell "Aisha Mohammed +234 807 901 2345" [ref=e883]:
+                  - generic [ref=e884]:
+                    - paragraph [ref=e885]: Aisha Mohammed
+                    - paragraph [ref=e886]: +234 807 901 2345
+                - cell "2 items" [ref=e887]
+                - cell "₦33,000" [ref=e888]
+                - cell "shipped" [ref=e889]:
+                  - generic [ref=e891]: shipped
+                - cell "paid" [ref=e892]:
+                  - generic [ref=e894]: paid
+                - cell "May 2, 2026" [ref=e895]
+                - cell [ref=e896]:
+                  - generic [ref=e897]:
+                    - button [ref=e898] [cursor=pointer]:
+                      - generic [ref=e899]: 
+                    - button [ref=e900] [cursor=pointer]:
+                      - generic [ref=e901]: 
+              - row "ORD-0082 Tunde Bakare +234 818 012 3456 6 items ₦120,500 confirmed pending May 2, 2026" [ref=e902]:
+                - cell "ORD-0082" [ref=e903]:
+                  - link "ORD-0082" [ref=e904] [cursor=pointer]:
+                    - /url: /orders/8
+                - cell "Tunde Bakare +234 818 012 3456" [ref=e905]:
+                  - generic [ref=e906]:
+                    - paragraph [ref=e907]: Tunde Bakare
+                    - paragraph [ref=e908]: +234 818 012 3456
+                - cell "6 items" [ref=e909]
+                - cell "₦120,500" [ref=e910]
+                - cell "confirmed" [ref=e911]:
+                  - generic [ref=e913]: confirmed
+                - cell "pending" [ref=e914]:
+                  - generic [ref=e916]: pending
+                - cell "May 2, 2026" [ref=e917]
+                - cell [ref=e918]:
+                  - generic [ref=e919]:
+                    - button [ref=e920] [cursor=pointer]:
+                      - generic [ref=e921]: 
+                    - button [ref=e922] [cursor=pointer]:
+                      - generic [ref=e923]: 
+          - generic [ref=e924]:
+            - button "First Page":
+              - img
+            - button "Previous Page" [disabled]:
+              - img
+            - button "1" [ref=e926] [cursor=pointer]
+            - button "Next Page" [disabled]:
+              - img
+            - button "Last Page" [disabled]:
+              - img

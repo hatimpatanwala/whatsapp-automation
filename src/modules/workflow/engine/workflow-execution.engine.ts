@@ -1,0 +1,500 @@
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../../../config/redis.module';
+import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
+import { QUEUE_WORKFLOW_RESUME } from '../../../queue/queue.module';
+import {
+  ExecutionContext,
+  WorkflowNode,
+  WorkflowEdge,
+  NodeHandler,
+  NodeExecutionResult,
+  ReplyData,
+} from './workflow-engine.types';
+
+// Import all node handlers
+import {
+  SendTextNodeHandler,
+  SendButtonsNodeHandler,
+  SendListNodeHandler,
+  SendImageNodeHandler,
+  SendTemplateNodeHandler,
+  ConditionNodeHandler,
+  SwitchNodeHandler,
+  WaitForReplyNodeHandler,
+  DelayNodeHandler,
+  EndNodeHandler,
+  ShowCatalogNodeHandler,
+  AddToCartNodeHandler,
+  ViewCartNodeHandler,
+  CheckoutNodeHandler,
+  InventoryCheckNodeHandler,
+  SearchProductsNodeHandler,
+  FilterProductsNodeHandler,
+  PaymentQrNodeHandler,
+  TagCustomerNodeHandler,
+  UpdateOrderNodeHandler,
+  AssignAgentNodeHandler,
+  HttpRequestNodeHandler,
+  SetLanguageNodeHandler,
+} from './node-handlers';
+
+const MAX_STEPS = 50;
+const LOCK_TTL = 30; // seconds
+
+@Injectable()
+export class WorkflowExecutionEngine {
+  private readonly logger = new Logger(WorkflowExecutionEngine.name);
+  private readonly handlerMap: Map<string, NodeHandler>;
+
+  constructor(
+    private readonly connectionManager: TenantConnectionManager,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @InjectQueue(QUEUE_WORKFLOW_RESUME) private readonly resumeQueue: Queue,
+    // Inject all node handlers
+    sendText: SendTextNodeHandler,
+    sendButtons: SendButtonsNodeHandler,
+    sendList: SendListNodeHandler,
+    sendImage: SendImageNodeHandler,
+    sendTemplate: SendTemplateNodeHandler,
+    condition: ConditionNodeHandler,
+    switchHandler: SwitchNodeHandler,
+    waitForReply: WaitForReplyNodeHandler,
+    delay: DelayNodeHandler,
+    end: EndNodeHandler,
+    showCatalog: ShowCatalogNodeHandler,
+    addToCart: AddToCartNodeHandler,
+    viewCart: ViewCartNodeHandler,
+    checkout: CheckoutNodeHandler,
+    inventoryCheck: InventoryCheckNodeHandler,
+    searchProducts: SearchProductsNodeHandler,
+    filterProducts: FilterProductsNodeHandler,
+    paymentQr: PaymentQrNodeHandler,
+    tagCustomer: TagCustomerNodeHandler,
+    updateOrder: UpdateOrderNodeHandler,
+    assignAgent: AssignAgentNodeHandler,
+    httpRequest: HttpRequestNodeHandler,
+    setLanguage: SetLanguageNodeHandler,
+  ) {
+    const handlers: NodeHandler[] = [
+      sendText, sendButtons, sendList, sendImage, sendTemplate,
+      condition, switchHandler, waitForReply, delay, end,
+      showCatalog, addToCart, viewCart, checkout, inventoryCheck,
+      searchProducts, filterProducts, paymentQr,
+      tagCustomer, updateOrder, assignAgent, httpRequest, setLanguage,
+    ];
+    this.handlerMap = new Map(handlers.map((h) => [h.nodeType, h]));
+  }
+
+  // ─── Find active execution waiting for a customer's reply ────────────────
+  async findActiveExecution(schema: string, customerPhone: string): Promise<any | null> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `SELECT * FROM workflow_executions
+         WHERE customer_phone = $1 AND status = 'waiting'
+         ORDER BY started_at DESC LIMIT 1`,
+        [customerPhone],
+      );
+      return rows[0] || null;
+    });
+  }
+
+  // ─── Start a new workflow execution ──────────────────────────────────────
+  async startExecution(params: {
+    schema: string;
+    tenant: any;
+    workflowId: string;
+    triggerNodeId: string;
+    conversationId: string;
+    customerPhone: string;
+    customerId: string;
+    customerName?: string;
+    triggerData?: any;
+  }): Promise<string> {
+    const { schema, tenant, workflowId, triggerNodeId, conversationId, customerPhone, customerId, customerName, triggerData } = params;
+
+    // Load workflow definition
+    const workflow = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(`SELECT * FROM workflows WHERE id = $1`, [workflowId]);
+      return rows[0];
+    });
+
+    if (!workflow) {
+      this.logger.error(`Workflow ${workflowId} not found`);
+      return '';
+    }
+
+    const nodes: WorkflowNode[] = workflow.nodes || [];
+    const allEdges: WorkflowEdge[] = workflow.edges || [];
+
+    // Find the first node after the trigger
+    const triggerEdge = allEdges.find((e) => e.from === triggerNodeId);
+    if (!triggerEdge) {
+      this.logger.error(`No edge leaving trigger node ${triggerNodeId}`);
+      return '';
+    }
+
+    // Create execution record
+    const executionId = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `INSERT INTO workflow_executions
+         (workflow_id, triggered_by, status, current_node_id, conversation_id, customer_phone, variables, context)
+         VALUES ($1, $2, 'running', $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          workflowId, customerPhone, triggerEdge.to, conversationId, customerPhone,
+          JSON.stringify({}), JSON.stringify({ triggerData }),
+        ],
+      );
+      // Increment workflow execution count
+      await qr.query(
+        `UPDATE workflows SET execution_count = execution_count + 1, last_executed_at = NOW() WHERE id = $1`,
+        [workflowId],
+      );
+      return rows[0].id;
+    });
+
+    // Build execution context
+    const ctx: ExecutionContext = {
+      executionId,
+      workflowId,
+      schema,
+      tenant,
+      conversationId,
+      customerPhone,
+      customerId,
+      customerName,
+      variables: {},
+      triggerData,
+    };
+
+    // Run the execution loop
+    await this.runLoop(ctx, nodes, allEdges, triggerEdge.to);
+
+    return executionId;
+  }
+
+  // ─── Resume a paused execution ───────────────────────────────────────────
+  async resumeExecution(params: {
+    schema: string;
+    executionId: string;
+    reply?: ReplyData;
+    resumeSource: 'message' | 'delay' | 'timeout';
+    tenant?: any;
+  }): Promise<void> {
+    const { schema, executionId, reply, resumeSource } = params;
+
+    // Acquire Redis lock to prevent concurrent resumes
+    const lockKey = `wf:exec:lock:${schema}:${executionId}`;
+    const acquired = await this.redis.set(lockKey, '1', 'EX', LOCK_TTL, 'NX');
+    if (!acquired) {
+      this.logger.warn(`Execution ${executionId} is already being resumed`);
+      return;
+    }
+
+    try {
+      // Load execution
+      const execution = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+        const rows = await qr.query(
+          `SELECT we.*, w.nodes, w.edges FROM workflow_executions we
+           JOIN workflows w ON we.workflow_id = w.id
+           WHERE we.id = $1`,
+          [executionId],
+        );
+        return rows[0];
+      });
+
+      if (!execution || execution.status !== 'waiting') {
+        this.logger.debug(`Execution ${executionId} is not in waiting state, skipping resume`);
+        return;
+      }
+
+      // Cancel pending timeout/delay job if resuming from a message
+      if (resumeSource === 'message' && execution.resume_job_id) {
+        try {
+          const job = await this.resumeQueue.getJob(execution.resume_job_id);
+          if (job) await job.remove();
+        } catch {
+          // Job may already be processed — that's fine
+        }
+      }
+
+      const nodes: WorkflowNode[] = execution.nodes || [];
+      const allEdges: WorkflowEdge[] = execution.edges || [];
+      const currentNodeId = execution.current_node_id;
+      const variables = execution.variables || {};
+      const waitConfig = execution.wait_config || {};
+
+      // Resolve tenant if not passed (for queue-based resumes)
+      let tenant = params.tenant;
+      if (!tenant) {
+        tenant = await this.connectionManager.executeInTenantContext('public', async (qr) => {
+          const rows = await qr.query(
+            `SELECT * FROM tenants WHERE schema_name = $1`,
+            [schema],
+          );
+          return rows[0];
+        });
+      }
+
+      // Build execution context
+      const ctx: ExecutionContext = {
+        executionId,
+        workflowId: execution.workflow_id,
+        schema,
+        tenant: {
+          phoneNumberId: tenant?.phone_number_id || tenant?.phoneNumberId,
+          accessToken: tenant?.access_token || tenant?.accessToken,
+          schemaName: schema,
+          ...tenant,
+        },
+        conversationId: execution.conversation_id,
+        customerPhone: execution.customer_phone,
+        customerId: variables.customer_id || '',
+        customerName: variables.customer_name,
+        variables,
+        lastReply: reply,
+      };
+
+      // Determine next node based on resume source
+      let nextNodeId: string | null = null;
+
+      if (resumeSource === 'delay') {
+        // Delay completed — follow the single outgoing edge
+        const edge = allEdges.find((e) => e.from === currentNodeId);
+        nextNodeId = edge?.to || null;
+      } else if (resumeSource === 'timeout') {
+        // Timeout — follow timeout edge or send timeout message and end
+        const timeoutEdge = allEdges.find(
+          (e) => e.from === currentNodeId && e.label?.toLowerCase() === 'timeout',
+        );
+        if (timeoutEdge) {
+          nextNodeId = timeoutEdge.to;
+        } else {
+          // No timeout edge — send timeout message if configured and end
+          if (waitConfig.timeoutMessage && tenant) {
+            const { WhatsAppMessageService } = await import('../../whatsapp/whatsapp-message.service');
+            // We can't easily DI here, so just end — the timeout message will be handled by caller
+          }
+          await this.completeExecution(ctx, 0, 'timeout');
+          return;
+        }
+      } else {
+        // Message resume — route based on reply
+        nextNodeId = this.resolveReplyRoute(currentNodeId, nodes, allEdges, ctx);
+      }
+
+      if (!nextNodeId) {
+        await this.completeExecution(ctx, execution.steps_executed || 0);
+        return;
+      }
+
+      // Mark as running again
+      await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+        await qr.query(
+          `UPDATE workflow_executions SET status = 'running', wait_type = NULL, wait_config = '{}', resume_job_id = NULL WHERE id = $1`,
+          [executionId],
+        );
+      });
+
+      // Continue the loop
+      await this.runLoop(ctx, nodes, allEdges, nextNodeId);
+    } finally {
+      await this.redis.del(lockKey);
+    }
+  }
+
+  // ─── The synchronous execution loop ──────────────────────────────────────
+  private async runLoop(
+    ctx: ExecutionContext,
+    nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
+    startNodeId: string,
+  ): Promise<void> {
+    let currentNodeId: string | null = startNodeId;
+    let stepsExecuted = 0;
+
+    while (currentNodeId && stepsExecuted < MAX_STEPS) {
+      const node = nodes.find((n) => n.id === currentNodeId);
+      if (!node) {
+        await this.failExecution(ctx, `Node not found: ${currentNodeId}`);
+        return;
+      }
+
+      const handler = this.handlerMap.get(node.type);
+      if (!handler) {
+        // Skip unknown node types (e.g., trigger nodes that enter the loop)
+        if (node.type.startsWith('trigger_')) {
+          const edge = edges.find((e) => e.from === currentNodeId);
+          currentNodeId = edge?.to || null;
+          continue;
+        }
+        await this.failExecution(ctx, `No handler for node type: ${node.type}`);
+        return;
+      }
+
+      // Update position in DB
+      await this.updateExecutionPosition(ctx, currentNodeId!, stepsExecuted);
+
+      // Get outgoing edges for this node
+      const outEdges = edges.filter((e) => e.from === currentNodeId);
+
+      // Execute the node
+      let result: NodeExecutionResult;
+      try {
+        result = await handler.execute(node, ctx, outEdges);
+      } catch (err: any) {
+        this.logger.error(`Node ${node.type}(${node.id}) execution failed: ${err.message}`);
+        await this.failExecution(ctx, `Node ${node.type} failed: ${err.message}`);
+        return;
+      }
+      stepsExecuted++;
+
+      switch (result.action) {
+        case 'continue':
+          currentNodeId = result.nextNodeId;
+          break;
+
+        case 'wait':
+          await this.pauseExecution(ctx, currentNodeId!, result.waitType, result.waitConfig || {});
+          return;
+
+        case 'end':
+          await this.completeExecution(ctx, stepsExecuted);
+          return;
+
+        case 'error':
+          await this.failExecution(ctx, result.message);
+          return;
+      }
+    }
+
+    if (stepsExecuted >= MAX_STEPS) {
+      await this.failExecution(ctx, 'Max steps exceeded (possible infinite loop)');
+    } else {
+      // Ran out of nodes — natural end
+      await this.completeExecution(ctx, stepsExecuted);
+    }
+  }
+
+  // ─── Route a reply to the correct next node ─────────────────────────────
+  private resolveReplyRoute(
+    currentNodeId: string,
+    nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
+    ctx: ExecutionContext,
+  ): string | null {
+    const outEdges = edges.filter((e) => e.from === currentNodeId);
+
+    // If there's a stored _buttonMap from send_buttons/view_cart, use it
+    if (ctx.variables._buttonMap && ctx.lastReply?.actionId) {
+      const targetNodeId = ctx.variables._buttonMap[ctx.lastReply.actionId];
+      if (targetNodeId) {
+        delete ctx.variables._buttonMap; // Clean up
+        return targetNodeId;
+      }
+    }
+
+    // Try to match reply against edge labels
+    const replyText = ctx.lastReply?.actionTitle || ctx.lastReply?.text || '';
+    if (replyText) {
+      const matchedEdge = outEdges.find(
+        (e) => e.label && e.label.toLowerCase() === replyText.toLowerCase(),
+      );
+      if (matchedEdge) return matchedEdge.to;
+    }
+
+    // Extract product/category ID from list reply
+    if (ctx.lastReply?.actionId) {
+      const actionId = ctx.lastReply.actionId;
+      if (actionId.startsWith('wf_prod_')) {
+        ctx.variables.selected_product_id = actionId.replace('wf_prod_', '');
+      } else if (actionId.startsWith('wf_cat_')) {
+        ctx.variables.selected_category_id = actionId.replace('wf_cat_', '');
+      }
+    }
+
+    // Store last reply text as a variable
+    if (ctx.lastReply?.text) {
+      ctx.variables.last_input = ctx.lastReply.text;
+    }
+
+    // Default: follow first outgoing edge
+    return outEdges[0]?.to || null;
+  }
+
+  // ─── DB helpers ──────────────────────────────────────────────────────────
+
+  private async updateExecutionPosition(ctx: ExecutionContext, nodeId: string, steps: number): Promise<void> {
+    await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      await qr.query(
+        `UPDATE workflow_executions SET current_node_id = $1, steps_executed = $2, variables = $3 WHERE id = $4`,
+        [nodeId, steps, JSON.stringify(ctx.variables), ctx.executionId],
+      );
+    });
+  }
+
+  private async pauseExecution(
+    ctx: ExecutionContext,
+    nodeId: string,
+    waitType: string,
+    waitConfig: Record<string, any>,
+  ): Promise<void> {
+    let resumeJobId: string | null = null;
+
+    // Schedule delay resume job
+    if (waitType === 'delay' && waitConfig.delayMs) {
+      const job = await this.resumeQueue.add(
+        'workflow-delay-resume',
+        { schema: ctx.schema, executionId: ctx.executionId },
+        { delay: waitConfig.delayMs },
+      );
+      resumeJobId = job.id ?? null;
+    }
+
+    // Schedule timeout job for reply waits
+    if (waitType === 'reply' && waitConfig.timeoutMinutes) {
+      const job = await this.resumeQueue.add(
+        'workflow-timeout',
+        { schema: ctx.schema, executionId: ctx.executionId, timeoutMessage: waitConfig.timeoutMessage },
+        { delay: waitConfig.timeoutMinutes * 60 * 1000 },
+      );
+      resumeJobId = job.id ?? null;
+    }
+
+    await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      await qr.query(
+        `UPDATE workflow_executions
+         SET status = 'waiting', current_node_id = $1, wait_type = $2,
+             wait_config = $3, resume_job_id = $4, variables = $5
+         WHERE id = $6`,
+        [nodeId, waitType, JSON.stringify(waitConfig), resumeJobId, JSON.stringify(ctx.variables), ctx.executionId],
+      );
+    });
+  }
+
+  private async completeExecution(ctx: ExecutionContext, stepsExecuted: number, reason?: string): Promise<void> {
+    await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      await qr.query(
+        `UPDATE workflow_executions
+         SET status = 'completed', completed_at = NOW(), steps_executed = $1,
+             variables = $2, context = jsonb_set(COALESCE(context, '{}'), '{completion_reason}', $3)
+         WHERE id = $4`,
+        [stepsExecuted, JSON.stringify(ctx.variables), JSON.stringify(reason || 'normal'), ctx.executionId],
+      );
+    });
+    this.logger.log(`Workflow execution ${ctx.executionId} completed (${stepsExecuted} steps)`);
+  }
+
+  private async failExecution(ctx: ExecutionContext, errorMessage: string): Promise<void> {
+    await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      await qr.query(
+        `UPDATE workflow_executions SET status = 'failed', error_message = $1, completed_at = NOW() WHERE id = $2`,
+        [errorMessage, ctx.executionId],
+      );
+    });
+    this.logger.error(`Workflow execution ${ctx.executionId} failed: ${errorMessage}`);
+  }
+}

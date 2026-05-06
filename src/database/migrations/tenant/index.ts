@@ -1,0 +1,648 @@
+import { QueryRunner } from 'typeorm';
+
+export interface TenantMigration {
+  name: string;
+  up: (queryRunner: QueryRunner, schema: string) => Promise<void>;
+  down: (queryRunner: QueryRunner, schema: string) => Promise<void>;
+}
+
+const migration001Users: TenantMigration = {
+  name: '001_create_users',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone VARCHAR(20) UNIQUE NOT NULL,
+        email VARCHAR(255),
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'seller',
+        language VARCHAR(10) DEFAULT 'en',
+        is_active BOOLEAN DEFAULT true,
+        last_login_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".users CASCADE`);
+  },
+};
+
+const migration002Customers: TenantMigration = {
+  name: '002_create_customers',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".customers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(255),
+        language VARCHAR(10) DEFAULT 'en',
+        tags TEXT[] DEFAULT '{}',
+        metadata JSONB DEFAULT '{}',
+        total_orders INT DEFAULT 0,
+        total_spent DECIMAL(12,2) DEFAULT 0,
+        last_order_at TIMESTAMPTZ,
+        opted_in BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_customers_phone ON "${schema}".customers(phone)`);
+    await qr.query(`CREATE INDEX idx_customers_tags ON "${schema}".customers USING GIN(tags)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".customers CASCADE`);
+  },
+};
+
+const migration003Addresses: TenantMigration = {
+  name: '003_create_addresses',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".addresses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        customer_id UUID REFERENCES "${schema}".customers(id) ON DELETE CASCADE,
+        label VARCHAR(50) DEFAULT 'home',
+        full_address TEXT NOT NULL,
+        city VARCHAR(100),
+        state VARCHAR(100),
+        pincode VARCHAR(10),
+        landmark VARCHAR(255),
+        latitude DECIMAL(10,7),
+        longitude DECIMAL(10,7),
+        is_default BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_addresses_customer ON "${schema}".addresses(customer_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".addresses CASCADE`);
+  },
+};
+
+const migration004Categories: TenantMigration = {
+  name: '004_create_categories',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".categories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(255) UNIQUE NOT NULL,
+        parent_id UUID REFERENCES "${schema}".categories(id),
+        sort_order INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        translations JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".categories CASCADE`);
+  },
+};
+
+const migration005Products: TenantMigration = {
+  name: '005_create_products',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".products (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        category_id UUID REFERENCES "${schema}".categories(id),
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(255) UNIQUE NOT NULL,
+        description TEXT,
+        base_price DECIMAL(10,2) NOT NULL,
+        sale_price DECIMAL(10,2),
+        currency VARCHAR(3) DEFAULT 'INR',
+        images TEXT[] DEFAULT '{}',
+        thumbnail VARCHAR(500),
+        has_variants BOOLEAN DEFAULT false,
+        is_active BOOLEAN DEFAULT true,
+        sort_order INT DEFAULT 0,
+        translations JSONB DEFAULT '{}',
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_products_category ON "${schema}".products(category_id)`);
+    await qr.query(`CREATE INDEX idx_products_active ON "${schema}".products(is_active) WHERE is_active = true`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".products CASCADE`);
+  },
+};
+
+const migration006ProductVariants: TenantMigration = {
+  name: '006_create_product_variants',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".product_variants (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        sku VARCHAR(100) UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        attributes JSONB NOT NULL DEFAULT '{}',
+        price DECIMAL(10,2) NOT NULL,
+        image VARCHAR(500),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_variants_product ON "${schema}".product_variants(product_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".product_variants CASCADE`);
+  },
+};
+
+const migration007Inventory: TenantMigration = {
+  name: '007_create_inventory',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".inventory (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        variant_id UUID REFERENCES "${schema}".product_variants(id) ON DELETE CASCADE,
+        stock_quantity INT NOT NULL DEFAULT 0,
+        reserved_quantity INT NOT NULL DEFAULT 0,
+        low_stock_threshold INT DEFAULT 5,
+        track_inventory BOOLEAN DEFAULT true,
+        version INT NOT NULL DEFAULT 1,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_inventory_product_variant UNIQUE (product_id, variant_id),
+        CONSTRAINT chk_stock_non_negative CHECK (stock_quantity >= 0),
+        CONSTRAINT chk_reserved_non_negative CHECK (reserved_quantity >= 0),
+        CONSTRAINT chk_reserved_lte_stock CHECK (reserved_quantity <= stock_quantity)
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".inventory CASCADE`);
+  },
+};
+
+const migration008StockReservations: TenantMigration = {
+  name: '008_create_stock_reservations',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".stock_reservations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        inventory_id UUID REFERENCES "${schema}".inventory(id) ON DELETE CASCADE,
+        order_id UUID,
+        cart_id UUID,
+        customer_id UUID REFERENCES "${schema}".customers(id),
+        quantity INT NOT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_reservations_expires ON "${schema}".stock_reservations(expires_at) WHERE status = 'active'`);
+    await qr.query(`CREATE INDEX idx_reservations_inventory ON "${schema}".stock_reservations(inventory_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".stock_reservations CASCADE`);
+  },
+};
+
+const migration009Carts: TenantMigration = {
+  name: '009_create_carts',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".carts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        customer_id UUID REFERENCES "${schema}".customers(id) ON DELETE CASCADE,
+        status VARCHAR(20) DEFAULT 'active',
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE UNIQUE INDEX idx_carts_active_customer ON "${schema}".carts(customer_id) WHERE status = 'active'`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".carts CASCADE`);
+  },
+};
+
+const migration010CartItems: TenantMigration = {
+  name: '010_create_cart_items',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".cart_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        cart_id UUID REFERENCES "${schema}".carts(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES "${schema}".products(id),
+        variant_id UUID REFERENCES "${schema}".product_variants(id),
+        quantity INT NOT NULL DEFAULT 1,
+        unit_price DECIMAL(10,2) NOT NULL,
+        reservation_id UUID REFERENCES "${schema}".stock_reservations(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".cart_items CASCADE`);
+  },
+};
+
+const migration011Orders: TenantMigration = {
+  name: '011_create_orders',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".orders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_number VARCHAR(20) UNIQUE NOT NULL,
+        customer_id UUID REFERENCES "${schema}".customers(id),
+        address_id UUID REFERENCES "${schema}".addresses(id),
+        status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        subtotal DECIMAL(12,2) NOT NULL,
+        discount DECIMAL(10,2) DEFAULT 0,
+        delivery_fee DECIMAL(10,2) DEFAULT 0,
+        total DECIMAL(12,2) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'INR',
+        notes TEXT,
+        cancelled_reason TEXT,
+        placed_at TIMESTAMPTZ DEFAULT NOW(),
+        confirmed_at TIMESTAMPTZ,
+        delivered_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_orders_customer ON "${schema}".orders(customer_id)`);
+    await qr.query(`CREATE INDEX idx_orders_status ON "${schema}".orders(status)`);
+    await qr.query(`CREATE INDEX idx_orders_placed ON "${schema}".orders(placed_at DESC)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".orders CASCADE`);
+  },
+};
+
+const migration012OrderItems: TenantMigration = {
+  name: '012_create_order_items',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".order_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_id UUID REFERENCES "${schema}".orders(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES "${schema}".products(id),
+        variant_id UUID REFERENCES "${schema}".product_variants(id),
+        product_name VARCHAR(255) NOT NULL,
+        variant_name VARCHAR(255),
+        quantity INT NOT NULL,
+        unit_price DECIMAL(10,2) NOT NULL,
+        total_price DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".order_items CASCADE`);
+  },
+};
+
+const migration013Payments: TenantMigration = {
+  name: '013_create_payments',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".payments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_id UUID REFERENCES "${schema}".orders(id),
+        method VARCHAR(30) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        amount DECIMAL(12,2) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'INR',
+        upi_id VARCHAR(255),
+        qr_code_url VARCHAR(500),
+        proof_image_url VARCHAR(500),
+        transaction_ref VARCHAR(255),
+        verified_by UUID REFERENCES "${schema}".users(id),
+        verified_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ,
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_payments_order ON "${schema}".payments(order_id)`);
+    await qr.query(`CREATE INDEX idx_payments_status ON "${schema}".payments(status) WHERE status = 'pending'`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".payments CASCADE`);
+  },
+};
+
+const migration014Deliveries: TenantMigration = {
+  name: '014_create_deliveries',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".deliveries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_id UUID REFERENCES "${schema}".orders(id),
+        provider_type VARCHAR(30) DEFAULT 'self_managed',
+        provider_name VARCHAR(100),
+        tracking_id VARCHAR(255),
+        tracking_url VARCHAR(500),
+        assigned_to VARCHAR(255),
+        status VARCHAR(30) DEFAULT 'pending',
+        estimated_delivery TIMESTAMPTZ,
+        delivered_at TIMESTAMPTZ,
+        proof_image_url VARCHAR(500),
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_deliveries_order ON "${schema}".deliveries(order_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".deliveries CASCADE`);
+  },
+};
+
+const migration015Conversations: TenantMigration = {
+  name: '015_create_conversations',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".conversations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        customer_id UUID REFERENCES "${schema}".customers(id),
+        phone VARCHAR(20) NOT NULL,
+        status VARCHAR(20) DEFAULT 'open',
+        last_message_at TIMESTAMPTZ,
+        context JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_conversations_customer ON "${schema}".conversations(customer_id)`);
+    await qr.query(`CREATE INDEX idx_conversations_phone ON "${schema}".conversations(phone)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".conversations CASCADE`);
+  },
+};
+
+const migration016Messages: TenantMigration = {
+  name: '016_create_messages',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id UUID REFERENCES "${schema}".conversations(id),
+        wa_message_id VARCHAR(255) UNIQUE,
+        direction VARCHAR(10) NOT NULL,
+        type VARCHAR(30) NOT NULL,
+        content JSONB NOT NULL,
+        status VARCHAR(20) DEFAULT 'sent',
+        error JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_messages_conversation ON "${schema}".messages(conversation_id)`);
+    await qr.query(`CREATE INDEX idx_messages_wa_id ON "${schema}".messages(wa_message_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".messages CASCADE`);
+  },
+};
+
+const migration017WebhookEvents: TenantMigration = {
+  name: '017_create_webhook_events',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".webhook_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_id VARCHAR(255) UNIQUE NOT NULL,
+        event_type VARCHAR(50) NOT NULL,
+        payload JSONB NOT NULL,
+        status VARCHAR(20) DEFAULT 'processed',
+        processed_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_webhook_events_event_id ON "${schema}".webhook_events(event_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".webhook_events CASCADE`);
+  },
+};
+
+const migration018Campaigns: TenantMigration = {
+  name: '018_create_campaigns',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".campaigns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        template_id UUID,
+        segment_id UUID,
+        status VARCHAR(20) DEFAULT 'draft',
+        scheduled_at TIMESTAMPTZ,
+        started_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        total_recipients INT DEFAULT 0,
+        sent_count INT DEFAULT 0,
+        delivered_count INT DEFAULT 0,
+        read_count INT DEFAULT 0,
+        failed_count INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".campaigns CASCADE`);
+  },
+};
+
+const migration019CampaignSegments: TenantMigration = {
+  name: '019_create_campaign_segments',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".campaign_segments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        rules JSONB NOT NULL,
+        customer_count INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".campaign_segments CASCADE`);
+  },
+};
+
+const migration020Templates: TenantMigration = {
+  name: '020_create_templates',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".templates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        wa_template_name VARCHAR(255) NOT NULL,
+        language VARCHAR(10) NOT NULL,
+        category VARCHAR(50),
+        components JSONB NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".templates CASCADE`);
+  },
+};
+
+const migration021Settings: TenantMigration = {
+  name: '021_create_settings',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    // Seed default settings
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('business_name', '"My Store"'),
+        ('default_language', '"en"'),
+        ('currency', '"INR"'),
+        ('auto_reply_enabled', 'true'),
+        ('reservation_ttl_minutes', '15'),
+        ('payment_expiry_minutes', '30'),
+        ('upi_ids', '[]'),
+        ('business_hours', '{"start": "09:00", "end": "21:00", "timezone": "Asia/Kolkata"}')
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".settings CASCADE`);
+  },
+};
+
+const migration022Workflows: TenantMigration = {
+  name: '022_create_workflows',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".workflows (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        trigger JSONB NOT NULL DEFAULT '{}',
+        nodes JSONB NOT NULL DEFAULT '[]',
+        edges JSONB NOT NULL DEFAULT '[]',
+        version INT NOT NULL DEFAULT 1,
+        execution_count INT DEFAULT 0,
+        last_executed_at TIMESTAMPTZ,
+        created_by UUID REFERENCES "${schema}".users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_workflows_status ON "${schema}".workflows(status)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".workflows CASCADE`);
+  },
+};
+
+const migration023WorkflowExecutions: TenantMigration = {
+  name: '023_create_workflow_executions',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".workflow_executions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workflow_id UUID REFERENCES "${schema}".workflows(id) ON DELETE CASCADE,
+        triggered_by VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'running',
+        steps_executed INT DEFAULT 0,
+        error_message TEXT,
+        context JSONB DEFAULT '{}',
+        started_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_wf_executions_workflow ON "${schema}".workflow_executions(workflow_id)`);
+    await qr.query(`CREATE INDEX idx_wf_executions_status ON "${schema}".workflow_executions(status)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".workflow_executions CASCADE`);
+  },
+};
+
+const migration024WorkflowEngine: TenantMigration = {
+  name: '024_workflow_execution_engine',
+  async up(qr, schema) {
+    // Add execution tracking columns to workflow_executions
+    await qr.query(`
+      ALTER TABLE "${schema}".workflow_executions
+        ADD COLUMN IF NOT EXISTS current_node_id VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES "${schema}".conversations(id),
+        ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS variables JSONB DEFAULT '{}',
+        ADD COLUMN IF NOT EXISTS wait_type VARCHAR(30),
+        ADD COLUMN IF NOT EXISTS wait_config JSONB DEFAULT '{}',
+        ADD COLUMN IF NOT EXISTS resume_job_id VARCHAR(255)
+    `);
+    // Partial index for fast active-execution lookup by phone
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_wf_exec_active_phone
+        ON "${schema}".workflow_executions(customer_phone, status)
+        WHERE status IN ('running', 'waiting')
+    `);
+    // Partial index for lookup by conversation
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_wf_exec_active_conv
+        ON "${schema}".workflow_executions(conversation_id, status)
+        WHERE status IN ('running', 'waiting')
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_wf_exec_active_phone`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_wf_exec_active_conv`);
+    await qr.query(`
+      ALTER TABLE "${schema}".workflow_executions
+        DROP COLUMN IF EXISTS current_node_id,
+        DROP COLUMN IF EXISTS conversation_id,
+        DROP COLUMN IF EXISTS customer_phone,
+        DROP COLUMN IF EXISTS variables,
+        DROP COLUMN IF EXISTS wait_type,
+        DROP COLUMN IF EXISTS wait_config,
+        DROP COLUMN IF EXISTS resume_job_id
+    `);
+  },
+};
+
+export const tenantMigrations: TenantMigration[] = [
+  migration001Users,
+  migration002Customers,
+  migration003Addresses,
+  migration004Categories,
+  migration005Products,
+  migration006ProductVariants,
+  migration007Inventory,
+  migration008StockReservations,
+  migration009Carts,
+  migration010CartItems,
+  migration011Orders,
+  migration012OrderItems,
+  migration013Payments,
+  migration014Deliveries,
+  migration015Conversations,
+  migration016Messages,
+  migration017WebhookEvents,
+  migration018Campaigns,
+  migration019CampaignSegments,
+  migration020Templates,
+  migration021Settings,
+  migration022Workflows,
+  migration023WorkflowExecutions,
+  migration024WorkflowEngine,
+];

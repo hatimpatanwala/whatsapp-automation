@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.js.map
+coverage/
+.nyc_output/
+*.log
+.DS_Store
+pgdata/
+redisdata/
