@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Tenant } from './entities/public/tenant.entity';
@@ -6,8 +6,16 @@ import { TenantMigrationHistory } from './entities/public/tenant-migration-histo
 import { tenantMigrations } from './migrations/tenant';
 
 @Injectable()
-export class TenantMigrationService {
+export class TenantMigrationService implements OnModuleInit {
   private readonly logger = new Logger(TenantMigrationService.name);
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.runPendingMigrations();
+    } catch (err) {
+      this.logger.error(`Failed to run pending migrations on startup: ${(err as Error).message}`);
+    }
+  }
 
   constructor(
     @InjectDataSource()

@@ -21,6 +21,8 @@ import { UpdateOrderNodeHandler } from './update-order.handler';
 import { AssignAgentNodeHandler } from './assign-agent.handler';
 import { HttpRequestNodeHandler } from './http-request.handler';
 import { SetLanguageNodeHandler } from './set-language.handler';
+import { FallbackNodeHandler } from './fallback.handler';
+import { StartWorkflowNodeHandler } from './start-workflow.handler';
 
 // Re-export all
 export {
@@ -47,6 +49,8 @@ export {
   AssignAgentNodeHandler,
   HttpRequestNodeHandler,
   SetLanguageNodeHandler,
+  FallbackNodeHandler,
+  StartWorkflowNodeHandler,
 };
 
 /** All node handler classes for DI registration */
@@ -74,4 +78,6 @@ export const ALL_NODE_HANDLERS = [
   AssignAgentNodeHandler,
   HttpRequestNodeHandler,
   SetLanguageNodeHandler,
+  FallbackNodeHandler,
+  StartWorkflowNodeHandler,
 ];

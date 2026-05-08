@@ -34,22 +34,31 @@ export class WorkflowTriggerMatcher {
     if (messageType !== 'text' && messageType !== 'interactive') return null;
 
     const workflows = await this.getActiveWorkflows(schema);
+    this.logger.log(`[TRIGGER] ${workflows.length} active workflows in ${schema}, checking "${messageText}"`);
 
     for (const wf of workflows) {
       const triggerNode = (wf.nodes || []).find(
         (n: WorkflowNode) => n.type === 'trigger_message',
       );
-      if (!triggerNode) continue;
+      if (!triggerNode) {
+        this.logger.log(`[TRIGGER] Workflow ${wf.id}: no trigger_message node`);
+        continue;
+      }
 
       const keywords = (triggerNode.config?.keywords || '')
         .split(',')
         .map((k: string) => k.trim().toLowerCase())
         .filter(Boolean);
 
-      if (keywords.length === 0) continue;
+      if (keywords.length === 0) {
+        this.logger.log(`[TRIGGER] Workflow ${wf.id}: no keywords configured`);
+        continue;
+      }
 
       const matchType = triggerNode.config?.matchType || 'contains';
       const text = messageText.toLowerCase().trim();
+
+      this.logger.log(`[TRIGGER] Workflow ${wf.id}: "${text}" vs [${keywords.join(', ')}] (${matchType})`);
 
       const matched = keywords.some((keyword: string) => {
         switch (matchType) {
@@ -61,10 +70,12 @@ export class WorkflowTriggerMatcher {
       });
 
       if (matched) {
+        this.logger.log(`[TRIGGER] MATCHED workflow ${wf.id} for "${text}"`);
         return { workflowId: wf.id, triggerNodeId: triggerNode.id };
       }
     }
 
+    this.logger.log(`[TRIGGER] No match for "${messageText}" across ${workflows.length} workflows`);
     return null;
   }
 

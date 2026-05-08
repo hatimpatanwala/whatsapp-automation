@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { WhatsAppMessageService } from '../whatsapp-message.service';
+import { CommerceSettingsHelper } from '../helpers/commerce-settings.helper';
 import { MessageContext } from './text-message.handler';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class InteractiveMessageHandler {
   constructor(
     private readonly connectionManager: TenantConnectionManager,
     private readonly messageService: WhatsAppMessageService,
+    private readonly commerceSettings: CommerceSettingsHelper,
   ) {}
 
   async handle(context: MessageContext, interactive: any): Promise<void> {
@@ -64,44 +66,56 @@ export class InteractiveMessageHandler {
     const [prefix, ...rest] = actionId.split(':');
     const param = rest.join(':');
 
+    const settings = await this.commerceSettings.getCommerceSettings(schema);
+
     switch (prefix) {
       case 'browse_catalog':
+        if (!settings.catalogEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Catalog browsing'); break; }
         await this.sendCategories(context, conversation.id);
         break;
 
       case 'category':
+        if (!settings.catalogEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Catalog browsing'); break; }
         await this.sendProductsInCategory(context, conversation.id, param);
         break;
 
       case 'product':
+        if (!settings.catalogEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Product browsing'); break; }
         await this.sendProductDetail(context, customer, conversation.id, param);
         break;
 
       case 'add_to_cart':
+        if (!settings.cartEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Cart'); break; }
         await this.addToCart(context, customer, conversation.id, param);
         break;
 
       case 'view_cart':
+        if (!settings.cartEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Cart'); break; }
         await this.sendCartView(context, customer, conversation.id);
         break;
 
       case 'checkout':
+        if (!settings.orderEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Ordering'); break; }
         await this.initiateCheckout(context, customer, conversation.id);
         break;
 
       case 'confirm_order':
+        if (!settings.orderEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Ordering'); break; }
         await this.confirmOrder(context, customer, conversation.id);
         break;
 
       case 'select_address':
+        if (!settings.orderEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Ordering'); break; }
         await this.selectAddress(context, customer, conversation.id, param);
         break;
 
       case 'my_orders':
+        if (!settings.orderEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Orders'); break; }
         await this.sendOrders(context, customer, conversation.id);
         break;
 
       case 'clear_cart':
+        if (!settings.cartEnabled) { await this.sendDisabledMessage(context, conversation.id, 'Cart'); break; }
         await this.clearCart(context, customer, conversation.id);
         break;
 
@@ -119,7 +133,13 @@ export class InteractiveMessageHandler {
 
     const categories = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(
-        `SELECT id, name, slug FROM categories WHERE is_active = true ORDER BY sort_order LIMIT 10`,
+        `SELECT c.id, c.name, c.slug, c.image_url,
+                COUNT(p.id) as product_count
+         FROM categories c
+         LEFT JOIN products p ON p.category_id = c.id AND p.is_active = true
+         WHERE c.is_active = true
+         GROUP BY c.id, c.name, c.slug, c.image_url, c.sort_order
+         ORDER BY c.sort_order LIMIT 10`,
       );
     });
 
@@ -137,7 +157,7 @@ export class InteractiveMessageHandler {
       rows: categories.map((cat: any) => ({
         id: `category:${cat.id}`,
         title: cat.name.substring(0, 24),
-        description: `Browse ${cat.name}`,
+        description: `${cat.product_count} product${cat.product_count !== 1 ? 's' : ''} available`,
       })),
     }];
 
@@ -160,8 +180,13 @@ export class InteractiveMessageHandler {
 
     const products = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(
-        `SELECT id, name, base_price, sale_price FROM products
-         WHERE category_id = $1 AND is_active = true ORDER BY sort_order LIMIT 10`,
+        `SELECT p.id, p.name, p.slug, p.base_price, p.sale_price, p.thumbnail, p.images,
+                p.description, c.name as category_name,
+                COALESCE(i.stock_quantity, 0) - COALESCE(i.reserved_quantity, 0) as available_stock
+         FROM products p
+         LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN inventory i ON i.product_id = p.id AND i.variant_id IS NULL
+         WHERE p.category_id = $1 AND p.is_active = true ORDER BY p.sort_order LIMIT 10`,
         [categoryId],
       );
     });
@@ -175,25 +200,83 @@ export class InteractiveMessageHandler {
       return;
     }
 
-    const sections = [{
-      title: 'Products',
-      rows: products.map((p: any) => {
-        const price = p.sale_price || p.base_price;
-        return {
+    // Try native Meta product list if catalog is synced
+    const settings = await this.commerceSettings.getCommerceSettings(schema);
+    if (settings.catalogId) {
+      const productItems = products.map((p: any) => ({
+        product_retailer_id: p.slug || p.id,
+      }));
+      const categoryName = products[0].category_name || 'Products';
+
+      try {
+        await this.messageService.logAndSendMultiProduct(
+          schema, tenant.phoneNumberId, tenant.accessToken,
+          context.from, conversationId,
+          settings.catalogId,
+          [{ title: categoryName, product_items: productItems }],
+          `🛍️ ${categoryName}`,
+          'Tap a product to view details and add to cart',
+        );
+        return;
+      } catch (err: any) {
+        this.logger.warn(`Native product list failed, using fallback: ${err.message}`);
+      }
+    }
+
+    // Fallback: send image cards for each product (max 5 to avoid spam)
+    const displayProducts = products.slice(0, 5);
+    for (const p of displayProducts) {
+      const price = p.sale_price || p.base_price;
+      const originalPrice = p.sale_price ? `~₹${p.base_price}~ ` : '';
+      const imageUrl = p.thumbnail || (p.images && p.images[0]);
+      const inStock = (p.available_stock || 0) > 0;
+      const stockLabel = inStock ? `✅ In Stock` : `❌ Out of Stock`;
+
+      if (imageUrl) {
+        const caption = `*${p.name}*\n${originalPrice}💰 ₹${price}\n${stockLabel}`;
+        await this.messageService.logAndSendImage(
+          schema, tenant.phoneNumberId, tenant.accessToken,
+          context.from, conversationId, imageUrl, caption,
+        );
+      }
+
+      const buttons: Array<{ id: string; title: string }> = [];
+      if (inStock) {
+        buttons.push({ id: `product:${p.id}`, title: '📋 View & Add' });
+      } else {
+        buttons.push({ id: `product:${p.id}`, title: '📋 View Details' });
+      }
+
+      if (buttons.length > 0) {
+        await this.messageService.logAndSendInteractiveButtons(
+          schema, tenant.phoneNumberId, tenant.accessToken,
+          context.from, conversationId,
+          imageUrl ? `Tap below to view *${p.name}*` : `*${p.name}*\n${originalPrice}💰 ₹${price}\n${stockLabel}`,
+          buttons,
+        );
+      }
+    }
+
+    // If more products, show a "see more" list
+    if (products.length > 5) {
+      const remaining = products.slice(5);
+      const sections = [{
+        title: 'More Products',
+        rows: remaining.map((p: any) => ({
           id: `product:${p.id}`,
           title: p.name.substring(0, 24),
-          description: `₹${price}`,
-        };
-      }),
-    }];
+          description: `₹${p.sale_price || p.base_price}`,
+        })),
+      }];
 
-    await this.messageService.logAndSendInteractiveList(
-      schema, tenant.phoneNumberId, tenant.accessToken,
-      context.from, conversationId,
-      'Select a product to view details:',
-      'View Products',
-      sections,
-    );
+      await this.messageService.logAndSendInteractiveList(
+        schema, tenant.phoneNumberId, tenant.accessToken,
+        context.from, conversationId,
+        `+${remaining.length} more products:`,
+        'See More',
+        sections,
+      );
+    }
   }
 
   private async sendProductDetail(
@@ -217,35 +300,114 @@ export class InteractiveMessageHandler {
 
     if (!product) return;
 
+    // Try native Meta product card if catalog is synced
+    const settings = await this.commerceSettings.getCommerceSettings(schema);
+    if (settings.catalogId) {
+      try {
+        await this.messageService.logAndSendProduct(
+          schema, tenant.phoneNumberId, tenant.accessToken,
+          context.from, conversationId,
+          settings.catalogId,
+          product.slug || product.id,
+          product.description || undefined,
+        );
+        return;
+      } catch (err: any) {
+        this.logger.warn(`Native product card failed, using fallback: ${err.message}`);
+      }
+    }
+
+    // Fallback: image + details + quantity buttons
     const price = product.sale_price || product.base_price;
+    const originalPrice = product.sale_price ? `~₹${product.base_price}~ ` : '';
     const available = (product.stock_quantity || 0) - (product.reserved_quantity || 0);
     const inStock = available > 0;
+    const imageUrl = product.thumbnail || (product.images && product.images[0]);
 
-    let text = `*${product.name}*\n\n`;
-    if (product.description) text += `${product.description}\n\n`;
-    text += `💰 Price: ₹${price}\n`;
-    text += inStock ? `✅ In Stock (${available} available)` : `❌ Out of Stock`;
+    // Send product image with details as caption
+    if (imageUrl) {
+      let caption = `*${product.name}*\n\n`;
+      if (product.description) caption += `${product.description}\n\n`;
+      caption += `${originalPrice}💰 *₹${price}*\n`;
+      caption += inStock ? `✅ In Stock (${available} available)` : `❌ Out of Stock`;
 
-    const buttons: Array<{ id: string; title: string }> = [];
-    if (inStock) {
-      buttons.push({ id: `add_to_cart:${productId}`, title: '🛒 Add to Cart' });
+      await this.messageService.logAndSendImage(
+        schema, tenant.phoneNumberId, tenant.accessToken,
+        context.from, conversationId, imageUrl, caption,
+      );
     }
-    buttons.push({ id: 'browse_catalog', title: '◀️ Back' });
 
-    await this.messageService.logAndSendInteractiveButtons(
-      schema, tenant.phoneNumberId, tenant.accessToken,
-      context.from, conversationId,
-      text, buttons,
-    );
+    if (inStock) {
+      // Send quantity selection buttons (WhatsApp allows max 3 buttons)
+      const maxQty = Math.min(available, 10);
+      const bodyText = imageUrl
+        ? `Select quantity for *${product.name}*:`
+        : `*${product.name}*\n${product.description || ''}\n\n${originalPrice}💰 *₹${price}*\n✅ In Stock (${available} available)\n\nSelect quantity:`;
+
+      const qtyButtons: Array<{ id: string; title: string }> = [
+        { id: `add_to_cart:${productId}:1`, title: '🛒 Add 1' },
+      ];
+      if (maxQty >= 2) {
+        qtyButtons.push({ id: `add_to_cart:${productId}:2`, title: '🛒 Add 2' });
+      }
+      if (maxQty >= 3) {
+        qtyButtons.push({ id: `add_to_cart:${productId}:3`, title: '🛒 Add 3' });
+      }
+
+      await this.messageService.logAndSendInteractiveButtons(
+        schema, tenant.phoneNumberId, tenant.accessToken,
+        context.from, conversationId,
+        bodyText, qtyButtons,
+      );
+
+      // If more quantities are possible, offer a list for larger quantities
+      if (maxQty > 3) {
+        const rows = [];
+        for (let qty = 4; qty <= Math.min(maxQty, 10); qty++) {
+          rows.push({
+            id: `add_to_cart:${productId}:${qty}`,
+            title: `Add ${qty} units`,
+            description: `₹${(price * qty).toFixed(2)} total`,
+          });
+        }
+
+        await this.messageService.logAndSendInteractiveList(
+          schema, tenant.phoneNumberId, tenant.accessToken,
+          context.from, conversationId,
+          'Need more? Select a larger quantity:',
+          'More Quantities',
+          [{ title: 'Quantity', rows }],
+        );
+      }
+    } else {
+      // Out of stock — just show back button
+      const bodyText = imageUrl
+        ? `❌ *${product.name}* is currently out of stock.`
+        : `*${product.name}*\n${product.description || ''}\n\n💰 ₹${price}\n❌ Out of Stock`;
+
+      await this.messageService.logAndSendInteractiveButtons(
+        schema, tenant.phoneNumberId, tenant.accessToken,
+        context.from, conversationId,
+        bodyText,
+        [{ id: 'browse_catalog', title: '◀️ Back to Catalog' }],
+      );
+    }
   }
 
   private async addToCart(
     context: MessageContext,
     customer: any,
     conversationId: string,
-    productId: string,
+    param: string,
   ): Promise<void> {
     const { schema, tenant } = context;
+
+    // Parse param: "productId" or "productId:quantity"
+    const parts = param.split(':');
+    const productId = parts[0];
+    const quantity = Math.max(1, Math.min(parseInt(parts[1]) || 1, 99));
+
+    let productName = '';
 
     await this.connectionManager.executeInTransaction(schema, async (qr) => {
       // Get or create active cart
@@ -269,6 +431,7 @@ export class InteractiveMessageHandler {
       );
       if (!product[0]) return;
 
+      productName = product[0].name;
       const price = product[0].sale_price || product[0].base_price;
 
       // Check if already in cart
@@ -279,21 +442,22 @@ export class InteractiveMessageHandler {
 
       if (existing.length > 0) {
         await qr.query(
-          `UPDATE cart_items SET quantity = quantity + 1 WHERE id = $1`,
-          [existing[0].id],
+          `UPDATE cart_items SET quantity = quantity + $1 WHERE id = $2`,
+          [quantity, existing[0].id],
         );
       } else {
         await qr.query(
-          `INSERT INTO cart_items (cart_id, product_id, quantity, unit_price) VALUES ($1, $2, 1, $3)`,
-          [cartId, productId, price],
+          `INSERT INTO cart_items (cart_id, product_id, quantity, unit_price) VALUES ($1, $2, $3, $4)`,
+          [cartId, productId, quantity, price],
         );
       }
     });
 
+    const qtyText = quantity > 1 ? `${quantity}x ` : '';
     await this.messageService.logAndSendInteractiveButtons(
       schema, tenant.phoneNumberId, tenant.accessToken,
       context.from, conversationId,
-      '✅ Added to cart!',
+      `✅ Added ${qtyText}*${productName || 'item'}* to cart!`,
       [
         { id: 'view_cart', title: '🛒 View Cart' },
         { id: 'browse_catalog', title: '➕ Continue Shopping' },
@@ -306,7 +470,9 @@ export class InteractiveMessageHandler {
 
     const items = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(
-        `SELECT ci.*, p.name as product_name FROM cart_items ci
+        `SELECT ci.*, p.name as product_name, p.thumbnail,
+                p.images, p.slug as product_slug
+         FROM cart_items ci
          JOIN carts c ON c.id = ci.cart_id
          JOIN products p ON p.id = ci.product_id
          WHERE c.customer_id = $1 AND c.status = 'active'`,
@@ -315,10 +481,11 @@ export class InteractiveMessageHandler {
     });
 
     if (!items || items.length === 0) {
-      await this.messageService.logAndSendText(
+      await this.messageService.logAndSendInteractiveButtons(
         schema, tenant.phoneNumberId, tenant.accessToken,
         context.from, conversationId,
         'Your cart is empty! Browse our catalog to add items.',
+        [{ id: 'browse_catalog', title: '🛍️ Browse Catalog' }],
       );
       return;
     }
@@ -328,9 +495,10 @@ export class InteractiveMessageHandler {
     items.forEach((item: any, i: number) => {
       const itemTotal = item.quantity * parseFloat(item.unit_price);
       total += itemTotal;
-      text += `${i + 1}. ${item.product_name} x${item.quantity} — ₹${itemTotal.toFixed(2)}\n`;
+      text += `${i + 1}. *${item.product_name}* × ${item.quantity} — ₹${itemTotal.toFixed(2)}\n`;
     });
-    text += `\n*Total: ₹${total.toFixed(2)}*`;
+    text += `\n💰 *Total: ₹${total.toFixed(2)}*`;
+    text += `\n\n_${items.length} item${items.length > 1 ? 's' : ''} in cart_`;
 
     await this.messageService.logAndSendInteractiveButtons(
       schema, tenant.phoneNumberId, tenant.accessToken,
@@ -339,6 +507,7 @@ export class InteractiveMessageHandler {
       [
         { id: 'checkout', title: '✅ Checkout' },
         { id: 'clear_cart', title: '🗑️ Clear Cart' },
+        { id: 'browse_catalog', title: '➕ Add More' },
       ],
     );
   }
@@ -482,6 +651,15 @@ export class InteractiveMessageHandler {
       );
       return result[0];
     });
+  }
+
+  private async sendDisabledMessage(context: MessageContext, conversationId: string, featureName: string): Promise<void> {
+    const { schema, tenant } = context;
+    await this.messageService.logAndSendText(
+      schema, tenant.phoneNumberId, tenant.accessToken,
+      context.from, conversationId,
+      `${featureName} is not available at the moment. Please contact us for assistance.`,
+    );
   }
 
   private async updateFlow(schema: string, conversationId: string, flow: string): Promise<void> {

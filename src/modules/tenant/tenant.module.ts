@@ -9,6 +9,8 @@ import { Subscription } from '../../database/entities/public/subscription.entity
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { WabaModule } from '../waba/waba.module';
+import { CatalogModule } from '../catalog/catalog.module';
+import { CommerceSettingsHelper } from '../whatsapp/helpers/commerce-settings.helper';
 
 @Module({
   imports: [
@@ -16,9 +18,10 @@ import { WabaModule } from '../waba/waba.module';
     TypeOrmModule.forFeature([Subscription, PhoneNumber]),
     forwardRef(() => OnboardingModule),
     forwardRef(() => WabaModule),
+    CatalogModule,
   ],
   controllers: [TenantController, SettingsController],
-  providers: [TenantService, TenantProvisioningService],
-  exports: [TenantService, TenantProvisioningService],
+  providers: [TenantService, TenantProvisioningService, CommerceSettingsHelper],
+  exports: [TenantService, TenantProvisioningService, CommerceSettingsHelper],
 })
 export class TenantModule {}

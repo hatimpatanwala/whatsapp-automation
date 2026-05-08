@@ -243,6 +243,128 @@ export class WhatsAppApiService {
     });
   }
 
+  // ─── WhatsApp Commerce / Catalog Messages ───────────────────────────────
+
+  /**
+   * Send the full business catalog to a customer.
+   * Requires a Meta Commerce catalog linked to the WABA.
+   */
+  async sendCatalogMessage(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    bodyText: string,
+    thumbnailProductId?: string,
+    footer?: string,
+  ): Promise<any> {
+    const interactive: any = {
+      type: 'catalog_message',
+      body: { text: bodyText },
+      action: {
+        name: 'catalog_message',
+      },
+    };
+
+    if (thumbnailProductId) {
+      interactive.action.parameters = {
+        thumbnail_product_retailer_id: thumbnailProductId,
+      };
+    }
+    if (footer) interactive.footer = { text: footer };
+
+    return this.sendDirectMessage(phoneNumberId, accessToken, to, {
+      type: 'interactive',
+      interactive,
+    });
+  }
+
+  /**
+   * Send a single product from the catalog.
+   */
+  async sendProductMessage(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    catalogId: string,
+    productRetailerId: string,
+    bodyText?: string,
+    footer?: string,
+  ): Promise<any> {
+    const interactive: any = {
+      type: 'product',
+      body: bodyText ? { text: bodyText } : undefined,
+      action: {
+        catalog_id: catalogId,
+        product_retailer_id: productRetailerId,
+      },
+    };
+
+    if (footer) interactive.footer = { text: footer };
+
+    return this.sendDirectMessage(phoneNumberId, accessToken, to, {
+      type: 'interactive',
+      interactive,
+    });
+  }
+
+  /**
+   * Send multiple products from the catalog (up to 30 items across sections).
+   */
+  async sendMultiProductMessage(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    catalogId: string,
+    sections: Array<{
+      title: string;
+      product_items: Array<{ product_retailer_id: string }>;
+    }>,
+    headerText: string,
+    bodyText: string,
+    footer?: string,
+  ): Promise<any> {
+    const interactive: any = {
+      type: 'product_list',
+      header: { type: 'text', text: headerText },
+      body: { text: bodyText },
+      action: {
+        catalog_id: catalogId,
+        sections,
+      },
+    };
+
+    if (footer) interactive.footer = { text: footer };
+
+    return this.sendDirectMessage(phoneNumberId, accessToken, to, {
+      type: 'interactive',
+      interactive,
+    });
+  }
+
+  /**
+   * Send an order status update message to a customer.
+   */
+  async sendOrderStatusMessage(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    orderNumber: string,
+    status: string,
+    details?: string,
+  ): Promise<any> {
+    const statusEmoji: Record<string, string> = {
+      confirmed: '✅',
+      processing: '🔄',
+      shipped: '🚚',
+      delivered: '📦',
+      cancelled: '❌',
+    };
+    const emoji = statusEmoji[status] || '📋';
+    const text = `${emoji} *Order Update*\n\nOrder: *${orderNumber}*\nStatus: *${status.replace(/_/g, ' ').toUpperCase()}*${details ? `\n\n${details}` : ''}`;
+
+    return this.sendTextMessage(phoneNumberId, accessToken, to, text);
+  }
+
   async getMediaUrl(mediaId: string, accessToken: string): Promise<string> {
     return this.metaApiBreaker.execute(async () => {
       const url = `${this.apiUrl}/${this.apiVersion}/${mediaId}`;

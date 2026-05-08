@@ -67,7 +67,7 @@ export class EmbeddedSignupService {
       configId: this.configId,
       version: this.graphApiVersion,
       loginParams: {
-        scope: 'whatsapp_business_management,whatsapp_business_messaging',
+        scope: 'whatsapp_business_management,whatsapp_business_messaging,catalog_management',
         extras: {
           featureType: 'whatsapp_business_app_onboarding',
           sessionInfoVersion: 3,

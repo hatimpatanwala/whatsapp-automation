@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { WhatsAppMessageService } from '../whatsapp-message.service';
+import { CommerceSettingsHelper } from '../helpers/commerce-settings.helper';
 
 export interface MessageContext {
   schema: string;
@@ -17,6 +18,7 @@ export class TextMessageHandler {
   constructor(
     private readonly connectionManager: TenantConnectionManager,
     private readonly messageService: WhatsAppMessageService,
+    private readonly commerceSettings: CommerceSettingsHelper,
   ) {}
 
   async handle(context: MessageContext, text: string): Promise<void> {
@@ -63,14 +65,20 @@ export class TextMessageHandler {
     }
 
     if (['cart', 'my cart', 'view cart'].includes(normalizedText)) {
-      await this.updateFlow(schema, conversation.id, 'view_cart');
-      await this.sendCartSummary(context, customer, conversation.id);
-      return;
+      const cs = await this.commerceSettings.getCommerceSettings(schema);
+      if (cs.cartEnabled) {
+        await this.updateFlow(schema, conversation.id, 'view_cart');
+        await this.sendCartSummary(context, customer, conversation.id);
+        return;
+      }
     }
 
     if (['orders', 'my orders', 'track'].includes(normalizedText)) {
-      await this.sendOrderStatus(context, customer, conversation.id);
-      return;
+      const cs = await this.commerceSettings.getCommerceSettings(schema);
+      if (cs.orderEnabled) {
+        await this.sendOrderStatus(context, customer, conversation.id);
+        return;
+      }
     }
 
     if (['help', 'support'].includes(normalizedText)) {
@@ -92,6 +100,32 @@ export class TextMessageHandler {
   private async sendMainMenu(context: MessageContext, conversationId: string): Promise<void> {
     const { schema, tenant } = context;
 
+    const settings = await this.commerceSettings.getCommerceSettings(schema);
+
+    const buttons: Array<{ id: string; title: string }> = [];
+
+    if (settings.catalogEnabled) {
+      buttons.push({ id: 'browse_catalog', title: '🛍️ Browse Catalog' });
+    }
+    if (settings.cartEnabled) {
+      buttons.push({ id: 'view_cart', title: '🛒 My Cart' });
+    }
+    if (settings.orderEnabled) {
+      buttons.push({ id: 'my_orders', title: '📦 My Orders' });
+    }
+
+    // WhatsApp requires 1-3 buttons; if none enabled, show a default greeting
+    if (buttons.length === 0) {
+      await this.messageService.logAndSendText(
+        schema, tenant.phoneNumberId, tenant.accessToken,
+        context.from, conversationId,
+        'Welcome! How can we help you today? Type "help" for assistance.',
+      );
+      await this.updateFlow(schema, conversationId, 'main_menu');
+      return;
+    }
+
+    // WhatsApp allows max 3 buttons — already guaranteed by our options
     await this.messageService.logAndSendInteractiveButtons(
       schema,
       tenant.phoneNumberId,
@@ -99,11 +133,7 @@ export class TextMessageHandler {
       context.from,
       conversationId,
       'Welcome! What would you like to do?',
-      [
-        { id: 'browse_catalog', title: '🛍️ Browse Catalog' },
-        { id: 'view_cart', title: '🛒 My Cart' },
-        { id: 'my_orders', title: '📦 My Orders' },
-      ],
+      buttons,
       'Main Menu',
     );
 

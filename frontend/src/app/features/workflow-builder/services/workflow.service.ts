@@ -195,4 +195,259 @@ export class WorkflowService {
     ];
     return { nodes, edges };
   }
+
+  /** Build template nodes for "Welcome Flow" — greet new customers with main menu */
+  buildWelcomeFlowTemplate(): { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } {
+    const trigger = this.createNode(this.getNodeTypeDef('trigger_message')!, 300, 40);
+    trigger.config['keywords'] = 'hi, hello, hey, start, menu';
+    trigger.config['matchType'] = 'contains';
+
+    const greet = this.createNode(this.getNodeTypeDef('send_text')!, 300, 240);
+    greet.label = 'Welcome Message';
+    greet.config['message'] = 'Hello {{customer_name}}! Welcome to our store. How can we help you today?';
+
+    const menu = this.createNode(this.getNodeTypeDef('send_buttons')!, 300, 440);
+    menu.label = 'Main Menu';
+    menu.config['body'] = 'Choose an option below:';
+    menu.config['buttons'] = 'Browse Products\nTrack Order\nTalk to Support';
+
+    const catalog = this.createNode(this.getNodeTypeDef('show_catalog')!, 40, 680);
+    catalog.label = 'Browse Products';
+
+    const trackOrder = this.createNode(this.getNodeTypeDef('send_text')!, 300, 680);
+    trackOrder.label = 'Track Order';
+    trackOrder.config['message'] = 'Please share your order number and we\'ll look it up for you.';
+
+    const agent = this.createNode(this.getNodeTypeDef('assign_agent')!, 560, 680);
+    agent.label = 'Connect Support';
+    agent.config['message'] = 'Connecting you with our support team. Please wait...';
+
+    const fallback = this.createNode(this.getNodeTypeDef('fallback')!, 560, 440);
+    fallback.label = 'Invalid Input';
+    fallback.config['message'] = "I didn't catch that. Please choose one of the options below:";
+    fallback.config['mode'] = 'buttons';
+    fallback.config['buttons'] = 'Main Menu\nTalk to Support';
+
+    const end = this.createNode(this.getNodeTypeDef('end')!, 300, 900);
+
+    const nodes = [trigger, greet, menu, catalog, trackOrder, agent, fallback, end];
+    const edges = [
+      this.createEdge(trigger.id, greet.id),
+      this.createEdge(greet.id, menu.id),
+      this.createEdge(menu.id, catalog.id, 'Browse Products'),
+      this.createEdge(menu.id, trackOrder.id, 'Track Order'),
+      this.createEdge(menu.id, agent.id, 'Talk to Support'),
+      this.createEdge(catalog.id, end.id),
+      this.createEdge(trackOrder.id, end.id),
+      this.createEdge(agent.id, end.id),
+      this.createEdge(fallback.id, menu.id, 'Main Menu'),
+      this.createEdge(fallback.id, agent.id, 'Talk to Support'),
+    ];
+    return { nodes, edges };
+  }
+
+  /** Build template nodes for "Appointment Booking Flow" */
+  buildAppointmentFlowTemplate(): { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } {
+    const trigger = this.createNode(this.getNodeTypeDef('trigger_message')!, 300, 40);
+    trigger.config['keywords'] = 'book, appointment, schedule, visit';
+    trigger.config['matchType'] = 'contains';
+
+    const greet = this.createNode(this.getNodeTypeDef('send_text')!, 300, 240);
+    greet.label = 'Booking Intro';
+    greet.config['message'] = 'Let\'s schedule your appointment! I\'ll need a few details from you.';
+
+    const askService = this.createNode(this.getNodeTypeDef('send_buttons')!, 300, 440);
+    askService.label = 'Select Service';
+    askService.config['body'] = 'Which service would you like to book?';
+    askService.config['buttons'] = 'Consultation\nFollow-up\nGeneral Visit';
+
+    const askDate = this.createNode(this.getNodeTypeDef('send_text')!, 300, 640);
+    askDate.label = 'Ask Date';
+    askDate.config['message'] = 'Great! Please tell us your preferred date and time (e.g., "Monday 3 PM").';
+
+    const waitDate = this.createNode(this.getNodeTypeDef('wait_for_reply')!, 300, 840);
+    waitDate.config['timeoutMinutes'] = 30;
+    waitDate.config['timeoutMessage'] = 'Your booking session has expired. Type "book" to start again.';
+
+    const confirm = this.createNode(this.getNodeTypeDef('send_buttons')!, 300, 1040);
+    confirm.label = 'Confirm Booking';
+    confirm.config['body'] = 'You\'ve requested a {{last_input}} appointment. Shall I confirm?';
+    confirm.config['buttons'] = 'Confirm\nChange Date\nCancel';
+
+    const confirmed = this.createNode(this.getNodeTypeDef('send_text')!, 40, 1260);
+    confirmed.label = 'Booking Confirmed';
+    confirmed.config['message'] = 'Your appointment is confirmed! We\'ll send you a reminder before your visit. Thank you!';
+
+    const tagVip = this.createNode(this.getNodeTypeDef('tag_customer')!, 40, 1460);
+    tagVip.label = 'Tag as Booked';
+    tagVip.config['action'] = 'add';
+    tagVip.config['tag'] = 'appointment_booked';
+
+    const cancelled = this.createNode(this.getNodeTypeDef('send_text')!, 560, 1260);
+    cancelled.label = 'Booking Cancelled';
+    cancelled.config['message'] = 'No problem! Your booking has been cancelled. You can book again anytime by typing "book".';
+
+    const end = this.createNode(this.getNodeTypeDef('end')!, 300, 1660);
+
+    const nodes = [trigger, greet, askService, askDate, waitDate, confirm, confirmed, tagVip, cancelled, end];
+    const edges = [
+      this.createEdge(trigger.id, greet.id),
+      this.createEdge(greet.id, askService.id),
+      this.createEdge(askService.id, askDate.id),
+      this.createEdge(askDate.id, waitDate.id),
+      this.createEdge(waitDate.id, confirm.id),
+      this.createEdge(confirm.id, confirmed.id, 'Confirm'),
+      this.createEdge(confirm.id, askDate.id, 'Change Date'),
+      this.createEdge(confirm.id, cancelled.id, 'Cancel'),
+      this.createEdge(confirmed.id, tagVip.id),
+      this.createEdge(tagVip.id, end.id),
+      this.createEdge(cancelled.id, end.id),
+    ];
+    return { nodes, edges };
+  }
+
+  /** Build template nodes for "Feedback Collection Flow" */
+  buildFeedbackFlowTemplate(): { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } {
+    const trigger = this.createNode(this.getNodeTypeDef('trigger_order')!, 300, 40);
+    trigger.config['event'] = 'delivered';
+
+    const delay = this.createNode(this.getNodeTypeDef('delay')!, 300, 240);
+    delay.label = 'Wait 1 Hour';
+    delay.config['duration'] = 1;
+    delay.config['unit'] = 'hours';
+
+    const askRating = this.createNode(this.getNodeTypeDef('send_buttons')!, 300, 440);
+    askRating.label = 'Ask Rating';
+    askRating.config['body'] = 'Hi {{customer_name}}! Your order has been delivered. How was your experience?';
+    askRating.config['buttons'] = 'Excellent\nGood\nPoor';
+
+    const thankYou = this.createNode(this.getNodeTypeDef('send_text')!, 40, 680);
+    thankYou.label = 'Thank You';
+    thankYou.config['message'] = 'Thank you for the wonderful feedback! We appreciate your business.';
+
+    const tagHappy = this.createNode(this.getNodeTypeDef('tag_customer')!, 40, 880);
+    tagHappy.label = 'Tag Happy Customer';
+    tagHappy.config['action'] = 'add';
+    tagHappy.config['tag'] = 'satisfied';
+
+    const askIssue = this.createNode(this.getNodeTypeDef('send_text')!, 560, 680);
+    askIssue.label = 'Ask Issue Details';
+    askIssue.config['message'] = 'We\'re sorry to hear that. Could you tell us what went wrong? Our team will look into it.';
+
+    const waitIssue = this.createNode(this.getNodeTypeDef('wait_for_reply')!, 560, 880);
+    waitIssue.config['timeoutMinutes'] = 120;
+
+    const assignAgent = this.createNode(this.getNodeTypeDef('assign_agent')!, 560, 1080);
+    assignAgent.label = 'Escalate to Support';
+    assignAgent.config['message'] = 'Your feedback has been noted. A support agent will follow up shortly.';
+
+    const end = this.createNode(this.getNodeTypeDef('end')!, 300, 1280);
+
+    const nodes = [trigger, delay, askRating, thankYou, tagHappy, askIssue, waitIssue, assignAgent, end];
+    const edges = [
+      this.createEdge(trigger.id, delay.id),
+      this.createEdge(delay.id, askRating.id),
+      this.createEdge(askRating.id, thankYou.id, 'Excellent'),
+      this.createEdge(askRating.id, thankYou.id, 'Good'),
+      this.createEdge(askRating.id, askIssue.id, 'Poor'),
+      this.createEdge(thankYou.id, tagHappy.id),
+      this.createEdge(tagHappy.id, end.id),
+      this.createEdge(askIssue.id, waitIssue.id),
+      this.createEdge(waitIssue.id, assignAgent.id),
+      this.createEdge(assignAgent.id, end.id),
+    ];
+    return { nodes, edges };
+  }
+
+  /** Build template nodes for "Abandoned Cart Recovery Flow" */
+  buildAbandonedCartFlowTemplate(): { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } {
+    const trigger = this.createNode(this.getNodeTypeDef('trigger_schedule')!, 300, 40);
+    trigger.config['schedule'] = 'daily';
+    trigger.config['time'] = '10:00';
+
+    const reminder = this.createNode(this.getNodeTypeDef('send_text')!, 300, 240);
+    reminder.label = 'Cart Reminder';
+    reminder.config['message'] = 'Hi {{customer_name}}! You have items in your cart. Would you like to complete your purchase?';
+
+    const buttons = this.createNode(this.getNodeTypeDef('send_buttons')!, 300, 440);
+    buttons.label = 'Recovery Options';
+    buttons.config['body'] = 'Your cart is waiting for you!';
+    buttons.config['buttons'] = 'View Cart\nClear Cart\nNot Now';
+
+    const viewCart = this.createNode(this.getNodeTypeDef('view_cart')!, 40, 680);
+    viewCart.label = 'Show Cart';
+
+    const checkout = this.createNode(this.getNodeTypeDef('checkout')!, 40, 900);
+    checkout.config['requireAddress'] = true;
+    checkout.config['paymentMethod'] = 'choice';
+
+    const dismiss = this.createNode(this.getNodeTypeDef('send_text')!, 560, 680);
+    dismiss.label = 'Dismiss';
+    dismiss.config['message'] = 'No worries! Your cart will be saved for later. Just type "cart" anytime to view it.';
+
+    const end = this.createNode(this.getNodeTypeDef('end')!, 300, 1100);
+
+    const nodes = [trigger, reminder, buttons, viewCart, checkout, dismiss, end];
+    const edges = [
+      this.createEdge(trigger.id, reminder.id),
+      this.createEdge(reminder.id, buttons.id),
+      this.createEdge(buttons.id, viewCart.id, 'View Cart'),
+      this.createEdge(buttons.id, dismiss.id, 'Clear Cart'),
+      this.createEdge(buttons.id, dismiss.id, 'Not Now'),
+      this.createEdge(viewCart.id, checkout.id),
+      this.createEdge(checkout.id, end.id),
+      this.createEdge(dismiss.id, end.id),
+    ];
+    return { nodes, edges };
+  }
+
+  /** Build template nodes for "Order Tracking Flow" */
+  buildOrderTrackingFlowTemplate(): { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } {
+    const trigger = this.createNode(this.getNodeTypeDef('trigger_message')!, 300, 40);
+    trigger.config['keywords'] = 'track, status, order, where';
+    trigger.config['matchType'] = 'contains';
+
+    const askOrder = this.createNode(this.getNodeTypeDef('send_text')!, 300, 240);
+    askOrder.label = 'Ask Order Number';
+    askOrder.config['message'] = 'Please share your order number so I can look it up for you.';
+
+    const waitOrder = this.createNode(this.getNodeTypeDef('wait_for_reply')!, 300, 440);
+    waitOrder.config['timeoutMinutes'] = 15;
+    waitOrder.config['timeoutMessage'] = 'Session timed out. Type "track" to try again.';
+
+    const condition = this.createNode(this.getNodeTypeDef('condition')!, 300, 640);
+    condition.label = 'Order Found?';
+    condition.config['variable'] = 'order_status';
+    condition.config['operator'] = 'neq';
+    condition.config['value'] = '';
+
+    const statusMsg = this.createNode(this.getNodeTypeDef('send_text')!, 40, 880);
+    statusMsg.label = 'Show Status';
+    statusMsg.config['message'] = 'Your order status: {{order_status}}. Expected delivery: {{delivery_date}}.';
+
+    const followUp = this.createNode(this.getNodeTypeDef('send_buttons')!, 40, 1080);
+    followUp.label = 'More Help?';
+    followUp.config['body'] = 'Anything else you need?';
+    followUp.config['buttons'] = 'Track Another\nTalk to Agent\nDone';
+
+    const notFound = this.createNode(this.getNodeTypeDef('send_text')!, 560, 880);
+    notFound.label = 'Not Found';
+    notFound.config['message'] = 'Sorry, we couldn\'t find that order. Please check the order number and try again.';
+
+    const end = this.createNode(this.getNodeTypeDef('end')!, 300, 1300);
+
+    const nodes = [trigger, askOrder, waitOrder, condition, statusMsg, followUp, notFound, end];
+    const edges = [
+      this.createEdge(trigger.id, askOrder.id),
+      this.createEdge(askOrder.id, waitOrder.id),
+      this.createEdge(waitOrder.id, condition.id),
+      this.createEdge(condition.id, statusMsg.id, 'Yes'),
+      this.createEdge(condition.id, notFound.id, 'No'),
+      this.createEdge(statusMsg.id, followUp.id),
+      this.createEdge(followUp.id, askOrder.id, 'Track Another'),
+      this.createEdge(followUp.id, end.id, 'Done'),
+      this.createEdge(notFound.id, askOrder.id),
+    ];
+    return { nodes, edges };
+  }
 }

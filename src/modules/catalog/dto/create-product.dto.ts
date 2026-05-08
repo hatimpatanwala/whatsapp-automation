@@ -10,11 +10,22 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  shortDescription?: string;
+
+  @IsOptional()
+  @IsString()
   categoryId?: string;
 
+  // Accept either "basePrice" or "price" from the frontend
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  basePrice: number;
+  basePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
 
   @IsOptional()
   @IsNumber()
@@ -22,12 +33,33 @@ export class CreateProductDto {
   salePrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  compareAtPrice?: number;
+
+  @IsOptional()
   @IsString()
   currency?: string;
 
   @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
   @IsArray()
   images?: string[];
+
+  @IsOptional()
+  @IsArray()
+  imageUrls?: string[];
 
   @IsOptional()
   @IsString()
@@ -38,12 +70,28 @@ export class CreateProductDto {
   hasVariants?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  trackInventory?: boolean;
+
+  @IsOptional()
   @IsNumber()
   initialStock?: number;
 
   @IsOptional()
   @IsNumber()
+  stockQuantity?: number;
+
+  @IsOptional()
+  @IsNumber()
   lowStockThreshold?: number;
+
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
+
+  @IsOptional()
+  @IsArray()
+  tags?: string[];
 
   @IsOptional()
   @IsObject()
@@ -52,4 +100,8 @@ export class CreateProductDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  @IsOptional()
+  @IsArray()
+  variants?: any[];
 }

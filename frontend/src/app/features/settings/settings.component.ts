@@ -52,6 +52,7 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
           <p-tab value="whatsapp"><i class="pi pi-whatsapp mr-2"></i>WhatsApp</p-tab>
           <p-tab value="payments"><i class="pi pi-credit-card mr-2"></i>Payments</p-tab>
           <p-tab value="notifications"><i class="pi pi-bell mr-2"></i>Notifications</p-tab>
+          <p-tab value="commerce"><i class="pi pi-shop mr-2"></i>Commerce</p-tab>
           <p-tab value="subscription"><i class="pi pi-star mr-2"></i>Subscription</p-tab>
         </p-tablist>
 
@@ -532,6 +533,148 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
             </div>
           </p-tabpanel>
 
+          <!-- Commerce -->
+          <p-tabpanel value="commerce">
+            <div class="space-y-6 mt-4">
+
+              <!-- WhatsApp Commerce Overview -->
+              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div class="flex items-center gap-3 mb-4">
+                  <div class="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <i class="pi pi-shop text-emerald-600" style="font-size:1.2rem"></i>
+                  </div>
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-900">WhatsApp Commerce</h3>
+                    <p class="text-sm text-gray-500">Let customers browse, add to cart, and order — all inside WhatsApp</p>
+                  </div>
+                </div>
+
+                <p-message severity="success" styleClass="w-full mb-4">
+                  <div class="text-xs leading-relaxed">
+                    Products you add to your catalog on this platform are automatically available to customers on WhatsApp.
+                    No Meta account or Commerce Manager needed — everything runs through your store.
+                  </div>
+                </p-message>
+              </div>
+
+              <!-- Feature Toggles -->
+              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 class="text-base font-semibold text-gray-900 mb-5">Commerce Features</h3>
+                <div class="space-y-1">
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Show Catalog on WhatsApp</p>
+                      <p class="text-xs text-gray-500">Customers can browse your product categories and items directly in the chat. Products are pulled from your catalog on this platform.</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.catalogEnabled" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Enable Cart</p>
+                      <p class="text-xs text-gray-500">Customers can add products to a cart, view items, update quantities, and clear their cart — all within WhatsApp.</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.cartEnabled" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Enable Ordering</p>
+                      <p class="text-xs text-gray-500">Customers can checkout their cart, select a delivery address, and place orders directly from WhatsApp. Orders appear in your Orders dashboard.</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.orderEnabled" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Auto-Confirm Orders</p>
+                      <p class="text-xs text-gray-500">Automatically confirm orders without manual review. Turn off if you want to review each order before confirming.</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.autoCheckout" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Order Notifications</p>
+                      <p class="text-xs text-gray-500">Automatically send WhatsApp messages to customers when their order status changes (confirmed, shipped, delivered).</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.orderNotification" />
+                  </div>
+
+                  <!-- Advanced: Meta Catalog (collapsible) -->
+                  <div class="pt-3">
+                    <button class="text-xs text-primary-500 hover:underline bg-transparent border-0 cursor-pointer p-0 flex items-center gap-1"
+                      (click)="showAdvancedCommerce = !showAdvancedCommerce">
+                      <i [class]="'pi ' + (showAdvancedCommerce ? 'pi-chevron-down' : 'pi-chevron-right')" style="font-size:0.65rem"></i>
+                      Advanced: Meta Native Catalog (optional)
+                    </button>
+                    @if (showAdvancedCommerce) {
+                      <div class="mt-3 bg-gray-50 rounded-lg p-4 space-y-3">
+                        <p class="text-xs text-gray-500">
+                          If you have a Meta Commerce Manager catalog linked to your WhatsApp Business Account, enter the Catalog ID below.
+                          This enables WhatsApp's native product browsing UI (richer product cards). Most users don't need this — the platform catalog works great on its own.
+                        </p>
+                        <div class="flex flex-col gap-1">
+                          <label class="text-xs font-medium text-gray-600">Meta Catalog ID (optional)</label>
+                          <input pInputText [(ngModel)]="commerce.catalogId" placeholder="e.g. 123456789012345" class="w-full" />
+                        </div>
+                      </div>
+                    }
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- How it works -->
+              <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                <h4 class="text-sm font-semibold text-gray-700 mb-3">How It Works</h4>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <span class="text-emerald-700 font-bold text-sm">1</span>
+                    </div>
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Add Products</p>
+                      <p class="text-xs text-gray-500">Add your products and categories in the Products section of this platform</p>
+                    </div>
+                  </div>
+                  <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <span class="text-emerald-700 font-bold text-sm">2</span>
+                    </div>
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Enable Features</p>
+                      <p class="text-xs text-gray-500">Toggle on Catalog, Cart, and Ordering above to activate them on WhatsApp</p>
+                    </div>
+                  </div>
+                  <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <span class="text-emerald-700 font-bold text-sm">3</span>
+                    </div>
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">Customers Shop</p>
+                      <p class="text-xs text-gray-500">Customers type "hi" on WhatsApp, browse products, add to cart, and checkout</p>
+                    </div>
+                  </div>
+                  <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <span class="text-emerald-700 font-bold text-sm">4</span>
+                    </div>
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">You Fulfill</p>
+                      <p class="text-xs text-gray-500">Orders appear in your Orders dashboard. Manage, confirm, and deliver from here.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex justify-end">
+                <button pButton label="Save Commerce Settings" icon="pi pi-check" severity="success" (click)="save()"></button>
+              </div>
+            </div>
+          </p-tabpanel>
+
           <!-- Subscription -->
           <p-tabpanel value="subscription">
             <div class="space-y-6 mt-4">
@@ -612,6 +755,7 @@ export class SettingsComponent implements OnInit {
 
   showToken = signal(false);
   allowExceed = false;
+  showAdvancedCommerce = false;
 
   // WhatsApp connection state
   waConnected = computed(() => {
@@ -645,6 +789,15 @@ export class SettingsComponent implements OnInit {
     autoConfirmOrders: true,
     enableDelivery: true,
     enablePickup: false,
+  };
+
+  commerce = {
+    catalogEnabled: false,
+    cartEnabled: false,
+    orderEnabled: false,
+    catalogId: '',
+    autoCheckout: false,
+    orderNotification: true,
   };
 
   wa = {
@@ -829,6 +982,14 @@ export class SettingsComponent implements OnInit {
           } catch {}
         }
 
+        // Commerce settings
+        if (settings.commerceCatalogEnabled !== undefined) this.commerce.catalogEnabled = this.parseBool(settings.commerceCatalogEnabled);
+        if (settings.commerceCartEnabled !== undefined) this.commerce.cartEnabled = this.parseBool(settings.commerceCartEnabled);
+        if (settings.commerceOrderEnabled !== undefined) this.commerce.orderEnabled = this.parseBool(settings.commerceOrderEnabled);
+        if (settings.commerceCatalogId) this.commerce.catalogId = settings.commerceCatalogId;
+        if (settings.commerceAutoCheckout !== undefined) this.commerce.autoCheckout = this.parseBool(settings.commerceAutoCheckout);
+        if (settings.commerceOrderNotification !== undefined) this.commerce.orderNotification = this.parseBool(settings.commerceOrderNotification);
+
         // WhatsApp config
         if (settings.waPhone) this.wa.phone = settings.waPhone;
         if (settings.waAccountId) this.wa.accountId = settings.waAccountId;
@@ -950,6 +1111,13 @@ export class SettingsComponent implements OnInit {
       enable_pickup: this.biz.enablePickup,
       // Business hours
       business_hours: this.businessHours,
+      // Commerce settings
+      commerce_catalog_enabled: this.commerce.catalogEnabled,
+      commerce_cart_enabled: this.commerce.cartEnabled,
+      commerce_order_enabled: this.commerce.orderEnabled,
+      commerce_catalog_id: this.commerce.catalogId,
+      commerce_auto_checkout: this.commerce.autoCheckout,
+      commerce_order_notification: this.commerce.orderNotification,
       // WhatsApp config
       wa_phone: this.wa.phone,
       wa_account_id: this.wa.accountId,

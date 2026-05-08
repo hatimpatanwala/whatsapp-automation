@@ -518,7 +518,14 @@ const migration021Settings: TenantMigration = {
         ('reservation_ttl_minutes', '15'),
         ('payment_expiry_minutes', '30'),
         ('upi_ids', '[]'),
-        ('business_hours', '{"start": "09:00", "end": "21:00", "timezone": "Asia/Kolkata"}')
+        ('business_hours', '{"start": "09:00", "end": "21:00", "timezone": "Asia/Kolkata"}'),
+        ('commerce_catalog_enabled', 'false'),
+        ('commerce_cart_enabled', 'false'),
+        ('commerce_order_enabled', 'false'),
+        ('commerce_catalog_id', '""'),
+        ('commerce_auto_checkout', 'false'),
+        ('commerce_order_notification', 'true')
+      ON CONFLICT (key) DO NOTHING
     `);
   },
   async down(qr, schema) {
@@ -662,6 +669,46 @@ const migration026PerformanceIndexes: TenantMigration = {
   },
 };
 
+const migration027WorkflowLastActivity: TenantMigration = {
+  name: '027_workflow_execution_last_activity',
+  async up(qr, schema) {
+    await qr.query(`
+      ALTER TABLE "${schema}".workflow_executions
+        ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ DEFAULT NOW()
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`
+      ALTER TABLE "${schema}".workflow_executions
+        DROP COLUMN IF EXISTS last_activity_at
+    `);
+  },
+};
+
+const migration028CommerceSettings: TenantMigration = {
+  name: '028_commerce_settings',
+  async up(qr, schema) {
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('commerce_catalog_enabled', 'false'),
+        ('commerce_cart_enabled', 'false'),
+        ('commerce_order_enabled', 'false'),
+        ('commerce_catalog_id', '""'),
+        ('commerce_auto_checkout', 'false'),
+        ('commerce_order_notification', 'true')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`
+      DELETE FROM "${schema}".settings WHERE key IN (
+        'commerce_catalog_enabled', 'commerce_cart_enabled', 'commerce_order_enabled',
+        'commerce_catalog_id', 'commerce_auto_checkout', 'commerce_order_notification'
+      )
+    `);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -689,4 +736,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration024WorkflowEngine,
   migration025UsersPhoneNullable,
   migration026PerformanceIndexes,
+  migration027WorkflowLastActivity,
+  migration028CommerceSettings,
 ];

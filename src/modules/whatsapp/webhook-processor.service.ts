@@ -19,6 +19,8 @@ import { RateLimitService } from '../waba/metering/rate-limit.service';
 import { PhoneNumberService } from '../waba/phone-number.service';
 import { MetaTokenService } from '../waba/meta-token.service';
 import { ComplianceMonitorService } from '../waba/compliance/compliance-monitor.service';
+import { OrderMessageHandler } from './message-handlers/order-message.handler';
+import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 
 @Injectable()
 export class WebhookProcessorService {
@@ -43,6 +45,8 @@ export class WebhookProcessorService {
     @Optional() private readonly quotaService: QuotaEnforcementService,
     @Optional() private readonly rateLimitService: RateLimitService,
     @Optional() private readonly complianceMonitor: ComplianceMonitorService,
+    private readonly orderHandler: OrderMessageHandler,
+    private readonly commerceSettings: CommerceSettingsHelper,
     private readonly configService: ConfigService,
   ) {
     this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
@@ -192,64 +196,117 @@ export class WebhookProcessorService {
     }
 
     // ─── WORKFLOW ENGINE: Check for active execution first ─────────────
+    let handledByWorkflow = false;
     try {
       const activeExecution = await this.workflowEngine.findActiveExecution(schema, from);
+      this.logger.log(`[FLOW] findActiveExecution for ${from}: ${activeExecution ? `id=${activeExecution.id} status=${activeExecution.status}` : 'null'}`);
       if (activeExecution) {
-        const reply = this.parseReply(message);
-        await this.workflowEngine.resumeExecution({
-          schema,
-          executionId: activeExecution.id,
-          reply,
-          resumeSource: 'message',
-          tenant,
-        });
-        return; // Workflow handled this message
+        if (activeExecution.status === 'waiting') {
+          const reply = this.parseReply(message);
+          this.logger.log(`[FLOW] Resuming waiting execution ${activeExecution.id} for ${from}`);
+          await this.workflowEngine.resumeExecution({
+            schema,
+            executionId: activeExecution.id,
+            reply,
+            resumeSource: 'message',
+            tenant,
+          });
+          handledByWorkflow = true;
+        } else {
+          // 'running' execution returned — it's actively processing (< 2 min old).
+          // Don't swallow the message; let it fall through to trigger matching.
+          this.logger.log(`[FLOW] Active running execution ${activeExecution.id} for ${from} — NOT blocking, will try trigger match`);
+        }
       }
 
       // ─── WORKFLOW ENGINE: Check for trigger match ──────────────────────
-      const text = message.text?.body || '';
-      if (text) {
-        const triggerMatch = await this.triggerMatcher.findMatchingWorkflow(schema, text, type);
-        if (triggerMatch) {
-          // Check subscription limits before starting a new conversation
-          const canStart = await this.conversationHelper.canStartConversation(schema);
-          if (!canStart.allowed) {
-            this.logger.warn(`Subscription limit reached for ${schema}: ${canStart.reason}`);
-            // Fall through to hardcoded handlers
+      if (!handledByWorkflow) {
+        const text = message.text?.body || '';
+        const interactiveText = message.interactive?.button_reply?.title
+          || message.interactive?.list_reply?.title || '';
+        const matchText = text || interactiveText;
+
+        if (matchText) {
+          this.logger.log(`[FLOW] Trigger matching "${matchText}" for ${from} in ${schema}`);
+          const triggerMatch = await this.triggerMatcher.findMatchingWorkflow(schema, matchText, 'text');
+          if (triggerMatch) {
+            this.logger.log(`[FLOW] Trigger matched workflow ${triggerMatch.workflowId} for "${matchText}"`);
+            const canStart = await this.conversationHelper.canStartConversation(schema);
+            if (canStart.allowed) {
+              const customer = await this.conversationHelper.getOrCreateCustomer(schema, from, contactName);
+              const conversation = await this.conversationHelper.getOrCreateConversation(schema, customer.id, from);
+
+              await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+                await qr.query(
+                  `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, status)
+                   VALUES ($1, $2, 'inbound', $3, $4, 'received')`,
+                  [conversation.id, messageId, type, JSON.stringify(message[type] || message)],
+                );
+              });
+
+              await this.workflowEngine.startExecution({
+                schema,
+                tenant,
+                workflowId: triggerMatch.workflowId,
+                triggerNodeId: triggerMatch.triggerNodeId,
+                conversationId: conversation.id,
+                customerPhone: from,
+                customerId: customer.id,
+                customerName: contactName,
+                triggerData: { text: matchText, messageType: type, raw: message },
+              });
+              handledByWorkflow = true;
+            } else {
+              this.logger.warn(`Subscription limit for ${schema}: ${canStart.reason} — falling through`);
+            }
           } else {
-            const customer = await this.conversationHelper.getOrCreateCustomer(schema, from, contactName);
-            const conversation = await this.conversationHelper.getOrCreateConversation(schema, customer.id, from);
+            this.logger.log(`[FLOW] No trigger match for "${matchText}" in ${schema}`);
+          }
+        }
+      }
 
-            // Log inbound message
-            await this.connectionManager.executeInTenantContext(schema, async (qr) => {
-              await qr.query(
-                `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, status)
-                 VALUES ($1, $2, 'inbound', $3, $4, 'received')`,
-                [conversation.id, messageId, type, JSON.stringify(message[type] || message)],
-              );
-            });
+      // ─── NO WORKFLOW, NO TRIGGER: Check for recently expired execution ─
+      if (!handledByWorkflow) {
+        this.logger.log(`[FLOW] No workflow matched, checking recently expired executions for ${from}`);
+        const recentExecution = await this.workflowEngine.findRecentExpiredExecution(schema, from);
+        if (recentExecution) {
+          this.logger.log(`Restarting recently expired workflow ${recentExecution.workflow_id} for ${from}`);
+          const customer = await this.conversationHelper.getOrCreateCustomer(schema, from, contactName);
+          const conversation = await this.conversationHelper.getOrCreateConversation(schema, customer.id, from);
 
+          await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+            await qr.query(
+              `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, status)
+               VALUES ($1, $2, 'inbound', $3, $4, 'received')`,
+              [conversation.id, messageId, type, JSON.stringify(message[type] || message)],
+            );
+          });
+
+          const triggerInfo = await this.workflowEngine.findWorkflowTriggerNode(schema, recentExecution.workflow_id);
+          if (triggerInfo) {
             await this.workflowEngine.startExecution({
               schema,
               tenant,
-              workflowId: triggerMatch.workflowId,
-              triggerNodeId: triggerMatch.triggerNodeId,
+              workflowId: recentExecution.workflow_id,
+              triggerNodeId: triggerInfo.triggerNodeId,
               conversationId: conversation.id,
               customerPhone: from,
               customerId: customer.id,
               customerName: contactName,
-              triggerData: { text, messageType: type, raw: message },
+              triggerData: { text: message.text?.body || '', restarted: true },
             });
-            return; // Workflow handled this message
+            handledByWorkflow = true;
           }
         }
       }
     } catch (err: any) {
       this.logger.error(`Workflow engine error: ${err.message}`, err.stack);
-      // Fall through to hardcoded handlers on workflow engine failure
     }
 
-    // ─── FALLBACK: Original hardcoded handlers ───────────────────────────
+    if (handledByWorkflow) return;
+
+    // ─── FALLBACK: Hardcoded handlers — guaranteed response ──────────────
+    this.logger.log(`[FLOW] No workflow handled message from ${from} (type=${type}), using hardcoded handler`);
     const context = {
       schema,
       tenant,
@@ -258,24 +315,37 @@ export class WebhookProcessorService {
       contactName,
     };
 
-    switch (type) {
-      case 'text':
-        await this.textHandler.handle(context, message.text.body);
-        break;
-      case 'interactive':
-        await this.interactiveHandler.handle(context, message.interactive);
-        break;
-      case 'image':
-      case 'document':
-      case 'video':
-      case 'audio':
-        await this.mediaHandler.handle(context, message[type], type);
-        break;
-      case 'location':
-        await this.textHandler.handle(context, `📍 Location: ${message.location.latitude},${message.location.longitude}`);
-        break;
-      default:
-        this.logger.warn(`Unhandled message type: ${type}`);
+    try {
+      switch (type) {
+        case 'text':
+          await this.textHandler.handle(context, message.text.body);
+          break;
+        case 'interactive':
+          await this.interactiveHandler.handle(context, message.interactive);
+          break;
+        case 'image':
+        case 'document':
+        case 'video':
+        case 'audio':
+          await this.mediaHandler.handle(context, message[type], type);
+          break;
+        case 'order':
+          await this.orderHandler.handle(context, message.order);
+          break;
+        case 'location':
+          await this.textHandler.handle(context, `📍 Location: ${message.location.latitude},${message.location.longitude}`);
+          break;
+        default:
+          this.logger.warn(`Unhandled message type: ${type}`);
+      }
+    } catch (handlerErr: any) {
+      // Last resort: if even hardcoded handlers fail, send a raw API response
+      this.logger.error(`Hardcoded handler failed: ${handlerErr.message}`);
+      try {
+        await this.sendDefaultReply(tenant, from);
+      } catch (e: any) {
+        this.logger.error(`Default reply also failed: ${e.message}`);
+      }
     }
   }
 
@@ -303,6 +373,29 @@ export class WebhookProcessorService {
       return { type: 'media', raw: message[message.type] };
     }
     return { type: 'text', text: '', raw: message };
+  }
+
+  private async sendDefaultReply(tenant: any, customerPhone: string): Promise<void> {
+    const accessToken = tenant.accessToken;
+    const phoneNumberId = tenant.phoneNumberId;
+    if (!accessToken || !phoneNumberId) {
+      this.logger.error(`Cannot send default reply — missing accessToken or phoneNumberId`);
+      return;
+    }
+
+    await fetch(`https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: customerPhone,
+        type: 'text',
+        text: { body: 'Hi! Send "hi" or "menu" to get started.' },
+      }),
+    });
   }
 
   private async sendInactiveAutoReply(tenant: any, phoneNumberId: string, customerPhone: string): Promise<void> {

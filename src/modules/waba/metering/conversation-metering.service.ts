@@ -6,6 +6,7 @@ import Redis from 'ioredis';
 import { ConversationSession } from '../../../database/entities/public/conversation-session.entity';
 import { ConversationCost } from '../../../database/entities/public/conversation-cost.entity';
 import { Subscription } from '../../../database/entities/public/subscription.entity';
+import { PhoneNumber } from '../../../database/entities/public/phone-number.entity';
 import { AuditLogService } from '../audit-log.service';
 import { WalletService } from '../../billing/wallet.service';
 
@@ -48,6 +49,8 @@ export class ConversationMeteringService {
     private readonly costRepo: Repository<ConversationCost>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepo: Repository<Subscription>,
+    @InjectRepository(PhoneNumber)
+    private readonly phoneNumberRepo: Repository<PhoneNumber>,
     @Inject('REDIS_CLIENT')
     private readonly redis: Redis,
     private readonly auditService: AuditLogService,
@@ -238,9 +241,12 @@ export class ConversationMeteringService {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
 
+    // Resolve Meta phone_number_id string to phone_numbers UUID
+    const resolvedPhoneId = await this.resolvePhoneNumberUuid(input.phoneNumberId);
+
     const session = this.sessionRepo.create({
       tenantId: input.tenantId,
-      phoneNumberId: input.phoneNumberId,
+      phoneNumberId: resolvedPhoneId,
       customerPhone: input.customerPhone,
       conversationIdMeta: input.waConversationId,
       category: input.category,
@@ -253,6 +259,36 @@ export class ConversationMeteringService {
     });
 
     return this.sessionRepo.save(session);
+  }
+
+  /**
+   * Resolve a Meta phone_number_id (e.g. "1100291683170524") to the UUID primary key
+   * from the phone_numbers table. Falls back to the input value if no record is found.
+   */
+  private async resolvePhoneNumberUuid(metaPhoneNumberId: string): Promise<string> {
+    // If it's already a valid UUID format, return as-is
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(metaPhoneNumberId)) {
+      return metaPhoneNumberId;
+    }
+
+    // Check cache first
+    const cacheKey = `phone:uuid:${metaPhoneNumberId}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached) return cached;
+
+    // Look up from DB
+    const phoneRecord = await this.phoneNumberRepo.findOne({
+      where: { phoneNumberId: metaPhoneNumberId },
+      select: ['id'],
+    });
+
+    if (phoneRecord) {
+      await this.redis.set(cacheKey, phoneRecord.id, 'EX', 3600); // Cache for 1 hour
+      return phoneRecord.id;
+    }
+
+    this.logger.warn(`No phone_numbers record found for Meta phone_number_id: ${metaPhoneNumberId}`);
+    return metaPhoneNumberId; // Fallback (will fail on FK constraint if not UUID)
   }
 
   private async recordCost(session: ConversationSession, input: MeterConversationInput): Promise<void> {

@@ -52,6 +52,7 @@ export type NodeExecutionResult =
   | { action: 'continue'; nextNodeId: string }
   | { action: 'wait'; waitType: 'reply' | 'delay' | 'timeout'; waitConfig?: Record<string, any> }
   | { action: 'end' }
+  | { action: 'start_workflow'; targetWorkflowId: string; passVariables: boolean }
   | { action: 'error'; message: string };
 
 export interface NodeHandler {

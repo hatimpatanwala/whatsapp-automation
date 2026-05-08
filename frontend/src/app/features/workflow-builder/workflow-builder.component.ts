@@ -204,7 +204,7 @@ import {
     }
 
     <!-- ========== NEW WORKFLOW DIALOG ========== -->
-    <p-dialog [(visible)]="newWorkflowDialog" header="Create New Workflow" [modal]="true" [style]="{width:'520px'}" [draggable]="false">
+    <p-dialog [(visible)]="newWorkflowDialog" header="Create New Workflow" [modal]="true" [style]="{width:'680px'}" [draggable]="false">
       <div class="space-y-4 py-2">
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium text-gray-700">Workflow Name *</label>
@@ -218,7 +218,7 @@ import {
         <!-- Templates -->
         <div>
           <label class="text-sm font-medium text-gray-700 mb-2 block">Start from a template</label>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-3 gap-3">
             @for (template of workflowTemplates; track template.name) {
               <div
                 class="p-3 border border-gray-200 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
@@ -281,6 +281,11 @@ export class WorkflowBuilderComponent implements OnInit {
     { name: 'Order Flow', desc: 'Confirm, pay, and deliver', icon: 'pi-shopping-cart' },
     { name: 'Support Flow', desc: 'Greet, route, and resolve', icon: 'pi-headphones' },
     { name: 'Sales Flow', desc: 'Browse, search, and buy', icon: 'pi-chart-line' },
+    { name: 'Welcome Flow', desc: 'Greet and show main menu', icon: 'pi-comments' },
+    { name: 'Appointment Flow', desc: 'Book and manage appointments', icon: 'pi-calendar' },
+    { name: 'Feedback Flow', desc: 'Collect post-delivery feedback', icon: 'pi-star' },
+    { name: 'Abandoned Cart', desc: 'Recover abandoned carts', icon: 'pi-cart-arrow-down' },
+    { name: 'Order Tracking', desc: 'Track order status', icon: 'pi-map-marker' },
     { name: 'Blank Canvas', desc: 'Start from scratch', icon: 'pi-palette' },
   ];
 
@@ -513,16 +518,19 @@ export class WorkflowBuilderComponent implements OnInit {
     let nodes: WorkflowNodeData[] = [];
     let edges: WorkflowEdgeData[] = [];
 
-    if (this.selectedTemplate === 'Order Flow') {
-      const t = this.workflowService.buildOrderFlowTemplate();
-      nodes = t.nodes;
-      edges = t.edges;
-    } else if (this.selectedTemplate === 'Support Flow') {
-      const t = this.workflowService.buildSupportFlowTemplate();
-      nodes = t.nodes;
-      edges = t.edges;
-    } else if (this.selectedTemplate === 'Sales Flow') {
-      const t = this.workflowService.buildSalesFlowTemplate();
+    const templateBuilders: Record<string, () => { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] }> = {
+      'Order Flow': () => this.workflowService.buildOrderFlowTemplate(),
+      'Support Flow': () => this.workflowService.buildSupportFlowTemplate(),
+      'Sales Flow': () => this.workflowService.buildSalesFlowTemplate(),
+      'Welcome Flow': () => this.workflowService.buildWelcomeFlowTemplate(),
+      'Appointment Flow': () => this.workflowService.buildAppointmentFlowTemplate(),
+      'Feedback Flow': () => this.workflowService.buildFeedbackFlowTemplate(),
+      'Abandoned Cart': () => this.workflowService.buildAbandonedCartFlowTemplate(),
+      'Order Tracking': () => this.workflowService.buildOrderTrackingFlowTemplate(),
+    };
+    const builder = templateBuilders[this.selectedTemplate];
+    if (builder) {
+      const t = builder();
       nodes = t.nodes;
       edges = t.edges;
     }

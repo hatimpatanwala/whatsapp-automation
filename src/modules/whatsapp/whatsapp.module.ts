@@ -8,7 +8,9 @@ import { WebhookIngestProcessor } from './webhook-ingest.processor';
 import { TextMessageHandler } from './message-handlers/text-message.handler';
 import { InteractiveMessageHandler } from './message-handlers/interactive-message.handler';
 import { MediaMessageHandler } from './message-handlers/media-message.handler';
+import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { ConversationHelper } from './helpers/conversation.helper';
+import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { MessageOrchestratorService } from './message-orchestrator.service';
 import { TenantModule } from '../tenant/tenant.module';
 import { WorkflowModule } from '../workflow/workflow.module';
@@ -26,9 +28,11 @@ import { WabaModule } from '../waba/waba.module';
     TextMessageHandler,
     InteractiveMessageHandler,
     MediaMessageHandler,
+    OrderMessageHandler,
     ConversationHelper,
+    CommerceSettingsHelper,
     MessageOrchestratorService,
   ],
-  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, MessageOrchestratorService],
+  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService],
 })
 export class WhatsAppModule {}

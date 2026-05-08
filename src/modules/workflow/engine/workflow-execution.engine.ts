@@ -40,6 +40,8 @@ import {
   AssignAgentNodeHandler,
   HttpRequestNodeHandler,
   SetLanguageNodeHandler,
+  FallbackNodeHandler,
+  StartWorkflowNodeHandler,
 } from './node-handlers';
 
 const MAX_STEPS = 50;
@@ -78,6 +80,8 @@ export class WorkflowExecutionEngine {
     assignAgent: AssignAgentNodeHandler,
     httpRequest: HttpRequestNodeHandler,
     setLanguage: SetLanguageNodeHandler,
+    fallback: FallbackNodeHandler,
+    startWorkflow: StartWorkflowNodeHandler,
   ) {
     const handlers: NodeHandler[] = [
       sendText, sendButtons, sendList, sendImage, sendTemplate,
@@ -85,20 +89,89 @@ export class WorkflowExecutionEngine {
       showCatalog, addToCart, viewCart, checkout, inventoryCheck,
       searchProducts, filterProducts, paymentQr,
       tagCustomer, updateOrder, assignAgent, httpRequest, setLanguage,
+      fallback, startWorkflow,
     ];
     this.handlerMap = new Map(handlers.map((h) => [h.nodeType, h]));
   }
 
-  // ─── Find active execution waiting for a customer's reply ────────────────
+  // ─── Find active execution (waiting or running) for a customer ───────────
+  // Only returns executions with activity within the last 1 hour.
+  // Stale executions are automatically timed out inline — no cron needed.
   async findActiveExecution(schema: string, customerPhone: string): Promise<any | null> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
         `SELECT * FROM workflow_executions
-         WHERE customer_phone = $1 AND status = 'waiting'
+         WHERE customer_phone = $1 AND status IN ('waiting', 'running')
          ORDER BY started_at DESC LIMIT 1`,
         [customerPhone],
       );
+      const execution = rows[0] || null;
+      if (!execution) return null;
+
+      const lastActivity = new Date(execution.last_activity_at || execution.started_at);
+      const elapsed = Date.now() - lastActivity.getTime();
+      const ONE_HOUR = 60 * 60 * 1000;
+      const TWO_MINUTES = 2 * 60 * 1000;
+
+      // 1-hour inactivity timeout for any execution
+      if (elapsed > ONE_HOUR) {
+        await qr.query(
+          `UPDATE workflow_executions
+           SET status = 'timed_out', error_message = 'Session expired (1 hour inactivity)', completed_at = NOW()
+           WHERE id = $1`,
+          [execution.id],
+        );
+        this.logger.log(`Expired stale execution ${execution.id} for ${customerPhone} (inactive ${Math.round(elapsed / 60000)}min)`);
+        return null;
+      }
+
+      // 'running' executions normally complete in seconds. If still 'running' after 2 min, it crashed.
+      if (execution.status === 'running' && elapsed > TWO_MINUTES) {
+        await qr.query(
+          `UPDATE workflow_executions
+           SET status = 'failed', error_message = 'Execution stuck in running state', completed_at = NOW()
+           WHERE id = $1`,
+          [execution.id],
+        );
+        this.logger.warn(`Cleaned up stuck running execution ${execution.id} for ${customerPhone} (${Math.round(elapsed / 1000)}s old)`);
+        return null;
+      }
+
+      return execution;
+    });
+  }
+
+  /**
+   * Find a recently completed/timed-out execution for this customer (within last 24 hours).
+   * Used to restart a workflow when customer sends a message after their session expired.
+   */
+  async findRecentExpiredExecution(schema: string, customerPhone: string): Promise<any | null> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `SELECT we.workflow_id, we.completed_at, w.status as workflow_status
+         FROM workflow_executions we
+         JOIN workflows w ON w.id = we.workflow_id
+         WHERE we.customer_phone = $1
+           AND we.status IN ('completed', 'timed_out')
+           AND we.completed_at > NOW() - INTERVAL '24 hours'
+           AND w.status = 'active'
+         ORDER BY we.completed_at DESC LIMIT 1`,
+        [customerPhone],
+      );
       return rows[0] || null;
+    });
+  }
+
+  /**
+   * Find the trigger node of a workflow (to restart it from the beginning).
+   */
+  async findWorkflowTriggerNode(schema: string, workflowId: string): Promise<{ triggerNodeId: string } | null> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(`SELECT nodes FROM workflows WHERE id = $1`, [workflowId]);
+      if (!rows[0]) return null;
+      const nodes: WorkflowNode[] = rows[0].nodes || [];
+      const trigger = nodes.find((n) => n.type.startsWith('trigger_'));
+      return trigger ? { triggerNodeId: trigger.id } : null;
     });
   }
 
@@ -366,6 +439,12 @@ export class WorkflowExecutionEngine {
           await this.completeExecution(ctx, stepsExecuted);
           return;
 
+        case 'start_workflow':
+          // Complete current execution, then chain into the target workflow
+          await this.completeExecution(ctx, stepsExecuted, 'chained');
+          await this.chainWorkflow(ctx, result.targetWorkflowId, result.passVariables);
+          return;
+
         case 'error':
           await this.failExecution(ctx, result.message);
           return;
@@ -420,6 +499,22 @@ export class WorkflowExecutionEngine {
     // Store last reply text as a variable
     if (ctx.lastReply?.text) {
       ctx.variables.last_input = ctx.lastReply.text;
+    }
+
+    // Check if there's a fallback node connected to this node (edge labeled "fallback")
+    const fallbackEdge = outEdges.find(
+      (e) => e.label && e.label.toLowerCase() === 'fallback',
+    );
+    if (fallbackEdge) {
+      return fallbackEdge.to;
+    }
+
+    // Look for a global fallback node in the workflow
+    const fallbackNode = nodes.find((n) => n.type === 'fallback');
+    if (fallbackNode && outEdges.length > 0) {
+      // Store the current node so fallback can route back
+      ctx.variables._fallbackReturnNode = currentNodeId;
+      return fallbackNode.id;
     }
 
     // Default: follow first outgoing edge
@@ -489,6 +584,83 @@ export class WorkflowExecutionEngine {
     this.logger.log(`Workflow execution ${ctx.executionId} completed (${stepsExecuted} steps)`);
   }
 
+  /**
+   * Chain into another workflow — completes current execution then starts the target workflow.
+   * Optionally passes variables from the current execution context.
+   */
+  private async chainWorkflow(ctx: ExecutionContext, targetWorkflowId: string, passVariables: boolean): Promise<void> {
+    // Load target workflow to find its trigger node
+    const targetWorkflow = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      const rows = await qr.query(`SELECT * FROM workflows WHERE id = $1`, [targetWorkflowId]);
+      return rows[0];
+    });
+
+    if (!targetWorkflow) {
+      this.logger.error(`Chain target workflow ${targetWorkflowId} not found`);
+      return;
+    }
+
+    const nodes: WorkflowNode[] = targetWorkflow.nodes || [];
+    const edges: WorkflowEdge[] = targetWorkflow.edges || [];
+
+    // Find the trigger node (first node with type starting with 'trigger_')
+    const triggerNode = nodes.find((n) => n.type.startsWith('trigger_'));
+    if (!triggerNode) {
+      this.logger.error(`Chain target workflow ${targetWorkflowId} has no trigger node`);
+      return;
+    }
+
+    // Find the first edge leaving the trigger
+    const triggerEdge = edges.find((e) => e.from === triggerNode.id);
+    if (!triggerEdge) {
+      this.logger.error(`Chain target workflow ${targetWorkflowId}: no edge leaving trigger`);
+      return;
+    }
+
+    // Create new execution for the chained workflow
+    const carriedVariables = passVariables ? { ...ctx.variables } : {};
+    // Clean up internal variables
+    delete carriedVariables._buttonMap;
+    delete carriedVariables._fallbackReturnNode;
+
+    const executionId = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      const rows = await qr.query(
+        `INSERT INTO workflow_executions
+         (workflow_id, triggered_by, status, current_node_id, conversation_id, customer_phone, variables, context)
+         VALUES ($1, $2, 'running', $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          targetWorkflowId, ctx.customerPhone, triggerEdge.to, ctx.conversationId, ctx.customerPhone,
+          JSON.stringify(carriedVariables),
+          JSON.stringify({ chainedFrom: ctx.workflowId, chainedExecutionId: ctx.executionId }),
+        ],
+      );
+      await qr.query(
+        `UPDATE workflows SET execution_count = execution_count + 1, last_executed_at = NOW() WHERE id = $1`,
+        [targetWorkflowId],
+      );
+      return rows[0].id;
+    });
+
+    this.logger.log(`Chained workflow ${ctx.workflowId} → ${targetWorkflowId} (execution ${executionId})`);
+
+    // Build new context and run
+    const chainedCtx: ExecutionContext = {
+      executionId,
+      workflowId: targetWorkflowId,
+      schema: ctx.schema,
+      tenant: ctx.tenant,
+      conversationId: ctx.conversationId,
+      customerPhone: ctx.customerPhone,
+      customerId: ctx.customerId,
+      customerName: ctx.customerName,
+      variables: carriedVariables,
+      triggerData: { chainedFrom: ctx.workflowId },
+    };
+
+    await this.runLoop(chainedCtx, nodes, edges, triggerEdge.to);
+  }
+
   private async failExecution(ctx: ExecutionContext, errorMessage: string): Promise<void> {
     await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
       await qr.query(
@@ -500,13 +672,13 @@ export class WorkflowExecutionEngine {
   }
 
   /**
-   * Cleanup stale executions that have been running/waiting for too long.
-   * Prevents zombie executions from accumulating when handlers crash or locks expire.
+   * Cleanup stale executions as a safety net.
+   * Primary expiry happens inline in findActiveExecution() when a customer messages.
+   * This cron catches orphaned executions where the customer never messages again.
    */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async cleanupStaleExecutions(): Promise<void> {
     try {
-      // Get all tenant schemas
       const schemas = await this.connectionManager.getDataSource().query(
         `SELECT schema_name FROM public.tenants WHERE schema_name IS NOT NULL`,
       );
@@ -517,7 +689,7 @@ export class WorkflowExecutionEngine {
           const result = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
             return qr.query(`
               UPDATE workflow_executions
-              SET status = 'timed_out', error_message = 'Execution timeout (1 hour)', completed_at = NOW()
+              SET status = 'timed_out', error_message = 'Session expired (1 hour inactivity)', completed_at = NOW()
               WHERE status IN ('running', 'waiting')
                 AND started_at < NOW() - INTERVAL '1 hour'
               RETURNING id

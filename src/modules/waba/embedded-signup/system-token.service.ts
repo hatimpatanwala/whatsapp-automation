@@ -158,7 +158,7 @@ export class SystemTokenService {
       },
       body: JSON.stringify({
         business_app: this.appId,
-        scope: 'whatsapp_business_management,whatsapp_business_messaging',
+        scope: 'whatsapp_business_management,whatsapp_business_messaging,catalog_management',
         appsecret_proof: await this.computeAppSecretProof(adminToken),
       }),
     });

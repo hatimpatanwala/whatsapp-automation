@@ -402,6 +402,33 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     ],
   },
   {
+    type: 'fallback',
+    label: 'Fallback Handler',
+    description: 'Handle unexpected input during workflow',
+    category: 'logic',
+    icon: 'pi-exclamation-triangle',
+    color: '#f97316',
+    maxOutputs: 3,
+    configFields: [
+      { key: 'message', label: 'Fallback Message', type: 'textarea', placeholder: "Sorry, I didn't understand that. What would you like to do?", defaultValue: "Sorry, I didn't understand that. What would you like to do?" },
+      { key: 'mode', label: 'Fallback Mode', type: 'select', options: [{ label: 'Show Buttons', value: 'buttons' }, { label: 'Send Text & Continue', value: 'text' }, { label: 'Restart Workflow', value: 'restart' }], defaultValue: 'buttons' },
+      { key: 'buttons', label: 'Button Options (one per line)', type: 'textarea', placeholder: 'Main Menu\nRepeat\nContinue', defaultValue: 'Main Menu\nRepeat\nContinue' },
+    ],
+  },
+  {
+    type: 'start_workflow',
+    label: 'Start Workflow',
+    description: 'Start another workflow from this one',
+    category: 'action',
+    icon: 'pi-external-link',
+    color: '#0ea5e9',
+    maxOutputs: 0,
+    configFields: [
+      { key: 'workflowId', label: 'Target Workflow (ID or Name)', type: 'text', placeholder: 'e.g. Order Flow or workflow UUID', required: true },
+      { key: 'passVariables', label: 'Pass Variables to Target', type: 'boolean', defaultValue: true },
+    ],
+  },
+  {
     type: 'end',
     label: 'End Flow',
     description: 'End the workflow',

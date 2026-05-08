@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, BadRequestException, Logger } from '@nestjs/common';
 import { WabaService } from './waba.service';
 import { PhoneNumberService } from './phone-number.service';
 import { MetaTokenService } from './meta-token.service';
 import { MetaCloudApiClient } from './meta-cloud-api.client';
 import { AuditLogService } from './audit-log.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
+import { SystemTokenService } from './embedded-signup/system-token.service';
 import { WabaAllocationService } from './allocation/waba-allocation.service';
 import { WabaHealthMonitorService } from './allocation/waba-health-monitor.service';
 import { RiskScoringService } from './risk/risk-scoring.service';
@@ -21,6 +22,8 @@ import {
 
 @Controller('api/admin/waba')
 export class WabaController {
+  private readonly logger = new Logger(WabaController.name);
+
   constructor(
     private readonly wabaService: WabaService,
     private readonly phoneService: PhoneNumberService,
@@ -28,6 +31,7 @@ export class WabaController {
     private readonly metaApi: MetaCloudApiClient,
     private readonly auditService: AuditLogService,
     private readonly onboardingService: OnboardingService,
+    private readonly systemTokenService: SystemTokenService,
     private readonly allocationService: WabaAllocationService,
     private readonly healthMonitor: WabaHealthMonitorService,
     private readonly riskService: RiskScoringService,
@@ -211,6 +215,51 @@ export class WabaController {
       resourceId: wabaAccountId,
     });
     return { message: 'Token rotated successfully' };
+  }
+
+  /**
+   * Regenerate the system user token with updated scopes (including catalog_management).
+   * Uses an admin user token to generate a new system user token.
+   * Call this after enabling catalog_management on your Facebook App.
+   */
+  @Post('tokens/:wabaAccountId/refresh-scopes')
+  async refreshTokenScopes(
+    @Param('wabaAccountId') wabaAccountId: string,
+    @Body() body: { adminToken: string },
+  ) {
+    if (!body.adminToken) {
+      throw new BadRequestException(
+        'adminToken is required. Use a user access token with admin permissions on the Business.',
+      );
+    }
+
+    const waba = await this.wabaService.findById(wabaAccountId);
+    if (!waba) throw new BadRequestException('WABA account not found');
+
+    // Generate new system user token with all scopes including catalog_management
+    const result = await this.systemTokenService.generateSystemUserToken(
+      body.adminToken,
+      waba.businessId,
+      waba.wabaId,
+    );
+
+    // Store the new token (deactivates old one)
+    await this.tokenService.storeToken(wabaAccountId, result.token, 'system_user');
+
+    await this.auditService.log({
+      actorType: 'admin',
+      actorId: 'system',
+      action: 'token.refresh_scopes',
+      resourceType: 'meta_token',
+      resourceId: wabaAccountId,
+      details: { isSystemUser: result.isSystemUser, scopes: 'whatsapp_business_management,whatsapp_business_messaging,catalog_management' },
+    });
+
+    this.logger.log(`Token refreshed with catalog_management scope for WABA ${wabaAccountId}`);
+    return {
+      message: 'Token regenerated with catalog_management scope',
+      isSystemUser: result.isSystemUser,
+    };
   }
 
   // ─── Audit Logs ─────────────────────────────────────────────────────────────
