@@ -21,7 +21,11 @@ export class CustomerService {
 
       params.push(pagination.limit, pagination.skip);
       const customers = await qr.query(
-        `SELECT * FROM customers WHERE ${whereClause} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        `SELECT id, phone as whatsapp_phone, name as whatsapp_name,
+                language, tags, metadata, total_orders, total_spent,
+                last_order_at, opted_in, created_at, updated_at,
+                COALESCE(CASE WHEN opted_in = false THEN 'blocked' ELSE 'active' END, 'active') as status
+         FROM customers WHERE ${whereClause} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
 
@@ -31,7 +35,12 @@ export class CustomerService {
 
   async findById(schema: string, id: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      const result = await qr.query(`SELECT * FROM customers WHERE id = $1`, [id]);
+      const result = await qr.query(
+        `SELECT id, phone as whatsapp_phone, name as whatsapp_name,
+                language, tags, metadata, total_orders, total_spent,
+                last_order_at, opted_in, created_at, updated_at,
+                COALESCE(CASE WHEN opted_in = false THEN 'blocked' ELSE 'active' END, 'active') as status
+         FROM customers WHERE id = $1`, [id]);
       if (!result[0]) throw new NotFoundException('Customer not found');
       return result[0];
     });
@@ -59,6 +68,34 @@ export class CustomerService {
       return qr.query(
         `SELECT * FROM orders WHERE customer_id = $1 ORDER BY placed_at DESC`, [customerId],
       );
+    });
+  }
+
+  async getStats(schema: string): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const stats = await qr.query(`
+        SELECT
+          COUNT(*)::int as total,
+          COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL)::int as active,
+          COUNT(*) FILTER (WHERE status = 'blocked')::int as blocked,
+          COUNT(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::int as new_this_month,
+          COUNT(*) FILTER (WHERE total_orders > 1)::int as repeat_customers,
+          CASE WHEN COUNT(*) FILTER (WHERE total_orders > 0) > 0
+            THEN ROUND(COALESCE(SUM(total_spent), 0) / NULLIF(COUNT(*) FILTER (WHERE total_orders > 0), 0), 2)
+            ELSE 0
+          END::numeric as average_order_value
+        FROM customers
+      `);
+
+      const topSpenders = await qr.query(`
+        SELECT id, phone as whatsapp_phone, name as whatsapp_name, total_spent
+        FROM customers
+        WHERE total_spent > 0
+        ORDER BY total_spent DESC
+        LIMIT 5
+      `);
+
+      return { ...stats[0], top_spenders: topSpenders };
     });
   }
 

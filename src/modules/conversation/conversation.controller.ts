@@ -14,6 +14,12 @@ export class ConversationController {
     private readonly messageService: WhatsAppMessageService,
   ) {}
 
+  @Get('stats')
+  @Roles('owner', 'seller')
+  async getStats(@Req() req: Request) {
+    return this.conversationService.getStats(req.tenantContext.schemaName);
+  }
+
   @Get()
   @Roles('owner', 'seller', 'staff')
   async findAll(@Req() req: Request, @Query() pagination: PaginationDto) {

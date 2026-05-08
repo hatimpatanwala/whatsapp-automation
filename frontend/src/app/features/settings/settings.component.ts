@@ -10,8 +10,12 @@ import { TabsModule } from 'primeng/tabs';
 import { ToastModule } from 'primeng/toast';
 import { DividerModule } from 'primeng/divider';
 import { TagModule } from 'primeng/tag';
+import { TooltipModule } from 'primeng/tooltip';
+import { MessageModule } from 'primeng/message';
 import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/services/auth.service';
+import { ApiService } from '../../core/services/api.service';
+import { OnboardingService, RegisterNumberResult } from '../../core/services/onboarding.service';
 
 @Component({
   selector: 'wa-settings',
@@ -29,6 +33,8 @@ import { AuthService } from '../../core/services/auth.service';
     ToastModule,
     DividerModule,
     TagModule,
+    TooltipModule,
+    MessageModule,
   ],
   providers: [MessageService],
   template: `
@@ -128,6 +134,267 @@ import { AuthService } from '../../core/services/auth.service';
           <!-- WhatsApp settings -->
           <p-tabpanel value="whatsapp">
             <div class="space-y-6 mt-4">
+
+              <!-- Connection Status -->
+              @if (waConnected()) {
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-green-200">
+                  <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                      <i class="pi pi-check-circle text-green-600" style="font-size:1.2rem"></i>
+                    </div>
+                    <div>
+                      <h3 class="text-base font-semibold text-gray-900">WhatsApp Connected</h3>
+                      <p class="text-sm text-green-600">Your WhatsApp Business Account is active</p>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-50 rounded-lg p-3">
+                      <p class="text-xs text-gray-500">Phone Number</p>
+                      <p class="text-sm font-semibold text-gray-900">{{ wa.phone || 'Not set' }}</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                      <p class="text-xs text-gray-500">Business Account ID</p>
+                      <p class="text-sm font-semibold text-gray-900 font-mono">{{ wa.accountId || 'Connected via Facebook' }}</p>
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <!-- Not connected — prompt to register a phone number -->
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-amber-200">
+                  <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                      <i class="pi pi-exclamation-triangle text-amber-600" style="font-size:1.1rem"></i>
+                    </div>
+                    <div>
+                      <h3 class="text-base font-semibold text-gray-900">WhatsApp Not Connected</h3>
+                      <p class="text-sm text-gray-500">Register a phone number to start messaging customers</p>
+                    </div>
+                  </div>
+
+                  <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                    <div class="flex gap-3">
+                      <i class="pi pi-whatsapp text-green-600 mt-0.5" style="font-size:1rem"></i>
+                      <div>
+                        <p class="text-sm font-semibold text-green-900">Register Your Number</p>
+                        <p class="text-xs text-green-700 mt-1 leading-relaxed">
+                          Enter your phone number and we'll register it for WhatsApp Business on our platform.
+                          No Facebook or Meta account needed.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex gap-2 mb-3">
+                    <input pInputText [(ngModel)]="settingsRegisterPhone" placeholder="+91XXXXXXXXXX" class="flex-1" />
+                    <button
+                      pButton
+                      label="Register Number"
+                      icon="pi pi-check"
+                      severity="success"
+                      [loading]="waConnecting()"
+                      [disabled]="!settingsRegisterPhone.trim()"
+                      (click)="registerNumberFromSettings()"
+                    ></button>
+                  </div>
+
+                  @if (waConnectError()) {
+                    <p-message severity="error" [text]="waConnectError()!" styleClass="w-full" />
+                  }
+                  @if (waConnectSuccess()) {
+                    <p-message severity="success" [text]="waConnectSuccess()!" styleClass="w-full" />
+                  }
+                </div>
+              }
+
+              <!-- Phone Number Management -->
+              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-900">Phone Numbers</h3>
+                    <p class="text-sm text-gray-500">Manage your WhatsApp phone numbers</p>
+                  </div>
+                  <button pButton label="Add Number" icon="pi pi-plus" class="p-button-sm p-button-outlined" (click)="showAddPhone.set(true)" [disabled]="showAddPhone()"></button>
+                </div>
+
+                <!-- Add Phone Number Form -->
+                @if (showAddPhone()) {
+                  <div class="border border-blue-200 bg-blue-50/50 rounded-xl p-4 mb-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                      <h4 class="text-sm font-semibold text-gray-900">Add a Phone Number</h4>
+                      <button pButton icon="pi pi-times" class="p-button-sm p-button-text p-button-secondary" (click)="closeAddPhone()"></button>
+                    </div>
+
+                    <!-- Phase: Input -->
+                    @if (addPhonePhase() === 'input') {
+                      <p class="text-xs text-gray-500">Enter the phone number you want to register for WhatsApp Business. We'll check its status and register it on our platform.</p>
+                      <div class="flex gap-2">
+                        <input pInputText [(ngModel)]="newPhoneNumber" placeholder="+91XXXXXXXXXX" class="flex-1" />
+                        <button pButton label="Register Number" icon="pi pi-check" severity="success" class="p-button-sm" [loading]="phoneChecking()" [disabled]="!newPhoneNumber.trim()" (click)="addPhoneNumber()"></button>
+                      </div>
+                    }
+
+                    <!-- Status results -->
+                    @if (addPhoneResult()) {
+                      <!-- needs_verification: Number registered on Meta, needs OTP -->
+                      @if (addPhoneResult()!.status === 'needs_verification') {
+                        <p-message severity="info" styleClass="w-full">
+                          <div>
+                            <p class="font-semibold text-sm">Verification Required</p>
+                            <p class="text-xs mt-1">{{ addPhoneResult()!.message }}</p>
+                          </div>
+                        </p-message>
+                      }
+
+                      <!-- registered: Number added and active (no OTP needed) -->
+                      @if (addPhoneResult()!.status === 'registered') {
+                        <p-message severity="success" styleClass="w-full">
+                          <div>
+                            <p class="font-semibold text-sm">Number Registered!</p>
+                            <p class="text-xs mt-1">{{ addPhoneResult()!.message }}</p>
+                          </div>
+                        </p-message>
+                      }
+
+                      <!-- already_business: Number on WA Business app or another BSP -->
+                      @if (addPhoneResult()!.status === 'already_business') {
+                        <p-message severity="warn" styleClass="w-full">
+                          <div>
+                            <p class="font-semibold text-sm">WhatsApp Business Already Active</p>
+                            <p class="text-xs mt-1">{{ addPhoneResult()!.message }}</p>
+                          </div>
+                        </p-message>
+                        @if (addPhoneResult()!.instructions?.length) {
+                          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <p class="text-xs font-semibold text-amber-900 mb-2"><i class="pi pi-info-circle mr-1"></i> How to fix this:</p>
+                            <ol class="text-xs text-amber-800 space-y-1 list-decimal pl-4">
+                              @for (inst of addPhoneResult()!.instructions!; track inst) {
+                                <li>{{ inst }}</li>
+                              }
+                            </ol>
+                          </div>
+                        }
+                        <button pButton label="I've Removed It — Try Again" icon="pi pi-refresh" severity="warn" class="p-button-sm" [loading]="phoneChecking()" (click)="addPhoneNumber()"></button>
+                      }
+
+                      <!-- already_occupied: Number in use by another tenant on our platform -->
+                      @if (addPhoneResult()!.status === 'already_occupied') {
+                        <p-message severity="error" styleClass="w-full">
+                          <div>
+                            <p class="font-semibold text-sm">Number Unavailable</p>
+                            <p class="text-xs mt-1">{{ addPhoneResult()!.message }}</p>
+                          </div>
+                        </p-message>
+                      }
+                    }
+
+                    <!-- Phase: Verify OTP -->
+                    @if (addPhonePhase() === 'verify') {
+                      <div class="border-t border-blue-200 pt-3 mt-2">
+                        <div class="flex items-center gap-2 mb-3">
+                          <div class="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center">
+                            <i class="pi pi-key text-amber-600" style="font-size:0.8rem"></i>
+                          </div>
+                          <div>
+                            <p class="text-sm font-semibold text-gray-900">Enter Verification Code</p>
+                            <p class="text-xs text-gray-500">A 6-digit code was sent to {{ newPhoneNumber }}</p>
+                          </div>
+                        </div>
+
+                        <div class="flex gap-2 mb-2">
+                          <input
+                            pInputText
+                            [(ngModel)]="addPhoneVerifyCode"
+                            placeholder="123456"
+                            class="flex-1"
+                            maxlength="6"
+                            style="font-size:1.1rem;letter-spacing:0.25em;text-align:center"
+                          />
+                          <button
+                            pButton
+                            label="Verify"
+                            icon="pi pi-check"
+                            severity="success"
+                            class="p-button-sm"
+                            [loading]="phoneChecking()"
+                            [disabled]="addPhoneVerifyCode.length < 6"
+                            (click)="verifyAddPhoneCode()"
+                          ></button>
+                        </div>
+
+                        <div class="flex items-center gap-3 text-xs">
+                          <span class="text-gray-400">Didn't receive it?</span>
+                          <button
+                            class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 text-xs"
+                            [disabled]="phoneChecking()"
+                            (click)="resendAddPhoneCode('sms')"
+                          >Resend SMS</button>
+                          <span class="text-gray-300">|</span>
+                          <button
+                            class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 text-xs"
+                            [disabled]="phoneChecking()"
+                            (click)="resendAddPhoneCode('voice')"
+                          >Voice Call</button>
+                        </div>
+                      </div>
+                    }
+
+                    <!-- Phase: Done -->
+                    @if (addPhonePhase() === 'done') {
+                      <div class="flex justify-end">
+                        <button pButton label="Done" icon="pi pi-check" class="p-button-sm" severity="success" (click)="closeAddPhone()"></button>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- Existing phone numbers list -->
+                @if (tenantPhones().length > 0) {
+                  <div class="space-y-2">
+                    @for (phone of tenantPhones(); track phone.id) {
+                      <div class="flex items-center justify-between border border-gray-200 rounded-xl p-4">
+                        <div class="flex items-center gap-3">
+                          <div class="w-8 h-8 rounded-full flex items-center justify-center"
+                            [class.bg-green-100]="phone.status === 'active'"
+                            [class.bg-gray-100]="phone.status !== 'active'"
+                          >
+                            <i class="pi pi-phone" style="font-size:0.8rem"
+                              [class.text-green-600]="phone.status === 'active'"
+                              [class.text-gray-400]="phone.status !== 'active'"
+                            ></i>
+                          </div>
+                          <div>
+                            <p class="text-sm font-semibold text-gray-900">{{ phone.phoneNumber }}</p>
+                            <p class="text-xs text-gray-500">{{ phone.displayName || 'WhatsApp Business' }}</p>
+                          </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <p-toggleswitch
+                            [ngModel]="phone.status === 'active'"
+                            (onChange)="togglePhoneStatus(phone)"
+                            pTooltip="Toggle active/inactive"
+                          />
+                          <p-tag
+                            [value]="phone.status === 'active' ? 'Active' : 'Inactive'"
+                            [severity]="phone.status === 'active' ? 'success' : 'warn'"
+                          />
+                          <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger"
+                            pTooltip="Remove this number"
+                            (click)="removePhoneNumber(phone.id)"></button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                } @else if (!showAddPhone()) {
+                  <div class="text-center py-6 text-gray-400">
+                    <i class="pi pi-phone mb-2" style="font-size:2rem"></i>
+                    <p class="text-sm">No phone numbers assigned yet.</p>
+                    <p class="text-xs mt-1">Click "Add Number" to get started, or register a number above.</p>
+                  </div>
+                }
+              </div>
+
+              <!-- Manual config (hidden read-only reference) -->
+              <!-- TODO: Re-enable manual WhatsApp config later
               <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-1">WhatsApp Business API</h3>
                 <p class="text-sm text-gray-500 mb-5">Configure your WhatsApp Business API credentials</p>
@@ -159,6 +426,7 @@ import { AuthService } from '../../core/services/auth.service';
                   <button pButton label="Save Configuration" icon="pi pi-check" severity="success" (click)="save()"></button>
                 </div>
               </div>
+              -->
             </div>
           </p-tabpanel>
 
@@ -277,7 +545,7 @@ import { AuthService } from '../../core/services/auth.service';
                     </div>
                     <p class="text-gray-500 text-sm mt-1">{{ subscriptionPriceLabel() }}</p>
                   </div>
-                  <button pButton label="Upgrade Plan" icon="pi pi-arrow-up" severity="success"></button>
+                  <button pButton label="Upgrade Plan" icon="pi pi-arrow-up" severity="success" (click)="upgradePlan()"></button>
                 </div>
 
                 <p-divider />
@@ -312,6 +580,21 @@ import { AuthService } from '../../core/services/auth.service';
                     </div>
                   }
                 </div>
+
+                <p-divider />
+
+                <div class="bg-gray-50 rounded-xl p-5">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h4 class="text-sm font-semibold text-gray-900">Allow Exceed Conversation Limit</h4>
+                      <p class="text-xs text-gray-500 mt-1">
+                        When enabled, conversations will continue beyond your plan limit.
+                        When disabled, new conversations are blocked once the limit is reached.
+                      </p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="allowExceed" (onChange)="toggleAllowExceed()" />
+                  </div>
+                </div>
               </div>
             </div>
           </p-tabpanel>
@@ -324,8 +607,32 @@ import { AuthService } from '../../core/services/auth.service';
 export class SettingsComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly authService = inject(AuthService);
+  private readonly apiService = inject(ApiService);
+  private readonly onboardingService = inject(OnboardingService);
 
   showToken = signal(false);
+  allowExceed = false;
+
+  // WhatsApp connection state
+  waConnected = computed(() => {
+    const tenant = this.authService.tenantInfo();
+    return tenant?.hasWhatsAppConfig ?? false;
+  });
+  waConnecting = signal(false);
+  waConnectError = signal<string | null>(null);
+
+  waConnectSuccess = signal<string | null>(null);
+  settingsRegisterPhone = '';
+
+  // Phone number management
+  showAddPhone = signal(false);
+  newPhoneNumber = '';
+  phoneChecking = signal(false);
+  addPhoneResult = signal<RegisterNumberResult | null>(null);
+  addPhonePhase = signal<'input' | 'verify' | 'done'>('input');
+  addPhoneVerifyCode = '';
+  addPhoneId = signal<string | null>(null);
+  tenantPhones = signal<Array<{ id: string; phoneNumber: string; displayName: string; status: string }>>([]);
 
   biz = {
     name: '',
@@ -389,21 +696,14 @@ export class SettingsComponent implements OnInit {
     '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
     .map(t => ({ label: t, value: t }));
 
-  // Subscription computed values from AuthService
-  private subscription = computed(() => {
-    const user = this.authService.currentUser();
-    // The subscription data comes from the tenant info via /auth/me
-    // We access it from the user's tenant relationship if available
-    return (user as any)?.tenant?.subscription ?? null;
-  });
-
-  private tenant = computed(() => this.authService.tenantInfo());
+  // Subscription data from AuthService (populated by /auth/me)
+  private subscription = computed(() => this.authService.subscriptionInfo());
 
   subscriptionPlanName = computed(() => {
     const sub = this.subscription();
-    if (sub?.plan?.name) return sub.plan.name;
-    // Fallback: derive from tenant info
-    return 'Free';
+    if (!sub) return 'Free';
+    // Capitalize plan name
+    return sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1);
   });
 
   subscriptionStatusLabel = computed(() => {
@@ -436,104 +736,174 @@ export class SettingsComponent implements OnInit {
 
   subscriptionPriceLabel = computed(() => {
     const sub = this.subscription();
-    if (!sub?.plan) return 'No active subscription';
-    const price = sub.billingCycle === 'yearly'
-      ? sub.plan.yearlyPrice
-      : sub.plan.monthlyPrice;
-    const formattedPrice = new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(price / 100);
-    const cycle = sub.billingCycle === 'yearly' ? 'year' : 'month';
-    const renewDate = sub.currentPeriodEnd
-      ? new Date(sub.currentPeriodEnd).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
-      : '';
-    return `${formattedPrice}/${cycle}${renewDate ? ' \u00B7 Renews ' + renewDate : ''}`;
+    if (!sub) return 'No active subscription';
+    if (sub.validUntil) {
+      const renewDate = new Date(sub.validUntil).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+      return `Valid until ${renewDate}`;
+    }
+    return `${sub.plan} plan`;
   });
 
   planLimits = computed(() => {
     const sub = this.subscription();
-    if (!sub?.plan) {
-      return [
-        { label: 'Conversations', used: '0', total: '0', pct: 0 },
-        { label: 'Messages', used: '0', total: '0', pct: 0 },
-        { label: 'Products', used: '0', total: '0', pct: 0 },
-        { label: 'Campaigns', used: '0', total: '0', pct: 0 },
-      ];
-    }
-    const plan = sub.plan;
-    const convLimit = plan.conversationLimit ?? 0;
-    const msgLimit = plan.messageLimit ?? 0;
-    const prodLimit = plan.productLimit ?? 0;
-    const campLimit = plan.campaignLimit ?? 0;
-
-    const convUsed = sub.conversationsUsed ?? 0;
-    const msgUsed = sub.messagesUsed ?? 0;
-
     const pct = (used: number, total: number) => total > 0 ? Math.round((used / total) * 100) : 0;
     const fmt = (n: number) => n.toLocaleString('en-IN');
-    const fmtLimit = (n: number | null) => n === null ? 'Unlimited' : n.toLocaleString('en-IN');
+
+    if (!sub) {
+      return [
+        { label: 'Conversations', used: '0', total: '0', pct: 0 },
+        { label: 'Products', used: '0', total: '0', pct: 0 },
+        { label: 'Campaigns/mo', used: '0', total: '0', pct: 0 },
+      ];
+    }
 
     return [
-      { label: 'Conversations', used: fmt(convUsed), total: fmtLimit(plan.conversationLimit), pct: pct(convUsed, convLimit) },
-      { label: 'Messages', used: fmt(msgUsed), total: fmtLimit(plan.messageLimit), pct: pct(msgUsed, msgLimit) },
-      { label: 'Products', used: '0', total: fmtLimit(plan.productLimit), pct: 0 },
-      { label: 'Campaigns', used: '0', total: fmtLimit(plan.campaignLimit), pct: 0 },
+      { label: 'Conversations', used: fmt(sub.conversationsUsed), total: fmt(sub.maxConversations), pct: pct(sub.conversationsUsed, sub.maxConversations) },
+      { label: 'Products', used: '-', total: fmt(sub.maxProducts), pct: 0 },
+      { label: 'Campaigns/mo', used: '-', total: fmt(sub.maxCampaignsPerMonth), pct: 0 },
     ];
   });
 
   planFeatures = computed(() => {
     const sub = this.subscription();
-    if (sub?.plan?.features?.length) {
-      return sub.plan.features;
-    }
-    // Fallback defaults
-    return [
+    const base = [
       'WhatsApp Messaging',
       'Product Catalog',
       'Order Management',
       'Customer Management',
       'Payment Verification',
-      'Basic Analytics',
     ];
+    if (sub && sub.maxConversations > 1000) {
+      base.push('Advanced Analytics', 'Workflow Automation');
+    }
+    if (sub && sub.maxProducts > 100) {
+      base.push('Unlimited Products');
+    }
+    return base;
   });
 
   ngOnInit() {
     this.loadTenantData();
+
+    // Initialize allowExceed from subscription
+    const sub = this.authService.subscriptionInfo();
+    if (sub) {
+      this.allowExceed = sub.allowExceed ?? false;
+    }
+
+    // Load phone numbers for this tenant
+    this.loadPhoneNumbers();
+
+    // Load persisted settings from backend
+    // Note: keys arrive as camelCase due to global TransformResponseInterceptor
+    this.apiService.get<any>('/settings').subscribe({
+      next: (settings) => {
+        // Business info
+        if (settings.businessName) this.biz.name = settings.businessName;
+        if (settings.slug) this.biz.slug = settings.slug;
+        if (settings.description) this.biz.description = settings.description;
+        if (settings.currency) this.biz.currency = settings.currency;
+        if (settings.timezone) this.biz.timezone = settings.timezone;
+        if (settings.orderPrefix) this.biz.orderPrefix = settings.orderPrefix;
+        if (settings.email) this.biz.email = settings.email;
+        if (settings.autoConfirmOrders !== undefined) this.biz.autoConfirmOrders = this.parseBool(settings.autoConfirmOrders);
+        if (settings.enableDelivery !== undefined) this.biz.enableDelivery = this.parseBool(settings.enableDelivery);
+        if (settings.enablePickup !== undefined) this.biz.enablePickup = this.parseBool(settings.enablePickup);
+
+        // Business hours
+        if (settings.businessHours) {
+          try {
+            const hours = typeof settings.businessHours === 'string'
+              ? JSON.parse(settings.businessHours)
+              : settings.businessHours;
+            if (Array.isArray(hours)) {
+              hours.forEach((h: any) => {
+                const day = this.businessHours.find(d => d.day === h.day);
+                if (day) {
+                  day.enabled = h.enabled ?? day.enabled;
+                  day.open = h.open ?? day.open;
+                  day.close = h.close ?? day.close;
+                }
+              });
+            }
+          } catch {}
+        }
+
+        // WhatsApp config
+        if (settings.waPhone) this.wa.phone = settings.waPhone;
+        if (settings.waAccountId) this.wa.accountId = settings.waAccountId;
+        if (settings.waAccessToken) this.wa.accessToken = settings.waAccessToken;
+        if (settings.waWebhookToken) this.wa.webhookToken = settings.waWebhookToken;
+
+        // Payment accounts
+        if (settings.paymentAccounts) {
+          try {
+            const accounts = typeof settings.paymentAccounts === 'string'
+              ? JSON.parse(settings.paymentAccounts)
+              : settings.paymentAccounts;
+            if (Array.isArray(accounts)) {
+              this.paymentAccounts = accounts.map((a: any, i: number) => ({
+                id: i + 1,
+                bank: a.bank || '',
+                number: a.number || '',
+                name: a.name || '',
+                upi: a.upi || '',
+              }));
+              this.accountIdCounter = this.paymentAccounts.length + 1;
+            }
+          } catch {}
+        }
+
+        // Notifications
+        if (settings.notifications) {
+          try {
+            const notifs = typeof settings.notifications === 'string'
+              ? JSON.parse(settings.notifications)
+              : settings.notifications;
+            if (typeof notifs === 'object' && notifs !== null) {
+              this.notifications.forEach(n => {
+                if (notifs[n.key]) {
+                  n.email = notifs[n.key].email ?? n.email;
+                  n.whatsapp = notifs[n.key].whatsapp ?? n.whatsapp;
+                }
+              });
+            }
+          } catch {}
+        }
+      },
+      error: () => {
+        // Settings endpoint may not exist yet - use defaults
+      },
+    });
   }
 
-  private loadTenantData() {
+  private applyTenantData() {
     const tenant = this.authService.tenantInfo();
     const user = this.authService.currentUser();
 
     if (tenant) {
       this.biz.name = tenant.businessName || this.biz.name;
+      this.biz.slug = tenant.slug || this.biz.slug;
+      this.biz.description = tenant.businessDescription || this.biz.description;
       this.wa.phone = tenant.whatsappPhone || this.wa.phone;
     }
 
     if (user) {
       this.biz.email = user.email || this.biz.email;
     }
+  }
 
-    // If tenant info is not loaded yet, trigger a rehydration
-    if (!tenant && !user) {
+  private loadTenantData() {
+    const tenant = this.authService.tenantInfo();
+    const user = this.authService.currentUser();
+
+    if (tenant || user) {
+      this.applyTenantData();
+    } else {
+      // Tenant info not loaded yet — rehydrate session
       this.authService.rehydrateSession().subscribe({
-        next: () => {
-          const freshTenant = this.authService.tenantInfo();
-          const freshUser = this.authService.currentUser();
-          if (freshTenant) {
-            this.biz.name = freshTenant.businessName || this.biz.name;
-            this.wa.phone = freshTenant.whatsappPhone || this.wa.phone;
-          }
-          if (freshUser) {
-            this.biz.email = freshUser.email || this.biz.email;
-          }
-        },
-        error: () => {
-          // Silently handle - user may not be authenticated yet
-        },
+        next: () => this.applyTenantData(),
+        error: () => {},
       });
     }
   }
@@ -553,7 +923,228 @@ export class SettingsComponent implements OnInit {
     }, 1500);
   }
 
+  private parseBool(val: any): boolean {
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val === 'true';
+    return !!val;
+  }
+
   save() {
-    this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Settings updated successfully' });
+    // Build notifications map
+    const notifsMap: Record<string, { email: boolean; whatsapp: boolean }> = {};
+    this.notifications.forEach(n => {
+      notifsMap[n.key] = { email: n.email, whatsapp: n.whatsapp };
+    });
+
+    const settingsToSave: Record<string, any> = {
+      // Business info
+      business_name: this.biz.name,
+      slug: this.biz.slug,
+      description: this.biz.description,
+      currency: this.biz.currency,
+      timezone: this.biz.timezone,
+      order_prefix: this.biz.orderPrefix,
+      email: this.biz.email,
+      auto_confirm_orders: this.biz.autoConfirmOrders,
+      enable_delivery: this.biz.enableDelivery,
+      enable_pickup: this.biz.enablePickup,
+      // Business hours
+      business_hours: this.businessHours,
+      // WhatsApp config
+      wa_phone: this.wa.phone,
+      wa_account_id: this.wa.accountId,
+      wa_access_token: this.wa.accessToken,
+      wa_webhook_token: this.wa.webhookToken,
+      // Payment accounts
+      payment_accounts: this.paymentAccounts.map(a => ({
+        bank: a.bank,
+        number: a.number,
+        name: a.name,
+        upi: a.upi,
+      })),
+      // Notifications
+      notifications: notifsMap,
+    };
+    this.apiService.put('/settings', settingsToSave).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Settings updated successfully' });
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save settings' });
+      },
+    });
+  }
+
+  upgradePlan() {
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Upgrade Plan',
+      detail: 'Please contact support to upgrade your subscription plan.',
+      life: 5000,
+    });
+  }
+
+  toggleAllowExceed() {
+    this.apiService.put('/settings/allow-exceed', { allowExceed: this.allowExceed }).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Updated',
+          detail: this.allowExceed
+            ? 'Conversations will continue beyond your plan limit.'
+            : 'New conversations will be blocked when limit is reached.',
+        });
+      },
+      error: () => {
+        this.allowExceed = !this.allowExceed; // revert on failure
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update setting' });
+      },
+    });
+  }
+
+  /** Register a phone number under the platform's shared WABA (from Settings page) */
+  registerNumberFromSettings() {
+    this.waConnectError.set(null);
+    this.waConnectSuccess.set(null);
+    this.waConnecting.set(true);
+
+    this.onboardingService.registerNumber(this.settingsRegisterPhone.trim()).subscribe({
+      next: (result) => {
+        this.waConnecting.set(false);
+        if (result.status === 'registered' || result.status === 'needs_verification') {
+          this.waConnectSuccess.set(result.message);
+          this.messageService.add({ severity: 'success', summary: result.status === 'needs_verification' ? 'Verification Needed' : 'Registered!', detail: result.message });
+          this.settingsRegisterPhone = '';
+          this.authService.rehydrateSession().subscribe(() => this.loadPhoneNumbers());
+        } else if (result.status === 'already_business') {
+          this.waConnectError.set(result.message + (result.instructions?.length ? '\n' + result.instructions.join('\n') : ''));
+        } else if (result.status === 'already_occupied') {
+          this.waConnectError.set(result.message);
+        }
+      },
+      error: (err) => {
+        this.waConnecting.set(false);
+        this.waConnectError.set(err?.error?.message || 'Failed to register phone number');
+      },
+    });
+  }
+
+  // COMMENTED OUT: Facebook Embedded Signup (replaced by register-number flow)
+  // connectFacebook() { ... }
+  // loadFacebookSDK(appId: string): Promise<void> { ... }
+
+  /** Load phone numbers assigned to this tenant */
+  private loadPhoneNumbers() {
+    this.apiService.get<any[]>('/settings/phones').subscribe({
+      next: (phones) => this.tenantPhones.set(phones || []),
+      error: () => {},
+    });
+  }
+
+  /** Register a phone number — backend registers on Meta and returns detailed status */
+  addPhoneNumber() {
+    this.phoneChecking.set(true);
+    this.addPhoneResult.set(null);
+
+    this.apiService.post<RegisterNumberResult>('/settings/phones', { phone: this.newPhoneNumber.trim() }).subscribe({
+      next: (result) => {
+        this.phoneChecking.set(false);
+        this.addPhoneResult.set(result);
+
+        if (result.status === 'needs_verification') {
+          this.addPhoneId.set(result.phoneId || null);
+          this.addPhonePhase.set('verify');
+        } else if (result.status === 'registered') {
+          this.addPhonePhase.set('done');
+          this.messageService.add({ severity: 'success', summary: 'Registered!', detail: result.message });
+          this.loadPhoneNumbers();
+          this.authService.rehydrateSession().subscribe();
+        }
+        // 'already_business' and 'already_occupied' stay in 'input' phase with message shown
+      },
+      error: (err) => {
+        this.phoneChecking.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.message || 'Failed to register phone number' });
+      },
+    });
+  }
+
+  /** Verify the OTP code for a newly added phone number */
+  verifyAddPhoneCode() {
+    const phoneId = this.addPhoneId();
+    if (!phoneId || this.addPhoneVerifyCode.length < 6) return;
+
+    this.phoneChecking.set(true);
+    this.onboardingService.verifyNumber(phoneId, this.addPhoneVerifyCode).subscribe({
+      next: (result) => {
+        this.phoneChecking.set(false);
+        if (result.verified) {
+          this.addPhonePhase.set('done');
+          this.addPhoneResult.set({ status: 'registered', phone: this.newPhoneNumber, message: 'Phone number verified and activated!' });
+          this.messageService.add({ severity: 'success', summary: 'Verified!', detail: 'Phone number is now active.' });
+          this.loadPhoneNumbers();
+          this.authService.rehydrateSession().subscribe();
+        }
+      },
+      error: (err) => {
+        this.phoneChecking.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Verification Failed', detail: err?.error?.message || 'Invalid code. Please try again.' });
+      },
+    });
+  }
+
+  /** Resend verification code via SMS or voice */
+  resendAddPhoneCode(method: 'sms' | 'voice') {
+    const phoneId = this.addPhoneId();
+    if (!phoneId) return;
+
+    this.phoneChecking.set(true);
+    this.onboardingService.requestVerificationCode(phoneId, method).subscribe({
+      next: (result) => {
+        this.phoneChecking.set(false);
+        this.messageService.add({ severity: 'success', summary: 'Code Sent', detail: result.message });
+      },
+      error: (err) => {
+        this.phoneChecking.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Failed', detail: err?.error?.message || 'Failed to resend code' });
+      },
+    });
+  }
+
+  /** Close/reset the Add Phone panel */
+  closeAddPhone() {
+    this.showAddPhone.set(false);
+    this.newPhoneNumber = '';
+    this.addPhoneResult.set(null);
+    this.addPhonePhase.set('input');
+    this.addPhoneVerifyCode = '';
+    this.addPhoneId.set(null);
+  }
+
+  /** Toggle a phone number active/inactive */
+  togglePhoneStatus(phone: { id: string; status: string }) {
+    const newStatus = phone.status === 'active' ? 'inactive' : 'active';
+    this.apiService.patch(`/settings/phones/${phone.id}/status`, { status: newStatus }).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: newStatus === 'active' ? 'Activated' : 'Deactivated', detail: `Phone number ${newStatus}` });
+        this.loadPhoneNumbers();
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update phone status' });
+      },
+    });
+  }
+
+  /** Remove a phone number from this tenant */
+  removePhoneNumber(phoneId: string) {
+    this.apiService.delete(`/settings/phones/${phoneId}`).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Removed', detail: 'Phone number removed' });
+        this.loadPhoneNumbers();
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove phone number' });
+      },
+    });
   }
 }

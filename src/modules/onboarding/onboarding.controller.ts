@@ -1,15 +1,19 @@
 import {
-  Controller, Get, Post, Body, Req, UseGuards, HttpCode,
+  Controller, Get, Post, Body, Req, Param, UseGuards, HttpCode, UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { OnboardingService, ConnectWhatsAppDto, BusinessProfileDto } from './onboarding.service';
+import { OnboardingService, BusinessProfileDto } from './onboarding.service';
+import { OnboardingEngineService } from './engine/onboarding-engine.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('onboarding')
 @UseGuards(TenantGuard)
 export class OnboardingController {
-  constructor(private readonly onboardingService: OnboardingService) {}
+  constructor(
+    private readonly onboardingService: OnboardingService,
+    private readonly onboardingEngine: OnboardingEngineService,
+  ) {}
 
   @Get('status')
   @Roles('owner', 'seller')
@@ -18,19 +22,44 @@ export class OnboardingController {
     return this.onboardingService.getStatus(tenantId);
   }
 
-  @Post('check-phone')
+  /**
+   * Step 1: Register a phone number under the platform's shared WABA.
+   * Checks if number is available, registers it on Meta, assigns to tenant.
+   */
+  @Post('register-number')
   @Roles('owner')
   @HttpCode(200)
-  async checkPhone(@Req() req: Request, @Body() body: { phone: string }) {
+  async registerNumber(@Req() req: Request, @Body() body: { phone: string }) {
     const tenantId = (req.session as any).tenantId;
-    return this.onboardingService.checkPhone(tenantId, body.phone);
+    return this.onboardingService.registerNumber(tenantId, body.phone);
   }
 
-  @Post('connect-whatsapp')
+  /**
+   * Request a verification code via SMS or voice call.
+   */
+  @Post('request-code')
   @Roles('owner')
-  async connectWhatsApp(@Req() req: Request, @Body() dto: ConnectWhatsAppDto) {
+  @HttpCode(200)
+  async requestVerificationCode(
+    @Req() req: Request,
+    @Body() body: { phoneId: string; method?: 'sms' | 'voice' },
+  ) {
     const tenantId = (req.session as any).tenantId;
-    return this.onboardingService.connectWhatsApp(tenantId, dto);
+    return this.onboardingService.requestVerificationCode(tenantId, body.phoneId, body.method);
+  }
+
+  /**
+   * Verify the phone number with the code received.
+   */
+  @Post('verify-code')
+  @Roles('owner')
+  @HttpCode(200)
+  async verifyNumber(
+    @Req() req: Request,
+    @Body() body: { phoneId: string; code: string },
+  ) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingService.verifyNumber(tenantId, body.phoneId, body.code);
   }
 
   @Post('business-profile')
@@ -56,9 +85,78 @@ export class OnboardingController {
     return this.onboardingService.skipOnboarding(tenantId);
   }
 
-  @Get('setup-guide')
-  @Roles('owner', 'seller')
-  async getSetupGuide() {
-    return this.onboardingService.getSetupGuide();
+  // ─── Session-based onboarding engine endpoints ──────────────────────────
+
+  /**
+   * Start a new onboarding session with phone detection.
+   * Returns session ID and detected state (fresh, business_wa, other_bsp, etc.)
+   */
+  @Post('start')
+  @Roles('owner')
+  @HttpCode(200)
+  async startSession(@Req() req: Request, @Body() body: { phone: string }) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingEngine.startOnboarding(tenantId, body.phone);
+  }
+
+  /**
+   * Get session status (for polling / resuming UI).
+   */
+  @Get('session/:sessionId')
+  @Roles('owner')
+  async getSessionStatus(@Req() req: Request, @Param('sessionId') sessionId: string) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingEngine.getSessionStatus(sessionId, tenantId);
+  }
+
+  /**
+   * Get the latest onboarding session for this tenant.
+   */
+  @Get('session')
+  @Roles('owner')
+  async getActiveSession(@Req() req: Request) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingEngine.getActiveSession(tenantId);
+  }
+
+  /**
+   * Retry detection after user completes migration steps.
+   */
+  @Post('session/:sessionId/retry')
+  @Roles('owner')
+  @HttpCode(200)
+  async retrySession(@Req() req: Request, @Param('sessionId') sessionId: string) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingEngine.retryAfterUserAction(sessionId, tenantId);
+  }
+
+  /**
+   * Request OTP for a session.
+   */
+  @Post('session/:sessionId/request-otp')
+  @Roles('owner')
+  @HttpCode(200)
+  async sessionRequestOtp(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { method?: 'sms' | 'voice' },
+  ) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingEngine.requestOtp(sessionId, tenantId, body.method);
+  }
+
+  /**
+   * Verify OTP for a session.
+   */
+  @Post('session/:sessionId/verify-otp')
+  @Roles('owner')
+  @HttpCode(200)
+  async sessionVerifyOtp(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { code: string },
+  ) {
+    const tenantId = (req.session as any).tenantId;
+    return this.onboardingEngine.verifyOtp(sessionId, tenantId, body.code);
   }
 }

@@ -15,6 +15,8 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { MessageService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { DividerModule } from 'primeng/divider';
+import { CampaignService } from '../../core/services/campaign.service';
+import { ApiService } from '../../core/services/api.service';
 
 interface Segment {
   id: string;
@@ -282,6 +284,8 @@ export class CampaignFormComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly messageService = inject(MessageService);
+  private readonly campaignService = inject(CampaignService);
+  private readonly apiService = inject(ApiService);
 
   isEdit = signal(false);
   saving = signal(false);
@@ -307,15 +311,7 @@ export class CampaignFormComponent implements OnInit {
     { label: 'Triggered (event-based)', value: 'triggered' },
   ];
 
-  segments: Segment[] = [
-    { id: 'seg-1', name: 'All Active Customers', customerCount: 1284 },
-    { id: 'seg-2', name: 'VIP Customers', customerCount: 87 },
-    { id: 'seg-3', name: 'Inactive (30+ days)', customerCount: 340 },
-    { id: 'seg-4', name: 'Electronics Buyers', customerCount: 412 },
-    { id: 'seg-5', name: 'High Value (₦50k+)', customerCount: 156 },
-    { id: 'seg-6', name: 'New Customers (last 30 days)', customerCount: 78 },
-    { id: 'seg-7', name: 'Cart Abandoners', customerCount: 145 },
-  ];
+  segments: Segment[] = [];
 
   messageTypeOptions = [
     { label: 'Text Message', value: 'text' },
@@ -324,12 +320,7 @@ export class CampaignFormComponent implements OnInit {
     { label: 'Interactive (Buttons)', value: 'interactive' },
   ];
 
-  templates = [
-    { id: 'tmpl-1', name: 'sale_announcement', description: 'Announce a sale or promo' },
-    { id: 'tmpl-2', name: 'order_confirmation', description: 'Confirm customer order' },
-    { id: 'tmpl-3', name: 'payment_reminder', description: 'Remind about pending payment' },
-    { id: 'tmpl-4', name: 'delivery_update', description: 'Share delivery status' },
-  ];
+  templates: { id: string; name: string; description: string }[] = [];
 
   scheduleOptions = [
     { label: 'Send Immediately', value: 'immediate', desc: 'Campaign starts as soon as you launch' },
@@ -357,10 +348,40 @@ export class CampaignFormComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.isEdit.set(true);
-      this.campaignName = 'May Day Flash Sale';
-      this.campaignDesc = 'Exclusive flash sale for May Day';
-      this.campaignType = 'broadcast';
+      // Load existing campaign data
+      this.campaignService.getById(id).subscribe({
+        next: (campaign: any) => {
+          this.campaignName = campaign.name || '';
+          this.campaignDesc = campaign.description || '';
+          this.campaignType = campaign.type || 'broadcast';
+        },
+      });
     }
+
+    // Load segments
+    this.campaignService.getSegments().subscribe({
+      next: (segments: any) => {
+        this.segments = (segments.data || segments || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          customerCount: s.customer_count ?? s.customerCount ?? 0,
+        }));
+      },
+    });
+
+    // Load templates from tenant's template table
+    this.apiService.get<any[]>('/campaigns/templates').subscribe({
+      next: (templates) => {
+        this.templates = (templates || []).map((t: any) => ({
+          id: t.id,
+          name: t.wa_template_name || t.name || '',
+          description: t.category || '',
+        }));
+      },
+      error: () => {
+        // Templates endpoint may not exist yet - keep empty
+      },
+    });
   }
 
   calcTotalReach() {
@@ -381,19 +402,60 @@ export class CampaignFormComponent implements OnInit {
 
   saveDraft() {
     this.saving.set(true);
-    setTimeout(() => {
-      this.saving.set(false);
-      this.messageService.add({ severity: 'info', summary: 'Saved', detail: 'Campaign saved as draft' });
-      setTimeout(() => this.router.navigate(['/campaigns']), 1000);
-    }, 800);
+    this.campaignService.create({
+      name: this.campaignName,
+      description: this.campaignDesc,
+      type: this.campaignType as any,
+      targetSegmentIds: this.selectedSegments,
+      messages: [],
+      scheduledAt: undefined,
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.messageService.add({ severity: 'info', summary: 'Saved', detail: 'Campaign saved as draft' });
+        setTimeout(() => this.router.navigate(['/campaigns']), 1000);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save campaign' });
+      },
+    });
   }
 
   launch() {
     this.saving.set(true);
-    setTimeout(() => {
-      this.saving.set(false);
-      this.messageService.add({ severity: 'success', summary: 'Launched!', detail: 'Campaign has been launched successfully' });
-      setTimeout(() => this.router.navigate(['/campaigns']), 1200);
-    }, 1000);
+    this.campaignService.create({
+      name: this.campaignName,
+      description: this.campaignDesc,
+      type: this.campaignType as any,
+      targetSegmentIds: this.selectedSegments,
+      messages: [],
+      scheduledAt: this.scheduleType === 'scheduled' && this.scheduledDate ? this.scheduledDate.toISOString() : undefined,
+    }).subscribe({
+      next: (created: any) => {
+        if (this.scheduleType === 'immediate') {
+          this.campaignService.send(created.id).subscribe({
+            next: () => {
+              this.saving.set(false);
+              this.messageService.add({ severity: 'success', summary: 'Launched!', detail: 'Campaign has been launched successfully' });
+              setTimeout(() => this.router.navigate(['/campaigns']), 1200);
+            },
+            error: () => {
+              this.saving.set(false);
+              this.messageService.add({ severity: 'warn', summary: 'Created', detail: 'Campaign created but failed to send' });
+              setTimeout(() => this.router.navigate(['/campaigns']), 1200);
+            },
+          });
+        } else {
+          this.saving.set(false);
+          this.messageService.add({ severity: 'success', summary: 'Scheduled!', detail: 'Campaign has been scheduled' });
+          setTimeout(() => this.router.navigate(['/campaigns']), 1200);
+        }
+      },
+      error: () => {
+        this.saving.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to create campaign' });
+      },
+    });
   }
 }

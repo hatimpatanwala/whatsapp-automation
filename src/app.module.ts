@@ -1,5 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './config/redis.module';
 import { QueueModule } from './queue/queue.module';
@@ -21,8 +22,11 @@ import { MediaModule } from './modules/media/media.module';
 import { I18nModule } from './modules/i18n/i18n.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { WabaModule } from './modules/waba/waba.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
+import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 
 @Module({
   imports: [
@@ -30,6 +34,7 @@ import { TenantResolutionMiddleware } from './common/middleware/tenant-resolutio
       isGlobal: true,
       envFilePath: ['.env'],
     }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     RedisModule,
     QueueModule,
@@ -51,6 +56,8 @@ import { TenantResolutionMiddleware } from './common/middleware/tenant-resolutio
     I18nModule,
     WorkflowModule,
     OnboardingModule,
+    WabaModule,
+    BillingModule,
   ],
 })
 export class AppModule implements NestModule {
@@ -61,6 +68,10 @@ export class AppModule implements NestModule {
     consumer
       .apply(TenantResolutionMiddleware)
       .exclude('health', 'api/admin/(.*)', 'api/webhook/whatsapp')
+      .forRoutes('*');
+    consumer
+      .apply(RateLimitMiddleware)
+      .exclude('health', 'api/webhook/whatsapp')
       .forRoutes('*');
   }
 }

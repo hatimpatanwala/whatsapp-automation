@@ -1,4 +1,4 @@
-import { Component, signal, inject, computed } from '@angular/core';
+import { Component, signal, inject, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -10,6 +10,7 @@ import { ToastModule } from 'primeng/toast';
 import { TooltipModule } from 'primeng/tooltip';
 import { DividerModule } from 'primeng/divider';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { SkeletonModule } from 'primeng/skeleton';
 import { MessageService, ConfirmationService } from 'primeng/api';
 
 import { NodePaletteComponent } from './components/node-palette.component';
@@ -38,6 +39,7 @@ import {
     TooltipModule,
     DividerModule,
     ConfirmDialogModule,
+    SkeletonModule,
     NodePaletteComponent,
     WorkflowCanvasComponent,
     NodeConfigPanelComponent,
@@ -58,57 +60,84 @@ import {
           <button pButton label="New Workflow" icon="pi pi-plus" severity="success" (click)="newWorkflowDialog = true"></button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          @for (wf of workflows(); track wf.id) {
-            <div
-              class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-primary-200 transition-all cursor-pointer group"
-              (click)="openWorkflow(wf)"
-            >
-              <div class="flex items-start justify-between mb-3">
-                <div class="flex-1 min-w-0">
-                  <h3 class="font-semibold text-gray-900 truncate">{{ wf.name }}</h3>
-                  <p class="text-xs text-gray-400 mt-0.5">{{ wf.description || 'No description' }}</p>
+        @if (loading()) {
+          <!-- Skeleton loading state -->
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            @for (i of [1,2,3,4,5,6]; track i) {
+              <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                <div class="flex items-start justify-between mb-3">
+                  <div class="flex-1 min-w-0 space-y-2">
+                    <p-skeleton width="60%" height="1.1rem" />
+                    <p-skeleton width="80%" height="0.8rem" />
+                  </div>
+                  <p-skeleton width="4rem" height="1.4rem" borderRadius="1rem" styleClass="ml-2" />
                 </div>
-                <p-tag [value]="wf.status" [severity]="getWfSeverity(wf.status)" styleClass="text-xs capitalize" />
+                <div class="flex items-center gap-4 border-t border-gray-100 pt-3 mt-3">
+                  <p-skeleton width="4rem" height="0.8rem" />
+                  <p-skeleton width="4rem" height="0.8rem" />
+                  <p-skeleton width="4rem" height="0.8rem" styleClass="ml-auto" />
+                </div>
+                <div class="flex gap-2 mt-3">
+                  <p-skeleton width="100%" height="2rem" borderRadius="0.375rem" />
+                  <p-skeleton width="2rem" height="2rem" shape="circle" />
+                  <p-skeleton width="2rem" height="2rem" shape="circle" />
+                </div>
               </div>
+            }
+          </div>
+        } @else {
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            @for (wf of workflows(); track wf.id) {
+              <div
+                class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-primary-200 transition-all cursor-pointer group"
+                (click)="openWorkflow(wf)"
+              >
+                <div class="flex items-start justify-between mb-3">
+                  <div class="flex-1 min-w-0">
+                    <h3 class="font-semibold text-gray-900 truncate">{{ wf.name }}</h3>
+                    <p class="text-xs text-gray-400 mt-0.5">{{ wf.description || 'No description' }}</p>
+                  </div>
+                  <p-tag [value]="wf.status" [severity]="getWfSeverity(wf.status)" styleClass="text-xs capitalize" />
+                </div>
 
-              <div class="flex items-center gap-4 text-xs text-gray-500 border-t border-gray-100 pt-3 mt-3">
-                <span class="flex items-center gap-1">
-                  <i class="pi pi-box" style="font-size:0.65rem"></i>
-                  {{ wf.nodes.length }} nodes
-                </span>
-                <span class="flex items-center gap-1">
-                  <i class="pi pi-play" style="font-size:0.65rem"></i>
-                  {{ wf.executionCount | number }} runs
-                </span>
-                <span class="ml-auto text-gray-400">{{ wf.updatedAt }}</span>
-              </div>
+                <div class="flex items-center gap-4 text-xs text-gray-500 border-t border-gray-100 pt-3 mt-3">
+                  <span class="flex items-center gap-1">
+                    <i class="pi pi-box" style="font-size:0.65rem"></i>
+                    {{ wf.nodes.length }} nodes
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <i class="pi pi-play" style="font-size:0.65rem"></i>
+                    {{ wf.executionCount | number }} runs
+                  </span>
+                  <span class="ml-auto text-gray-400">{{ wf.updatedAt }}</span>
+                </div>
 
-              <div class="flex gap-2 mt-3">
-                <button pButton
-                  [icon]="wf.status === 'active' ? 'pi pi-pause' : 'pi pi-play'"
-                  [label]="wf.status === 'active' ? 'Pause' : 'Activate'"
-                  class="p-button-sm p-button-outlined flex-1"
-                  [severity]="wf.status === 'active' ? 'warn' : 'success'"
-                  (click)="toggleWorkflow($event, wf)">
-                </button>
-                <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm p-button-rounded" pTooltip="Edit" (click)="openWorkflow(wf); $event.stopPropagation()"></button>
-                <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger" pTooltip="Delete" (click)="deleteWorkflow($event, wf)"></button>
+                <div class="flex gap-2 mt-3">
+                  <button pButton
+                    [icon]="wf.status === 'active' ? 'pi pi-pause' : 'pi pi-play'"
+                    [label]="wf.status === 'active' ? 'Pause' : 'Activate'"
+                    class="p-button-sm p-button-outlined flex-1"
+                    [severity]="wf.status === 'active' ? 'warn' : 'success'"
+                    (click)="toggleWorkflow($event, wf)">
+                  </button>
+                  <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm p-button-rounded" pTooltip="Edit" (click)="openWorkflow(wf); $event.stopPropagation()"></button>
+                  <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger" pTooltip="Delete" (click)="deleteWorkflow($event, wf)"></button>
+                </div>
               </div>
-            </div>
-          }
+            }
 
-          @if (!workflows().length) {
-            <div class="col-span-3 text-center py-16">
-              <div class="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <i class="pi pi-sitemap text-gray-400" style="font-size:2.5rem"></i>
+            @if (!workflows().length) {
+              <div class="col-span-3 text-center py-16">
+                <div class="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <i class="pi pi-sitemap text-gray-400" style="font-size:2.5rem"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-700">No workflows yet</h3>
+                <p class="text-gray-400 text-sm mt-1">Create your first workflow to automate WhatsApp interactions</p>
+                <button pButton label="Create Workflow" icon="pi pi-plus" severity="success" class="mt-4" (click)="newWorkflowDialog = true"></button>
               </div>
-              <h3 class="text-lg font-semibold text-gray-700">No workflows yet</h3>
-              <p class="text-gray-400 text-sm mt-1">Create your first workflow to automate WhatsApp interactions</p>
-              <button pButton label="Create Workflow" icon="pi pi-plus" severity="success" class="mt-4" (click)="newWorkflowDialog = true"></button>
-            </div>
-          }
-        </div>
+            }
+          </div>
+        }
       </div>
     } @else {
       <!-- ========== WORKFLOW EDITOR VIEW ========== -->
@@ -213,7 +242,7 @@ import {
     </p-dialog>
   `,
 })
-export class WorkflowBuilderComponent {
+export class WorkflowBuilderComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly workflowService = inject(WorkflowService);
@@ -224,6 +253,7 @@ export class WorkflowBuilderComponent {
   currentEdges = signal<WorkflowEdgeData[]>([]);
   selectedNodeId = signal<string | null>(null);
   showConfigPanel = signal(false);
+  loading = signal(true);
 
   // Undo/redo
   private undoStack: { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] }[] = [];
@@ -245,33 +275,7 @@ export class WorkflowBuilderComponent {
   });
 
   // Data
-  workflows = signal<WorkflowDefinition[]>([
-    {
-      id: '1', name: 'Order Confirmation Flow', description: 'Confirms orders and sends payment QR',
-      status: 'active', trigger: 'order_created', nodes: [], edges: [],
-      createdAt: '2026-04-15', updatedAt: '2 days ago', executionCount: 847, lastExecutedAt: '5 mins ago',
-    },
-    {
-      id: '2', name: 'Payment Reminder', description: 'Sends reminders for pending payments',
-      status: 'active', trigger: 'payment_pending', nodes: [], edges: [],
-      createdAt: '2026-04-10', updatedAt: '1 week ago', executionCount: 312, lastExecutedAt: '1 hour ago',
-    },
-    {
-      id: '3', name: 'Abandoned Cart Recovery', description: 'Recovers abandoned carts via WhatsApp',
-      status: 'active', trigger: 'cart_abandoned', nodes: [], edges: [],
-      createdAt: '2026-04-08', updatedAt: '3 days ago', executionCount: 145, lastExecutedAt: '30 mins ago',
-    },
-    {
-      id: '4', name: 'Welcome New Customer', description: 'Greets new customers with catalog',
-      status: 'paused', trigger: 'customer_created', nodes: [], edges: [],
-      createdAt: '2026-03-25', updatedAt: '2 weeks ago', executionCount: 78, lastExecutedAt: '1 day ago',
-    },
-    {
-      id: '5', name: 'Delivery Update Notifier', description: 'Notifies customers on delivery updates',
-      status: 'draft', trigger: 'delivery_status_changed', nodes: [], edges: [],
-      createdAt: '2026-05-01', updatedAt: 'Today', executionCount: 0,
-    },
-  ]);
+  workflows = signal<WorkflowDefinition[]>([]);
 
   workflowTemplates = [
     { name: 'Order Flow', desc: 'Confirm, pay, and deliver', icon: 'pi-shopping-cart' },
@@ -280,23 +284,58 @@ export class WorkflowBuilderComponent {
     { name: 'Blank Canvas', desc: 'Start from scratch', icon: 'pi-palette' },
   ];
 
+  ngOnInit(): void {
+    this.loadWorkflows();
+  }
+
+  private loadWorkflows(): void {
+    this.loading.set(true);
+    this.workflowService.getAll().subscribe({
+      next: (response: any) => {
+        const items: any[] = Array.isArray(response) ? response : (response?.data ?? response?.items ?? []);
+        const mapped: WorkflowDefinition[] = items.map((w: any) => ({
+          id: w.id,
+          name: w.name,
+          description: w.description || '',
+          status: w.status || 'draft',
+          trigger: w.trigger || 'message_received',
+          nodes: w.nodes || [],
+          edges: w.edges || [],
+          createdAt: w.created_at || w.createdAt || '',
+          updatedAt: w.updated_at || w.updatedAt || '',
+          executionCount: w.execution_count ?? w.executionCount ?? 0,
+          lastExecutedAt: w.last_executed_at || w.lastExecutedAt,
+        }));
+        this.workflows.set(mapped);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load workflows' });
+      },
+    });
+  }
+
   // --- Workflow list actions ---
   openWorkflow(wf: WorkflowDefinition) {
-    // Load template nodes for demo workflows that haven't been populated yet
-    if (!wf.nodes.length) {
-      let template: { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } | null = null;
-      if (wf.id === '1' || wf.id === '2') {
-        template = this.workflowService.buildOrderFlowTemplate();
-      } else if (wf.id === '3' || wf.id === '4') {
-        template = this.workflowService.buildSalesFlowTemplate();
-      } else if (wf.id === '5') {
-        template = this.workflowService.buildSupportFlowTemplate();
-      }
-      if (template) {
-        wf.nodes = template.nodes;
-        wf.edges = template.edges;
-      }
+    if (!wf.nodes.length && wf.id) {
+      // Load full workflow from backend
+      this.workflowService.getById(wf.id).subscribe({
+        next: (full: any) => {
+          wf.nodes = full.nodes || [];
+          wf.edges = full.edges || [];
+          this.setEditorState(wf);
+        },
+        error: () => {
+          this.setEditorState(wf);
+        },
+      });
+    } else {
+      this.setEditorState(wf);
     }
+  }
+
+  private setEditorState(wf: WorkflowDefinition) {
     this.editingWorkflow.set(wf);
     this.currentNodes.set([...wf.nodes]);
     this.currentEdges.set([...wf.edges]);
@@ -321,9 +360,19 @@ export class WorkflowBuilderComponent {
 
   toggleWorkflow(event: Event, wf: WorkflowDefinition) {
     event.stopPropagation();
-    wf.status = wf.status === 'active' ? 'paused' : 'active';
-    this.workflows.update(list => [...list]);
-    this.messageService.add({ severity: 'info', summary: 'Updated', detail: `${wf.name} is now ${wf.status}` });
+    const action$ = wf.status === 'active'
+      ? this.workflowService.pause(wf.id)
+      : this.workflowService.activate(wf.id);
+    action$.subscribe({
+      next: (result: any) => {
+        wf.status = result.status || (wf.status === 'active' ? 'paused' : 'active');
+        this.workflows.update(list => [...list]);
+        this.messageService.add({ severity: 'info', summary: 'Updated', detail: `${wf.name} is now ${wf.status}` });
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update workflow status' });
+      },
+    });
   }
 
   deleteWorkflow(event: Event, wf: WorkflowDefinition) {
@@ -334,8 +383,15 @@ export class WorkflowBuilderComponent {
       icon: 'pi pi-trash',
       acceptButtonStyleClass: 'p-button-danger',
       accept: () => {
-        this.workflows.update(list => list.filter(w => w.id !== wf.id));
-        this.messageService.add({ severity: 'success', summary: 'Deleted', detail: 'Workflow deleted' });
+        this.workflowService.deleteWorkflow(wf.id).subscribe({
+          next: () => {
+            this.workflows.update(list => list.filter(w => w.id !== wf.id));
+            this.messageService.add({ severity: 'success', summary: 'Deleted', detail: 'Workflow deleted' });
+          },
+          error: () => {
+            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete workflow' });
+          },
+        });
       },
     });
   }
@@ -471,37 +527,61 @@ export class WorkflowBuilderComponent {
       edges = t.edges;
     }
 
-    const newWf: WorkflowDefinition = {
-      id: Date.now().toString(),
+    this.workflowService.create({
       name: this.newWfName,
       description: this.newWfDescription,
-      status: 'draft',
       trigger: 'message_received',
-      nodes,
-      edges,
-      createdAt: new Date().toISOString(),
-      updatedAt: 'Just now',
-      executionCount: 0,
-    };
-
-    this.workflows.update(list => [newWf, ...list]);
-    this.newWorkflowDialog = false;
-    this.newWfName = '';
-    this.newWfDescription = '';
-    this.selectedTemplate = 'Blank Canvas';
-    this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Workflow created successfully' });
-    this.openWorkflow(newWf);
+    }).subscribe({
+      next: (created: any) => {
+        const wf: WorkflowDefinition = {
+          id: created.id,
+          name: created.name,
+          description: created.description || '',
+          status: created.status || 'draft',
+          trigger: created.trigger || 'message_received',
+          nodes,
+          edges,
+          createdAt: created.created_at || created.createdAt,
+          updatedAt: created.updated_at || created.updatedAt || 'Just now',
+          executionCount: 0,
+        };
+        // If template has nodes, save them to the backend
+        if (nodes.length > 0) {
+          this.workflowService.saveDefinition(wf.id, { nodes, edges }).subscribe();
+        }
+        this.workflows.update(list => [wf, ...list]);
+        this.newWorkflowDialog = false;
+        this.newWfName = '';
+        this.newWfDescription = '';
+        this.selectedTemplate = 'Blank Canvas';
+        this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Workflow created successfully' });
+        this.openWorkflow(wf);
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to create workflow' });
+      },
+    });
   }
 
   saveWorkflow() {
     const wf = this.editingWorkflow();
-    if (wf) {
-      wf.nodes = this.currentNodes();
-      wf.edges = this.currentEdges();
-      wf.updatedAt = 'Just now';
-      this.workflows.update(list => [...list]);
-    }
-    this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Workflow saved successfully' });
+    if (!wf) return;
+
+    const nodes = this.currentNodes();
+    const edges = this.currentEdges();
+
+    this.workflowService.saveDefinition(wf.id, { nodes, edges }).subscribe({
+      next: () => {
+        wf.nodes = nodes;
+        wf.edges = edges;
+        wf.updatedAt = 'Just now';
+        this.workflows.update(list => [...list]);
+        this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Workflow saved successfully' });
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save workflow' });
+      },
+    });
   }
 
   getWfSeverity(status: string): any {

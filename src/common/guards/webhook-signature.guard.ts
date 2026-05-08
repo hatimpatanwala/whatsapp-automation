@@ -18,17 +18,25 @@ export class WebhookSignatureGuard implements CanActivate {
     }
 
     const appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET');
-    const rawBody = request.rawBody || JSON.stringify(request.body);
+    if (!appSecret) {
+      this.logger.error('WHATSAPP_APP_SECRET not configured');
+      throw new UnauthorizedException('Webhook verification not configured');
+    }
+
+    const rawBody = request.rawBody;
+    if (!rawBody) {
+      this.logger.error('Raw body not available — webhook signature cannot be verified. Ensure raw body parsing is enabled in main.ts');
+      throw new UnauthorizedException('Raw body required for signature verification');
+    }
 
     const expectedSignature = 'sha256=' + crypto
       .createHmac('sha256', appSecret)
       .update(rawBody)
       .digest('hex');
 
-    if (!crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature),
-    )) {
+    const sigBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expectedSignature);
+    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
       this.logger.warn('Invalid webhook signature');
       throw new UnauthorizedException('Invalid signature');
     }

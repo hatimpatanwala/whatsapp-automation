@@ -9,6 +9,12 @@ import { Roles } from '../../common/decorators/roles.decorator';
 export class DeliveryController {
   constructor(private readonly deliveryService: DeliveryService) {}
 
+  @Get('stats')
+  @Roles('owner', 'seller')
+  async getStats(@Req() req: Request) {
+    return this.deliveryService.getStats(req.tenantContext.schemaName);
+  }
+
   @Get()
   @Roles('owner', 'seller', 'staff')
   async findAll(@Req() req: Request) {

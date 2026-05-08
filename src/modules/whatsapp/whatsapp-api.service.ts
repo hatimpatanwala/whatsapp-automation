@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QUEUE_WHATSAPP_OUTBOUND } from '../../queue/queue.module';
+import { CircuitBreaker, CircuitBreakerOpenError } from '../../common/resilience/circuit-breaker';
 
 export interface SendMessagePayload {
   tenantSchema: string;
@@ -13,11 +14,20 @@ export interface SendMessagePayload {
   message: any;
 }
 
+export interface MetaApiErrorClassification {
+  retryable: boolean;
+  action: 'rate_limit_backoff' | 'undeliverable' | 'outside_24h_window' | 'reauth_required' | 'transient_error' | 'temporarily_blocked' | 'unknown';
+  code?: number;
+  message?: string;
+}
+
 @Injectable()
 export class WhatsAppApiService {
   private readonly logger = new Logger(WhatsAppApiService.name);
   private readonly apiUrl: string;
   private readonly apiVersion: string;
+  private readonly metaApiBreaker = new CircuitBreaker('meta-api', 10, 60000);
+  private static readonly MAX_QUEUE_DEPTH = 50000;
 
   constructor(
     private readonly configService: ConfigService,
@@ -25,10 +35,18 @@ export class WhatsAppApiService {
     private readonly outboundQueue: Queue,
   ) {
     this.apiUrl = this.configService.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com');
-    this.apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v18.0');
+    this.apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v21.0');
   }
 
   async sendMessage(payload: SendMessagePayload): Promise<string> {
+    // Backpressure: reject if queue is overloaded
+    const waiting = await this.outboundQueue.getWaitingCount();
+    if (waiting > WhatsAppApiService.MAX_QUEUE_DEPTH) {
+      throw new ServiceUnavailableException(
+        `Message queue at capacity (${waiting} pending). Please retry later.`,
+      );
+    }
+
     const job = await this.outboundQueue.add('send-message', payload, {
       priority: payload.type === 'template' ? 2 : 1,
     });
@@ -41,29 +59,79 @@ export class WhatsAppApiService {
     to: string,
     messageBody: any,
   ): Promise<any> {
-    const url = `${this.apiUrl}/${this.apiVersion}/${phoneNumberId}/messages`;
+    return this.metaApiBreaker.execute(async () => {
+      const url = `${this.apiUrl}/${this.apiVersion}/${phoneNumberId}/messages`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        ...messageBody,
-      }),
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          ...messageBody,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json() as any;
+        const classification = this.classifyMetaError(errorData);
+        this.logger.error(
+          `WhatsApp API error [${classification.code}/${classification.action}]: ${classification.message}`,
+        );
+
+        const error = new MetaApiError(
+          classification.message || 'Unknown error',
+          classification,
+        );
+
+        // Don't let non-retryable errors trip the circuit breaker
+        if (!classification.retryable) {
+          throw error;
+        }
+
+        throw error;
+      }
+
+      return response.json();
     });
+  }
 
-    if (!response.ok) {
-      const error = await response.json();
-      this.logger.error(`WhatsApp API error: ${JSON.stringify(error)}`);
-      throw new Error(`WhatsApp API error: ${error.error?.message || 'Unknown error'}`);
+  classifyMetaError(errorData: any): MetaApiErrorClassification {
+    const code = errorData.error?.code;
+    const subcode = errorData.error?.error_subcode;
+    const message = errorData.error?.message || 'Unknown error';
+
+    switch (code) {
+      case 130429:
+        return { retryable: true, action: 'rate_limit_backoff', code, message };
+      case 131026:
+        return { retryable: false, action: 'undeliverable', code, message };
+      case 131047:
+        return { retryable: false, action: 'outside_24h_window', code, message };
+      case 190:
+        return { retryable: false, action: 'reauth_required', code, message };
+      case 4:
+        return { retryable: true, action: 'transient_error', code, message };
+      case 368:
+        return { retryable: false, action: 'temporarily_blocked', code, message };
+      case 131031:
+        return { retryable: false, action: 'undeliverable', code, message }; // Recipient not on WA
+      case 131053:
+        return { retryable: true, action: 'transient_error', code, message }; // Media upload error
+      default:
+        return { retryable: true, action: 'unknown', code, message };
     }
+  }
 
-    return response.json();
+  getCircuitBreakerState() {
+    return {
+      state: this.metaApiBreaker.getState(),
+      failures: this.metaApiBreaker.getFailures(),
+    };
   }
 
   async sendTextMessage(
@@ -176,22 +244,36 @@ export class WhatsAppApiService {
   }
 
   async getMediaUrl(mediaId: string, accessToken: string): Promise<string> {
-    const url = `${this.apiUrl}/${this.apiVersion}/${mediaId}`;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    return this.metaApiBreaker.execute(async () => {
+      const url = `${this.apiUrl}/${this.apiVersion}/${mediaId}`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-    if (!response.ok) throw new Error('Failed to get media URL');
-    const data = await response.json();
-    return data.url;
+      if (!response.ok) throw new Error('Failed to get media URL');
+      const data = await response.json() as any;
+      return data.url;
+    });
   }
 
   async downloadMedia(mediaUrl: string, accessToken: string): Promise<Buffer> {
-    const response = await fetch(mediaUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    return this.metaApiBreaker.execute(async () => {
+      const response = await fetch(mediaUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-    if (!response.ok) throw new Error('Failed to download media');
-    return Buffer.from(await response.arrayBuffer());
+      if (!response.ok) throw new Error('Failed to download media');
+      return Buffer.from(await response.arrayBuffer());
+    });
+  }
+}
+
+export class MetaApiError extends Error {
+  constructor(
+    message: string,
+    public readonly classification: MetaApiErrorClassification,
+  ) {
+    super(message);
+    this.name = 'MetaApiError';
   }
 }

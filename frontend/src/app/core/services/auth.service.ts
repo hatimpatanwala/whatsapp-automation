@@ -19,7 +19,7 @@ export interface LoginResponse {
 export interface SignupPayload {
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
   password: string;
   businessName?: string;
 }
@@ -33,17 +33,37 @@ export interface SignupResponse {
   message?: string;
 }
 
+export interface TenantSubscription {
+  plan: string;
+  status: string;
+  maxProducts: number;
+  maxConversations: number;
+  maxCampaignsPerMonth: number;
+  conversationsUsed: number;
+  validFrom: string | null;
+  validUntil: string | null;
+  allowExceed: boolean;
+}
+
+export interface TenantInfo {
+  id: string;
+  slug?: string;
+  onboardingStatus: string;
+  whatsappPhone?: string;
+  businessName?: string;
+  businessCategory?: string;
+  businessDescription?: string;
+  businessAddress?: string;
+  logoUrl?: string;
+  hasWhatsAppConfig: boolean;
+}
+
 export interface MeResponse {
   type: 'admin' | 'tenant_user' | null;
   admin?: SuperAdminUser;
   user?: User;
-  tenant?: {
-    id: string;
-    onboardingStatus: string;
-    whatsappPhone?: string;
-    businessName?: string;
-    hasWhatsAppConfig: boolean;
-  };
+  tenant?: TenantInfo;
+  subscription?: TenantSubscription;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -53,7 +73,8 @@ export class AuthService {
 
   readonly currentUser = signal<User | null>(null);
   readonly currentAdmin = signal<SuperAdminUser | null>(null);
-  readonly tenantInfo = signal<MeResponse['tenant'] | null>(null);
+  readonly tenantInfo = signal<TenantInfo | null>(null);
+  readonly subscriptionInfo = signal<TenantSubscription | null>(null);
 
   readonly isAuthenticated = computed(() => this.currentUser() !== null || this.currentAdmin() !== null);
   readonly isSuperAdmin = computed(() => this.currentAdmin() !== null);
@@ -125,6 +146,7 @@ export class AuthService {
         } else if (res.type === 'tenant_user') {
           this.currentUser.set(res.user!);
           this.tenantInfo.set(res.tenant ?? null);
+          this.subscriptionInfo.set(res.subscription ?? null);
           this.currentAdmin.set(null);
         }
       }),
@@ -140,6 +162,7 @@ export class AuthService {
     this.currentUser.set(null);
     this.currentAdmin.set(null);
     this.tenantInfo.set(null);
+    this.subscriptionInfo.set(null);
     this.router.navigate(['/auth/login']);
   }
 }

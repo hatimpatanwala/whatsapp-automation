@@ -43,10 +43,10 @@ export class SubscriptionGuard implements CanActivate {
       );
     }
 
-    // Check conversation limit
-    if (subscription.conversationsUsed >= subscription.maxConversations) {
+    // Check conversation limit (only block if tenant has NOT enabled exceed)
+    if (subscription.conversationsUsed >= subscription.maxConversations && !subscription.allowExceed) {
       throw new ForbiddenException(
-        `You have reached your conversation limit (${subscription.maxConversations}). Please upgrade your plan.`,
+        `You have reached your conversation limit (${subscription.maxConversations}). Please upgrade your plan or enable exceed in settings.`,
       );
     }
 

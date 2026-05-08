@@ -440,6 +440,17 @@ p-password {
 }
 
 /* --- Toggle Switch --- */
+.p-toggleswitch {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+.p-toggleswitch .p-toggleswitch-input {
+  appearance: none !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+}
 .p-toggleswitch .p-toggleswitch-slider {
   width: 2.75rem !important;
   height: 1.5rem !important;
@@ -449,8 +460,14 @@ p-password {
   cursor: pointer !important;
   transition: background 0.2s !important;
   position: relative !important;
+  display: flex !important;
+  align-items: center !important;
 }
+/* Remove any pseudo-element — PrimeNG 21 uses a real <div> handle */
 .p-toggleswitch .p-toggleswitch-slider::before {
+  display: none !important;
+}
+.p-toggleswitch .p-toggleswitch-handle {
   width: 1.125rem !important;
   height: 1.125rem !important;
   border-radius: 50% !important;
@@ -460,13 +477,14 @@ p-password {
   left: 3px !important;
   transform: translateY(-50%) !important;
   transition: left 0.2s !important;
-  content: '' !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
 }
-.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-slider {
+.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-slider,
+.p-toggleswitch[data-p-checked="true"] .p-toggleswitch-slider {
   background: var(--wa-primary) !important;
 }
-.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-slider::before {
+.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-handle,
+.p-toggleswitch[data-p-checked="true"] .p-toggleswitch-handle {
   left: calc(100% - 1.125rem - 3px) !important;
 }
 

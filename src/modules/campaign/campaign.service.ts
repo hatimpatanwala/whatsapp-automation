@@ -19,9 +19,44 @@ export class CampaignService {
     private readonly broadcastQueue: Queue,
   ) {}
 
-  async findAll(schema: string): Promise<any[]> {
+  async findAll(schema: string, pagination?: { page?: number; limit?: number }): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      return qr.query(`SELECT * FROM campaigns ORDER BY created_at DESC`);
+      const page = pagination?.page || 1;
+      const limit = pagination?.limit || 50;
+      const offset = (page - 1) * limit;
+
+      const countResult = await qr.query(`SELECT COUNT(*) as total FROM campaigns`);
+      const total = parseInt(countResult[0].total);
+
+      const campaigns = await qr.query(
+        `SELECT * FROM campaigns ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+        [limit, offset],
+      );
+
+      // Map stats sub-object from individual columns
+      const mappedCampaigns = campaigns.map((c: any) => ({
+        ...c,
+        stats: {
+          total_recipients: c.total_recipients || 0,
+          sent: c.sent_count || 0,
+          delivered: c.delivered_count || 0,
+          read: c.read_count || 0,
+          replied: c.replied_count || 0,
+          failed: c.failed_count || 0,
+          opt_outs: c.opt_out_count || 0,
+          delivery_rate: c.total_recipients > 0 ? Math.round(((c.delivered_count || 0) / c.total_recipients) * 100) : 0,
+          read_rate: (c.delivered_count || 0) > 0 ? Math.round(((c.read_count || 0) / (c.delivered_count || 1)) * 100) : 0,
+          reply_rate: (c.delivered_count || 0) > 0 ? Math.round(((c.replied_count || 0) / (c.delivered_count || 1)) * 100) : 0,
+        },
+      }));
+
+      return {
+        data: mappedCampaigns,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     });
   }
 
@@ -32,6 +67,33 @@ export class CampaignService {
         [data.name, data.templateId, data.segmentId, data.scheduledAt],
       );
       return result[0];
+    });
+  }
+
+  async getStats(schema: string, campaignId: string): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const campaign = await qr.query(`SELECT * FROM campaigns WHERE id = $1`, [campaignId]);
+      if (!campaign[0]) return null;
+      const c = campaign[0];
+      const totalRecipients = c.total_recipients || 0;
+      const sent = c.sent_count || 0;
+      const delivered = c.delivered_count || 0;
+      const read = c.read_count || 0;
+      const replied = c.replied_count || 0;
+      const failed = c.failed_count || 0;
+      const optOuts = c.opt_out_count || 0;
+      return {
+        total_recipients: totalRecipients,
+        sent,
+        delivered,
+        read,
+        replied,
+        failed,
+        opt_outs: optOuts,
+        delivery_rate: totalRecipients > 0 ? Math.round((delivered / totalRecipients) * 100 * 10) / 10 : 0,
+        read_rate: delivered > 0 ? Math.round((read / delivered) * 100 * 10) / 10 : 0,
+        reply_rate: delivered > 0 ? Math.round((replied / delivered) * 100 * 10) / 10 : 0,
+      };
     });
   }
 

@@ -409,12 +409,32 @@ export class ConversationsComponent implements OnInit {
   private mapMessage(m: Message): MessageView {
     return {
       id: m.id,
-      content: m.content ?? '',
+      content: this.extractContent(m),
       direction: m.direction as 'inbound' | 'outbound',
       status: m.status,
       time: this.formatMessageTime(m.createdAt),
       type: m.type,
     };
+  }
+
+  private extractContent(m: Message): string {
+    const c = m.content as any;
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+    // text messages: { body: "..." }
+    if (c.body) return typeof c.body === 'string' ? c.body : c.body?.text ?? '';
+    // interactive replies (keys may be camelCase after transform interceptor)
+    if (c.buttonReply) return c.buttonReply.title ?? c.buttonReply.id ?? '';
+    if (c.button_reply) return c.button_reply.title ?? c.button_reply.id ?? '';
+    if (c.listReply) return c.listReply.title ?? c.listReply.description ?? '';
+    if (c.list_reply) return c.list_reply.title ?? c.list_reply.description ?? '';
+    // media
+    if (c.caption) return c.caption;
+    if (c.mimeType || c.mime_type) return `[${m.type}]`;
+    // template
+    if (c.name || c.templateName || c.template_name) return `[Template: ${c.name || c.templateName || c.template_name}]`;
+    // fallback
+    return JSON.stringify(c);
   }
 
   private formatMessageTime(dateStr: string): string {

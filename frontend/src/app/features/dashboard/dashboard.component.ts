@@ -364,38 +364,6 @@ export class DashboardComponent implements OnInit {
   }
 
   private initChart() {
-    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const revenue = [385000, 420000, 310000, 480000, 395000, 520000, 447500];
-    const orders = [32, 38, 28, 45, 35, 48, 42];
-
-    this.revenueChartData = {
-      labels,
-      datasets: [
-        {
-          label: 'Revenue (\u20B9)',
-          data: revenue,
-          borderColor: '#25D366',
-          backgroundColor: 'rgba(37,211,102,0.1)',
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#25D366',
-          pointRadius: 4,
-          yAxisID: 'y',
-        },
-        {
-          label: 'Orders',
-          data: orders,
-          borderColor: '#34B7F1',
-          backgroundColor: 'transparent',
-          tension: 0.4,
-          borderDash: [5, 5],
-          pointBackgroundColor: '#34B7F1',
-          pointRadius: 4,
-          yAxisID: 'y1',
-        },
-      ],
-    };
-
     this.revenueChartOptions = {
       responsive: true,
       maintainAspectRatio: false,
@@ -405,23 +373,54 @@ export class DashboardComponent implements OnInit {
       },
       scales: {
         y: {
-          type: 'linear',
-          position: 'left',
+          type: 'linear', position: 'left',
           ticks: { callback: (v: number) => '\u20B9' + (v / 1000).toFixed(0) + 'k', font: { size: 10 } },
           grid: { color: 'rgba(0,0,0,0.05)' },
         },
         y1: {
-          type: 'linear',
-          position: 'right',
+          type: 'linear', position: 'right',
           grid: { drawOnChartArea: false },
           ticks: { font: { size: 10 } },
         },
-        x: {
-          ticks: { font: { size: 11 } },
-          grid: { display: false },
-        },
+        x: { ticks: { font: { size: 11 } }, grid: { display: false } },
       },
     };
+
+    this.apiService.get<any>('/orders/dashboard/chart', { days: 7 }).subscribe({
+      next: (data) => {
+        const labels = (data.labels || []).map((d: string) => {
+          const date = new Date(d);
+          return date.toLocaleDateString('en-IN', { weekday: 'short' });
+        });
+        this.revenueChartData = {
+          labels: labels.length ? labels : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          datasets: [
+            {
+              label: 'Revenue (\u20B9)',
+              data: data.revenue || [],
+              borderColor: '#25D366', backgroundColor: 'rgba(37,211,102,0.1)',
+              fill: true, tension: 0.4, pointBackgroundColor: '#25D366', pointRadius: 4, yAxisID: 'y',
+            },
+            {
+              label: 'Orders',
+              data: data.orders || [],
+              borderColor: '#34B7F1', backgroundColor: 'transparent',
+              tension: 0.4, borderDash: [5, 5], pointBackgroundColor: '#34B7F1', pointRadius: 4, yAxisID: 'y1',
+            },
+          ],
+        };
+      },
+      error: () => {
+        // Fallback: empty chart
+        this.revenueChartData = {
+          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          datasets: [
+            { label: 'Revenue (\u20B9)', data: [0, 0, 0, 0, 0, 0, 0], borderColor: '#25D366', backgroundColor: 'rgba(37,211,102,0.1)', fill: true, tension: 0.4, yAxisID: 'y' },
+            { label: 'Orders', data: [0, 0, 0, 0, 0, 0, 0], borderColor: '#34B7F1', backgroundColor: 'transparent', tension: 0.4, borderDash: [5, 5], yAxisID: 'y1' },
+          ],
+        };
+      },
+    });
   }
 
   getOrderSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {

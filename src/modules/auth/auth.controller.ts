@@ -170,7 +170,7 @@ export class AuthController {
 
       const tenant = await this.tenantRepository.findOne({
         where: { id: session.tenantId },
-        select: ['id', 'onboardingStatus', 'whatsappPhone', 'businessName', 'phoneNumberId'],
+        select: ['id', 'slug', 'onboardingStatus', 'whatsappPhone', 'businessName', 'businessCategory', 'businessDescription', 'businessAddress', 'logoUrl', 'phoneNumberId'],
       });
 
       // Get subscription info for trial status display
@@ -183,17 +183,26 @@ export class AuthController {
         user,
         tenant: tenant ? {
           id: tenant.id,
+          slug: tenant.slug,
           onboardingStatus: tenant.onboardingStatus,
           whatsappPhone: tenant.whatsappPhone,
           businessName: tenant.businessName,
+          businessCategory: tenant.businessCategory,
+          businessDescription: tenant.businessDescription,
+          businessAddress: tenant.businessAddress,
+          logoUrl: tenant.logoUrl,
           hasWhatsAppConfig: !!tenant.phoneNumberId,
         } : null,
         subscription: subscription ? {
           plan: subscription.plan,
-          maxConversations: subscription.maxConversations,
-          conversationsUsed: subscription.conversationsUsed,
-          validUntil: subscription.validUntil,
           status: subscription.status,
+          maxProducts: subscription.maxProducts,
+          maxConversations: subscription.maxConversations,
+          maxCampaignsPerMonth: subscription.maxCampaignsPerMonth,
+          conversationsUsed: subscription.conversationsUsed,
+          validFrom: subscription.validFrom,
+          validUntil: subscription.validUntil,
+          allowExceed: subscription.allowExceed,
         } : null,
       };
     }

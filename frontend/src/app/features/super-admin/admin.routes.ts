@@ -34,4 +34,8 @@ export const ADMIN_ROUTES: Routes = [
     path: 'subscriptions/:id/edit',
     loadComponent: () => import('./subscriptions/plan-form.component').then(m => m.PlanFormComponent),
   },
+  {
+    path: 'waba',
+    loadComponent: () => import('./waba/waba-dashboard.component').then(m => m.WabaDashboardComponent),
+  },
 ];

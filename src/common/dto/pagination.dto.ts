@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, IsString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class PaginationDto {
@@ -15,6 +15,18 @@ export class PaginationDto {
   @Max(100)
   limit?: number = 20;
 
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   get skip(): number {
     return (this.page - 1) * this.limit;
   }
@@ -22,20 +34,16 @@ export class PaginationDto {
 
 export class PaginatedResponse<T> {
   data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 
   constructor(data: T[], total: number, page: number, limit: number) {
     this.data = data;
-    this.meta = {
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    this.total = total;
+    this.page = page;
+    this.limit = limit;
+    this.totalPages = Math.ceil(total / limit);
   }
 }

@@ -87,15 +87,59 @@ export class DeliveryService {
     });
   }
 
-  async findAll(schema: string): Promise<any[]> {
+  async getStats(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      return qr.query(`
-        SELECT d.*, o.order_number, c.phone as customer_phone, c.name as customer_name
+      const stats = await qr.query(`
+        SELECT
+          COUNT(*)::int as total,
+          COUNT(*) FILTER (WHERE status = 'pending')::int as pending,
+          COUNT(*) FILTER (WHERE status = 'assigned')::int as assigned,
+          COUNT(*) FILTER (WHERE status = 'in_transit')::int as in_transit,
+          COUNT(*) FILTER (WHERE status = 'delivered')::int as delivered,
+          COUNT(*) FILTER (WHERE status = 'failed')::int as failed,
+          CASE WHEN COUNT(*) > 0
+            THEN ROUND(COUNT(*) FILTER (WHERE status = 'delivered')::numeric / COUNT(*)::numeric * 100, 1)
+            ELSE 0
+          END::numeric as delivery_rate,
+          COALESCE(
+            ROUND(AVG(EXTRACT(EPOCH FROM (delivered_at - created_at)) / 3600) FILTER (WHERE status = 'delivered'), 1),
+            0
+          )::numeric as average_delivery_hours
+        FROM deliveries
+      `);
+      return stats[0];
+    });
+  }
+
+  async findAll(schema: string): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const deliveries = await qr.query(`
+        SELECT d.*,
+               json_build_object(
+                 'id', o.id,
+                 'order_number', o.order_number,
+                 'total_amount', o.total,
+                 'status', o.status
+               ) as "order",
+               o.order_number,
+               c.phone as customer_phone, c.name as customer_name
         FROM deliveries d
         JOIN orders o ON o.id = d.order_id
         JOIN customers c ON c.id = o.customer_id
         ORDER BY d.created_at DESC
       `);
+      const mapped = deliveries.map((d: any) => ({
+        ...d,
+        order: typeof d.order === 'string' ? JSON.parse(d.order) : d.order,
+        courier_name: d.assigned_to,
+      }));
+      return {
+        data: mapped,
+        total: mapped.length,
+        page: 1,
+        limit: mapped.length || 20,
+        totalPages: 1,
+      };
     });
   }
 }

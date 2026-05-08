@@ -76,7 +76,7 @@ import { AuthService } from '../../core/services/auth.service';
             </div>
 
             <div class="wa-form-field">
-              <label for="phone">Phone number</label>
+              <label for="phone">Phone number <span class="optional">(optional)</span></label>
               <input pInputText id="phone" type="tel" formControlName="phone" placeholder="+91 98765 43210" />
             </div>
 
@@ -282,7 +282,7 @@ export class RegisterComponent {
     name: ['', [Validators.required, Validators.minLength(2)]],
     businessName: [''],
     email: ['', [Validators.required, Validators.email]],
-    phone: ['', [Validators.required]],
+    phone: [''],
     password: ['', [Validators.required, Validators.minLength(6)]],
   });
 
@@ -296,7 +296,7 @@ export class RegisterComponent {
     this.authService.signup({
       name: name!,
       email: email!,
-      phone: phone!,
+      phone: phone || undefined,
       password: password!,
       businessName: businessName || undefined,
     }).subscribe({

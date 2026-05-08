@@ -1,4 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
+import { ApiService } from '../../../core/services/api.service';
 import {
   WorkflowDefinition,
   WorkflowNodeData,
@@ -9,7 +11,52 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class WorkflowService {
+  private readonly api = inject(ApiService);
   private idCounter = 0;
+
+  // === API Methods ===
+
+  getAll(params?: { page?: number; limit?: number; status?: string; search?: string }): Observable<any> {
+    return this.api.get('/workflows', params as any);
+  }
+
+  getById(id: string): Observable<any> {
+    return this.api.get(`/workflows/${id}`);
+  }
+
+  create(data: { name: string; description?: string; trigger?: string }): Observable<any> {
+    return this.api.post('/workflows', data);
+  }
+
+  update(id: string, data: { name?: string; description?: string }): Observable<any> {
+    return this.api.patch(`/workflows/${id}`, data);
+  }
+
+  saveDefinition(id: string, data: { nodes: any[]; edges: any[]; trigger?: any }): Observable<any> {
+    return this.api.put(`/workflows/${id}/definition`, data);
+  }
+
+  deleteWorkflow(id: string): Observable<any> {
+    return this.api.delete(`/workflows/${id}`);
+  }
+
+  activate(id: string): Observable<any> {
+    return this.api.post(`/workflows/${id}/activate`, {});
+  }
+
+  pause(id: string): Observable<any> {
+    return this.api.post(`/workflows/${id}/pause`, {});
+  }
+
+  duplicate(id: string): Observable<any> {
+    return this.api.post(`/workflows/${id}/duplicate`, {});
+  }
+
+  getExecutions(id: string, params?: { page?: number; limit?: number }): Observable<any> {
+    return this.api.get(`/workflows/${id}/executions`, params as any);
+  }
+
+  // === Template / Local Methods ===
 
   /** Generate a unique node ID */
   generateNodeId(): string {

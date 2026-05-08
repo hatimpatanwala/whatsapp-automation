@@ -7,6 +7,29 @@ export interface ApiResponse<T> {
   meta?: Record<string, any>;
 }
 
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z0-9])/g, (_, char) => char.toUpperCase());
+}
+
+function transformKeys(obj: any, seen = new WeakSet()): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj;
+  if (Buffer.isBuffer(obj)) return obj;
+
+  // Prevent circular reference infinite recursion
+  if (seen.has(obj)) return undefined;
+  seen.add(obj);
+
+  if (Array.isArray(obj)) return obj.map(item => transformKeys(item, seen));
+
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    result[snakeToCamel(key)] = transformKeys(obj[key], seen);
+  }
+  return result;
+}
+
 @Injectable()
 export class TransformResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
@@ -19,7 +42,7 @@ export class TransformResponseInterceptor<T> implements NestInterceptor<T, ApiRe
 
         return {
           success: true,
-          data,
+          data: transformKeys(data),
         };
       }),
     );

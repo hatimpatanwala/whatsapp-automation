@@ -1,7 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('whatsapp', () => ({
-  apiVersion: process.env.WHATSAPP_API_VERSION || 'v18.0',
+  apiVersion: process.env.WHATSAPP_API_VERSION || 'v21.0',
   apiUrl: process.env.WHATSAPP_API_URL || 'https://graph.facebook.com',
   appSecret: process.env.WHATSAPP_APP_SECRET || '',
   verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',

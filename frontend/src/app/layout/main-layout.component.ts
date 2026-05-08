@@ -7,6 +7,7 @@ import { BadgeModule } from 'primeng/badge';
 import { TooltipModule } from 'primeng/tooltip';
 import { DividerModule } from 'primeng/divider';
 import { AuthService } from '../core/services/auth.service';
+import { ApiService } from '../core/services/api.service';
 
 interface NavItem {
   label: string;
@@ -166,6 +167,7 @@ interface NavItem {
 export class MainLayoutComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly apiService = inject(ApiService);
 
   sidebarOpen = signal(true);
   isMobile = signal(false);
@@ -175,11 +177,11 @@ export class MainLayoutComponent implements OnInit {
     { label: 'Products', icon: 'pi-box', route: '/products' },
     { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders' },
     { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory' },
-    { label: 'Payments', icon: 'pi-credit-card', route: '/payments', badge: 5 },
+    { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },
     { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries' },
     { label: 'Customers', icon: 'pi-users', route: '/customers' },
     { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns' },
-    { label: 'Conversations', icon: 'pi-comments', route: '/conversations', badge: 12 },
+    { label: 'Conversations', icon: 'pi-comments', route: '/conversations' },
     { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder' },
     { label: 'Settings', icon: 'pi-cog', route: '/settings' },
   ];
@@ -221,6 +223,17 @@ export class MainLayoutComponent implements OnInit {
   ngOnInit() {
     this.checkMobile();
     window.addEventListener('resize', () => this.checkMobile());
+    this.apiService.get<any>('/orders/dashboard/counts').subscribe({
+      next: (counts) => {
+        this.navItems = this.navItems.map(item => {
+          if (item.route === '/payments') return { ...item, badge: counts.pendingPayments || undefined };
+          if (item.route === '/conversations') return { ...item, badge: counts.openConversations || undefined };
+          if (item.route === '/orders') return { ...item, badge: counts.pendingOrders || undefined };
+          if (item.route === '/deliveries') return { ...item, badge: counts.pendingDeliveries || undefined };
+          return item;
+        });
+      },
+    });
   }
 
   private checkMobile() {

@@ -1,0 +1,165 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { WhatsAppApiService } from './whatsapp-api.service';
+import { ConversationMeteringService, ConversationCategory } from '../waba/metering/conversation-metering.service';
+import { QuotaEnforcementService } from '../waba/metering/quota-enforcement.service';
+import { RateLimitService } from '../waba/metering/rate-limit.service';
+
+export interface OrchestatedSendResult {
+  success: boolean;
+  messageId?: string;
+  blocked?: boolean;
+  reason?: string;
+}
+
+/**
+ * Wraps WhatsAppApiService with metering, quota enforcement, and rate limiting.
+ * All outbound messages should go through this service instead of directly
+ * calling WhatsAppApiService.
+ */
+@Injectable()
+export class MessageOrchestratorService {
+  private readonly logger = new Logger(MessageOrchestratorService.name);
+
+  constructor(
+    private readonly whatsappApi: WhatsAppApiService,
+    private readonly metering: ConversationMeteringService,
+    private readonly quota: QuotaEnforcementService,
+    private readonly rateLimit: RateLimitService,
+  ) {}
+
+  /**
+   * Send a text message with full metering pipeline.
+   */
+  async sendText(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    text: string,
+    category: ConversationCategory = 'service',
+  ): Promise<OrchestatedSendResult> {
+    const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category);
+    if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
+
+    const result = await this.whatsappApi.sendTextMessage(phoneNumberId, accessToken, to, text);
+    return { success: true, messageId: result?.messages?.[0]?.id };
+  }
+
+  /**
+   * Send a template message with full metering pipeline.
+   */
+  async sendTemplate(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    templateName: string,
+    language: string,
+    components?: any[],
+    category: ConversationCategory = 'utility',
+  ): Promise<OrchestatedSendResult> {
+    const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category, 'business_initiated');
+    if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
+
+    const result = await this.whatsappApi.sendTemplate(phoneNumberId, accessToken, to, templateName, language, components);
+    return { success: true, messageId: result?.messages?.[0]?.id };
+  }
+
+  /**
+   * Send interactive buttons with full metering pipeline.
+   */
+  async sendButtons(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    body: string,
+    buttons: Array<{ id: string; title: string }>,
+    header?: string,
+    footer?: string,
+    category: ConversationCategory = 'service',
+  ): Promise<OrchestatedSendResult> {
+    const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category);
+    if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
+
+    const result = await this.whatsappApi.sendInteractiveButtons(phoneNumberId, accessToken, to, body, buttons, header, footer);
+    return { success: true, messageId: result?.messages?.[0]?.id };
+  }
+
+  /**
+   * Send interactive list with full metering pipeline.
+   */
+  async sendList(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    body: string,
+    buttonText: string,
+    sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    header?: string,
+    footer?: string,
+    category: ConversationCategory = 'service',
+  ): Promise<OrchestatedSendResult> {
+    const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category);
+    if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
+
+    const result = await this.whatsappApi.sendInteractiveList(phoneNumberId, accessToken, to, body, buttonText, sections, header, footer);
+    return { success: true, messageId: result?.messages?.[0]?.id };
+  }
+
+  /**
+   * Send an image with full metering pipeline.
+   */
+  async sendImage(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    imageUrl: string,
+    caption?: string,
+    category: ConversationCategory = 'service',
+  ): Promise<OrchestatedSendResult> {
+    const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category);
+    if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
+
+    const result = await this.whatsappApi.sendImage(phoneNumberId, accessToken, to, imageUrl, caption);
+    return { success: true, messageId: result?.messages?.[0]?.id };
+  }
+
+  /**
+   * Pre-send checks: quota enforcement, rate limiting, and conversation metering.
+   */
+  private async preSendChecks(
+    tenantId: string,
+    phoneNumberId: string,
+    to: string,
+    category: ConversationCategory,
+    origin: 'business_initiated' | 'user_initiated' = 'business_initiated',
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    // 1. Quota check
+    const quotaStatus = await this.quota.canSendMessage(tenantId);
+    if (!quotaStatus.allowed) {
+      this.logger.warn(`Quota blocked for tenant ${tenantId}: ${quotaStatus.reason}`);
+      return { allowed: false, reason: quotaStatus.reason };
+    }
+
+    // 2. Rate limit check
+    const rateLimitResult = await this.rateLimit.checkRateLimit(tenantId);
+    if (!rateLimitResult.allowed) {
+      this.logger.warn(`Rate limited for tenant ${tenantId}: window=${rateLimitResult.window}, retry after ${rateLimitResult.retryAfterMs}ms`);
+      return { allowed: false, reason: `Rate limited. Retry after ${Math.ceil((rateLimitResult.retryAfterMs || 1000) / 1000)}s` };
+    }
+
+    // 3. Meter the conversation (find or create 24h session)
+    await this.metering.meterConversation({
+      tenantId,
+      phoneNumberId,
+      customerPhone: to,
+      category,
+      origin,
+    });
+
+    return { allowed: true };
+  }
+}

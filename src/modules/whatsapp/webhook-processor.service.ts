@@ -1,4 +1,5 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../config/redis.module';
 import { TenantService } from '../tenant/tenant.service';
@@ -12,10 +13,17 @@ import { ConversationHelper } from './helpers/conversation.helper';
 import { WorkflowExecutionEngine } from '../workflow/engine/workflow-execution.engine';
 import { WorkflowTriggerMatcher } from '../workflow/engine/workflow-trigger.matcher';
 import { ReplyData } from '../workflow/engine/workflow-engine.types';
+import { ConversationMeteringService } from '../waba/metering/conversation-metering.service';
+import { QuotaEnforcementService } from '../waba/metering/quota-enforcement.service';
+import { RateLimitService } from '../waba/metering/rate-limit.service';
+import { PhoneNumberService } from '../waba/phone-number.service';
+import { MetaTokenService } from '../waba/meta-token.service';
+import { ComplianceMonitorService } from '../waba/compliance/compliance-monitor.service';
 
 @Injectable()
 export class WebhookProcessorService {
   private readonly logger = new Logger(WebhookProcessorService.name);
+  private readonly graphApiVersion: string;
 
   constructor(
     @Inject(REDIS_CLIENT)
@@ -29,7 +37,16 @@ export class WebhookProcessorService {
     private readonly conversationHelper: ConversationHelper,
     private readonly workflowEngine: WorkflowExecutionEngine,
     private readonly triggerMatcher: WorkflowTriggerMatcher,
-  ) {}
+    @Optional() private readonly phoneNumberService: PhoneNumberService,
+    @Optional() private readonly metaTokenService: MetaTokenService,
+    @Optional() private readonly meteringService: ConversationMeteringService,
+    @Optional() private readonly quotaService: QuotaEnforcementService,
+    @Optional() private readonly rateLimitService: RateLimitService,
+    @Optional() private readonly complianceMonitor: ComplianceMonitorService,
+    private readonly configService: ConfigService,
+  ) {
+    this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
+  }
 
   async processWebhook(payload: any): Promise<void> {
     const entries = payload?.entry;
@@ -40,9 +57,28 @@ export class WebhookProcessorService {
       if (!changes) continue;
 
       for (const change of changes) {
-        if (change.field !== 'messages') continue;
-
+        const field = change.field;
         const value = change.value;
+
+        // Handle non-message webhook events
+        if (field === 'phone_number_quality_update') {
+          await this.handleQualityUpdate(value);
+          continue;
+        }
+        if (field === 'message_template_status_update') {
+          await this.handleTemplateStatusUpdate(value);
+          continue;
+        }
+        if (field === 'account_update') {
+          await this.handleAccountUpdate(value);
+          continue;
+        }
+        if (field === 'phone_number_name_update') {
+          this.logger.log(`Phone name update: ${JSON.stringify(value)}`);
+          continue;
+        }
+        if (field !== 'messages') continue;
+
         const phoneNumberId = value?.metadata?.phone_number_id;
 
         if (!phoneNumberId) continue;
@@ -52,6 +88,34 @@ export class WebhookProcessorService {
         if (!tenant) {
           this.logger.warn(`No tenant found for phone_number_id: ${phoneNumberId}`);
           continue;
+        }
+
+        // Look up phone record for status check and token resolution
+        if (this.phoneNumberService) {
+          try {
+            const phoneRecord = await this.phoneNumberService.findByPhoneNumberId(phoneNumberId);
+            if (phoneRecord) {
+              // Check if phone number is inactive
+              if (phoneRecord.status === 'inactive') {
+                this.logger.warn(`Phone ${phoneNumberId} is inactive — skipping message processing`);
+                if (value.messages?.length) {
+                  const customerPhone = value.messages[0].from;
+                  await this.sendInactiveAutoReply(tenant, phoneNumberId, customerPhone);
+                }
+                continue;
+              }
+
+              // Resolve access token from encrypted meta_tokens if tenant doesn't have one
+              if (!tenant.accessToken && this.metaTokenService && phoneRecord.wabaAccountId) {
+                const token = await this.metaTokenService.getActiveToken(phoneRecord.wabaAccountId);
+                if (token) {
+                  tenant.accessToken = token;
+                }
+              }
+            }
+          } catch (err: any) {
+            this.logger.error(`Phone lookup/token resolution failed (non-blocking): ${err.message}`);
+          }
         }
 
         // Process messages
@@ -102,6 +166,30 @@ export class WebhookProcessorService {
 
     // Get customer name from contacts
     const contactName = contacts?.find((c: any) => c.wa_id === from)?.profile?.name;
+
+    // ─── METERING: Track conversation session + enforce quotas ────────
+    if (this.meteringService && tenant.id) {
+      try {
+        const meteringResult = await this.meteringService.meterConversation({
+          tenantId: tenant.id,
+          phoneNumberId: tenant.phoneNumberId,
+          customerPhone: from,
+          category: 'service', // Inbound messages default to service category
+          origin: 'user_initiated',
+        });
+
+        if (meteringResult.isNew && meteringResult.softLimitReached) {
+          this.logger.warn(`Tenant ${schema} approaching conversation limit`);
+        }
+
+        if (meteringResult.quotaExceeded) {
+          this.logger.warn(`Tenant ${schema} exceeded conversation quota — message still processed but flagged`);
+        }
+      } catch (err: any) {
+        this.logger.error(`Metering error (non-blocking): ${err.message}`);
+        // Metering failures should not block message processing
+      }
+    }
 
     // ─── WORKFLOW ENGINE: Check for active execution first ─────────────
     try {
@@ -217,8 +305,31 @@ export class WebhookProcessorService {
     return { type: 'text', text: '', raw: message };
   }
 
+  private async sendInactiveAutoReply(tenant: any, phoneNumberId: string, customerPhone: string): Promise<void> {
+    try {
+      const accessToken = tenant.accessToken;
+      if (!accessToken) return;
+
+      await fetch(`https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: customerPhone,
+          type: 'text',
+          text: { body: 'This business is temporarily unavailable. Please try again later.' },
+        }),
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to send inactive auto-reply: ${err.message}`);
+    }
+  }
+
   private async processStatusUpdate(schema: string, status: any): Promise<void> {
-    const { id: waMessageId, status: messageStatus } = status;
+    const { id: waMessageId, status: messageStatus, recipient_id } = status;
 
     await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       await qr.query(
@@ -226,5 +337,80 @@ export class WebhookProcessorService {
         [messageStatus, waMessageId],
       );
     });
+
+    // Feed delivery metrics to health monitor
+    this.eventBus.emit({
+      type: 'message.status_update',
+      schema,
+      messageStatus,
+      waMessageId,
+      recipientId: recipient_id,
+    } as any);
+  }
+
+  // ─── Non-message webhook event handlers ──────────────────────────────────
+
+  /**
+   * phone_number_quality_update: Meta sends quality rating changes (GREEN/YELLOW/RED).
+   * Payload: { display_phone_number, event, current_limit, ... }
+   */
+  private async handleQualityUpdate(value: any): Promise<void> {
+    try {
+      const phoneNumber = value?.display_phone_number;
+      const rating = value?.current_limit; // e.g. GREEN, YELLOW, RED
+      this.logger.log(`Quality update for ${phoneNumber}: ${rating}`);
+
+      if (this.phoneNumberService && phoneNumber) {
+        const match = await this.phoneNumberService.findByDisplayNumber(phoneNumber);
+        if (match) {
+          await this.phoneNumberService.updateQualityRating(match.phoneNumberId, rating || value?.event || 'UNKNOWN');
+          this.logger.log(`Updated quality rating for ${phoneNumber} to ${rating}`);
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`Quality update handler error: ${err.message}`);
+    }
+  }
+
+  /**
+   * message_template_status_update: Template approved/rejected/paused.
+   * Payload: { event, message_template_id, message_template_name, message_template_language, reason, ... }
+   */
+  private async handleTemplateStatusUpdate(value: any): Promise<void> {
+    try {
+      const templateName = value?.message_template_name;
+      const templateId = value?.message_template_id;
+      const event = value?.event; // APPROVED, REJECTED, PENDING_DELETION, DISABLED, etc.
+      const reason = value?.reason;
+
+      this.logger.log(`Template status update: ${templateName} (${templateId}) → ${event}${reason ? ` reason: ${reason}` : ''}`);
+
+      // Route to compliance monitor for tracking/alerting
+      if (this.complianceMonitor && (event === 'REJECTED' || event === 'DISABLED' || event === 'PENDING_DELETION')) {
+        await this.complianceMonitor.handleTemplateRestriction(templateId, templateName, event, reason);
+      }
+    } catch (err: any) {
+      this.logger.error(`Template status update handler error: ${err.message}`);
+    }
+  }
+
+  /**
+   * account_update: WABA account status changes (banned, restricted, etc.).
+   * Payload: { event, ... }
+   */
+  private async handleAccountUpdate(value: any): Promise<void> {
+    try {
+      const event = value?.event;
+      const banInfo = value?.ban_info;
+      const wabaId = value?.waba_id;
+      this.logger.warn(`WABA account update: event=${event}${banInfo ? `, ban_info=${JSON.stringify(banInfo)}` : ''}`);
+
+      // Route to compliance monitor for automated response
+      if (this.complianceMonitor && wabaId) {
+        await this.complianceMonitor.handleAccountRestriction(wabaId, event, banInfo);
+      }
+    } catch (err: any) {
+      this.logger.error(`Account update handler error: ${err.message}`);
+    }
   }
 }

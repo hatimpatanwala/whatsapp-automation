@@ -149,7 +149,7 @@ interface DeliveryRow {
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-sm font-medium text-gray-700">Select Courier</label>
-              <p-select [(ngModel)]="selectedCourier" [options]="courierOptions" optionLabel="name" optionValue="name"
+              <p-select [(ngModel)]="selectedCourier" [options]="courierOptions()" optionLabel="name" optionValue="name"
                 placeholder="Choose a delivery person" styleClass="w-full" />
             </div>
             <div class="flex flex-col gap-1">
@@ -221,12 +221,7 @@ export class DeliveriesComponent implements OnInit {
     { label: 'Failed', value: 'failed' },
   ];
 
-  courierOptions = [
-    { name: 'Kemi Oladele', phone: '+234 801 111 2222' },
-    { name: 'Bayo Adeyinka', phone: '+234 802 333 4444' },
-    { name: 'Sola Martins', phone: '+234 803 555 6666' },
-    { name: 'Chukwu Okeke', phone: '+234 804 777 8888' },
-  ];
+  courierOptions = signal<{ name: string; phone: string }[]>([]);
 
   ngOnInit() {
     this.loadDeliveries();
@@ -244,6 +239,16 @@ export class DeliveriesComponent implements OnInit {
         this.allDeliveries.set(rows);
         this.computeStats(rows);
         this.filter();
+        // Derive unique couriers from loaded deliveries
+        const couriers = rows
+          .filter(r => r.courier)
+          .reduce((acc, r) => {
+            if (!acc.find((c: any) => c.name === r.courier)) {
+              acc.push({ name: r.courier, phone: r.courierPhone || '' });
+            }
+            return acc;
+          }, [] as { name: string; phone: string }[]);
+        this.courierOptions.set(couriers);
         this.loading.set(false);
       },
       error: () => {
@@ -308,7 +313,7 @@ export class DeliveriesComponent implements OnInit {
     if (!delivery || !this.selectedCourier) return;
     this.deliveryService.assignCourier(delivery.id, {
       courierName: this.selectedCourier,
-      courierPhone: this.courierOptions.find(c => c.name === this.selectedCourier)?.phone,
+      courierPhone: this.courierOptions().find(c => c.name === this.selectedCourier)?.phone,
       estimatedDeliveryAt: this.estDelivery,
     }).subscribe({
       next: () => {

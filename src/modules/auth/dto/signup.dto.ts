@@ -12,8 +12,9 @@ export class SignupDto {
   @MinLength(6)
   password: string;
 
+  @IsOptional()
   @IsString()
-  phone: string;
+  phone?: string;
 
   @IsOptional()
   @IsString()

@@ -71,12 +71,13 @@ export class TenantProvisioningService {
     await this.subscriptionRepository.save(subscription);
 
     // 5. Create owner user in tenant schema
-    if (dto.ownerPhone && dto.ownerPassword) {
+    if (dto.ownerPassword && (dto.ownerPhone || dto.ownerEmail)) {
       const passwordHash = await bcrypt.hash(dto.ownerPassword, 12);
+      const phone = dto.ownerPhone || null;
       await this.connectionManager.executeInTenantContext(schemaName, async (qr) => {
         await qr.query(
           `INSERT INTO users (phone, name, password_hash, role, email) VALUES ($1, $2, $3, $4, $5)`,
-          [dto.ownerPhone, dto.ownerName || dto.name, passwordHash, 'owner', dto.ownerEmail],
+          [phone, dto.ownerName || dto.name, passwordHash, 'owner', dto.ownerEmail],
         );
       });
       this.logger.log(`Owner user created for tenant: ${tenant.slug}`);

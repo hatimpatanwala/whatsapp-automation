@@ -16,14 +16,28 @@ export class OrderController {
     @Req() req: Request,
     @Query() pagination: PaginationDto,
     @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('paymentStatus') paymentStatus?: string,
   ) {
-    return this.orderService.findAll(req.tenantContext.schemaName, pagination, status);
+    return this.orderService.findAll(req.tenantContext.schemaName, pagination, status, search, paymentStatus);
   }
 
   @Get('stats')
   @Roles('owner', 'seller')
   async getStats(@Req() req: Request) {
     return this.orderService.getStats(req.tenantContext.schemaName);
+  }
+
+  @Get('dashboard/counts')
+  @Roles('owner', 'seller')
+  async getDashboardCounts(@Req() req: Request) {
+    return this.orderService.getDashboardCounts(req.tenantContext.schemaName);
+  }
+
+  @Get('dashboard/chart')
+  @Roles('owner', 'seller')
+  async getChartData(@Req() req: Request, @Query('days') days?: string) {
+    return this.orderService.getChartData(req.tenantContext.schemaName, days ? parseInt(days) : 7);
   }
 
   @Get(':id')

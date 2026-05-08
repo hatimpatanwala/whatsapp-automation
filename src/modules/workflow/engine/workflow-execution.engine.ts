@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../../config/redis.module';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
@@ -496,5 +497,43 @@ export class WorkflowExecutionEngine {
       );
     });
     this.logger.error(`Workflow execution ${ctx.executionId} failed: ${errorMessage}`);
+  }
+
+  /**
+   * Cleanup stale executions that have been running/waiting for too long.
+   * Prevents zombie executions from accumulating when handlers crash or locks expire.
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async cleanupStaleExecutions(): Promise<void> {
+    try {
+      // Get all tenant schemas
+      const schemas = await this.connectionManager.getDataSource().query(
+        `SELECT schema_name FROM public.tenants WHERE schema_name IS NOT NULL`,
+      );
+
+      let timedOut = 0;
+      for (const { schema_name: schema } of schemas) {
+        try {
+          const result = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+            return qr.query(`
+              UPDATE workflow_executions
+              SET status = 'timed_out', error_message = 'Execution timeout (1 hour)', completed_at = NOW()
+              WHERE status IN ('running', 'waiting')
+                AND started_at < NOW() - INTERVAL '1 hour'
+              RETURNING id
+            `);
+          });
+          timedOut += result?.length || 0;
+        } catch {
+          // Schema may not exist or table may not exist — skip
+        }
+      }
+
+      if (timedOut > 0) {
+        this.logger.warn(`Timed out ${timedOut} stale workflow executions`);
+      }
+    } catch (err: any) {
+      this.logger.error(`Stale execution cleanup failed: ${err.message}`);
+    }
   }
 }

@@ -620,6 +620,48 @@ const migration024WorkflowEngine: TenantMigration = {
   },
 };
 
+const migration025UsersPhoneNullable: TenantMigration = {
+  name: '025_users_phone_nullable',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".users ALTER COLUMN phone DROP NOT NULL`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".users ALTER COLUMN phone SET NOT NULL`);
+  },
+};
+
+const migration026PerformanceIndexes: TenantMigration = {
+  name: '026_performance_indexes',
+  async up(qr, schema) {
+    // Messages: status update lookups (called on EVERY webhook)
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_messages_wa_id_status
+        ON "${schema}".messages(wa_message_id, status)
+    `);
+    // Messages: conversation listing (called on every inbox open)
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_messages_conv_created
+        ON "${schema}".messages(conversation_id, created_at DESC)
+    `);
+    // Orders: date range queries for analytics
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_orders_placed_status
+        ON "${schema}".orders(placed_at DESC, status)
+    `);
+    // Webhook events: cleanup/archival queries
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_webhook_events_created
+        ON "${schema}".webhook_events(created_at)
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_messages_wa_id_status`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_messages_conv_created`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_orders_placed_status`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_webhook_events_created`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -645,4 +687,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration022Workflows,
   migration023WorkflowExecutions,
   migration024WorkflowEngine,
+  migration025UsersPhoneNullable,
+  migration026PerformanceIndexes,
 ];

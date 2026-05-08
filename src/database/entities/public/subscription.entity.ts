@@ -44,6 +44,9 @@ export class Subscription {
   @Column({ length: 20, default: 'active' })
   status: string;
 
+  @Column({ name: 'allow_exceed', default: false })
+  allowExceed: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

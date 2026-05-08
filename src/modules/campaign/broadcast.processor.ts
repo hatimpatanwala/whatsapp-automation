@@ -5,7 +5,13 @@ import { WhatsAppApiService } from '../whatsapp/whatsapp-api.service';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { QUEUE_BROADCAST } from '../../queue/queue.module';
 
-@Processor(QUEUE_BROADCAST, { concurrency: 5 })
+@Processor(QUEUE_BROADCAST, {
+  concurrency: 3,
+  limiter: {
+    max: 50,
+    duration: 1000,
+  },
+})
 export class BroadcastProcessor extends WorkerHost {
   private readonly logger = new Logger(BroadcastProcessor.name);
 
@@ -17,10 +23,14 @@ export class BroadcastProcessor extends WorkerHost {
   }
 
   async process(job: Job): Promise<void> {
-    const { schema, campaignId, phoneNumberId, accessToken, template, recipients } = job.data;
+    const { schema, campaignId, phoneNumberId, accessToken, template, recipients, batchIndex } = job.data;
 
     let sentCount = 0;
     let failedCount = 0;
+
+    this.logger.log(
+      `Processing broadcast batch${batchIndex != null ? ` #${batchIndex}` : ''} for campaign ${campaignId}: ${recipients.length} recipients`,
+    );
 
     for (const phone of recipients) {
       try {
@@ -37,9 +47,6 @@ export class BroadcastProcessor extends WorkerHost {
         failedCount++;
         this.logger.error(`Failed to send to ${phone}: ${(error as Error).message}`);
       }
-
-      // Small delay between messages
-      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     // Update campaign counters
@@ -49,5 +56,9 @@ export class BroadcastProcessor extends WorkerHost {
         [sentCount, failedCount, campaignId],
       );
     });
+
+    this.logger.log(
+      `Broadcast batch${batchIndex != null ? ` #${batchIndex}` : ''} complete: ${sentCount} sent, ${failedCount} failed`,
+    );
   }
 }

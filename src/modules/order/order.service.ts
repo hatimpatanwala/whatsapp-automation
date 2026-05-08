@@ -14,7 +14,7 @@ export class OrderService {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async findAll(schema: string, pagination: PaginationDto, status?: string): Promise<PaginatedResponse<any>> {
+  async findAll(schema: string, pagination: PaginationDto, status?: string, search?: string, paymentStatus?: string): Promise<PaginatedResponse<any>> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       let whereClause = '1=1';
       const params: any[] = [];
@@ -23,32 +23,76 @@ export class OrderService {
         params.push(status);
         whereClause += ` AND o.status = $${params.length}`;
       }
+      if (paymentStatus) {
+        params.push(paymentStatus);
+        whereClause += ` AND COALESCE(p.status, 'pending') = $${params.length}`;
+      }
+      if (search) {
+        params.push(`%${search}%`);
+        whereClause += ` AND (o.order_number ILIKE $${params.length} OR c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length})`;
+      }
 
       const countResult = await qr.query(
-        `SELECT COUNT(*) as total FROM orders o WHERE ${whereClause}`, params,
+        `SELECT COUNT(*) as total FROM orders o
+         JOIN customers c ON c.id = o.customer_id
+         LEFT JOIN payments p ON p.order_id = o.id
+         WHERE ${whereClause}`, params,
       );
       const total = parseInt(countResult[0].total);
 
       params.push(pagination.limit, pagination.skip);
       const orders = await qr.query(
-        `SELECT o.*, c.phone as customer_phone, c.name as customer_name
+        `SELECT o.id, o.order_number, o.status, o.subtotal, o.discount,
+                o.delivery_fee, o.total as total_amount, o.currency, o.notes,
+                o.placed_at, o.confirmed_at, o.delivered_at,
+                o.created_at, o.updated_at,
+                COALESCE(p.status, 'pending') as payment_status,
+                json_build_object(
+                  'id', c.id,
+                  'whatsapp_phone', c.phone,
+                  'whatsapp_name', c.name,
+                  'first_name', NULL,
+                  'last_name', NULL
+                ) as customer
          FROM orders o
          JOIN customers c ON c.id = o.customer_id
+         LEFT JOIN payments p ON p.order_id = o.id
          WHERE ${whereClause}
-         ORDER BY o.placed_at DESC
+         ORDER BY o.created_at DESC
          LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       );
 
-      return new PaginatedResponse(orders, total, pagination.page, pagination.limit);
+      // Parse customer JSON
+      const mappedOrders = orders.map((o: any) => ({
+        ...o,
+        customer: typeof o.customer === 'string' ? JSON.parse(o.customer) : o.customer,
+      }));
+
+      return new PaginatedResponse(mappedOrders, total, pagination.page, pagination.limit);
     });
   }
 
   async findById(schema: string, id: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const order = await qr.query(
-        `SELECT o.*, c.phone as customer_phone, c.name as customer_name,
-                a.full_address, a.city, a.pincode
+        `SELECT o.id, o.order_number, o.status, o.subtotal, o.discount,
+                o.delivery_fee, o.total as total_amount, o.currency, o.notes,
+                o.cancelled_reason as cancel_reason,
+                o.placed_at, o.confirmed_at, o.delivered_at,
+                o.created_at, o.updated_at,
+                json_build_object(
+                  'id', c.id,
+                  'whatsapp_phone', c.phone,
+                  'whatsapp_name', c.name,
+                  'first_name', NULL,
+                  'last_name', NULL
+                ) as customer,
+                json_build_object(
+                  'street', COALESCE(a.full_address, ''),
+                  'city', COALESCE(a.city, ''),
+                  'postal_code', COALESCE(a.pincode, '')
+                ) as shipping_address
          FROM orders o
          JOIN customers c ON c.id = o.customer_id
          LEFT JOIN addresses a ON a.id = o.address_id
@@ -58,7 +102,10 @@ export class OrderService {
       if (!order[0]) throw new NotFoundException('Order not found');
 
       const items = await qr.query(
-        `SELECT * FROM order_items WHERE order_id = $1`, [id],
+        `SELECT oi.*, p.name as product_name, p.slug as sku, p.images as image_urls
+         FROM order_items oi
+         LEFT JOIN products p ON p.id = oi.product_id
+         WHERE oi.order_id = $1`, [id],
       );
 
       const payment = await qr.query(
@@ -69,7 +116,16 @@ export class OrderService {
         `SELECT * FROM deliveries WHERE order_id = $1`, [id],
       );
 
-      return { ...order[0], items, payment: payment[0], delivery: delivery[0] };
+      const o = order[0];
+      return {
+        ...o,
+        customer: typeof o.customer === 'string' ? JSON.parse(o.customer) : o.customer,
+        shipping_address: typeof o.shipping_address === 'string' ? JSON.parse(o.shipping_address) : o.shipping_address,
+        payment_status: payment[0]?.status ?? 'pending',
+        items,
+        payment: payment[0],
+        delivery: delivery[0],
+      };
     });
   }
 
@@ -177,16 +233,64 @@ export class OrderService {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const stats = await qr.query(`
         SELECT
-          COUNT(*) as total_orders,
-          COUNT(*) FILTER (WHERE status = 'pending') as pending_orders,
-          COUNT(*) FILTER (WHERE status = 'delivered') as delivered_orders,
-          COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_orders,
-          COALESCE(SUM(total) FILTER (WHERE status != 'cancelled'), 0) as total_revenue,
-          COALESCE(SUM(total) FILTER (WHERE placed_at >= NOW() - INTERVAL '30 days' AND status != 'cancelled'), 0) as revenue_30d,
-          COUNT(*) FILTER (WHERE placed_at >= NOW() - INTERVAL '30 days') as orders_30d
+          COUNT(*)::int as "totalOrders",
+          COUNT(*) FILTER (WHERE status = 'pending')::int as "pendingOrders",
+          COUNT(*) FILTER (WHERE status = 'processing')::int as "processingOrders",
+          COUNT(*) FILTER (WHERE status IN ('completed', 'delivered'))::int as "completedOrders",
+          COUNT(*) FILTER (WHERE status IN ('cancelled', 'canceled'))::int as "canceledOrders",
+          COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'canceled')), 0)::numeric as "totalRevenue",
+          CASE WHEN COUNT(*) FILTER (WHERE status NOT IN ('cancelled', 'canceled')) > 0
+            THEN ROUND(COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelled', 'canceled')), 0) / NULLIF(COUNT(*) FILTER (WHERE status NOT IN ('cancelled', 'canceled')), 0), 2)
+            ELSE 0
+          END::numeric as "averageOrderValue",
+          COALESCE(SUM(total) FILTER (WHERE placed_at >= CURRENT_DATE AND status NOT IN ('cancelled', 'canceled')), 0)::numeric as "revenueToday",
+          COUNT(*) FILTER (WHERE placed_at >= CURRENT_DATE)::int as "ordersToday"
         FROM orders
       `);
       return stats[0];
+    });
+  }
+
+  async getDashboardCounts(schema: string): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const [pendingPayments] = await qr.query(
+        `SELECT COUNT(*) as count FROM "${schema}".payments WHERE status = 'pending'`
+      );
+      const [openConversations] = await qr.query(
+        `SELECT COUNT(*) as count FROM "${schema}".conversations WHERE status = 'open'`
+      );
+      const [pendingOrders] = await qr.query(
+        `SELECT COUNT(*) as count FROM "${schema}".orders WHERE status = 'pending'`
+      );
+      const [pendingDeliveries] = await qr.query(
+        `SELECT COUNT(*) as count FROM "${schema}".deliveries WHERE status = 'pending'`
+      );
+      return {
+        pendingPayments: parseInt(pendingPayments?.count ?? '0'),
+        openConversations: parseInt(openConversations?.count ?? '0'),
+        pendingOrders: parseInt(pendingOrders?.count ?? '0'),
+        pendingDeliveries: parseInt(pendingDeliveries?.count ?? '0'),
+      };
+    });
+  }
+
+  async getChartData(schema: string, days: number = 7): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(`
+        SELECT
+          DATE(placed_at) as date,
+          COUNT(*) as order_count,
+          COALESCE(SUM(total), 0) as revenue
+        FROM "${schema}".orders
+        WHERE placed_at >= NOW() - INTERVAL '${days} days'
+        GROUP BY DATE(placed_at)
+        ORDER BY date ASC
+      `);
+      return {
+        labels: rows.map((r: any) => r.date),
+        revenue: rows.map((r: any) => parseFloat(r.revenue)),
+        orders: rows.map((r: any) => parseInt(r.order_count)),
+      };
     });
   }
 }

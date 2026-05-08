@@ -26,8 +26,16 @@ export class ProductService {
       params.push(pagination.limit);
       params.push(pagination.skip);
       const products = await qr.query(
-        `SELECT p.*, c.name as category_name,
-                i.stock_quantity, i.reserved_quantity
+        `SELECT p.id, p.name, p.slug, p.description, p.category_id,
+                p.base_price as price, p.sale_price as compare_at_price,
+                p.slug as sku, p.images as image_urls, p.thumbnail,
+                p.is_active, p.sort_order, p.has_variants as track_inventory,
+                p.created_at, p.updated_at,
+                CASE WHEN p.is_active THEN 'active' ELSE 'draft' END as status,
+                COALESCE(i.stock_quantity, 0) as stock_quantity,
+                COALESCE(i.low_stock_threshold, 5) as low_stock_threshold,
+                COALESCE(p.metadata->>'tags', '[]')::text as tags_json,
+                json_build_object('id', c.id, 'name', c.name) as category
          FROM products p
          LEFT JOIN categories c ON c.id = p.category_id
          LEFT JOIN inventory i ON i.product_id = p.id AND i.variant_id IS NULL
@@ -37,7 +45,14 @@ export class ProductService {
         params,
       );
 
-      return new PaginatedResponse(products, total, pagination.page, pagination.limit);
+      const mappedProducts = products.map((p: any) => ({
+        ...p,
+        category: typeof p.category === 'string' ? JSON.parse(p.category) : p.category,
+        tags: p.tags_json ? (typeof p.tags_json === 'string' ? JSON.parse(p.tags_json) : p.tags_json) : [],
+        variants: [],
+      }));
+
+      return new PaginatedResponse(mappedProducts, total, pagination.page, pagination.limit);
     });
   }
 

@@ -9,12 +9,13 @@ import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { tenantInterceptor } from './core/interceptors/tenant.interceptor';
 import { apiResponseInterceptor } from './core/interceptors/api-response.interceptor';
+import { retryInterceptor } from './core/interceptors/retry.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(withInterceptors([authInterceptor, tenantInterceptor, apiResponseInterceptor])),
+    provideHttpClient(withInterceptors([retryInterceptor, authInterceptor, tenantInterceptor, apiResponseInterceptor])),
     provideAnimationsAsync(),
     providePrimeNG({
       theme: {

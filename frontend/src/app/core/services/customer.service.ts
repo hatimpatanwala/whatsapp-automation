@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService, QueryParams } from './api.service';
-import { Customer, CustomerStatus, Segment, SegmentRule, SegmentConditionLogic, PaginatedResponse } from '../models';
+import { Customer, CustomerStatus, Segment, SegmentRule, SegmentConditionLogic, PaginatedResponse, Order } from '../models';
 
 export interface CustomerListParams extends QueryParams {
   page?: number;
@@ -86,6 +86,20 @@ export class CustomerService {
 
   removeTags(id: string, tags: string[]): Observable<Customer> {
     return this.api.delete<Customer>(`/customers/${id}/tags`);
+  }
+
+  /**
+   * Replace all tags for a customer with the provided list.
+   */
+  updateTags(id: string, tags: string[]): Observable<Customer> {
+    return this.api.patch<Customer>(`/customers/${id}`, { tags });
+  }
+
+  /**
+   * Get orders for a specific customer.
+   */
+  getOrders(id: string, params?: QueryParams): Observable<PaginatedResponse<Order>> {
+    return this.api.get<PaginatedResponse<Order>>(`/customers/${id}/orders`, params);
   }
 
   getStats(): Observable<CustomerStats> {

@@ -12,28 +12,70 @@ export class InventoryService {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async getAll(schema: string): Promise<any[]> {
+  async getAll(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      return qr.query(`
-        SELECT i.*, p.name as product_name, pv.name as variant_name
+      const items = await qr.query(`
+        SELECT i.id, i.product_id, i.variant_id,
+               i.stock_quantity as current_stock,
+               i.reserved_quantity as reserved_stock,
+               (i.stock_quantity - i.reserved_quantity) as available_stock,
+               i.low_stock_threshold,
+               CASE WHEN (i.stock_quantity - i.reserved_quantity) <= i.low_stock_threshold THEN true ELSE false END as is_low_stock,
+               i.updated_at,
+               json_build_object(
+                 'id', p.id,
+                 'name', p.name,
+                 'sku', p.slug,
+                 'image_urls', p.images
+               ) as product,
+               pv.name as variant_name
         FROM inventory i
         JOIN products p ON p.id = i.product_id
         LEFT JOIN product_variants pv ON pv.id = i.variant_id
         ORDER BY p.name
       `);
+      const mapped = items.map((i: any) => ({
+        ...i,
+        product: typeof i.product === 'string' ? JSON.parse(i.product) : i.product,
+      }));
+      return {
+        data: mapped,
+        total: mapped.length,
+        page: 1,
+        limit: mapped.length || 20,
+        totalPages: 1,
+      };
     });
   }
 
   async getLowStock(schema: string): Promise<any[]> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      return qr.query(`
-        SELECT i.*, p.name as product_name
+      const items = await qr.query(`
+        SELECT i.id, i.product_id, i.variant_id,
+               i.stock_quantity as current_stock,
+               i.reserved_quantity as reserved_stock,
+               (i.stock_quantity - i.reserved_quantity) as available_stock,
+               i.low_stock_threshold,
+               true as is_low_stock,
+               i.updated_at,
+               json_build_object(
+                 'id', p.id,
+                 'name', p.name,
+                 'sku', p.slug,
+                 'image_urls', p.images
+               ) as product,
+               pv.name as variant_name
         FROM inventory i
         JOIN products p ON p.id = i.product_id
+        LEFT JOIN product_variants pv ON pv.id = i.variant_id
         WHERE i.track_inventory = true
           AND (i.stock_quantity - i.reserved_quantity) <= i.low_stock_threshold
         ORDER BY (i.stock_quantity - i.reserved_quantity)
       `);
+      return items.map((i: any) => ({
+        ...i,
+        product: typeof i.product === 'string' ? JSON.parse(i.product) : i.product,
+      }));
     });
   }
 

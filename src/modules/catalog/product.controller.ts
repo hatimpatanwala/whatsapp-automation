@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { ProductService } from './product.service';
+import { CategoryService } from './category.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
@@ -9,7 +10,15 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('products')
 @UseGuards(TenantGuard)
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(
+    private readonly productService: ProductService,
+    private readonly categoryService: CategoryService,
+  ) {}
+
+  @Get('categories')
+  async getCategories(@Req() req: Request) {
+    return this.categoryService.findAll(req.tenantContext.schemaName);
+  }
 
   @Get()
   async findAll(

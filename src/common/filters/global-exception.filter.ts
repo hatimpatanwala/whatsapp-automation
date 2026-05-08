@@ -8,6 +8,13 @@ import {
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 
+let Sentry: any;
+try {
+  Sentry = require('@sentry/node');
+} catch {
+  // Sentry is optional
+}
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
@@ -37,6 +44,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         `[${request['requestId']}] Unhandled exception: ${exception.message}`,
         exception.stack,
       );
+    }
+
+    // Send 5xx errors to Sentry for aggregation and alerting
+    if (Sentry && (!(exception instanceof HttpException) || status >= 500)) {
+      Sentry.captureException(exception, {
+        tags: {
+          tenantId: (request as any).tenantContext?.id,
+          path: request.url,
+          method: request.method,
+        },
+        extra: {
+          requestId: request['requestId'],
+          statusCode: status,
+        },
+      });
     }
 
     response.status(status).json({

@@ -69,6 +69,14 @@ export const routes: Routes = [
         path: 'settings',
         loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent),
       },
+      {
+        path: 'settings/usage',
+        loadComponent: () => import('./features/settings/usage-dashboard.component').then(m => m.UsageDashboardComponent),
+      },
+      {
+        path: 'settings/billing',
+        loadComponent: () => import('./features/settings/billing-dashboard.component').then(m => m.BillingDashboardComponent),
+      },
     ],
   },
   { path: '**', redirectTo: '' },
