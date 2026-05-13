@@ -36,6 +36,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
+  
   // Raw body parsing for webhook signature verification
   app.use(
     json({
