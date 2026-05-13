@@ -48,11 +48,14 @@ async function bootstrap() {
   // Security
   app.use(helmet());
   const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
+  // app.enableCors({
+  //   origin: corsOrigin.includes(',') ? corsOrigin.split(',').map((s) => s.trim()) : corsOrigin,
+  //   credentials: true,
+  // });
   app.enableCors({
-    origin: corsOrigin.includes(',') ? corsOrigin.split(',').map((s) => s.trim()) : corsOrigin,
+    origin: "*",
     credentials: true,
   });
-
   // Global prefix
   const apiPrefix = configService.get<string>('API_PREFIX', 'api');
   app.setGlobalPrefix(apiPrefix, {
