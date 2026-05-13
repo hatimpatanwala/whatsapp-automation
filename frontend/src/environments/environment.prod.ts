@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: '/api',
+  apiUrl: 'https://whatsapp-automation-8lk0.onrender.com/api',
 };

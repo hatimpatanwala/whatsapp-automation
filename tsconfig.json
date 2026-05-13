@@ -24,7 +24,8 @@
       "@database/*": ["src/database/*"],
       "@modules/*": ["src/modules/*"],
       "@queue/*": ["src/queue/*"]
-    }
+    },
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

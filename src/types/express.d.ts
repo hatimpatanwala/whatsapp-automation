@@ -10,6 +10,7 @@ declare global {
         accessToken?: string;
         wabaId?: string;
       };
+      session: Session & Partial<SessionData>;
     }
 
     interface SessionData {
@@ -21,5 +22,19 @@ declare global {
       adminRole: string;
       isAdmin: boolean;
     }
+  }
+}
+declare module 'express-session' {
+  interface SessionData {
+    userId?: string;
+    userRole?: string;
+
+    adminId?: string;
+    adminRole?: string;
+
+    tenantId?: string;
+    tenantSchema?: string;
+
+    isAdmin?: boolean;
   }
 }
