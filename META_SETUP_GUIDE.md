@@ -137,8 +137,9 @@ A Business Portfolio (formerly "Business Manager") is REQUIRED for WhatsApp API 
 2. Go to **Settings > Basic** (left sidebar)
    - URL: `https://developers.facebook.com/apps/{YOUR_APP_ID}/settings/basic/`
 3. Copy and save:
-   - **App ID** → This is your `META_APP_ID`
-   - **App Secret** → Click "Show", enter password, copy → This is your `META_APP_SECRET`
+   - **App ID** → This is your `META_APP_ID`=1699754718125609
+   - **App Secret** → Click "Show", enter password, copy → This is your `META_APP_SECRET`=19e6278a90fc0ac68efd99441ae2f197
+
 4. While here, fill in:
    - **Privacy Policy URL**: Your platform's privacy policy page
    - **Terms of Service URL**: Your platform's terms page
@@ -389,9 +390,7 @@ After verification succeeds:
 
 **Option A — Via API (Recommended):**
 ```bash
-curl -X POST \
-  "https://graph.facebook.com/v21.0/{YOUR_WABA_ID}/subscribed_apps" \
-  -H "Authorization: Bearer {YOUR_SYSTEM_USER_TOKEN}"
+curl -X POST "https://graph.facebook.com/v21.0/{YOUR_WABA_ID}/subscribed_apps" -H "Authorization: Bearer EAAYJ6vwt3ikBRZAoA3zYi2fUwyTrJdiFZCzy5LHcuMlsCbpNyjsmd0AYxZCaOZCdf4MsujlA91vcKvxqQsqczoBN3kMpYElAf4ycvmmU3fsQmnGSyHng5Fqg1tTrJJBGGGpORiV6mD9046bqCqoutRu0KE3LLcOamZBdRA1KZCJX4zusE46n0SlIOit2cHC4vomgZDZD"
 ```
 
 Expected response:
@@ -401,8 +400,7 @@ Expected response:
 
 **Verify the subscription:**
 ```bash
-curl "https://graph.facebook.com/v21.0/{YOUR_WABA_ID}/subscribed_apps" \
-  -H "Authorization: Bearer {YOUR_SYSTEM_USER_TOKEN}"
+curl "https://graph.facebook.com/v21.0/1642870743653301/subscribed_apps" -H "Authorization: Bearer EAAYJ6vwt3ikBRZAoA3zYi2fUwyTrJdiFZCzy5LHcuMlsCbpNyjsmd0AYxZCaOZCdf4MsujlA91vcKvxqQsqczoBN3kMpYElAf4ycvmmU3fsQmnGSyHng5Fqg1tTrJJBGGGpORiV6mD9046bqCqoutRu0KE3LLcOamZBdRA1KZCJX4zusE46n0SlIOit2cHC4vomgZDZD"
 ```
 
 Expected response:
@@ -497,7 +495,7 @@ If creating manually (or editing the template):
 After creation:
 1. You'll see the new configuration listed with a **Configuration ID**
 2. Copy this ID (looks like `1234567890123456`)
-3. Save it as your `META_EMBEDDED_SIGNUP_CONFIG_ID`
+3. Save it as your `META_EMBEDDED_SIGNUP_CONFIG_ID`=1302193481292705
 
 ---
 
@@ -662,6 +660,7 @@ curl "https://yourdomain.com/api/onboarding/embedded-signup/config"
 3. The system should detect the number's state and route accordingly
 
 ---
+
 
 ## 13. Phase 12: Go Live (Production)
 

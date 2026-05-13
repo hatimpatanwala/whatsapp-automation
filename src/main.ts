@@ -37,17 +37,19 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   // Raw body parsing for webhook signature verification
-  app.use(json({
-    verify: (req: any, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }));
+  app.use(
+    json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
   // Security
   app.use(helmet());
   const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
   app.enableCors({
-    origin: corsOrigin.includes(',') ? corsOrigin.split(',').map(s => s.trim()) : corsOrigin,
+    origin: corsOrigin.includes(',') ? corsOrigin.split(',').map((s) => s.trim()) : corsOrigin,
     credentials: true,
   });
 
@@ -69,10 +71,7 @@ async function bootstrap() {
 
   // Global filters & interceptors
   app.useGlobalFilters(new GlobalExceptionFilter());
-  app.useGlobalInterceptors(
-    new LoggingInterceptor(),
-    new TransformResponseInterceptor(),
-  );
+  app.useGlobalInterceptors(new LoggingInterceptor(), new TransformResponseInterceptor());
 
   // Session setup with Redis
   const redisClient = new Redis({
@@ -105,7 +104,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const port = configService.get<number>('PORT', 3000);
-  await app.listen(port,"0.0.0.0");
+  await app.listen(port, '0.0.0.0');
   logger.log(`Application running on port ${port}`);
 }
 
