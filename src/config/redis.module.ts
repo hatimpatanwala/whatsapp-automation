@@ -10,6 +10,7 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
     {
       provide: REDIS_CLIENT,
       useFactory: (configService: ConfigService) => {
+        console.log(configService.get("REDIS_URL"))
         return configService.get<string>('REDIS_URL')
           ? new Redis(configService.get<string>('REDIS_URL'), {
               tls: {},
