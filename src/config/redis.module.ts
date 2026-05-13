@@ -10,12 +10,18 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
     {
       provide: REDIS_CLIENT,
       useFactory: (configService: ConfigService) => {
-        return new Redis({
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD', undefined),
-          maxRetriesPerRequest: null,
-        });
+        return configService.get<string>('REDIS_URL')
+          ? new Redis(configService.get<string>('REDIS_URL'), {
+              tls: {},
+              maxRetriesPerRequest: null,
+              enableReadyCheck: false,
+            })
+          : new Redis({
+              host: configService.get<string>('REDIS_HOST', 'localhost'),
+              port: configService.get<number>('REDIS_PORT', 6379),
+              password: configService.get<string>('REDIS_PASSWORD', undefined),
+              maxRetriesPerRequest: null,
+            });
       },
       inject: [ConfigService],
     },
