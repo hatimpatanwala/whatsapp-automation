@@ -1,9 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import {
-  HttpClient,
-  HttpParams,
-  HttpContext,
-} from '@angular/common/http';
+import { HttpClient, HttpParams, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
@@ -46,6 +42,7 @@ export class ApiService {
 
   get<T>(path: string, params?: QueryParams, context?: HttpContext): Observable<T> {
     return this.http.get<T>(this.url(path), {
+      withCredentials: true,
       params: this.buildParams(params),
       ...(context ? { context } : {}),
     });
@@ -54,24 +51,28 @@ export class ApiService {
   post<T>(path: string, body: unknown, context?: HttpContext): Observable<T> {
     return this.http.post<T>(this.url(path), body, {
       ...(context ? { context } : {}),
+      withCredentials: true,
     });
   }
 
   put<T>(path: string, body: unknown, context?: HttpContext): Observable<T> {
     return this.http.put<T>(this.url(path), body, {
       ...(context ? { context } : {}),
+      withCredentials: true,
     });
   }
 
   patch<T>(path: string, body: unknown, context?: HttpContext): Observable<T> {
     return this.http.patch<T>(this.url(path), body, {
       ...(context ? { context } : {}),
+      withCredentials: true,
     });
   }
 
   delete<T>(path: string, context?: HttpContext): Observable<T> {
     return this.http.delete<T>(this.url(path), {
       ...(context ? { context } : {}),
+      withCredentials: true,
     });
   }
 }

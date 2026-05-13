@@ -36,7 +36,6 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  
   // Raw body parsing for webhook signature verification
   app.use(
     json({
@@ -75,32 +74,66 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor(), new TransformResponseInterceptor());
 
   // Session setup with Redis
-  const redisClient = new Redis({
-    host: configService.get<string>('REDIS_HOST', 'localhost'),
-    port: configService.get<number>('REDIS_PORT', 6379),
-    password: configService.get<string>('REDIS_PASSWORD', undefined),
-  });
+  const redisClient = configService.get('REDIS_URL')
+    ? new Redis(configService.get<string>('REDIS_URL')!, {
+        tls: {
+          rejectUnauthorized: false,
+        },
+
+        maxRetriesPerRequest: null,
+
+        enableReadyCheck: false,
+      })
+    : new Redis({
+        host: configService.get<string>('REDIS_HOST', 'localhost'),
+        port: configService.get<number>('REDIS_PORT', 6379),
+        password: configService.get<string>('REDIS_PASSWORD', undefined),
+      });
 
   const redisStore = new RedisStore({
     client: redisClient,
     prefix: 'sess:',
   });
 
+  // app.use(
+  //   session({
+  //     store: redisStore,
+  //     secret: configService.get<string>('SESSION_SECRET', 'change-me'),
+  //     resave: false,
+  //     saveUninitialized: false,
+  //     cookie: {
+  //       maxAge: configService.get<number>('SESSION_TTL', 86400) * 1000,
+  //       httpOnly: true,
+  //       secure: configService.get<string>('NODE_ENV') === 'production',
+  //       sameSite: 'lax',
+  //     },
+  //   }),
+  // );
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.use(
     session({
       store: redisStore,
+
       secret: configService.get<string>('SESSION_SECRET', 'change-me'),
+
       resave: false,
+
       saveUninitialized: false,
+
+      proxy: true,
+
       cookie: {
         maxAge: configService.get<number>('SESSION_TTL', 86400) * 1000,
+
         httpOnly: true,
-        secure: configService.get<string>('NODE_ENV') === 'production',
-        sameSite: 'lax',
+
+        secure: true,
+
+        sameSite: 'none',
       },
     }),
   );
-
   // Enable graceful shutdown hooks (drain queues, close connections)
   app.enableShutdownHooks();
 
