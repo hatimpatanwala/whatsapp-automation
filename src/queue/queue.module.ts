@@ -25,7 +25,21 @@ export const QUEUE_CATALOG_WEBHOOK = 'catalog-webhook';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        connection: {
+        connection:configService.get("REDIS_URL")?url: configService.get<string>('REDIS_URL'),
+
+      tls: {
+        rejectUnauthorized: false,
+      },
+
+      maxRetriesPerRequest: null,
+
+      enableReadyCheck: false,
+
+      connectTimeout: 10000,
+
+      retryStrategy: (times: number) => {
+        return Math.min(times * 50, 2000);
+      }: {
           host: configService.get<string>('QUEUE_REDIS_HOST', 'localhost'),
           port: configService.get<number>('QUEUE_REDIS_PORT', 6379),
           password: configService.get<string>('REDIS_PASSWORD', undefined),
