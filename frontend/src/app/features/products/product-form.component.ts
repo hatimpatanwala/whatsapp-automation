@@ -180,6 +180,20 @@ import { ProductService, CreateProductPayload, UpdateProductPayload } from '../.
               </div>
             </div>
 
+            <!-- WhatsApp Catalog -->
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <h3 class="text-base font-semibold text-gray-900 mb-4">WhatsApp Catalog</h3>
+              <div class="flex items-center gap-2 mb-2">
+                <p-toggleswitch formControlName="syncToWhatsApp" />
+                <span class="text-sm text-gray-700">Sync to WhatsApp Catalog</span>
+              </div>
+              <p class="text-xs text-gray-400">When enabled, this product will be synced to your WhatsApp Commerce catalog so customers can browse it directly in WhatsApp.</p>
+              @if (isEditMode() && productForm.get('syncToWhatsApp')?.value) {
+                <button pButton type="button" label="Sync Now" icon="pi pi-sync" class="p-button-sm p-button-outlined mt-3 w-full"
+                  [loading]="syncingToWhatsApp()" (click)="syncProductToWhatsApp()"></button>
+              }
+            </div>
+
             <!-- Image upload -->
             <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-4">Product Images</h3>
@@ -230,6 +244,7 @@ export class ProductFormComponent implements OnInit {
   isEditMode = signal(false);
   saving = signal(false);
   loadingProduct = signal(false);
+  syncingToWhatsApp = signal(false);
   previewImages = signal<string[]>([]);
   tagInput = '';
   private productId: string | null = null;
@@ -257,6 +272,7 @@ export class ProductFormComponent implements OnInit {
     lowStockThreshold: [10],
     status: ['active'],
     categoryId: [''],
+    syncToWhatsApp: [true],
   });
 
   get f() { return this.productForm.controls; }
@@ -299,6 +315,25 @@ export class ProductFormComponent implements OnInit {
     this.productForm.patchValue({ tags: current.filter((t: string) => t !== tag) });
   }
 
+  syncProductToWhatsApp() {
+    if (!this.productId) return;
+    this.syncingToWhatsApp.set(true);
+    this.productService.syncCatalog([this.productId]).subscribe({
+      next: (res) => {
+        this.syncingToWhatsApp.set(false);
+        this.messageService.add({
+          severity: res.errors > 0 ? 'warn' : 'success',
+          summary: res.errors > 0 ? 'Partial Sync' : 'Synced',
+          detail: `${res.synced} synced, ${res.errors} errors`,
+        });
+      },
+      error: () => {
+        this.syncingToWhatsApp.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to sync to WhatsApp' });
+      },
+    });
+  }
+
   saveAsDraft() {
     this.productForm.patchValue({ status: 'draft' });
     this.onSubmit();
@@ -333,11 +368,15 @@ export class ProductFormComponent implements OnInit {
       this.productService.update(this.productId, payload).subscribe({
         next: () => {
           this.saving.set(false);
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Product updated successfully',
-          });
+          const syncEnabled = this.productForm.get('syncToWhatsApp')?.value;
+          if (syncEnabled && this.productId) {
+            this.productService.syncCatalog([this.productId]).subscribe({
+              next: () => this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Product updated and synced to WhatsApp' }),
+              error: () => this.messageService.add({ severity: 'warn', summary: 'Updated', detail: 'Product updated but WhatsApp sync failed' }),
+            });
+          } else {
+            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Product updated successfully' });
+          }
           setTimeout(() => this.router.navigate(['/products']), 1000);
         },
         error: (err) => {
@@ -367,13 +406,17 @@ export class ProductFormComponent implements OnInit {
       };
 
       this.productService.create(payload).subscribe({
-        next: () => {
+        next: (product) => {
           this.saving.set(false);
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Product created successfully',
-          });
+          const syncEnabled = this.productForm.get('syncToWhatsApp')?.value;
+          if (syncEnabled && product?.id) {
+            this.productService.syncCatalog([product.id]).subscribe({
+              next: () => this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Product created and synced to WhatsApp' }),
+              error: () => this.messageService.add({ severity: 'warn', summary: 'Created', detail: 'Product created but WhatsApp sync failed' }),
+            });
+          } else {
+            this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Product created successfully' });
+          }
           setTimeout(() => this.router.navigate(['/products']), 1000);
         },
         error: (err) => {

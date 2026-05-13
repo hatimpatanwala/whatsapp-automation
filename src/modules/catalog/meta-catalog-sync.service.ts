@@ -48,6 +48,22 @@ export class MetaCatalogSyncService {
     this.apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v21.0');
   }
 
+  /**
+   * Check if a tenant has been provisioned via the new Commerce module.
+   * If so, we defer all operations to CommerceService/CatalogSyncService.
+   */
+  private async hasCommerceCatalog(tenantId: string): Promise<boolean> {
+    try {
+      const rows = await this.tenantRepo.manager.query(
+        `SELECT id FROM public.tenant_catalogs WHERE tenant_id = $1 AND status = 'active' LIMIT 1`,
+        [tenantId],
+      );
+      return rows.length > 0;
+    } catch {
+      return false; // Table might not exist yet
+    }
+  }
+
   // ─── Provision a new Meta catalog for a tenant ──────────────────────────
 
   async provisionCatalog(tenantId: string): Promise<string | null> {
@@ -171,6 +187,10 @@ export class MetaCatalogSyncService {
   async syncProduct(schema: string, productId: string): Promise<void> {
     const settings = await this.commerceSettings.getCommerceSettings(schema);
     if (!settings.catalogEnabled || !settings.catalogId) return;
+
+    // If tenant uses the Commerce module, skip legacy sync (Commerce module handles it)
+    const tenant = await this.tenantRepo.findOne({ where: { schemaName: schema } });
+    if (tenant && await this.hasCommerceCatalog(tenant.id)) return;
 
     const product = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
@@ -345,6 +365,9 @@ export class MetaCatalogSyncService {
 
       for (const tenant of tenants) {
         try {
+          // Skip tenants managed by the Commerce module (they have their own cron)
+          if (await this.hasCommerceCatalog(tenant.id)) continue;
+
           const settings = await this.commerceSettings.getCommerceSettings(tenant.schemaName);
           if (!settings.catalogEnabled || !settings.catalogId) continue;
 

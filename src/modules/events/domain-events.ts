@@ -170,6 +170,55 @@ export class CampaignCompletedEvent extends DomainEvent {
   }
 }
 
+// Catalog Events
+export class CatalogProvisionedEvent extends DomainEvent {
+  readonly eventName = 'catalog.provisioned';
+  constructor(
+    schema: string,
+    public readonly tenantId: string,
+    public readonly metaCatalogId: string,
+    public readonly phoneNumberId: string,
+  ) {
+    super(schema);
+  }
+}
+
+export class CatalogSyncCompletedEvent extends DomainEvent {
+  readonly eventName = 'catalog.sync_completed';
+  constructor(
+    schema: string,
+    public readonly syncJobId: string,
+    public readonly syncedCount: number,
+    public readonly failedCount: number,
+  ) {
+    super(schema);
+  }
+}
+
+export class CatalogLinkedEvent extends DomainEvent {
+  readonly eventName = 'catalog.linked';
+  constructor(
+    schema: string,
+    public readonly tenantId: string,
+    public readonly metaCatalogId: string,
+    public readonly phoneNumberId: string,
+  ) {
+    super(schema);
+  }
+}
+
+export class ProductSyncFailedEvent extends DomainEvent {
+  readonly eventName = 'catalog.product_sync_failed';
+  constructor(
+    schema: string,
+    public readonly productId: string,
+    public readonly error: string,
+    public readonly retryCount: number,
+  ) {
+    super(schema);
+  }
+}
+
 // Delivery Events
 export class DeliveryStatusChangedEvent extends DomainEvent {
   readonly eventName = 'delivery.status_changed';

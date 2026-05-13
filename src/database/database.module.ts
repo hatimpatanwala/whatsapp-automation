@@ -25,6 +25,7 @@ import { TenantUsageMonthly } from './entities/public/tenant-usage-monthly.entit
 import { EmbeddedSignupSession } from './entities/public/embedded-signup-session.entity';
 import { WebhookSubscription } from './entities/public/webhook-subscription.entity';
 import { CoexistenceSession } from './entities/public/coexistence-session.entity';
+import { TenantCatalog } from './entities/public/tenant-catalog.entity';
 
 @Global()
 @Module({
@@ -43,7 +44,7 @@ import { CoexistenceSession } from './entities/public/coexistence-session.entity
           PhoneNumber, WabaAccount, MetaToken,
           ConversationSession, ConversationCost, TemplateRegistry, QualityScore, AuditLog,
           OnboardingSession, TenantQuotaConfig, MetaPricing, NumberHealth, TenantRiskScore, TenantUsageMonthly,
-          EmbeddedSignupSession, WebhookSubscription, CoexistenceSession,
+          EmbeddedSignupSession, WebhookSubscription, CoexistenceSession, TenantCatalog,
         ],
         synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
         logging: configService.get<string>('NODE_ENV') === 'development',

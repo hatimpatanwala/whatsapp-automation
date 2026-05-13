@@ -16,6 +16,8 @@ export const QUEUE_WEBHOOK_INGEST = 'webhook-ingest';
 export const QUEUE_WEBHOOK_DLQ = 'webhook-dlq';
 export const QUEUE_TOKEN_HEALTH = 'token-health';
 export const QUEUE_COMPLIANCE = 'compliance';
+export const QUEUE_CATALOG_SYNC = 'catalog-sync';
+export const QUEUE_CATALOG_WEBHOOK = 'catalog-webhook';
 
 @Global()
 @Module({
@@ -145,6 +147,24 @@ export const QUEUE_COMPLIANCE = 'compliance';
           removeOnFail: 500,
           attempts: 2,
           backoff: { type: 'exponential', delay: 600000 },
+        },
+      },
+      {
+        name: QUEUE_CATALOG_SYNC,
+        defaultJobOptions: {
+          removeOnComplete: 500,
+          removeOnFail: 2000,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+        },
+      },
+      {
+        name: QUEUE_CATALOG_WEBHOOK,
+        defaultJobOptions: {
+          removeOnComplete: 500,
+          removeOnFail: 2000,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
         },
       },
     ),

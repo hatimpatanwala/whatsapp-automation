@@ -62,6 +62,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/conversations/conversations.component').then(m => m.ConversationsComponent),
       },
       {
+        path: 'catalog-management',
+        loadComponent: () => import('./features/catalog-management/catalog-management.component').then(m => m.CatalogManagementComponent),
+      },
+      {
         path: 'workflow-builder',
         loadComponent: () => import('./features/workflow-builder/workflow-builder.component').then(m => m.WorkflowBuilderComponent),
       },

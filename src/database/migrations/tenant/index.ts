@@ -709,6 +709,102 @@ const migration028CommerceSettings: TenantMigration = {
   },
 };
 
+const migration029CatalogCommerceExtension: TenantMigration = {
+  name: '029_catalog_commerce_extension',
+  async up(qr, schema) {
+    // ─── product_sync_status: per-product Meta sync tracking ─────────
+    await qr.query(`
+      CREATE TABLE "${schema}".product_sync_status (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        meta_retailer_id VARCHAR(255),
+        meta_product_id VARCHAR(50),
+        sync_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        last_synced_at TIMESTAMPTZ,
+        last_sync_error TEXT,
+        retry_count INT DEFAULT 0,
+        content_hash VARCHAR(64),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_product_sync_product UNIQUE (product_id)
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_product_sync_status ON "${schema}".product_sync_status(sync_status)`);
+    await qr.query(`CREATE INDEX idx_product_sync_retailer ON "${schema}".product_sync_status(meta_retailer_id)`);
+
+    // ─── catalog_collections: product groupings for WhatsApp ─────────
+    await qr.query(`
+      CREATE TABLE "${schema}".catalog_collections (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        image_url VARCHAR(500),
+        sort_order INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ─── catalog_collection_products: many-to-many ───────────────────
+    await qr.query(`
+      CREATE TABLE "${schema}".catalog_collection_products (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        collection_id UUID NOT NULL REFERENCES "${schema}".catalog_collections(id) ON DELETE CASCADE,
+        product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_collection_product UNIQUE (collection_id, product_id)
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_coll_products_collection ON "${schema}".catalog_collection_products(collection_id)`);
+    await qr.query(`CREATE INDEX idx_coll_products_product ON "${schema}".catalog_collection_products(product_id)`);
+
+    // ─── catalog_media: media assets for products ────────────────────
+    await qr.query(`
+      CREATE TABLE "${schema}".catalog_media (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        original_url VARCHAR(1000) NOT NULL,
+        cdn_url VARCHAR(1000),
+        media_type VARCHAR(30) NOT NULL DEFAULT 'image',
+        file_size INT,
+        width INT,
+        height INT,
+        content_hash VARCHAR(64),
+        upload_status VARCHAR(30) DEFAULT 'pending',
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_catalog_media_product ON "${schema}".catalog_media(product_id)`);
+    await qr.query(`CREATE INDEX idx_catalog_media_hash ON "${schema}".catalog_media(content_hash) WHERE content_hash IS NOT NULL`);
+
+    // ─── Extended commerce settings ──────────────────────────────────
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('commerce_collections_enabled', 'false'),
+        ('commerce_product_messages_enabled', 'true'),
+        ('commerce_auto_sync', 'true'),
+        ('commerce_sync_interval_minutes', '60'),
+        ('commerce_catalog_status', '"not_provisioned"')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".catalog_collection_products CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".catalog_collections CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".catalog_media CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".product_sync_status CASCADE`);
+    await qr.query(`
+      DELETE FROM "${schema}".settings WHERE key IN (
+        'commerce_collections_enabled', 'commerce_product_messages_enabled',
+        'commerce_auto_sync', 'commerce_sync_interval_minutes', 'commerce_catalog_status'
+      )
+    `);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -738,4 +834,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration026PerformanceIndexes,
   migration027WorkflowLastActivity,
   migration028CommerceSettings,
+  migration029CatalogCommerceExtension,
 ];
