@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Delete, Param, Body, Query } from '@nestjs/common';
 import { TemplateService, CreateTemplateInput } from './template.service';
 
-@Controller('api/admin/waba/templates')
+@Controller('admin/waba/templates')
 export class TemplateController {
   constructor(private readonly templateService: TemplateService) {}
 

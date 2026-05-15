@@ -23,6 +23,10 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./tenants/tenant-form.component').then(m => m.TenantFormComponent),
   },
   {
+    path: 'tenants/:id/view',
+    loadComponent: () => import('./tenants/tenant-detail.component').then(m => m.TenantDetailComponent),
+  },
+  {
     path: 'subscriptions',
     loadComponent: () => import('./subscriptions/plan-list.component').then(m => m.PlanListComponent),
   },
@@ -35,7 +39,19 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./subscriptions/plan-form.component').then(m => m.PlanFormComponent),
   },
   {
+    path: 'tenants/:id/workflows',
+    loadComponent: () => import('./workflows/admin-workflow-builder.component').then(m => m.AdminWorkflowBuilderComponent),
+  },
+  {
+    path: 'tenants/:id/simulator',
+    loadComponent: () => import('./workflows/chat-simulator.component').then(m => m.ChatSimulatorComponent),
+  },
+  {
     path: 'waba',
     loadComponent: () => import('./waba/waba-dashboard.component').then(m => m.WabaDashboardComponent),
+  },
+  {
+    path: 'billing',
+    loadComponent: () => import('./billing/admin-billing.component').then(m => m.AdminBillingComponent),
   },
 ];

@@ -20,7 +20,7 @@ import {
   SyncWabaDto,
 } from './dto/create-waba.dto';
 
-@Controller('api/admin/waba')
+@Controller('admin/waba')
 export class WabaController {
   private readonly logger = new Logger(WabaController.name);
 

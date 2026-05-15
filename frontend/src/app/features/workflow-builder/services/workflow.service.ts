@@ -32,7 +32,7 @@ export class WorkflowService {
     return this.api.patch(`/workflows/${id}`, data);
   }
 
-  saveDefinition(id: string, data: { nodes: any[]; edges: any[]; trigger?: any }): Observable<any> {
+  saveDefinition(id: string, data: { nodes: any[]; edges: any[]; trigger?: any; status?: string }): Observable<any> {
     return this.api.put(`/workflows/${id}/definition`, data);
   }
 
@@ -71,6 +71,35 @@ export class WorkflowService {
   /** Get node type definition by type string */
   getNodeTypeDef(type: string): NodeTypeDefinition | undefined {
     return NODE_TYPE_DEFINITIONS.find(d => d.type === type);
+  }
+
+  /**
+   * Create a fallback node pre-configured with a message and optional buttons.
+   * Positions it below-right of the canvas.
+   */
+  createFallbackNode(x = 600, y = 500): WorkflowNodeData {
+    const def = this.getNodeTypeDef('fallback')!;
+    const node = this.createNode(def, x, y);
+    node.label = 'Fallback Handler';
+    node.config = {
+      message: "Sorry, I didn't understand that. Please choose a valid option:",
+      mode: 'buttons',
+      buttons: 'Main Menu\nTalk to Support',
+    };
+    return node;
+  }
+
+  /**
+   * Auto-adds a fallback node to a workflow if it doesn't have one.
+   * Returns the updated nodes/edges arrays.
+   */
+  ensureFallback(nodes: WorkflowNodeData[], edges: WorkflowEdgeData[]): { nodes: WorkflowNodeData[]; edges: WorkflowEdgeData[] } {
+    if (nodes.find(n => n.type === 'fallback')) return { nodes, edges };
+    // Find rightmost + bottommost node for positioning
+    const maxX = Math.max(100, ...nodes.map(n => n.x));
+    const maxY = Math.max(100, ...nodes.map(n => n.y));
+    const fb = this.createFallbackNode(maxX + 200, maxY - 100);
+    return { nodes: [...nodes, fb], edges };
   }
 
   /** Create a new node from a type definition at given position */

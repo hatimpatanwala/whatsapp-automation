@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Tenant } from '../../database/entities/public/tenant.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { OnboardingService } from '../onboarding/onboarding.service';
@@ -19,6 +20,8 @@ export class SettingsController {
 
   constructor(
     private readonly tenantConn: TenantConnectionManager,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepo: Repository<Subscription>,
     @InjectRepository(PhoneNumber)
@@ -172,6 +175,17 @@ export class SettingsController {
 
     // Unassign from tenant (don't delete from pool — just remove tenant assignment)
     await this.phoneNumberRepo.update(phoneId, { tenantId: null as any });
+
+    // Clear tenant's phone_number_id if it matches the removed phone
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    if (tenant && tenant.phoneNumberId === phone.phoneNumberId) {
+      await this.tenantRepo.update(tenantId, {
+        phoneNumberId: null as any,
+        wabaId: null as any,
+        whatsappPhone: null as any,
+      });
+    }
+
     this.logger.log(`Phone ${phone.phoneNumber} removed from tenant ${tenantId}`);
 
     return { message: 'Phone number removed from your account.' };

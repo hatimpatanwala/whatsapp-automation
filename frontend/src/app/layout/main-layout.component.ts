@@ -8,12 +8,14 @@ import { TooltipModule } from 'primeng/tooltip';
 import { DividerModule } from 'primeng/divider';
 import { AuthService } from '../core/services/auth.service';
 import { ApiService } from '../core/services/api.service';
+import { FeatureService } from '../core/services/feature.service';
 
 interface NavItem {
   label: string;
   icon: string;
   route: string;
   badge?: number;
+  featureKey?: string;
 }
 
 @Component({
@@ -66,23 +68,40 @@ interface NavItem {
         <!-- Navigation -->
         <nav class="flex-1 overflow-y-auto py-4 px-2">
           @for (item of navItems; track item.route) {
-            <a
-              [routerLink]="item.route"
-              routerLinkActive="bg-primary-50 text-primary-700"
-              [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
-              class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-gray-600 hover:bg-gray-100 transition-colors duration-150 no-underline group"
-              [pTooltip]="!sidebarOpen() ? item.label : ''"
-              tooltipPosition="right"
-              (click)="onNavClick()"
-            >
-              <i [class]="'pi ' + item.icon + ' flex-shrink-0'" style="font-size:1.1rem"></i>
-              @if (sidebarOpen()) {
-                <span class="text-sm font-medium truncate">{{ item.label }}</span>
-                @if (item.badge) {
-                  <span class="ml-auto bg-primary-500 text-white text-xs rounded-full px-2 py-0.5">{{ item.badge }}</span>
+            @if (!item.featureKey || featureService.hasFeature(item.featureKey)) {
+              <!-- Unlocked feature -->
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="bg-primary-50 text-primary-700"
+                [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-gray-600 hover:bg-gray-100 transition-colors duration-150 no-underline group"
+                [pTooltip]="!sidebarOpen() ? item.label : ''"
+                tooltipPosition="right"
+                (click)="onNavClick()"
+              >
+                <i [class]="'pi ' + item.icon + ' flex-shrink-0'" style="font-size:1.1rem"></i>
+                @if (sidebarOpen()) {
+                  <span class="text-sm font-medium truncate">{{ item.label }}</span>
+                  @if (item.badge) {
+                    <span class="ml-auto bg-primary-500 text-white text-xs rounded-full px-2 py-0.5">{{ item.badge }}</span>
+                  }
                 }
-              }
-            </a>
+              </a>
+            } @else {
+              <!-- Locked feature -->
+              <a
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-gray-400 opacity-60 hover:bg-gray-50 transition-colors duration-150 no-underline cursor-pointer"
+                [pTooltip]="(!sidebarOpen() ? item.label + ' — ' : '') + 'Upgrade to unlock'"
+                tooltipPosition="right"
+                (click)="onLockedFeatureClick(item)"
+              >
+                <i [class]="'pi ' + item.icon + ' flex-shrink-0'" style="font-size:1.1rem"></i>
+                @if (sidebarOpen()) {
+                  <span class="text-sm font-medium truncate">{{ item.label }}</span>
+                  <i class="pi pi-lock ml-auto text-xs text-gray-400"></i>
+                }
+              </a>
+            }
           }
         </nav>
 
@@ -168,6 +187,7 @@ export class MainLayoutComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly apiService = inject(ApiService);
+  readonly featureService = inject(FeatureService);
 
   sidebarOpen = signal(true);
   isMobile = signal(false);
@@ -178,12 +198,12 @@ export class MainLayoutComponent implements OnInit {
     { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders' },
     { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory' },
     { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },
-    { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries' },
-    { label: 'Customers', icon: 'pi-users', route: '/customers' },
-    { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns' },
-    { label: 'Conversations', icon: 'pi-comments', route: '/conversations' },
-    { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management' },
-    { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder' },
+    { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries', featureKey: 'deliveries' },
+    { label: 'Customers', icon: 'pi-users', route: '/customers', featureKey: 'customers' },
+    { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns' },
+    { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations' },
+    { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog' },
+    { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder' },
     { label: 'Settings', icon: 'pi-cog', route: '/settings' },
   ];
 
@@ -256,6 +276,13 @@ export class MainLayoutComponent implements OnInit {
 
   onNavClick() {
     if (this.isMobile()) this.closeSidebar();
+  }
+
+  onLockedFeatureClick(item: NavItem) {
+    if (this.isMobile()) this.closeSidebar();
+    this.router.navigate(['/settings/upgrade'], {
+      queryParams: { feature: item.featureKey },
+    });
   }
 
   logout() {

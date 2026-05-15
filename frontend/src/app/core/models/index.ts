@@ -40,7 +40,28 @@ export interface Address {
 // ─────────────────────────────────────────────
 
 export type BillingCycle = 'monthly' | 'yearly';
-export type PlanTier = 'starter' | 'growth' | 'professional' | 'enterprise';
+export type PlanTier = 'trial' | 'starter' | 'growth' | 'professional' | 'enterprise' | 'custom';
+
+export interface SubscriptionPlanLimits {
+  conversationLimit?: number | null;
+  messageLimit?: number | null;
+  productLimit?: number | null;
+  campaignLimit?: number | null;
+  userLimit?: number | null;
+}
+
+export interface SubscriptionPlanFeatures {
+  deliveries?: boolean;
+  customers?: boolean;
+  campaigns?: boolean;
+  conversations?: boolean;
+  whatsappCatalog?: boolean;
+  workflowBuilder?: boolean;
+  aiFeatures?: boolean;
+  advancedAnalytics?: boolean;
+  multiCatalog?: boolean;
+  [key: string]: boolean | undefined;
+}
 
 export interface SubscriptionPlan {
   id: UUID;
@@ -56,31 +77,15 @@ export interface SubscriptionPlan {
   /** Cost in USD cents charged per WhatsApp conversation */
   pricePerConversation: number;
 
-  /** Max WhatsApp conversations included per billing period (null = unlimited) */
-  conversationLimit: number | null;
-  /** Max messages that can be sent per billing period (null = unlimited) */
-  messageLimit: number | null;
-  /** Max products the tenant can list (null = unlimited) */
-  productLimit: number | null;
-  /** Max marketing campaigns per billing period (null = unlimited) */
-  campaignLimit: number | null;
-  /** Max team members / users (null = unlimited) */
-  userLimit: number | null;
+  /** Usage limits as JSONB */
+  limits: SubscriptionPlanLimits;
 
-  /** Feature flags included in this plan */
-  features: string[];
-
-  /** Whether AI-powered features are included */
-  aiFeatures: boolean;
-  /** Whether workflow automation builder is included */
-  workflowBuilder: boolean;
-  /** Whether advanced analytics are included */
-  advancedAnalytics: boolean;
-  /** Whether multi-catalog support is included */
-  multiCatalog: boolean;
+  /** Feature flags as JSONB */
+  features: SubscriptionPlanFeatures;
 
   isActive: boolean;
   sortOrder: number;
+  tenantCount?: number;
   createdAt: ISODateString;
   updatedAt: ISODateString;
 }

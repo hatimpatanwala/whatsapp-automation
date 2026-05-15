@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { onboardingGuard } from './core/guards/onboarding.guard';
+import { featureGuard } from './core/guards/feature.guard';
 
 export const routes: Routes = [
   {
@@ -47,27 +48,38 @@ export const routes: Routes = [
       },
       {
         path: 'deliveries',
+        canActivate: [featureGuard('deliveries')],
         loadComponent: () => import('./features/deliveries/deliveries.component').then(m => m.DeliveriesComponent),
       },
       {
         path: 'customers',
+        canActivate: [featureGuard('customers')],
         loadChildren: () => import('./features/customers/customers.routes').then(m => m.CUSTOMERS_ROUTES),
       },
       {
         path: 'campaigns',
+        canActivate: [featureGuard('campaigns')],
         loadChildren: () => import('./features/campaigns/campaigns.routes').then(m => m.CAMPAIGNS_ROUTES),
       },
       {
         path: 'conversations',
+        canActivate: [featureGuard('conversations')],
         loadComponent: () => import('./features/conversations/conversations.component').then(m => m.ConversationsComponent),
       },
       {
         path: 'catalog-management',
+        canActivate: [featureGuard('whatsappCatalog')],
         loadComponent: () => import('./features/catalog-management/catalog-management.component').then(m => m.CatalogManagementComponent),
       },
       {
         path: 'workflow-builder',
+        canActivate: [featureGuard('workflowBuilder')],
         loadComponent: () => import('./features/workflow-builder/workflow-builder.component').then(m => m.WorkflowBuilderComponent),
+      },
+      {
+        path: 'workflow-simulator',
+        canActivate: [featureGuard('workflowBuilder')],
+        loadComponent: () => import('./features/workflow-builder/components/tenant-chat-simulator.component').then(m => m.TenantChatSimulatorComponent),
       },
       {
         path: 'settings',
@@ -80,6 +92,10 @@ export const routes: Routes = [
       {
         path: 'settings/billing',
         loadComponent: () => import('./features/settings/billing-dashboard.component').then(m => m.BillingDashboardComponent),
+      },
+      {
+        path: 'settings/upgrade',
+        loadComponent: () => import('./features/settings/upgrade.component').then(m => m.UpgradeComponent),
       },
     ],
   },

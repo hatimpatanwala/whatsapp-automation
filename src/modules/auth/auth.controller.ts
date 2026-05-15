@@ -12,6 +12,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { SuperAdmin } from '../../database/entities/public/super-admin.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
+import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
 
 @Controller('auth')
@@ -25,6 +26,8 @@ export class AuthController {
     private readonly adminRepository: Repository<SuperAdmin>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(SubscriptionPlan)
+    private readonly planRepository: Repository<SubscriptionPlan>,
   ) {}
 
   /**
@@ -178,6 +181,35 @@ export class AuthController {
         where: { tenantId: session.tenantId, status: 'active' },
       });
 
+      // Load the subscription plan to get enabled features
+      let enabledFeatures: string[] = [];
+      let planName = subscription?.plan ?? '';
+      let planLimits: Record<string, number | null> = {};
+      if (subscription) {
+        let plan: SubscriptionPlan | null = null;
+
+        if (subscription.planId) {
+          plan = await this.planRepository.findOne({ where: { id: subscription.planId } });
+        }
+
+        // Fallback: look up plan by tier name if planId is missing
+        if (!plan && subscription.plan) {
+          plan = await this.planRepository.findOne({
+            where: { tier: subscription.plan, isActive: true },
+          });
+          // Backfill the planId so future lookups are fast
+          if (plan) {
+            await this.subscriptionRepository.update(subscription.id, { planId: plan.id });
+          }
+        }
+
+        if (plan) {
+          enabledFeatures = plan.getEnabledFeatures();
+          planName = plan.name;
+          planLimits = plan.limits || {};
+        }
+      }
+
       return {
         type: 'tenant_user',
         user,
@@ -195,6 +227,8 @@ export class AuthController {
         } : null,
         subscription: subscription ? {
           plan: subscription.plan,
+          planId: subscription.planId,
+          planName,
           status: subscription.status,
           maxProducts: subscription.maxProducts,
           maxConversations: subscription.maxConversations,
@@ -203,6 +237,8 @@ export class AuthController {
           validFrom: subscription.validFrom,
           validUntil: subscription.validUntil,
           allowExceed: subscription.allowExceed,
+          enabledFeatures,
+          limits: planLimits,
         } : null,
       };
     }

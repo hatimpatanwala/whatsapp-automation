@@ -29,22 +29,20 @@ export class TenantService {
   }
 
   async findByPhoneNumberId(phoneNumberId: string): Promise<Tenant | null> {
-    // Check cache first
-    const cached = await this.redis.get(`tenant:phone:${phoneNumberId}`);
-    if (cached) {
-      return JSON.parse(cached);
-    }
+    // Check cache first (gracefully handle Redis errors)
+    try {
+      const cached = await this.redis.get(`tenant:phone:${phoneNumberId}`);
+      if (cached) return JSON.parse(cached);
+    } catch {}
 
     const tenant = await this.tenantRepository.findOne({
       where: { phoneNumberId, status: 'active' },
     });
 
     if (tenant) {
-      await this.redis.setex(
-        `tenant:phone:${phoneNumberId}`,
-        this.CACHE_TTL,
-        JSON.stringify(tenant),
-      );
+      try {
+        await this.redis.setex(`tenant:phone:${phoneNumberId}`, this.CACHE_TTL, JSON.stringify(tenant));
+      } catch {}
     }
 
     return tenant;
@@ -58,9 +56,9 @@ export class TenantService {
     await this.tenantRepository.update(id, data);
     const tenant = await this.findById(id);
 
-    // Invalidate cache
+    // Invalidate cache (gracefully handle Redis errors)
     if (tenant.phoneNumberId) {
-      await this.redis.del(`tenant:phone:${tenant.phoneNumberId}`);
+      try { await this.redis.del(`tenant:phone:${tenant.phoneNumberId}`); } catch {}
     }
 
     return tenant;
@@ -70,7 +68,7 @@ export class TenantService {
     await this.tenantRepository.update(id, { status: 'suspended' });
     const tenant = await this.findById(id);
     if (tenant.phoneNumberId) {
-      await this.redis.del(`tenant:phone:${tenant.phoneNumberId}`);
+      try { await this.redis.del(`tenant:phone:${tenant.phoneNumberId}`); } catch {}
     }
   }
 

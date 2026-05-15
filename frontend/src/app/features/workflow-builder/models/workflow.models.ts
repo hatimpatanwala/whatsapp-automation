@@ -44,7 +44,7 @@ export interface WorkflowDefinition {
   id: string;
   name: string;
   description: string;
-  status: 'draft' | 'active' | 'paused' | 'archived';
+  status: 'draft' | 'active' | 'paused' | 'archived' | 'preview';
   trigger: string;
   nodes: WorkflowNodeData[];
   edges: WorkflowEdgeData[];

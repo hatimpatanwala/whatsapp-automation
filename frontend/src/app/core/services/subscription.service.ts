@@ -3,6 +3,8 @@ import { Observable } from 'rxjs';
 import { ApiService, QueryParams } from './api.service';
 import {
   SubscriptionPlan,
+  SubscriptionPlanLimits,
+  SubscriptionPlanFeatures,
   Subscription,
   SubscriptionStatus,
   BillingCycle,
@@ -19,16 +21,8 @@ export interface CreatePlanPayload {
   monthlyPrice: number;
   yearlyPrice: number;
   pricePerConversation: number;
-  conversationLimit?: number | null;
-  messageLimit?: number | null;
-  productLimit?: number | null;
-  campaignLimit?: number | null;
-  userLimit?: number | null;
-  features?: string[];
-  aiFeatures?: boolean;
-  workflowBuilder?: boolean;
-  advancedAnalytics?: boolean;
-  multiCatalog?: boolean;
+  limits?: SubscriptionPlanLimits;
+  features?: SubscriptionPlanFeatures;
   isActive?: boolean;
   sortOrder?: number;
 }
@@ -197,5 +191,25 @@ export class SubscriptionService {
 
   getTenantUsage(tenantId: string): Observable<SubscriptionUsage> {
     return this.api.get<SubscriptionUsage>(`/admin/tenants/${tenantId}/usage`);
+  }
+
+  /**
+   * Assign or change a tenant's plan (super admin).
+   */
+  assignTenantPlan(
+    tenantId: string,
+    payload: { planId: string; validUntil?: string; featureOverrides?: Record<string, boolean> },
+  ): Observable<any> {
+    return this.api.post(`/admin/tenants/${tenantId}/subscription`, payload);
+  }
+
+  /**
+   * Update feature overrides for a tenant (super admin).
+   */
+  updateTenantFeatures(
+    tenantId: string,
+    features: Record<string, boolean>,
+  ): Observable<any> {
+    return this.api.patch(`/admin/tenants/${tenantId}/features`, { features });
   }
 }

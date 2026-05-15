@@ -1,29 +1,14 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ChartModule } from 'primeng/chart';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ButtonModule } from 'primeng/button';
-
-interface PlatformStat {
-  label: string;
-  value: string;
-  sub: string;
-  icon: string;
-  iconBg: string;
-  change: string;
-  changeUp: boolean;
-}
-
-interface TenantRow {
-  name: string;
-  plan: string;
-  status: string;
-  conversations: number;
-  revenue: string;
-  joinedAt: string;
-}
+import { TooltipModule } from 'primeng/tooltip';
+import { HttpClient } from '@angular/common/http';
+import { ApiService } from '../../../core/services/api.service';
+import { TenantService } from '../../../core/services/tenant.service';
 
 @Component({
   selector: 'wa-admin-dashboard',
@@ -35,32 +20,29 @@ interface TenantRow {
     TableModule,
     TagModule,
     ButtonModule,
+    TooltipModule,
   ],
   template: `
     <div class="p-6 space-y-6">
 
       <!-- Header -->
       <div>
-        <h1 class="text-2xl font-bold text-white">Platform Dashboard</h1>
-        <p class="text-gray-400 text-sm mt-1">Overview of all tenants and platform performance</p>
+        <h1 class="text-2xl font-bold text-gray-900">Platform Dashboard</h1>
+        <p class="text-sm mt-1 text-gray-500">Overview of all tenants and platform performance</p>
       </div>
 
       <!-- Stats grid -->
-      <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        @for (stat of stats; track stat.label) {
-          <div class="bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        @for (stat of stats(); track stat.label) {
+          <div class="rounded-xl p-5 bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs text-gray-400 font-medium">{{ stat.label }}</p>
-                <p class="text-2xl font-bold text-white mt-1">{{ stat.value }}</p>
-                <p class="text-xs text-gray-500 mt-0.5">{{ stat.sub }}</p>
-                <div class="flex items-center gap-1 mt-2">
-                  <i [class]="'pi ' + (stat.changeUp ? 'pi-arrow-up text-green-400' : 'pi-arrow-down text-red-400')" style="font-size:0.7rem"></i>
-                  <span class="text-xs" [class.text-green-400]="stat.changeUp" [class.text-red-400]="!stat.changeUp">{{ stat.change }}</span>
-                </div>
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">{{ stat.label }}</p>
+                <p class="text-3xl font-bold text-gray-900 mt-2">{{ stat.value }}</p>
+                <p class="text-xs mt-1 text-gray-400">{{ stat.sub }}</p>
               </div>
-              <div [class]="'w-10 h-10 rounded-lg flex items-center justify-center ' + stat.iconBg">
-                <i [class]="'pi ' + stat.icon + ' text-white'" style="font-size:1.1rem"></i>
+              <div [class]="'w-11 h-11 rounded-xl flex items-center justify-center ' + stat.iconBg">
+                <i [class]="'pi ' + stat.icon + ' text-white'" style="font-size:1.15rem"></i>
               </div>
             </div>
           </div>
@@ -68,52 +50,81 @@ interface TenantRow {
       </div>
 
       <!-- Charts row -->
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div class="bg-gray-900 rounded-xl p-5 border border-gray-800">
-          <h3 class="text-base font-semibold text-white mb-4">Revenue (Last 30 days)</h3>
-          <p-chart type="bar" [data]="revenueChartData" [options]="revenueChartOptions" height="220px" />
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <div class="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
+          <h3 class="text-sm font-semibold uppercase tracking-wider mb-4 text-gray-500">Tenants by Status</h3>
+          @if (allTenants().length) {
+            <div style="min-height:250px">
+              <p-chart type="doughnut" [data]="statusChartData()" [options]="chartOptions" height="250px" />
+            </div>
+          } @else {
+            <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+              <i class="pi pi-chart-pie" style="font-size:2.5rem"></i>
+              <p class="mt-3 text-sm">No tenant data available</p>
+            </div>
+          }
         </div>
-        <div class="bg-gray-900 rounded-xl p-5 border border-gray-800">
-          <h3 class="text-base font-semibold text-white mb-4">Tenants by Plan</h3>
-          <p-chart type="doughnut" [data]="planChartData" [options]="planChartOptions" height="220px" />
+        <div class="rounded-xl p-6 bg-white border border-gray-200 shadow-sm">
+          <h3 class="text-sm font-semibold uppercase tracking-wider mb-4 text-gray-500">Onboarding Progress</h3>
+          @if (allTenants().length) {
+            <div style="min-height:250px">
+              <p-chart type="doughnut" [data]="onboardingChartData()" [options]="chartOptions" height="250px" />
+            </div>
+          } @else {
+            <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+              <i class="pi pi-chart-pie" style="font-size:2.5rem"></i>
+              <p class="mt-3 text-sm">No tenant data available</p>
+            </div>
+          }
         </div>
       </div>
 
       <!-- Recent tenants -->
-      <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-          <h3 class="text-base font-semibold text-white">Recent Tenants</h3>
-          <button pButton label="View All" class="p-button-text p-button-sm text-gray-400" routerLink="/admin/tenants"></button>
+      <div class="rounded-xl overflow-hidden bg-white border border-gray-200 shadow-sm">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h3 class="text-base font-semibold text-gray-900">Recent Tenants</h3>
+          <button pButton label="View All" class="p-button-text p-button-sm text-gray-500" routerLink="/admin/tenants"></button>
         </div>
-        <p-table [value]="recentTenants" styleClass="text-sm">
+        <p-table [value]="recentTenants()" [loading]="loading()" styleClass="text-sm">
           <ng-template pTemplate="header">
-            <tr class="bg-gray-950">
+            <tr class="bg-gray-50">
               <th class="text-xs text-gray-500 font-medium">Store</th>
-              <th class="text-xs text-gray-500 font-medium">Plan</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
-              <th class="text-xs text-gray-500 font-medium">Conversations</th>
-              <th class="text-xs text-gray-500 font-medium">MRR</th>
+              <th class="text-xs text-gray-500 font-medium">Onboarding</th>
+              <th class="text-xs text-gray-500 font-medium">WhatsApp</th>
               <th class="text-xs text-gray-500 font-medium">Joined</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-tenant>
-            <tr class="border-t border-gray-800 hover:bg-gray-800/50">
-              <td class="font-medium text-white">{{ tenant.name }}</td>
+            <tr class="border-t border-gray-100 hover:bg-gray-50">
               <td>
-                <span class="text-xs bg-primary-900 text-primary-300 px-2 py-0.5 rounded-full font-medium">{{ tenant.plan }}</span>
+                <div>
+                  <p class="font-medium text-gray-900">{{ tenant.name || tenant.businessName || 'Unnamed' }}</p>
+                  <p class="text-xs text-gray-500">&#64;{{ tenant.slug }}</p>
+                </div>
               </td>
               <td>
                 <p-tag [value]="tenant.status" [severity]="getTenantStatusSeverity(tenant.status)" styleClass="text-xs capitalize" />
               </td>
-              <td class="text-gray-300">{{ tenant.conversations | number }}</td>
-              <td class="font-semibold text-green-400">{{ tenant.revenue }}</td>
-              <td class="text-gray-400 text-xs">{{ tenant.joinedAt }}</td>
+              <td>
+                <p-tag [value]="tenant.onboardingStatus || 'pending'" [severity]="tenant.onboardingStatus === 'completed' ? 'success' : 'warn'" styleClass="text-xs capitalize" />
+              </td>
+              <td class="text-gray-600 text-xs">{{ tenant.whatsappPhone || '—' }}</td>
+              <td class="text-gray-500 text-xs">{{ tenant.createdAt | date:'mediumDate' }}</td>
               <td>
                 <div class="flex gap-1">
-                  <button pButton icon="pi pi-eye" class="p-button-text p-button-sm p-button-rounded text-gray-400" pTooltip="View"></button>
-                  <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm p-button-rounded text-gray-400" pTooltip="Edit"></button>
+                  <button pButton icon="pi pi-eye" class="p-button-text p-button-sm p-button-rounded text-gray-500" pTooltip="View" [routerLink]="['/admin/tenants', tenant.id, 'view']"></button>
+                  <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm p-button-rounded text-gray-500" pTooltip="Edit" [routerLink]="['/admin/tenants', tenant.id, 'edit']"></button>
                 </div>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr>
+              <td colspan="6" class="text-center py-8 text-gray-500">
+                <i class="pi pi-building" style="font-size:2rem"></i>
+                <p class="mt-2">No tenants yet</p>
               </td>
             </tr>
           </ng-template>
@@ -123,69 +134,89 @@ interface TenantRow {
   `,
 })
 export class AdminDashboardComponent implements OnInit {
-  stats: PlatformStat[] = [
-    { label: 'Total Tenants', value: '47', sub: '5 new this month', icon: 'pi-building', iconBg: 'bg-primary-600', change: '+12%', changeUp: true },
-    { label: 'Active Subscriptions', value: '42', sub: '3 on trial', icon: 'pi-star', iconBg: 'bg-purple-600', change: '+8%', changeUp: true },
-    { label: 'Platform MRR', value: '$8,940', sub: 'Monthly recurring', icon: 'pi-dollar', iconBg: 'bg-green-600', change: '+15%', changeUp: true },
-    { label: 'Total Conversations', value: '124,820', sub: 'This month', icon: 'pi-comments', iconBg: 'bg-blue-600', change: '+22%', changeUp: true },
-  ];
+  private readonly api = inject(ApiService);
+  private readonly tenantService = inject(TenantService);
 
-  recentTenants: TenantRow[] = [
-    { name: 'TechGadgets Store', plan: 'Growth', status: 'active', conversations: 847, revenue: '$190', joinedAt: 'May 1, 2026' },
-    { name: 'FashionHub NG', plan: 'Professional', status: 'active', conversations: 2134, revenue: '$390', joinedAt: 'Apr 28, 2026' },
-    { name: 'QuickMart Abuja', plan: 'Starter', status: 'trialing', conversations: 124, revenue: '$49', joinedAt: 'Apr 25, 2026' },
-    { name: 'Lagos Foods Delivery', plan: 'Growth', status: 'active', conversations: 1205, revenue: '$190', joinedAt: 'Apr 20, 2026' },
-    { name: 'HealthPlus Pharmacy', plan: 'Enterprise', status: 'active', conversations: 4821, revenue: '$790', joinedAt: 'Apr 15, 2026' },
-  ];
+  loading = signal(true);
+  allTenants = signal<any[]>([]);
 
-  revenueChartData: any = {};
-  revenueChartOptions: any = {};
-  planChartData: any = {};
-  planChartOptions: any = {};
+  stats = signal([
+    { label: 'Total Tenants', value: '0', sub: '', icon: 'pi-building', iconBg: 'bg-primary-600' },
+    { label: 'Active', value: '0', sub: '', icon: 'pi-check-circle', iconBg: 'bg-green-600' },
+    { label: 'Suspended', value: '0', sub: '', icon: 'pi-ban', iconBg: 'bg-red-600' },
+    { label: 'Pending Onboarding', value: '0', sub: '', icon: 'pi-clock', iconBg: 'bg-blue-600' },
+  ]);
+
+  recentTenants = signal<any[]>([]);
+
+  statusChartData = signal<any>({ labels: [], datasets: [] });
+  onboardingChartData = signal<any>({ labels: [], datasets: [] });
+
+  chartOptions: any = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { color: '#6b7280', font: { size: 11 }, padding: 16 } },
+    },
+    cutout: '65%',
+  };
 
   ngOnInit() {
-    this.initCharts();
+    this.loadData();
   }
 
-  private initCharts() {
-    const days = Array.from({ length: 30 }, (_, i) => `Apr ${i + 5}`).slice(0, 30);
-    const revenue = days.map(() => Math.floor(Math.random() * 1500 + 500));
+  private loadData() {
+    this.loading.set(true);
 
-    this.revenueChartData = {
-      labels: days.filter((_, i) => i % 3 === 0),
-      datasets: [{
-        label: 'Revenue ($)',
-        data: revenue.filter((_, i) => i % 3 === 0),
-        backgroundColor: 'rgba(37,211,102,0.7)',
-        borderRadius: 6,
-      }],
-    };
+    this.tenantService.getAll().subscribe({
+      next: (res) => {
+        const list: any[] = Array.isArray(res) ? res : (res as any).data || [];
+        this.allTenants.set(list);
 
-    this.revenueChartOptions = {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 }, callback: (v: number) => '$' + v } },
+        const active = list.filter(t => t.status === 'active').length;
+        const suspended = list.filter(t => t.status === 'suspended').length;
+        const pending = list.filter(t => t.status === 'pending').length;
+        const onboardingPending = list.filter(t => t.onboardingStatus !== 'completed').length;
+        // Trial is determined by subscription plan, not tenant status
+        const trialing = list.filter(t => t.subscriptions?.[0]?.plan === 'trial').length;
+
+        this.stats.set([
+          { label: 'Total Tenants', value: list.length.toString(), sub: `${trialing} on trial`, icon: 'pi-building', iconBg: 'bg-primary-600' },
+          { label: 'Active', value: active.toString(), sub: 'Currently active', icon: 'pi-check-circle', iconBg: 'bg-green-600' },
+          { label: 'Suspended', value: suspended.toString(), sub: 'Access restricted', icon: 'pi-ban', iconBg: 'bg-red-600' },
+          { label: 'Pending Onboarding', value: onboardingPending.toString(), sub: 'Needs setup', icon: 'pi-clock', iconBg: 'bg-blue-600' },
+        ]);
+
+        this.recentTenants.set(
+          [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5)
+        );
+
+        this.statusChartData.set({
+          labels: ['Active', 'Suspended', 'Trial', 'Pending'],
+          datasets: [{
+            data: [active - trialing, suspended, trialing, pending],
+            backgroundColor: ['#25D366', '#ef4444', '#3b82f6', '#64748b'],
+            borderWidth: 0,
+          }],
+        });
+
+        const completed = list.filter(t => t.onboardingStatus === 'completed').length;
+        const inProgress = list.filter(t => t.onboardingStatus === 'in_progress').length;
+        const notStarted = list.filter(t => !t.onboardingStatus || t.onboardingStatus === 'pending').length;
+
+        this.onboardingChartData.set({
+          labels: ['Completed', 'In Progress', 'Pending'],
+          datasets: [{
+            data: [completed, inProgress, notStarted],
+            backgroundColor: ['#25D366', '#f59e0b', '#64748b'],
+            borderWidth: 0,
+          }],
+        });
+
+        this.loading.set(false);
       },
-    };
-
-    this.planChartData = {
-      labels: ['Starter', 'Growth', 'Professional', 'Enterprise'],
-      datasets: [{
-        data: [8, 22, 12, 5],
-        backgroundColor: ['#64748b', '#25D366', '#8b5cf6', '#f59e0b'],
-        borderWidth: 0,
-      }],
-    };
-
-    this.planChartOptions = {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'right', labels: { color: '#9ca3af', font: { size: 11 }, padding: 16 } },
-      },
-      cutout: '65%',
-    };
+      error: () => this.loading.set(false),
+    });
   }
 
   getTenantStatusSeverity(status: string): any {

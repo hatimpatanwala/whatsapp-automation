@@ -2,7 +2,7 @@ import { Controller, Get, Post, Param, Body } from '@nestjs/common';
 import { PhoneOnboardingService } from './phone-onboarding.service';
 import { QualityMonitorService } from './quality-monitor.service';
 
-@Controller('api/admin/waba/phones')
+@Controller('admin/waba/phones')
 export class PhoneOnboardingController {
   constructor(
     private readonly onboarding: PhoneOnboardingService,

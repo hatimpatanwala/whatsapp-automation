@@ -87,6 +87,14 @@ export class WorkflowController {
     return result;
   }
 
+  @Post(':id/preview')
+  @Roles('owner', 'seller')
+  async setPreview(@Req() req: Request, @Param('id') id: string) {
+    const result = await this.workflowService.setPreview(req.tenantContext.schemaName, id);
+    if (!result) throw new NotFoundException('Workflow not found');
+    return result;
+  }
+
   @Post(':id/archive')
   @Roles('owner')
   async archive(@Req() req: Request, @Param('id') id: string) {

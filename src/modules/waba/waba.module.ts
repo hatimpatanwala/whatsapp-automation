@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Tenant } from '../../database/entities/public/tenant.entity';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { MetaToken } from '../../database/entities/public/meta-token.entity';
@@ -28,6 +29,7 @@ import { OnboardingModule } from '../onboarding/onboarding.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      Tenant,
       WabaAccount,
       PhoneNumber,
       MetaToken,

@@ -25,6 +25,7 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { WabaModule } from './modules/waba/waba.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
+import { SubscriptionPlanModule } from './modules/subscription-plan/subscription-plan.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
@@ -60,6 +61,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     WabaModule,
     BillingModule,
     CommerceModule,
+    SubscriptionPlanModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -26,6 +26,7 @@ import { EmbeddedSignupSession } from './entities/public/embedded-signup-session
 import { WebhookSubscription } from './entities/public/webhook-subscription.entity';
 import { CoexistenceSession } from './entities/public/coexistence-session.entity';
 import { TenantCatalog } from './entities/public/tenant-catalog.entity';
+import { SubscriptionPlan } from './entities/public/subscription-plan.entity';
 
 @Global()
 @Module({
@@ -45,6 +46,7 @@ import { TenantCatalog } from './entities/public/tenant-catalog.entity';
           ConversationSession, ConversationCost, TemplateRegistry, QualityScore, AuditLog,
           OnboardingSession, TenantQuotaConfig, MetaPricing, NumberHealth, TenantRiskScore, TenantUsageMonthly,
           EmbeddedSignupSession, WebhookSubscription, CoexistenceSession, TenantCatalog,
+          SubscriptionPlan,
         ],
         synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
         logging: configService.get<string>('NODE_ENV') === 'development',

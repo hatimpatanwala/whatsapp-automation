@@ -115,7 +115,14 @@
       "Bash(wc:*)",
       "mcp__plugin_playwright_playwright__browser_wait_for",
       "mcp__plugin_playwright_playwright__browser_network_requests",
-      "mcp__plugin_playwright_playwright__browser_network_request"
+      "mcp__plugin_playwright_playwright__browser_network_request",
+      "Bash(grep -iE \"^.*error.*$\")",
+      "Bash(sed -i 's/text-\\\\[#64748b\\\\]/text-\\\\[#94a3b8\\\\]/g; s/text-\\\\[#8896ab\\\\]/text-\\\\[#a8b5c7\\\\]/g; s/text-\\\\[#475569\\\\]/text-\\\\[#7a8999\\\\]/g' stats/admin-dashboard.component.ts)",
+      "Bash(sed -i 's/style=\"color:#64748b\"/style=\"color:#94a3b8\"/g; s/style=\"color:#475569\"/style=\"color:#7a8999\"/g' stats/admin-dashboard.component.ts)",
+      "Bash(sed -i 's/text-\\\\[#94a3b8\\\\] mb-4/text-\\\\[#cbd5e1\\\\] mb-4/g' tenants/tenant-detail.component.ts)",
+      "Bash(sed -i 's/class=\"text-\\\\[#94a3b8\\\\] text-sm\">&#64/class=\"text-\\\\[#b0bec5\\\\] text-sm\">\\\\&#64/g' tenants/tenant-detail.component.ts)",
+      "Bash(grep -rn \"Processor\" D:/whatsapp-automation/src/modules/*/module*.ts D:/whatsapp-automation/src/modules/*/*.module.ts D:/whatsapp-automation/src/queue/*.module.ts)",
+      "Bash(grep -E \"\\\\.\\(ts|css\\)$\")"
     ]
   }
 }

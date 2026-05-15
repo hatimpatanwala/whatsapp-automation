@@ -1,0 +1,41 @@
+import { Injectable, inject, computed } from '@angular/core';
+import { AuthService } from './auth.service';
+
+/**
+ * Feature keys that map to gatable sidebar/route features.
+ * Core features (dashboard, products, orders, inventory, payments, settings) are always enabled.
+ */
+export const FEATURE_KEYS = {
+  deliveries: 'deliveries',
+  customers: 'customers',
+  campaigns: 'campaigns',
+  conversations: 'conversations',
+  whatsappCatalog: 'whatsappCatalog',
+  workflowBuilder: 'workflowBuilder',
+  aiFeatures: 'aiFeatures',
+  advancedAnalytics: 'advancedAnalytics',
+  multiCatalog: 'multiCatalog',
+} as const;
+
+export type FeatureKey = (typeof FEATURE_KEYS)[keyof typeof FEATURE_KEYS];
+
+@Injectable({ providedIn: 'root' })
+export class FeatureService {
+  private readonly auth = inject(AuthService);
+
+  readonly enabledFeatures = computed(() =>
+    this.auth.subscriptionInfo()?.enabledFeatures ?? [],
+  );
+
+  readonly enabledFeaturesSet = computed(() =>
+    new Set(this.enabledFeatures()),
+  );
+
+  readonly currentPlanName = computed(() =>
+    this.auth.subscriptionInfo()?.planName ?? this.auth.subscriptionInfo()?.plan ?? 'Free',
+  );
+
+  hasFeature(key: string): boolean {
+    return this.enabledFeaturesSet().has(key);
+  }
+}

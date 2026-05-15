@@ -1,6 +1,7 @@
 import { Component, signal, inject, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 import { SelectModule } from 'primeng/select';
@@ -16,6 +17,7 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { NodePaletteComponent } from './components/node-palette.component';
 import { WorkflowCanvasComponent } from './components/workflow-canvas.component';
 import { NodeConfigPanelComponent } from './components/node-config-panel.component';
+import { WorkflowPreviewComponent } from './components/workflow-preview.component';
 import { WorkflowService } from './services/workflow.service';
 import {
   WorkflowDefinition,
@@ -30,6 +32,7 @@ import {
   imports: [
     CommonModule,
     FormsModule,
+    RouterLink,
     ButtonModule,
     TagModule,
     SelectModule,
@@ -43,6 +46,7 @@ import {
     NodePaletteComponent,
     WorkflowCanvasComponent,
     NodeConfigPanelComponent,
+    WorkflowPreviewComponent,
   ],
   providers: [MessageService, ConfirmationService],
   template: `
@@ -57,7 +61,10 @@ import {
             <h1 class="text-2xl font-bold text-gray-900">Workflow Builder</h1>
             <p class="text-gray-500 text-sm">Automate your WhatsApp commerce flows with drag-and-drop</p>
           </div>
-          <button pButton label="New Workflow" icon="pi pi-plus" severity="success" (click)="newWorkflowDialog = true"></button>
+          <div class="flex gap-2">
+            <button pButton label="Chat Simulator" icon="pi pi-comments" severity="info" routerLink="/workflow-simulator"></button>
+            <button pButton label="New Workflow" icon="pi pi-plus" severity="success" (click)="newWorkflowDialog = true"></button>
+          </div>
         </div>
 
         @if (loading()) {
@@ -154,7 +161,14 @@ import {
               class="text-sm font-semibold border-0 bg-transparent p-1 hover:bg-gray-50 focus:bg-gray-50 rounded"
               style="max-width:300px"
             />
-            <p-tag [value]="editingWorkflow()!.status" [severity]="getWfSeverity(editingWorkflow()!.status)" styleClass="text-xs" />
+            <p-select
+              [ngModel]="editingWorkflow()!.status"
+              (ngModelChange)="updateWorkflowStatus($event)"
+              [options]="statusOptions"
+              optionLabel="label" optionValue="value"
+              styleClass="w-28"
+              pTooltip="Change workflow status"
+            />
           </div>
           <div class="flex items-center gap-2">
             <span class="text-xs text-gray-400">{{ currentNodes().length }} nodes | {{ currentEdges().length }} connections</span>
@@ -162,6 +176,18 @@ import {
             <button pButton icon="pi pi-undo" class="p-button-text p-button-sm p-button-rounded" pTooltip="Undo" [disabled]="!canUndo()" (click)="undo()"></button>
             <button pButton icon="pi pi-refresh" class="p-button-text p-button-sm p-button-rounded" pTooltip="Redo" [disabled]="!canRedo()" (click)="redo()"></button>
             <p-divider layout="vertical" styleClass="h-6 mx-0" />
+            @if (!hasFallbackNode()) {
+              <button pButton label="+ Fallback" icon="pi pi-shield" class="p-button-sm p-button-outlined" severity="warn" pTooltip="Add a fallback handler for invalid inputs" (click)="addFallbackNode()"></button>
+            }
+            <button
+              pButton
+              [label]="showPreview() ? 'Close Preview' : 'Preview'"
+              [icon]="showPreview() ? 'pi pi-times' : 'pi pi-play'"
+              class="p-button-sm"
+              [severity]="showPreview() ? 'secondary' : 'info'"
+              (click)="togglePreview()"
+              pTooltip="Test workflow with WhatsApp-style chat simulator"
+            ></button>
             <button pButton label="Save" icon="pi pi-check" class="p-button-sm" severity="success" (click)="saveWorkflow()"></button>
           </div>
         </div>
@@ -188,7 +214,7 @@ import {
           </div>
 
           <!-- Right: Config Panel -->
-          @if (showConfigPanel()) {
+          @if (showConfigPanel() && !showPreview()) {
             <div class="w-72 shrink-0">
               <wa-node-config-panel
                 [node]="selectedNode()"
@@ -196,6 +222,18 @@ import {
                 (deleteNode)="onDeleteNode($event)"
                 (duplicateNode)="onDuplicateNode($event)"
                 (panelClosed)="deselectNode()"
+              />
+            </div>
+          }
+
+          <!-- Right: Preview Panel -->
+          @if (showPreview()) {
+            <div class="w-96 shrink-0">
+              <wa-workflow-preview
+                [nodes]="currentNodes()"
+                [edges]="currentEdges()"
+                (closed)="showPreview.set(false)"
+                (highlightNode)="onPreviewHighlightNode($event)"
               />
             </div>
           }
@@ -246,6 +284,18 @@ export class WorkflowBuilderComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly workflowService = inject(WorkflowService);
+
+  // Status options
+  statusOptions = [
+    { label: 'Draft', value: 'draft' },
+    { label: 'Active', value: 'active' },
+    { label: 'Paused', value: 'paused' },
+    { label: 'Preview', value: 'preview' },
+    { label: 'Archived', value: 'archived' },
+  ];
+
+  // Preview
+  showPreview = signal(false);
 
   // State
   editingWorkflow = signal<WorkflowDefinition | null>(null);
@@ -534,6 +584,10 @@ export class WorkflowBuilderComponent implements OnInit {
       nodes = t.nodes;
       edges = t.edges;
     }
+    // Auto-add fallback node to every new workflow
+    const withFb = this.workflowService.ensureFallback(nodes, edges);
+    nodes = withFb.nodes;
+    edges = withFb.edges;
 
     this.workflowService.create({
       name: this.newWfName,
@@ -578,7 +632,7 @@ export class WorkflowBuilderComponent implements OnInit {
     const nodes = this.currentNodes();
     const edges = this.currentEdges();
 
-    this.workflowService.saveDefinition(wf.id, { nodes, edges }).subscribe({
+    this.workflowService.saveDefinition(wf.id, { nodes, edges, status: wf.status } as any).subscribe({
       next: () => {
         wf.nodes = nodes;
         wf.edges = edges;
@@ -592,8 +646,40 @@ export class WorkflowBuilderComponent implements OnInit {
     });
   }
 
+  hasFallbackNode = computed(() => this.currentNodes().some(n => n.type === 'fallback'));
+
+  addFallbackNode() {
+    this.pushUndo();
+    const fb = this.workflowService.createFallbackNode(
+      Math.max(100, ...this.currentNodes().map(n => n.x)) + 200,
+      Math.max(100, ...this.currentNodes().map(n => n.y)) - 100,
+    );
+    this.currentNodes.update(nodes => [...nodes, fb]);
+    this.selectNode(fb);
+    this.messageService.add({ severity: 'success', summary: 'Fallback node added', detail: 'Configure the message and connect edges' });
+  }
+
+  updateWorkflowStatus(status: string) {
+    const wf = this.editingWorkflow();
+    if (wf) {
+      wf.status = status as any;
+      this.editingWorkflow.set({ ...wf });
+    }
+  }
+
+  togglePreview() {
+    this.showPreview.update(v => !v);
+    if (this.showPreview()) {
+      this.showConfigPanel.set(false);
+    }
+  }
+
+  onPreviewHighlightNode(nodeId: string) {
+    this.selectedNodeId.set(nodeId);
+  }
+
   getWfSeverity(status: string): any {
-    const map: Record<string, any> = { active: 'success', draft: 'warn', paused: 'secondary', archived: 'secondary' };
+    const map: Record<string, any> = { active: 'success', draft: 'warn', paused: 'secondary', archived: 'secondary', preview: 'info' };
     return map[status] ?? 'secondary';
   }
 }

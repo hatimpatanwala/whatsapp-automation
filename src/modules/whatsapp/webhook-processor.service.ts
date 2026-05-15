@@ -88,7 +88,25 @@ export class WebhookProcessorService {
         if (!phoneNumberId) continue;
 
         // Resolve tenant
-        const tenant = await this.tenantService.findByPhoneNumberId(phoneNumberId);
+        let tenant = await this.tenantService.findByPhoneNumberId(phoneNumberId);
+
+        // Fallback: look up via phone_numbers table if tenant.phone_number_id wasn't set
+        if (!tenant && this.phoneNumberService) {
+          try {
+            const phoneRecord = await this.phoneNumberService.findByPhoneNumberId(phoneNumberId);
+            if (phoneRecord?.tenantId) {
+              tenant = await this.tenantService.findById(phoneRecord.tenantId);
+              if (tenant) {
+                // Backfill the tenant's phone_number_id so future lookups are fast
+                await this.tenantService.update(tenant.id, { phoneNumberId });
+                this.logger.log(`Backfilled phone_number_id=${phoneNumberId} on tenant ${tenant.id}`);
+              }
+            }
+          } catch (err: any) {
+            this.logger.error(`Phone fallback lookup failed: ${err.message}`);
+          }
+        }
+
         if (!tenant) {
           this.logger.warn(`No tenant found for phone_number_id: ${phoneNumberId}`);
           continue;

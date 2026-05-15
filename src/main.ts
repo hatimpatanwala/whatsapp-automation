@@ -1,3 +1,5 @@
+// Patch ioredis BEFORE any other imports (suppresses ECONNREFUSED spam)
+
 // OpenTelemetry must be initialized before any other imports
 import './telemetry';
 
@@ -48,6 +50,7 @@ async function bootstrap() {
   // Security
   app.use(helmet());
   const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
+  console.log(corsOrigin)
   app.enableCors({
     origin: corsOrigin.includes(',') ? corsOrigin.split(',').map((s) => s.trim()) : corsOrigin,
     credentials: true,
@@ -73,27 +76,25 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor(), new TransformResponseInterceptor());
 
-  // Session setup with Redis
-  const redisClient = configService.get('REDIS_URL')
-    ? new Redis(configService.get<string>('REDIS_URL')!, {
-        tls: {
-          rejectUnauthorized: false,
-        },
+  // Session setup — use Redis if available, otherwise in-memory (dev only)
+  let sessionStore: any = undefined; // undefined = express-session default MemoryStore
+  const redisUrl = configService.get<string>('REDIS_URL');
+  const redisHost = configService.get<string>('REDIS_HOST', 'localhost');
+  const redisPort = configService.get<number>('REDIS_PORT', 6379);
 
-        maxRetriesPerRequest: null,
+  try {
+    const redisClient = redisUrl
+      ? new Redis(redisUrl, { tls: { rejectUnauthorized: false }, maxRetriesPerRequest: null, enableReadyCheck: false, connectTimeout: 3000 })
+      : new Redis({ host: redisHost, port: redisPort, password: configService.get<string>('REDIS_PASSWORD', undefined), connectTimeout: 3000, lazyConnect: true });
 
-        enableReadyCheck: false,
-      })
-    : new Redis({
-        host: configService.get<string>('REDIS_HOST', 'localhost'),
-        port: configService.get<number>('REDIS_PORT', 6379),
-        password: configService.get<string>('REDIS_PASSWORD', undefined),
-      });
-
-  const redisStore = new RedisStore({
-    client: redisClient,
-    prefix: 'sess:',
-  });
+    if (!redisUrl) await redisClient.connect();
+    // Quick ping test
+    await redisClient.ping();
+    sessionStore = new RedisStore({ client: redisClient, prefix: 'sess:' });
+    logger.log('Session store: Redis');
+  } catch {
+    logger.warn('Redis unavailable — using in-memory session store (sessions lost on restart)');
+  }
 
   // app.use(
   //   session({
@@ -111,26 +112,20 @@ async function bootstrap() {
   // );
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
+  const isProduction = configService.get<string>('NODE_ENV') === 'production';
+
   app.use(
     session({
-      store: redisStore,
-
+      ...(sessionStore ? { store: sessionStore } : {}),
       secret: configService.get<string>('SESSION_SECRET', 'change-me'),
-
       resave: false,
-
       saveUninitialized: false,
-
-      proxy: true,
-
+      proxy: isProduction,
       cookie: {
         maxAge: configService.get<number>('SESSION_TTL', 86400) * 1000,
-
         httpOnly: true,
-
-        secure: true,
-
-        sameSite: 'none',
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
       },
     }),
   );

@@ -28,7 +28,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         !req.url.includes('/auth/register')
       ) {
         // Session has expired or cookie is invalid — clear client state.
-        auth.currentUser.set(null);
+      auth.currentUser.set(null);
         router.navigate(['/auth/login'], {
           queryParams: { sessionExpired: 'true' },
         });

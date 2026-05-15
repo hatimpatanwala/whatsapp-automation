@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Tenant } from './tenant.entity';
+import { SubscriptionPlan } from './subscription-plan.entity';
 
 @Entity({ name: 'subscriptions', schema: 'public' })
 export class Subscription {
@@ -19,6 +20,13 @@ export class Subscription {
   @ManyToOne(() => Tenant, (tenant) => tenant.subscriptions)
   @JoinColumn({ name: 'tenant_id' })
   tenant: Tenant;
+
+  @Column({ name: 'plan_id', nullable: true })
+  planId: string;
+
+  @ManyToOne(() => SubscriptionPlan, { eager: false })
+  @JoinColumn({ name: 'plan_id' })
+  subscriptionPlan: SubscriptionPlan;
 
   @Column({ length: 50 })
   plan: string;

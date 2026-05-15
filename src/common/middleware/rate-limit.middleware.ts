@@ -14,19 +14,25 @@ export class RateLimitMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
-    const tenantId = req.tenantContext?.id || 'anonymous';
-    const key = `ratelimit:${tenantId}:${Math.floor(Date.now() / this.windowMs)}`;
+    try {
+      const tenantId = req.tenantContext?.id || 'anonymous';
+      const key = `ratelimit:${tenantId}:${Math.floor(Date.now() / this.windowMs)}`;
 
-    const current = await this.redis.incr(key);
-    if (current === 1) {
-      await this.redis.expire(key, Math.ceil(this.windowMs / 1000));
-    }
+      const current = await this.redis.incr(key);
+      if (current === 1) {
+        await this.redis.expire(key, Math.ceil(this.windowMs / 1000));
+      }
 
-    res.setHeader('X-RateLimit-Limit', this.maxRequests);
-    res.setHeader('X-RateLimit-Remaining', Math.max(0, this.maxRequests - current));
+      res.setHeader('X-RateLimit-Limit', this.maxRequests);
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, this.maxRequests - current));
 
-    if (current > this.maxRequests) {
-      throw new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
+      if (current > this.maxRequests) {
+        throw new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
+      }
+    } catch (err) {
+      // If Redis is down, skip rate limiting rather than blocking all requests
+      if (err instanceof HttpException) throw err;
+      // Redis error — allow request through
     }
 
     next();

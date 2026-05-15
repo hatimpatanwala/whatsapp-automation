@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
+import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';
 import { TenantMigrationService } from '../../database/tenant-migration.service';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { CreateTenantDto } from './dto/create-tenant.dto';
@@ -17,6 +18,8 @@ export class TenantProvisioningService {
     private readonly tenantRepository: Repository<Tenant>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(SubscriptionPlan)
+    private readonly planRepository: Repository<SubscriptionPlan>,
     private readonly migrationService: TenantMigrationService,
     private readonly connectionManager: TenantConnectionManager,
   ) {}
@@ -55,14 +58,29 @@ export class TenantProvisioningService {
 
     // 4. Create default subscription
     const selectedPlan = dto.plan || 'starter';
-    const planLimits = this.getPlanLimits(selectedPlan);
     const now = new Date();
     const validUntil = selectedPlan === 'trial'
       ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // 30 days
       : null;
+
+    // Look up the plan entity for limits and planId
+    const tierMap: Record<string, string> = { trial: 'trial', starter: 'starter', pro: 'professional', growth: 'growth', enterprise: 'enterprise' };
+    const planEntity = await this.planRepository.findOne({
+      where: { tier: tierMap[selectedPlan] || 'starter', isActive: true },
+    });
+
+    const planLimits = planEntity
+      ? {
+          maxProducts: planEntity.limits?.productLimit ?? 50,
+          maxConversations: planEntity.limits?.conversationLimit ?? 1000,
+          maxCampaignsPerMonth: planEntity.limits?.campaignLimit ?? 5,
+        }
+      : this.getFallbackPlanLimits(selectedPlan);
+
     const subscription = this.subscriptionRepository.create({
       tenantId: tenant.id,
       plan: selectedPlan,
+      planId: planEntity?.id ?? null,
       ...planLimits,
       validFrom: now,
       validUntil,
@@ -86,7 +104,7 @@ export class TenantProvisioningService {
     return tenant;
   }
 
-  private getPlanLimits(plan: string): { maxProducts: number; maxConversations: number; maxCampaignsPerMonth: number } {
+  private getFallbackPlanLimits(plan: string): { maxProducts: number; maxConversations: number; maxCampaignsPerMonth: number } {
     switch (plan) {
       case 'trial':
         return { maxProducts: 20, maxConversations: 100, maxCampaignsPerMonth: 2 };

@@ -7,12 +7,13 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { SuperAdmin } from '../../database/entities/public/super-admin.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
+import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';
 import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
   imports: [
     PassportModule.register({ session: true }),
-    TypeOrmModule.forFeature([Tenant, SuperAdmin, Subscription]),
+    TypeOrmModule.forFeature([Tenant, SuperAdmin, Subscription, SubscriptionPlan]),
     TenantModule,
   ],
   controllers: [AuthController],

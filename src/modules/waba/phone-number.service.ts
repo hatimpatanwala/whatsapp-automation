@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
+import { Tenant } from '../../database/entities/public/tenant.entity';
 import { MetaCloudApiClient } from './meta-cloud-api.client';
 
 @Injectable()
@@ -9,6 +10,8 @@ export class PhoneNumberService {
   constructor(
     @InjectRepository(PhoneNumber)
     private readonly phoneRepo: Repository<PhoneNumber>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
     private readonly metaApi: MetaCloudApiClient,
   ) {}
 
@@ -50,10 +53,27 @@ export class PhoneNumberService {
       throw new ConflictException('Phone number is already assigned to another tenant');
     }
     await this.phoneRepo.update(phoneId, { tenantId });
+
+    // Also update the tenant record so webhook processor can resolve tenant by phone_number_id
+    await this.tenantRepo.update(tenantId, {
+      phoneNumberId: phone.phoneNumberId,
+      wabaId: phone.wabaAccount?.wabaId ?? phone.wabaAccountId,
+    });
+
     return this.findById(phoneId);
   }
 
   async unassignFromTenant(phoneId: string): Promise<PhoneNumber> {
+    const phone = await this.findById(phoneId);
+
+    // Clear the tenant's phone_number_id if it matches this phone
+    if (phone.tenantId) {
+      const tenant = await this.tenantRepo.findOne({ where: { id: phone.tenantId } });
+      if (tenant && tenant.phoneNumberId === phone.phoneNumberId) {
+        await this.tenantRepo.update(phone.tenantId, { phoneNumberId: null, wabaId: null });
+      }
+    }
+
     await this.phoneRepo.update(phoneId, { tenantId: null });
     return this.findById(phoneId);
   }

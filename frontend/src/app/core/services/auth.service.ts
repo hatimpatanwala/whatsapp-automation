@@ -35,6 +35,8 @@ export interface SignupResponse {
 
 export interface TenantSubscription {
   plan: string;
+  planId?: string;
+  planName?: string;
   status: string;
   maxProducts: number;
   maxConversations: number;
@@ -43,6 +45,8 @@ export interface TenantSubscription {
   validFrom: string | null;
   validUntil: string | null;
   allowExceed: boolean;
+  enabledFeatures: string[];
+  limits?: Record<string, number | null>;
 }
 
 export interface TenantInfo {
@@ -105,6 +109,8 @@ export class AuthService {
           this.currentUser.set(res.user!);
           this.currentAdmin.set(null);
         }
+        // Immediately fetch full session (tenant, subscription, features)
+        this.rehydrateSession().subscribe();
       }),
     );
   }

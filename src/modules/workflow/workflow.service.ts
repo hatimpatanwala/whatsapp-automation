@@ -140,6 +140,7 @@ export class WorkflowService {
       if (dto.name) { sets.push(`name = $${idx++}`); params.push(dto.name); }
       if (dto.description) { sets.push(`description = $${idx++}`); params.push(dto.description); }
       if (dto.trigger) { sets.push(`trigger = $${idx++}`); params.push(JSON.stringify(dto.trigger)); }
+      if ((dto as any).status) { sets.push(`status = $${idx++}`); params.push((dto as any).status); }
 
       params.push(id);
       const rows = await qr.query(
@@ -192,6 +193,16 @@ export class WorkflowService {
     });
     await this.triggerMatcher?.invalidateCache(schema);
     return result;
+  }
+
+  async setPreview(schema: string, id: string) {
+    return this.tenantConn.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `UPDATE workflows SET status = 'preview', updated_at = NOW() WHERE id = $1 RETURNING *`,
+        [id],
+      );
+      return rows[0] || null;
+    });
   }
 
   async duplicate(schema: string, id: string, userId?: string) {

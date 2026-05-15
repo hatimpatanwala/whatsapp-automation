@@ -108,6 +108,12 @@ export class OnboardingService {
 
     if (existingInPool) {
       if (existingInPool.tenantId === tenantId) {
+        // Already assigned to this tenant — ensure tenant record is in sync
+        // If phone_number_id is missing, try to resolve it from Meta
+        if (!existingInPool.phoneNumberId && existingInPool.wabaAccountId) {
+          await this.syncPhoneNumberIdFromMeta(existingInPool);
+        }
+        await this.updateTenantWithPhone(tenantId, fullPhone, existingInPool);
         return {
           status: 'registered',
           phone: fullPhone,
@@ -127,6 +133,12 @@ export class OnboardingService {
         tenantId,
         status: 'active',
       });
+
+      // If phone_number_id is missing, try to resolve it from Meta
+      if (!existingInPool.phoneNumberId && existingInPool.wabaAccountId) {
+        await this.syncPhoneNumberIdFromMeta(existingInPool);
+      }
+
       await this.updateTenantWithPhone(tenantId, fullPhone, existingInPool);
       return {
         status: 'registered',
@@ -495,20 +507,74 @@ export class OnboardingService {
     return rawNumber.substring(0, 2);
   }
 
+  /**
+   * Try to resolve the Meta phone_number_id by listing phone numbers on the WABA
+   * and matching by display phone number. Updates the phone record if found.
+   */
+  private async syncPhoneNumberIdFromMeta(phoneRecord: PhoneNumber): Promise<void> {
+    try {
+      const waba = await this.wabaAccountRepository.findOne({ where: { id: phoneRecord.wabaAccountId } });
+      if (!waba) return;
+
+      const accessToken = await this.metaTokenService.getActiveToken(waba.id);
+      if (!accessToken) return;
+
+      const response = await fetch(
+        `https://graph.facebook.com/${this.graphApiVersion}/${waba.wabaId}/phone_numbers`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+      const data = await response.json() as any;
+      if (!data.data) return;
+
+      // Normalize the stored phone for matching
+      const normalized = phoneRecord.phoneNumber.replace(/[^0-9]/g, '');
+
+      for (const metaPhone of data.data) {
+        const metaDisplay = (metaPhone.display_phone_number || '').replace(/[^0-9]/g, '');
+        if (metaDisplay === normalized || normalized.endsWith(metaDisplay) || metaDisplay.endsWith(normalized)) {
+          await this.phoneNumberRepository.update(phoneRecord.id, {
+            phoneNumberId: metaPhone.id,
+            displayName: metaPhone.verified_name || phoneRecord.displayName,
+            qualityRating: metaPhone.quality_rating || phoneRecord.qualityRating,
+          });
+          phoneRecord.phoneNumberId = metaPhone.id;
+          this.logger.log(`Synced phone_number_id=${metaPhone.id} from Meta for phone ${phoneRecord.phoneNumber}`);
+          return;
+        }
+      }
+      this.logger.warn(`Could not find Meta phone_number_id for ${phoneRecord.phoneNumber} on WABA ${waba.wabaId}`);
+    } catch (err: any) {
+      this.logger.error(`Failed to sync phone_number_id from Meta: ${err.message}`);
+    }
+  }
+
   private async updateTenantWithPhone(tenantId: string, phone: string, phoneRecord: PhoneNumber) {
+    // Re-fetch the phone record to get the latest data (in case it was just updated)
+    const freshPhone = await this.phoneNumberRepository.findOne({
+      where: { id: phoneRecord.id },
+      relations: ['wabaAccount'],
+    });
+    const record = freshPhone || phoneRecord;
+
     const updateData: Partial<Tenant> = {
       whatsappPhone: phone,
       onboardingStatus: 'whatsapp_connected' as any,
     };
-    if (phoneRecord.phoneNumberId) {
-      updateData.phoneNumberId = phoneRecord.phoneNumberId;
+    if (record.phoneNumberId) {
+      updateData.phoneNumberId = record.phoneNumberId;
     }
-    if (phoneRecord.wabaAccountId) {
-      const waba = await this.wabaAccountRepository.findOne({ where: { id: phoneRecord.wabaAccountId } });
-      if (waba) {
-        updateData.wabaId = waba.wabaId;
+    if (record.wabaAccountId) {
+      const wabaId = record.wabaAccount?.wabaId
+        || (await this.wabaAccountRepository.findOne({ where: { id: record.wabaAccountId } }))?.wabaId;
+      if (wabaId) {
+        updateData.wabaId = wabaId;
       }
     }
+    this.logger.log(
+      `Updating tenant ${tenantId} with phone data: phoneNumberId=${record.phoneNumberId}, wabaId=${updateData.wabaId}, phone=${phone}`,
+    );
     await this.tenantRepository.update(tenantId, updateData);
   }
 }

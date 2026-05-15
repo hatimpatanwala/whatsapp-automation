@@ -1,8 +1,10 @@
-import { Module, Global } from '@nestjs/common';
+import { Module, Global, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
+
+const logger = new Logger('RedisModule');
 
 @Global()
 @Module({
@@ -10,19 +12,19 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
     {
       provide: REDIS_CLIENT,
       useFactory: (configService: ConfigService) => {
-        console.log(configService.get("REDIS_URL"))
-        return configService.get<string>('REDIS_URL')
-          ? new Redis(configService.get<string>('REDIS_URL'), {
-              tls: {},
-              maxRetriesPerRequest: null,
-              enableReadyCheck: false,
-            })
-          : new Redis({
-              host: configService.get<string>('REDIS_HOST', 'localhost'),
-              port: configService.get<number>('REDIS_PORT', 6379),
-              password: configService.get<string>('REDIS_PASSWORD', undefined),
-              maxRetriesPerRequest: null,
-            });
+        const url = configService.get<string>('REDIS_URL');
+        const host = configService.get<string>('REDIS_HOST', 'localhost');
+        const port = configService.get<number>('REDIS_PORT', 6379);
+        const password = configService.get<string>('REDIS_PASSWORD', undefined);
+
+        const client = url
+          ? new Redis(url, { tls: { rejectUnauthorized: false }, maxRetriesPerRequest: null, enableReadyCheck: false })
+          : new Redis({ host, port, password, maxRetriesPerRequest: null });
+
+        client.on('connect', () => logger.log(`Redis connected to ${url ? 'Upstash' : host + ':' + port}`));
+        client.on('error', () => {}); // Suppress — patch-ioredis handles logging
+
+        return client;
       },
       inject: [ConfigService],
     },
