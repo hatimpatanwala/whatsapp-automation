@@ -216,6 +216,9 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
                     </div>
                     <button pButton [label]="activeSub() ? 'Change Plan' : 'Assign'" icon="pi pi-check" severity="success" class="p-button-sm" [loading]="assigningPlan()" [disabled]="!selectedPlanId" (click)="assignPlan()"></button>
                     <button pButton label="Create Custom Plan" icon="pi pi-plus" class="p-button-sm p-button-outlined" style="color:#00A884;border-color:#00A884" (click)="showCustomPlanDialog = true"></button>
+                    @if (activeSub()) {
+                      <button pButton label="Remove Plan" icon="pi pi-times" severity="danger" class="p-button-sm p-button-outlined" [loading]="removingPlan()" (click)="confirmRemovePlan()"></button>
+                    }
                   </div>
                 </div>
 
@@ -571,6 +574,7 @@ export class TenantDetailComponent implements OnInit {
   assigningPlan = signal(false);
   savingFeatures = signal(false);
   creatingCustomPlan = signal(false);
+  removingPlan = signal(false);
   workflowsLoading = signal(true);
   savingWorkflow = signal(false);
 
@@ -719,6 +723,23 @@ export class TenantDetailComponent implements OnInit {
     });
   }
 
+  confirmRemovePlan() {
+    if (!confirm('Are you sure you want to remove the active plan from this tenant?')) return;
+    this.removingPlan.set(true);
+    this.subscriptionService.removeTenantSubscription(this.tenantId).subscribe({
+      next: () => {
+        this.removingPlan.set(false);
+        this.activeSub.set(null);
+        this.planFeatures.set({});
+        this.featureOverrides = {};
+        this.toast('success', 'Plan removed from tenant');
+        this.loadTenant();
+        this.loadSubscription();
+      },
+      error: () => { this.removingPlan.set(false); this.toast('error', 'Failed to remove plan'); },
+    });
+  }
+
   getEmptyCustomPlan() {
     return {
       name: '',
@@ -773,7 +794,16 @@ export class TenantDetailComponent implements OnInit {
   saveFeatures() {
     this.savingFeatures.set(true);
     this.subscriptionService.updateTenantFeatures(this.tenantId, this.featureOverrides).subscribe({
-      next: () => { this.savingFeatures.set(false); this.toast('success', 'Features updated'); this.loadSubscription(); },
+      next: (res: any) => {
+        this.savingFeatures.set(false);
+        // Update local state with the actual persisted features from backend
+        if (res?.features) {
+          this.planFeatures.set({ ...res.features });
+          this.featureOverrides = { ...res.features };
+        }
+        this.toast('success', 'Features updated');
+        this.loadSubscription();
+      },
       error: () => { this.savingFeatures.set(false); this.toast('error', 'Failed to update features'); },
     });
   }

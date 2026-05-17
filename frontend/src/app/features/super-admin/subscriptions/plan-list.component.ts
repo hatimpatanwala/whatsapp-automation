@@ -162,6 +162,14 @@ interface Plan {
                   [loading]="togglingId() === plan.id"
                   (click)="togglePlan(plan)"
                 ></button>
+                <button
+                  pButton
+                  icon="pi pi-trash"
+                  class="p-button-text p-button-sm p-button-rounded p-button-danger"
+                  pTooltip="Delete plan"
+                  [loading]="deletingId() === plan.id"
+                  (click)="confirmDelete(plan)"
+                ></button>
               </div>
             </div>
           }
@@ -172,11 +180,13 @@ interface Plan {
 })
 export class PlanListComponent implements OnInit {
   private readonly messageService = inject(MessageService);
+  private readonly confirmationService = inject(ConfirmationService);
   private readonly subscriptionService = inject(SubscriptionService);
 
   plans = signal<Plan[]>([]);
   loading = signal(true);
   togglingId = signal<string | null>(null);
+  deletingId = signal<string | null>(null);
 
   ngOnInit() {
     this.loadPlans();
@@ -238,6 +248,44 @@ export class PlanListComponent implements OnInit {
           severity: 'error',
           summary: 'Error',
           detail: 'Failed to update plan',
+        });
+      },
+    });
+  }
+
+  confirmDelete(plan: Plan) {
+    const message = plan.tenantCount > 0
+      ? `This plan has ${plan.tenantCount} active tenant(s). Deleting will deactivate the plan. Continue?`
+      : `Are you sure you want to delete "${plan.name}"? This cannot be undone.`;
+
+    this.confirmationService.confirm({
+      message,
+      header: 'Delete Plan',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => this.deletePlan(plan),
+    });
+  }
+
+  private deletePlan(plan: Plan) {
+    this.deletingId.set(plan.id);
+    this.subscriptionService.deletePlan(plan.id).subscribe({
+      next: () => {
+        this.plans.update(plans => plans.filter(p => p.id !== plan.id));
+        this.deletingId.set(null);
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Deleted',
+          detail: `Plan "${plan.name}" has been deleted`,
+        });
+        this.loadPlans();
+      },
+      error: () => {
+        this.deletingId.set(null);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to delete plan',
         });
       },
     });

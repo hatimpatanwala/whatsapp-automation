@@ -258,15 +258,14 @@ export class TenantController {
       return { error: 'No active subscription with a plan' };
     }
 
-    // Create a custom copy of the plan for this tenant if needed
-    // For simplicity, we update the plan's features directly if it's a custom plan,
-    // or create a new custom plan for this tenant
     const currentPlan = sub.subscriptionPlan;
+    let updatedPlan: SubscriptionPlan;
 
     if (currentPlan.tier === 'custom') {
-      // Update the custom plan directly
+      // Update the custom plan directly — use save() to properly persist JSONB
       const merged = { ...(currentPlan.features || {}), ...body.features };
-      await this.planRepo.update(currentPlan.id, { features: merged });
+      currentPlan.features = merged;
+      updatedPlan = await this.planRepo.save(currentPlan);
     } else {
       // Create a new custom plan based on the current one
       const customPlan = this.planRepo.create({
@@ -281,13 +280,34 @@ export class TenantController {
         isActive: false, // Don't show in public plan list
         sortOrder: 99,
       });
-      const savedPlan = await this.planRepo.save(customPlan);
+      updatedPlan = await this.planRepo.save(customPlan);
 
       // Point the subscription to the new custom plan
-      await this.subscriptionRepo.update(sub.id, { planId: savedPlan.id });
+      await this.subscriptionRepo.update(sub.id, { planId: updatedPlan.id });
     }
 
-    return { message: 'Features updated', features: body.features };
+    return {
+      message: 'Features updated',
+      features: updatedPlan.features,
+      planId: updatedPlan.id,
+    };
+  }
+
+  /**
+   * Remove subscription (plan) from a tenant — cancels the active subscription.
+   */
+  @Delete(':id/subscription')
+  @Roles('admin')
+  async removeSubscription(@Param('id') id: string) {
+    const result = await this.subscriptionRepo.update(
+      { tenantId: id, status: 'active' },
+      { status: 'canceled' },
+    );
+    if (result.affected === 0) {
+      return { message: 'No active subscription to remove' };
+    }
+    this.logger.log(`Removed active subscription from tenant ${id}`);
+    return { message: 'Subscription removed' };
   }
 
   /**

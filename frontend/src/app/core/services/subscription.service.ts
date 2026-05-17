@@ -212,4 +212,11 @@ export class SubscriptionService {
   ): Observable<any> {
     return this.api.patch(`/admin/tenants/${tenantId}/features`, { features });
   }
+
+  /**
+   * Remove (cancel) a tenant's active subscription (super admin).
+   */
+  removeTenantSubscription(tenantId: string): Observable<any> {
+    return this.api.delete(`/admin/tenants/${tenantId}/subscription`);
+  }
 }
