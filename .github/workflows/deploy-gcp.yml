@@ -1,0 +1,107 @@
+name: Deploy to GCP
+
+on:
+  push:
+    branches: [main]
+
+env:
+  VM_USER: ${{ secrets.GCP_VM_USER }}
+  VM_IP: ${{ secrets.GCP_VM_IP }}
+  DEPLOY_PATH: /opt/whatsapp-automation
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      # ─── 1. Checkout code ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ─── 2. Setup SSH ──────────────────────────────────────────────
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/gcp_key
+          chmod 600 ~/.ssh/gcp_key
+          ssh-keyscan -H ${{ env.VM_IP }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      # ─── 3. Sync code to GCP VM ────────────────────────────────────
+      - name: Sync code to VM
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='dist' \
+            --exclude='.env' \
+            --exclude='.env.gcp' \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/dist' \
+            -e "ssh -i ~/.ssh/gcp_key -o StrictHostKeyChecking=no" \
+            ./ ${{ env.VM_USER }}@${{ env.VM_IP }}:${{ env.DEPLOY_PATH }}/
+
+      # ─── 4. Build and deploy on VM ─────────────────────────────────
+      - name: Build and deploy
+        run: |
+          ssh -i ~/.ssh/gcp_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_IP }} << 'DEPLOY_SCRIPT'
+
+          set -e
+          cd /opt/whatsapp-automation
+
+          echo "=== Pulling latest images ==="
+          docker compose -f gcp/docker-compose.gcp.yml --env-file .env.gcp pull postgres redis
+
+          echo "=== Building application images ==="
+          docker compose -f gcp/docker-compose.gcp.yml --env-file .env.gcp build --no-cache backend frontend
+
+          echo "=== Stopping old containers ==="
+          docker compose -f gcp/docker-compose.gcp.yml --env-file .env.gcp down --timeout 30
+
+          echo "=== Starting services ==="
+          docker compose -f gcp/docker-compose.gcp.yml --env-file .env.gcp up -d
+
+          echo "=== Waiting for services to be healthy ==="
+          sleep 15
+
+          echo "=== Checking service status ==="
+          docker compose -f gcp/docker-compose.gcp.yml --env-file .env.gcp ps
+
+          echo "=== Checking backend health ==="
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:80/health/liveness > /dev/null 2>&1; then
+              echo "Backend is healthy!"
+              break
+            fi
+            echo "Waiting for backend... attempt $i/10"
+            sleep 5
+          done
+
+          echo "=== Cleaning up old images ==="
+          docker image prune -f
+
+          echo "=== Deployment complete ==="
+          DEPLOY_SCRIPT
+
+      # ─── 5. Verify deployment ──────────────────────────────────────
+      - name: Verify deployment
+        run: |
+          sleep 10
+          STATUS=$(ssh -i ~/.ssh/gcp_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_IP }} \
+            "curl -sf -o /dev/null -w '%{http_code}' http://localhost:80/health/liveness || echo 'failed'")
+          if [ "$STATUS" = "200" ]; then
+            echo "Deployment verified successfully!"
+          else
+            echo "WARNING: Health check returned: $STATUS"
+            ssh -i ~/.ssh/gcp_key -o StrictHostKeyChecking=no \
+              ${{ env.VM_USER }}@${{ env.VM_IP }} \
+              "docker compose -f /opt/whatsapp-automation/gcp/docker-compose.gcp.yml --env-file /opt/whatsapp-automation/.env.gcp logs --tail=50"
+            exit 1
+          fi
+
+      # ─── 6. Cleanup SSH key ────────────────────────────────────────
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/gcp_key

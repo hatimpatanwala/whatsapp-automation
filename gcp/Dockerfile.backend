@@ -1,0 +1,47 @@
+# ─── Backend Production Dockerfile (GCP) ──────────────────────────────
+# Multi-stage build for NestJS backend
+# ───────────────────────────────────────────────────────────────────────
+
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies for native modules (bcrypt, sharp)
+RUN apk add --no-cache python3 make g++ vips-dev
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig*.json nest-cli.json ./
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+RUN npm run build
+
+# ─── Production image ─────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Runtime dependencies for sharp/bcrypt
+RUN apk add --no-cache vips tini
+
+# Copy only production dependencies
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Copy built output and scripts
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/scripts ./scripts
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health/liveness || exit 1
+
+EXPOSE 3000
+
+USER node
+
+# Use tini as init system for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/main.js"]

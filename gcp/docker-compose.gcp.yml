@@ -1,0 +1,174 @@
+# ─── GCP Production Docker Compose ─────────────────────────────────────
+# Full stack: Frontend + Backend + PostgreSQL + Redis
+# Usage: docker compose -f gcp/docker-compose.gcp.yml --env-file .env.gcp up -d
+# ───────────────────────────────────────────────────────────────────────
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: wa-gcp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-whatsapp_commerce}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./../.docker/scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - wa-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  # ─── Redis ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: wa-gcp-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-redispass123}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redispass123}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wa-network
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: "0.25"
+
+  # ─── Backend (NestJS API) ──────────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: gcp/Dockerfile.backend
+    container_name: wa-gcp-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PREFIX: api
+
+      # Database — connects to postgres container
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:-whatsapp_commerce}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_SYNCHRONIZE: "false"
+
+      # Redis — connects to redis container
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redispass123}
+
+      # Queue Redis
+      QUEUE_REDIS_HOST: redis
+      QUEUE_REDIS_PORT: 6379
+      QUEUE_REDIS_PASSWORD: ${REDIS_PASSWORD:-redispass123}
+
+      # Session
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      SESSION_TTL: ${SESSION_TTL:-86400}
+
+      # CORS — frontend container serves via nginx on port 80/443
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+
+      # WhatsApp
+      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v21.0}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN}
+      WHATSAPP_RATE_LIMIT_MAX: ${WHATSAPP_RATE_LIMIT_MAX:-70}
+      WHATSAPP_RATE_LIMIT_DURATION: ${WHATSAPP_RATE_LIMIT_DURATION:-1000}
+
+      # Meta
+      META_APP_ID: ${META_APP_ID}
+      META_APP_SECRET: ${META_APP_SECRET}
+      META_SYSTEM_USER_ID: ${META_SYSTEM_USER_ID}
+      META_SYSTEM_USER_TOKEN: ${META_SYSTEM_USER_TOKEN}
+
+      # Encryption
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
+
+      # AWS S3
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET:-whatsapp-commerce-media}
+
+      # Razorpay
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+
+      # Admin Seed
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@wacommerce.in}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123456}
+      ADMIN_NAME: ${ADMIN_NAME:-Platform Admin}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wa-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  # ─── Frontend (Angular + Nginx) ────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: gcp/Dockerfile.frontend
+    container_name: wa-gcp-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - wa-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  wa-network:
+    driver: bridge

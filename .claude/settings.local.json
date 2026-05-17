@@ -122,7 +122,8 @@
       "Bash(sed -i 's/text-\\\\[#94a3b8\\\\] mb-4/text-\\\\[#cbd5e1\\\\] mb-4/g' tenants/tenant-detail.component.ts)",
       "Bash(sed -i 's/class=\"text-\\\\[#94a3b8\\\\] text-sm\">&#64/class=\"text-\\\\[#b0bec5\\\\] text-sm\">\\\\&#64/g' tenants/tenant-detail.component.ts)",
       "Bash(grep -rn \"Processor\" D:/whatsapp-automation/src/modules/*/module*.ts D:/whatsapp-automation/src/modules/*/*.module.ts D:/whatsapp-automation/src/queue/*.module.ts)",
-      "Bash(grep -E \"\\\\.\\(ts|css\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|css\\)$\")",
+      "Bash(grep -l \"Entity\\\\|entity\" /d/whatsapp-automation/src/database/entities/public/*.ts)"
     ]
   }
 }
