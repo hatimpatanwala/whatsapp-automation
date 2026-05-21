@@ -1,0 +1,145 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches: [main]
+
+env:
+  VM_USER: ${{ secrets.AWS_EC2_USER }}
+  VM_IP: ${{ secrets.AWS_EC2_IP }}
+  DEPLOY_PATH: /opt/whatsapp-automation
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      # ─── 1. Checkout code ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ─── 2. Setup SSH ──────────────────────────────────────────────
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H ${{ env.VM_IP }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      # ─── 3. Sync code to EC2 ───────────────────────────────────────
+      - name: Sync code to EC2
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='dist' \
+            --exclude='.env' \
+            --exclude='deploy/.env' \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/dist' \
+            --exclude='frontend/.angular' \
+            --exclude='docs' \
+            --exclude='.claude' \
+            --exclude='coverage' \
+            -e "ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no" \
+            ./ ${{ env.VM_USER }}@${{ env.VM_IP }}:${{ env.DEPLOY_PATH }}/
+
+      # ─── 4. Build and deploy on EC2 ────────────────────────────────
+      - name: Build and deploy
+        run: |
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_IP }} << 'DEPLOY_SCRIPT'
+
+          set -e
+          cd /opt/whatsapp-automation
+
+          echo "=== Pulling latest base images ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull postgres redis 2>/dev/null || true
+
+          echo "=== Building backend image ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env build backend
+
+          echo "=== Building frontend image ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env build frontend
+
+          echo "=== Stopping old containers ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env down --timeout 30
+
+          echo "=== Starting database and redis first ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d postgres redis
+
+          echo "=== Waiting for database to be ready ==="
+          for i in $(seq 1 15); do
+            if docker exec wa-postgres pg_isready -U postgres > /dev/null 2>&1; then
+              echo "PostgreSQL is ready!"
+              break
+            fi
+            echo "Waiting for PostgreSQL... attempt $i/15"
+            sleep 3
+          done
+
+          echo "=== Waiting for Redis to be ready ==="
+          for i in $(seq 1 10); do
+            if docker exec wa-redis redis-cli -a "${REDIS_PASSWORD:-redispass123}" ping 2>/dev/null | grep -q PONG; then
+              echo "Redis is ready!"
+              break
+            fi
+            echo "Waiting for Redis... attempt $i/10"
+            sleep 2
+          done
+
+          echo "=== Starting backend ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend
+
+          echo "=== Waiting for backend health ==="
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:3000/health/liveness > /dev/null 2>&1; then
+              echo "Backend is healthy!"
+              break
+            fi
+            if [ "$i" -eq 20 ]; then
+              echo "ERROR: Backend failed to start. Logs:"
+              docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs --tail=30 backend
+              exit 1
+            fi
+            echo "Waiting for backend... attempt $i/20"
+            sleep 5
+          done
+
+          echo "=== Starting frontend ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d frontend
+
+          sleep 5
+
+          echo "=== Service status ==="
+          docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps
+
+          echo "=== Cleaning up old Docker images ==="
+          docker image prune -f
+          docker builder prune -f --keep-storage 500MB 2>/dev/null || true
+
+          echo "=== Deployment complete ==="
+          DEPLOY_SCRIPT
+
+      # ─── 5. Verify deployment ──────────────────────────────────────
+      - name: Verify deployment
+        run: |
+          sleep 10
+          STATUS=$(ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+            ${{ env.VM_USER }}@${{ env.VM_IP }} \
+            "curl -sf -o /dev/null -w '%{http_code}' http://localhost:80/health/liveness || echo 'failed'")
+          if [ "$STATUS" = "200" ]; then
+            echo "Deployment verified successfully!"
+          else
+            echo "WARNING: Health check returned: $STATUS"
+            ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \
+              ${{ env.VM_USER }}@${{ env.VM_IP }} \
+              "cd /opt/whatsapp-automation && docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs --tail=50"
+            exit 1
+          fi
+
+      # ─── 6. Cleanup SSH key ────────────────────────────────────────
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/ec2_key

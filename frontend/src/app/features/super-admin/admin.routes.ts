@@ -39,6 +39,10 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./subscriptions/plan-form.component').then(m => m.PlanFormComponent),
   },
   {
+    path: 'tenants/:id/quotes',
+    loadComponent: () => import('./quotes/admin-quote-list.component').then(m => m.AdminQuoteListComponent),
+  },
+  {
     path: 'tenants/:id/workflows',
     loadComponent: () => import('./workflows/admin-workflow-builder.component').then(m => m.AdminWorkflowBuilderComponent),
   },

@@ -4,6 +4,7 @@ import {
 import { Request } from 'express';
 import { OnboardingService, BusinessProfileDto } from './onboarding.service';
 import { OnboardingEngineService } from './engine/onboarding-engine.service';
+import { AdminWhatsAppService } from './admin-whatsapp.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
@@ -13,6 +14,7 @@ export class OnboardingController {
   constructor(
     private readonly onboardingService: OnboardingService,
     private readonly onboardingEngine: OnboardingEngineService,
+    private readonly adminWhatsAppService: AdminWhatsAppService,
   ) {}
 
   @Get('status')
@@ -158,5 +160,39 @@ export class OnboardingController {
   ) {
     const tenantId = (req.session as any).tenantId;
     return this.onboardingEngine.verifyOtp(sessionId, tenantId, body.code);
+  }
+
+  // ─── Admin WhatsApp (personal number for admin control) ────────────────────
+
+  /**
+   * Send OTP to admin's personal WhatsApp number for verification.
+   */
+  @Post('admin-whatsapp/send-otp')
+  @Roles('owner')
+  @HttpCode(200)
+  async sendAdminWhatsappOtp(@Req() req: Request, @Body() body: { phone: string }) {
+    const tenantId = (req.session as any).tenantId;
+    return this.adminWhatsAppService.sendOtp(tenantId, body.phone);
+  }
+
+  /**
+   * Verify the OTP sent to admin's personal WhatsApp number.
+   */
+  @Post('admin-whatsapp/verify-otp')
+  @Roles('owner')
+  @HttpCode(200)
+  async verifyAdminWhatsappOtp(@Req() req: Request, @Body() body: { phone: string; code: string }) {
+    const tenantId = (req.session as any).tenantId;
+    return this.adminWhatsAppService.verifyOtp(tenantId, body.phone, body.code);
+  }
+
+  /**
+   * Skip admin WhatsApp setup (user can do it later from settings).
+   */
+  @Post('admin-whatsapp/skip')
+  @Roles('owner')
+  @HttpCode(200)
+  async skipAdminWhatsapp() {
+    return { skipped: true };
   }
 }

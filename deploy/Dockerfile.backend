@@ -1,0 +1,55 @@
+# ─── Backend Production Dockerfile (AWS EC2) ─────────────────────────
+# Multi-stage build for NestJS backend
+# Matches proven gcp/Dockerfile.backend with EC2-specific optimizations
+# ───────────────────────────────────────────────────────────────────────
+
+# ─── Stage 1: Build ──────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies for native modules (bcrypt, sharp)
+RUN apk add --no-cache python3 make g++ vips-dev
+
+# Install dependencies first (layer cache — only re-runs if package*.json changes)
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY tsconfig*.json nest-cli.json ./
+COPY src/ ./src/
+
+# Build NestJS app
+RUN npm run build
+
+# ─── Stage 2: Production image ───────────────────────────────────────
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Runtime dependencies for sharp (image processing) and tini (init system)
+RUN apk add --no-cache vips tini curl
+
+# Install only production dependencies
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Copy compiled output from builder
+COPY --from=builder /app/dist ./dist
+
+# seed-admin.ts compiles to dist/database/seed-admin.js (part of src/)
+# Run it in the container: docker exec wa-backend node dist/database/seed-admin.js
+# Tenant migrations auto-run on app boot via TenantMigrationService.onModuleInit()
+
+# Health check — uses the /health/liveness endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -sf http://localhost:3000/health/liveness || exit 1
+
+EXPOSE 3000
+
+# Run as non-root for security
+USER node
+
+# Use tini as PID 1 for proper signal handling (graceful shutdown)
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/main.js"]

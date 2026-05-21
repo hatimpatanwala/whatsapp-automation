@@ -219,6 +219,33 @@ export class ProductSyncFailedEvent extends DomainEvent {
   }
 }
 
+// Quote Events
+export class QuoteCreatedEvent extends DomainEvent {
+  readonly eventName = 'quote.created';
+  constructor(
+    schema: string,
+    public readonly quoteId: string,
+    public readonly customerId: string,
+    public readonly quoteNumber: string,
+    public readonly totalAmount: number,
+  ) {
+    super(schema);
+  }
+}
+
+export class QuoteStatusChangedEvent extends DomainEvent {
+  readonly eventName = 'quote.status_changed';
+  constructor(
+    schema: string,
+    public readonly quoteId: string,
+    public readonly customerId: string,
+    public readonly oldStatus: string,
+    public readonly newStatus: string,
+  ) {
+    super(schema);
+  }
+}
+
 // Delivery Events
 export class DeliveryStatusChangedEvent extends DomainEvent {
   readonly eventName = 'delivery.status_changed';

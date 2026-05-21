@@ -123,7 +123,13 @@
       "Bash(sed -i 's/class=\"text-\\\\[#94a3b8\\\\] text-sm\">&#64/class=\"text-\\\\[#b0bec5\\\\] text-sm\">\\\\&#64/g' tenants/tenant-detail.component.ts)",
       "Bash(grep -rn \"Processor\" D:/whatsapp-automation/src/modules/*/module*.ts D:/whatsapp-automation/src/modules/*/*.module.ts D:/whatsapp-automation/src/queue/*.module.ts)",
       "Bash(grep -E \"\\\\.\\(ts|css\\)$\")",
-      "Bash(grep -l \"Entity\\\\|entity\" /d/whatsapp-automation/src/database/entities/public/*.ts)"
+      "Bash(grep -l \"Entity\\\\|entity\" /d/whatsapp-automation/src/database/entities/public/*.ts)",
+      "Bash(grep -r \"order\\\\|payment\\\\|delivery\\\\|campaign\" /d/whatsapp-automation/frontend/src/app/core/services/*.ts -A 2)",
+      "Bash(grep -r \"api\\\\\\\\.post\\\\|api\\\\\\\\.get\\\\|api\\\\\\\\.put\\\\|api\\\\\\\\.patch\" /d/whatsapp-automation/frontend/src/app --include=\"*.ts\")",
+      "Bash(npx --yes md-to-pdf --version)",
+      "Bash(npx --yes md-to-pdf whatsapp-pricing-and-strategy.md --pdf-options '{\"format\": \"A4\", \"margin\": {\"top\": \"20mm\", \"bottom\": \"20mm\", \"left\": \"15mm\", \"right\": \"15mm\"}}')",
+      "Bash(grep -E \"\\(json|js|ts\\)$\")",
+      "Bash(ssh:*)"
     ]
   }
 }

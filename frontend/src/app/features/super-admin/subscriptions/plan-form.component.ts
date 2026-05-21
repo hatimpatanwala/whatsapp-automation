@@ -218,6 +218,7 @@ export class PlanFormComponent implements OnInit {
     { key: 'customers', label: 'Customers', desc: 'Customer management, segments and tagging' },
     { key: 'campaigns', label: 'Campaigns', desc: 'Broadcast, drip and triggered campaigns' },
     { key: 'conversations', label: 'Conversations', desc: 'WhatsApp inbox and chat management' },
+    { key: 'quotes', label: 'Quotes', desc: 'Create and manage customer quotes' },
     { key: 'whatsappCatalog', label: 'WhatsApp Catalog', desc: 'WhatsApp product catalog sync' },
     { key: 'workflowBuilder', label: 'Workflow Builder', desc: 'Visual automation flow builder' },
     { key: 'aiFeatures', label: 'AI Features', desc: 'Chatbot, smart replies, intent detection' },

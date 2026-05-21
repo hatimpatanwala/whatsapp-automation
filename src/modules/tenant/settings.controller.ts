@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, Req, UseGuards, BadRequestException, Logger, Optional } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, Req, UseGuards, HttpCode, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,6 +9,7 @@ import { Tenant } from '../../database/entities/public/tenant.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { OnboardingService } from '../onboarding/onboarding.service';
+import { AdminWhatsAppService } from '../onboarding/admin-whatsapp.service';
 import { ConversationAccountingService } from '../waba/accounting/conversation-accounting.service';
 import { CommerceSettingsHelper } from '../whatsapp/helpers/commerce-settings.helper';
 import { MetaCatalogSyncService } from '../catalog/meta-catalog-sync.service';
@@ -27,6 +28,7 @@ export class SettingsController {
     @InjectRepository(PhoneNumber)
     private readonly phoneNumberRepo: Repository<PhoneNumber>,
     private readonly onboardingService: OnboardingService,
+    private readonly adminWhatsAppService: AdminWhatsAppService,
     @Optional() private readonly commerceSettingsHelper?: CommerceSettingsHelper,
     @Optional() private readonly accountingService?: ConversationAccountingService,
     @Optional() private readonly catalogSyncService?: MetaCatalogSyncService,
@@ -219,6 +221,50 @@ export class SettingsController {
     }
 
     return { catalogId, message: 'Meta catalog created and linked to your WhatsApp number.' };
+  }
+
+  // ─── Admin WhatsApp Number (personal number for admin control) ─────────────
+
+  /**
+   * Get admin WhatsApp number status.
+   */
+  @Get('admin-whatsapp')
+  @Roles('owner')
+  async getAdminWhatsapp(@Req() req: Request) {
+    const tenantId = req.session?.['tenantId'] || (req as any).tenantContext?.id;
+    return this.adminWhatsAppService.getStatus(tenantId);
+  }
+
+  /**
+   * Send OTP to admin's personal WhatsApp number.
+   */
+  @Post('admin-whatsapp/send-otp')
+  @Roles('owner')
+  @HttpCode(200)
+  async sendAdminWhatsappOtp(@Req() req: Request, @Body() body: { phone: string }) {
+    const tenantId = req.session?.['tenantId'] || (req as any).tenantContext?.id;
+    return this.adminWhatsAppService.sendOtp(tenantId, body.phone);
+  }
+
+  /**
+   * Verify OTP for admin's personal WhatsApp number.
+   */
+  @Post('admin-whatsapp/verify-otp')
+  @Roles('owner')
+  @HttpCode(200)
+  async verifyAdminWhatsappOtp(@Req() req: Request, @Body() body: { phone: string; code: string }) {
+    const tenantId = req.session?.['tenantId'] || (req as any).tenantContext?.id;
+    return this.adminWhatsAppService.verifyOtp(tenantId, body.phone, body.code);
+  }
+
+  /**
+   * Remove admin WhatsApp number.
+   */
+  @Delete('admin-whatsapp')
+  @Roles('owner')
+  async removeAdminWhatsapp(@Req() req: Request) {
+    const tenantId = req.session?.['tenantId'] || (req as any).tenantContext?.id;
+    return this.adminWhatsAppService.removeAdminWhatsapp(tenantId);
   }
 
 }

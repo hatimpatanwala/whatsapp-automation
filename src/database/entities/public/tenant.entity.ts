@@ -43,6 +43,12 @@ export class Tenant {
   @Column({ name: 'whatsapp_phone', length: 20, nullable: true })
   whatsappPhone: string;
 
+  @Column({ name: 'admin_whatsapp_number', length: 20, nullable: true })
+  adminWhatsappNumber: string;
+
+  @Column({ name: 'admin_whatsapp_verified', default: false })
+  adminWhatsappVerified: boolean;
+
   @Column({ name: 'business_name', length: 255, nullable: true })
   businessName: string;
 

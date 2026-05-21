@@ -72,6 +72,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/catalog-management/catalog-management.component').then(m => m.CatalogManagementComponent),
       },
       {
+        path: 'quotes',
+        canActivate: [featureGuard('quotes')],
+        loadChildren: () => import('./features/quotes/quotes.routes').then(m => m.QUOTES_ROUTES),
+      },
+      {
         path: 'workflow-builder',
         canActivate: [featureGuard('workflowBuilder')],
         loadComponent: () => import('./features/workflow-builder/workflow-builder.component').then(m => m.WorkflowBuilderComponent),

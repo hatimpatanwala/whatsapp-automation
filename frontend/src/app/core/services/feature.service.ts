@@ -10,6 +10,7 @@ export const FEATURE_KEYS = {
   customers: 'customers',
   campaigns: 'campaigns',
   conversations: 'conversations',
+  quotes: 'quotes',
   whatsappCatalog: 'whatsappCatalog',
   workflowBuilder: 'workflowBuilder',
   aiFeatures: 'aiFeatures',

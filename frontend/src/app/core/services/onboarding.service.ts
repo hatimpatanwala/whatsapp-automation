@@ -13,6 +13,8 @@ export interface OnboardingStatus {
   businessDescription: string | null;
   businessAddress: string | null;
   logoUrl: string | null;
+  adminWhatsappNumber: string | null;
+  adminWhatsappVerified: boolean;
 }
 
 export interface RegisterNumberResult {
@@ -157,5 +159,21 @@ export class OnboardingService {
    */
   sessionVerifyOtp(sessionId: string, code: string): Observable<{ verified: boolean; sessionId: string; state: OnboardingState; message: string }> {
     return this.api.post(`/onboarding/session/${sessionId}/verify-otp`, { code });
+  }
+
+  // ─── Admin WhatsApp (personal number for admin control) ───────────────────
+
+  /**
+   * Send OTP to admin's personal WhatsApp number.
+   */
+  sendAdminWhatsappOtp(phone: string): Observable<{ sent: boolean; message: string }> {
+    return this.api.post('/onboarding/admin-whatsapp/send-otp', { phone });
+  }
+
+  /**
+   * Verify OTP for admin's personal WhatsApp number.
+   */
+  verifyAdminWhatsappOtp(phone: string, code: string): Observable<{ verified: boolean; message: string }> {
+    return this.api.post('/onboarding/admin-whatsapp/verify-otp', { phone, code });
   }
 }

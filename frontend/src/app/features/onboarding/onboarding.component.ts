@@ -411,8 +411,150 @@ import {
             </div>
           }
 
-          <!-- ===== STEP 2: Business Profile ===== -->
+          <!-- ===== STEP 2: Admin WhatsApp Number ===== -->
           @if (activeStep() === 1) {
+            <div class="p-8">
+              <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                  <i class="pi pi-user text-indigo-600" style="font-size:1.1rem"></i>
+                </div>
+                <div>
+                  <h2 class="text-xl font-bold text-gray-900">Admin WhatsApp Number</h2>
+                  <p class="text-sm text-gray-500">Your personal WhatsApp number to control the admin panel</p>
+                </div>
+              </div>
+
+              <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-5">
+                <div class="flex gap-3">
+                  <i class="pi pi-info-circle text-indigo-500 mt-0.5" style="font-size:1rem"></i>
+                  <div>
+                    <p class="text-sm font-semibold text-indigo-900">Why is this needed?</p>
+                    <ul class="text-xs text-indigo-700 mt-1 leading-relaxed list-disc ml-4 space-y-1">
+                      <li>Manage orders, confirm payments, and update inventory directly via WhatsApp</li>
+                      <li>Receive real-time order and payment notifications on your personal number</li>
+                      <li>Control your store admin features without opening the dashboard</li>
+                      <li>This is NOT your business WhatsApp number — it's your personal number for admin control</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                @if (!adminOtpSent() && !adminVerified()) {
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-semibold text-gray-700">Your Personal WhatsApp Number</label>
+                    <div class="flex gap-2">
+                      <p-select
+                        [(ngModel)]="adminCountryCode"
+                        [options]="countryCodes"
+                        optionLabel="label"
+                        optionValue="value"
+                        styleClass="w-36"
+                        placeholder="Code"
+                      />
+                      <input
+                        pInputText
+                        [(ngModel)]="adminPhone"
+                        placeholder="9876543210"
+                        class="flex-1"
+                        style="font-size:1.1rem;letter-spacing:0.05em"
+                      />
+                    </div>
+                    <p class="text-xs text-gray-400">
+                      <i class="pi pi-info-circle mr-1"></i>
+                      We'll send a verification code to this number via WhatsApp to confirm it's yours.
+                    </p>
+                  </div>
+                }
+
+                @if (adminOtpSent() && !adminVerified()) {
+                  <p-message severity="info" styleClass="w-full">
+                    <div>
+                      <p class="font-semibold">Verification Code Sent!</p>
+                      <p class="text-sm mt-1">Check your WhatsApp messages on {{ adminCountryCode }}{{ adminPhone }} for a 6-digit code.</p>
+                    </div>
+                  </p-message>
+
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-semibold text-gray-700">Enter Verification Code</label>
+                    <div class="flex gap-2">
+                      <input
+                        pInputText
+                        [(ngModel)]="adminOtpCode"
+                        placeholder="123456"
+                        class="flex-1"
+                        maxlength="6"
+                        style="font-size:1.2rem;letter-spacing:0.3em;text-align:center"
+                      />
+                      <button
+                        pButton
+                        label="Verify"
+                        icon="pi pi-check"
+                        severity="success"
+                        [loading]="adminLoading()"
+                        [disabled]="adminOtpCode.length < 6"
+                        (click)="verifyAdminOtp()"
+                      ></button>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-3 text-xs">
+                    <span class="text-gray-400">Didn't receive it?</span>
+                    <button
+                      class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 text-xs"
+                      [disabled]="adminLoading()"
+                      (click)="sendAdminOtp()"
+                    >Resend Code</button>
+                  </div>
+                }
+
+                @if (adminVerified()) {
+                  <p-message severity="success" styleClass="w-full">
+                    <div>
+                      <p class="font-semibold">WhatsApp Number Verified!</p>
+                      <p class="text-sm mt-1">Your personal number {{ adminCountryCode }}{{ adminPhone }} is now connected for admin control.</p>
+                    </div>
+                  </p-message>
+                }
+
+                @if (adminError()) {
+                  <p-message severity="error" [text]="adminError()!" styleClass="w-full" />
+                }
+              </div>
+
+              <div class="flex justify-between mt-8">
+                <div class="flex gap-2">
+                  <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(0)"></button>
+                  <button pButton label="Skip for Now" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="activeStep.set(2)"></button>
+                </div>
+                @if (!adminOtpSent() && !adminVerified()) {
+                  <button
+                    pButton
+                    label="Send OTP via WhatsApp"
+                    icon="pi pi-whatsapp"
+                    iconPos="right"
+                    severity="success"
+                    [loading]="adminLoading()"
+                    [disabled]="!adminPhone.trim()"
+                    (click)="sendAdminOtp()"
+                  ></button>
+                }
+                @if (adminVerified()) {
+                  <button
+                    pButton
+                    label="Continue"
+                    icon="pi pi-arrow-right"
+                    iconPos="right"
+                    severity="success"
+                    (click)="activeStep.set(2)"
+                  ></button>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- ===== STEP 3: Business Profile ===== -->
+          @if (activeStep() === 2) {
             <div class="p-8">
               <div class="flex items-center gap-3 mb-6">
                 <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -464,14 +606,14 @@ import {
               </div>
 
               <div class="flex justify-between mt-8">
-                <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(0)"></button>
+                <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(1)"></button>
                 <button pButton label="Save & Continue" icon="pi pi-arrow-right" iconPos="right" severity="success" [loading]="loading()" [disabled]="!bizName.trim() || !bizCategory" (click)="saveProfile()"></button>
               </div>
             </div>
           }
 
-          <!-- ===== STEP 3: Complete ===== -->
-          @if (activeStep() === 2) {
+          <!-- ===== STEP 4: Complete ===== -->
+          @if (activeStep() === 3) {
             <div class="p-8 text-center">
               <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i class="pi pi-check text-green-600" style="font-size:2.5rem"></i>
@@ -503,7 +645,7 @@ import {
         </div>
 
         <!-- Skip link at bottom -->
-        @if (activeStep() < 2) {
+        @if (activeStep() < 3) {
           <p class="text-center text-xs text-gray-400 mt-4">
             Need help?
             <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" class="text-primary-500 hover:underline">WhatsApp API Docs</a>
@@ -528,6 +670,7 @@ export class OnboardingComponent implements OnInit {
 
   stepLabels = [
     { key: 'phone', label: 'WhatsApp Number' },
+    { key: 'admin', label: 'Admin WhatsApp' },
     { key: 'profile', label: 'Business Profile' },
     { key: 'complete', label: 'Complete' },
   ];
@@ -573,6 +716,15 @@ export class OnboardingComponent implements OnInit {
 
   fullPhone = computed(() => this.countryCode + this.phoneNumber.replace(/^0+/, ''));
 
+  // Step 1: Admin WhatsApp (personal number)
+  adminCountryCode = '+91';
+  adminPhone = '';
+  adminOtpSent = signal(false);
+  adminOtpCode = '';
+  adminVerified = signal(false);
+  adminError = signal<string | null>(null);
+  adminLoading = signal(false);
+
   // Step 2: Profile
   bizName = '';
   bizCategory = '';
@@ -604,10 +756,16 @@ export class OnboardingComponent implements OnInit {
       next: (status) => {
         switch (status.currentStep) {
           case 'whatsapp_connected':
-            this.activeStep.set(1);
+            // If admin WhatsApp already verified, skip to profile step
+            if (status.adminWhatsappVerified) {
+              this.adminVerified.set(true);
+              this.activeStep.set(2);
+            } else {
+              this.activeStep.set(1);
+            }
             break;
           case 'profile_complete':
-            this.activeStep.set(2);
+            this.activeStep.set(3);
             break;
           case 'completed':
             this.router.navigate(['/dashboard']);
@@ -617,6 +775,10 @@ export class OnboardingComponent implements OnInit {
         }
         if (status.phone) {
           this.phoneNumber = status.phone.replace(/^\+\d{1,3}/, '');
+        }
+        if (status.adminWhatsappNumber) {
+          this.adminPhone = status.adminWhatsappNumber.replace(/^\+\d{1,3}/, '');
+          this.adminVerified.set(status.adminWhatsappVerified);
         }
         if (status.businessName) this.bizName = status.businessName;
         if (status.businessCategory) this.bizCategory = status.businessCategory;
@@ -724,6 +886,51 @@ export class OnboardingComponent implements OnInit {
     });
   }
 
+  // ─── Admin WhatsApp OTP ──────────────────────────────────────────────────
+
+  sendAdminOtp() {
+    this.adminError.set(null);
+    const phone = this.adminCountryCode + this.adminPhone.replace(/^0+/, '');
+    if (!phone || phone.length < 10) {
+      this.adminError.set('Please enter a valid phone number');
+      return;
+    }
+
+    this.adminLoading.set(true);
+    this.onboardingService.sendAdminWhatsappOtp(phone).subscribe({
+      next: () => {
+        this.adminLoading.set(false);
+        this.adminOtpSent.set(true);
+        this.messageService.add({ severity: 'success', summary: 'OTP Sent', detail: 'Check your WhatsApp for the verification code.' });
+      },
+      error: (err) => {
+        this.adminLoading.set(false);
+        this.adminError.set(err?.error?.message || 'Failed to send OTP. Please try again.');
+      },
+    });
+  }
+
+  verifyAdminOtp() {
+    this.adminError.set(null);
+    const phone = this.adminCountryCode + this.adminPhone.replace(/^0+/, '');
+    if (this.adminOtpCode.length < 6) return;
+
+    this.adminLoading.set(true);
+    this.onboardingService.verifyAdminWhatsappOtp(phone, this.adminOtpCode).subscribe({
+      next: (result) => {
+        this.adminLoading.set(false);
+        if (result.verified) {
+          this.adminVerified.set(true);
+          this.messageService.add({ severity: 'success', summary: 'Verified!', detail: 'Your admin WhatsApp number is now connected.' });
+        }
+      },
+      error: (err) => {
+        this.adminLoading.set(false);
+        this.adminError.set(err?.error?.message || 'Invalid code. Please try again.');
+      },
+    });
+  }
+
   saveProfile() {
     this.profileError.set(null);
     if (!this.bizName.trim()) {
@@ -745,7 +952,7 @@ export class OnboardingComponent implements OnInit {
     }).subscribe({
       next: () => {
         this.loading.set(false);
-        this.activeStep.set(2);
+        this.activeStep.set(3);
       },
       error: (err) => {
         this.loading.set(false);

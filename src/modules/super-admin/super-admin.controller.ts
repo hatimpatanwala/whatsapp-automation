@@ -1,11 +1,17 @@
-import { Controller, Get, Post, Put, Param, Body, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { Request } from 'express';
 import { SuperAdminService } from './super-admin.service';
+import { TemplateProvisioningService } from '../onboarding/template-provisioning.service';
+import { QuoteService } from '../quote/quote.service';
 import { Public } from '../../common/decorators/public.decorator';
 
 @Controller('admin')
 export class SuperAdminController {
-  constructor(private readonly superAdminService: SuperAdminService) {}
+  constructor(
+    private readonly superAdminService: SuperAdminService,
+    private readonly templateProvisioningService: TemplateProvisioningService,
+    private readonly quoteService: QuoteService,
+  ) {}
 
   @Post('auth/login')
   @Public()
@@ -41,5 +47,44 @@ export class SuperAdminController {
   @Put('subscriptions/:id')
   async updateSubscription(@Param('id') id: string, @Body() body: any) {
     return this.superAdminService.updateSubscription(id, body);
+  }
+
+  /**
+   * Provision all WhatsApp message templates on the platform WABA.
+   * Creates authentication, utility, and marketing templates via Meta Graph API.
+   */
+  @Post('templates/provision')
+  @HttpCode(HttpStatus.OK)
+  async provisionTemplates() {
+    return this.templateProvisioningService.provisionAll();
+  }
+
+  // ─── Quote Management (Admin) ─────────────────────────────────────
+
+  @Get('tenants/:id/quotes')
+  async getTenantQuotes(
+    @Param('id') tenantId: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const schema = await this.superAdminService.getTenantSchema(tenantId);
+    return this.quoteService.findAll(schema, {
+      status,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+    });
+  }
+
+  @Get('tenants/:id/quotes/stats')
+  async getTenantQuoteStats(@Param('id') tenantId: string) {
+    const schema = await this.superAdminService.getTenantSchema(tenantId);
+    return this.quoteService.getStats(schema);
+  }
+
+  @Get('tenants/:id/quotes/:quoteId')
+  async getTenantQuote(@Param('id') tenantId: string, @Param('quoteId') quoteId: string) {
+    const schema = await this.superAdminService.getTenantSchema(tenantId);
+    return this.quoteService.findById(schema, quoteId);
   }
 }

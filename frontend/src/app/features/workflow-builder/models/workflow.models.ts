@@ -107,6 +107,18 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
       { key: 'time', label: 'At Time', type: 'text', placeholder: '09:00' },
     ],
   },
+  {
+    type: 'trigger_quote',
+    label: 'Quote Event',
+    description: 'Triggers on quote status changes',
+    category: 'trigger',
+    icon: 'pi-file-edit',
+    color: '#f59e0b',
+    maxOutputs: 1,
+    configFields: [
+      { key: 'event', label: 'Event', type: 'select', options: [{ label: 'Quote Created', value: 'created' }, { label: 'Quote Sent', value: 'sent' }, { label: 'Quote Accepted', value: 'accepted' }, { label: 'Quote Rejected', value: 'rejected' }, { label: 'Quote Converted', value: 'converted' }] },
+    ],
+  },
 
   // Messages
   {
@@ -281,6 +293,35 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     ],
   },
 
+  // Quote nodes
+  {
+    type: 'send_quote',
+    label: 'Send Quote',
+    description: 'Send a quote to customer via WhatsApp',
+    category: 'commerce',
+    icon: 'pi-file-edit',
+    color: '#8b5cf6',
+    maxOutputs: 1,
+    configFields: [
+      { key: 'quoteId', label: 'Quote ID (or leave empty to use context)', type: 'text', placeholder: 'Auto from context' },
+      { key: 'headerMessage', label: 'Header Message', type: 'textarea', placeholder: 'Hi {{customer_name}}, here is your quote:' },
+      { key: 'footerMessage', label: 'Footer Message', type: 'textarea', placeholder: 'Reply YES to accept or NO to decline.' },
+    ],
+  },
+  {
+    type: 'update_quote',
+    label: 'Update Quote Status',
+    description: 'Change quote status in the system',
+    category: 'action',
+    icon: 'pi-file-edit',
+    color: '#3b82f6',
+    maxOutputs: 1,
+    configFields: [
+      { key: 'quoteId', label: 'Quote ID (or leave empty to use context)', type: 'text', placeholder: 'Auto from context' },
+      { key: 'status', label: 'New Status', type: 'select', options: [{ label: 'Sent', value: 'sent' }, { label: 'Accepted', value: 'accepted' }, { label: 'Rejected', value: 'rejected' }, { label: 'Converted', value: 'converted' }] },
+    ],
+  },
+
   // Logic nodes
   {
     type: 'condition',
@@ -291,7 +332,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#ec4899',
     maxOutputs: 2,
     configFields: [
-      { key: 'variable', label: 'Check Variable', type: 'select', options: [{ label: 'Cart Items Count', value: 'cart_items' }, { label: 'Order Status', value: 'order_status' }, { label: 'Payment Status', value: 'payment_status' }, { label: 'Customer Tag', value: 'customer_tag' }, { label: 'Message Contains', value: 'message_contains' }, { label: 'Time of Day', value: 'time_of_day' }] },
+      { key: 'variable', label: 'Check Variable', type: 'select', options: [{ label: 'Cart Items Count', value: 'cart_items' }, { label: 'Order Status', value: 'order_status' }, { label: 'Payment Status', value: 'payment_status' }, { label: 'Quote Status', value: 'quote_status' }, { label: 'Customer Tag', value: 'customer_tag' }, { label: 'Message Contains', value: 'message_contains' }, { label: 'Time of Day', value: 'time_of_day' }] },
       { key: 'operator', label: 'Operator', type: 'select', options: [{ label: 'Equals', value: 'eq' }, { label: 'Not Equals', value: 'neq' }, { label: 'Greater Than', value: 'gt' }, { label: 'Less Than', value: 'lt' }, { label: 'Contains', value: 'contains' }] },
       { key: 'value', label: 'Value', type: 'text' },
     ],
@@ -305,7 +346,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#ec4899',
     maxOutputs: 5,
     configFields: [
-      { key: 'variable', label: 'Route By', type: 'select', options: [{ label: 'Button Reply ID', value: 'button_reply' }, { label: 'List Reply ID', value: 'list_reply' }, { label: 'Message Text', value: 'message_text' }, { label: 'Customer Language', value: 'language' }] },
+      { key: 'variable', label: 'Route By', type: 'select', options: [{ label: 'Button Reply ID', value: 'button_reply' }, { label: 'List Reply ID', value: 'list_reply' }, { label: 'Message Text', value: 'message_text' }, { label: 'Customer Language', value: 'language' }, { label: 'Quote Status', value: 'quote_status' }] },
     ],
   },
   {

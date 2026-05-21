@@ -202,6 +202,7 @@ export class MainLayoutComponent implements OnInit {
     { label: 'Customers', icon: 'pi-users', route: '/customers', featureKey: 'customers' },
     { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns' },
     { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations' },
+    { label: 'Quotes', icon: 'pi-file-edit', route: '/quotes', featureKey: 'quotes' },
     { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog' },
     { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder' },
     { label: 'Settings', icon: 'pi-cog', route: '/settings' },

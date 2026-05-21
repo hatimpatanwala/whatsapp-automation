@@ -1,0 +1,43 @@
+# ─── Git ───────────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ─── Dependencies (rebuilt inside container) ──────────────────────────
+node_modules
+frontend/node_modules
+
+# ─── Build output (rebuilt inside container) ──────────────────────────
+dist
+frontend/dist
+frontend/.angular
+
+# ─── Environment / secrets ────────────────────────────────────────────
+.env
+.env.gcp
+.env.local
+.env.production
+deploy/.env
+
+# ─── IDE / editor ─────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+
+# ─── Docker (avoid recursive copy) ───────────────────────────────────
+.docker
+docker-compose.yml
+
+# ─── Docs / non-essential ─────────────────────────────────────────────
+docs
+*.md
+LICENSE
+.claude
+
+# ─── OS files ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Build artifacts ──────────────────────────────────────────────────
+tsconfig.build.tsbuildinfo
+coverage

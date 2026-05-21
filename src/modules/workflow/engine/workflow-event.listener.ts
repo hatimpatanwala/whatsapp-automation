@@ -6,6 +6,8 @@ import {
   OrderStatusChangedEvent,
   PaymentVerifiedEvent,
   PaymentExpiredEvent,
+  QuoteCreatedEvent,
+  QuoteStatusChangedEvent,
 } from '../../events/domain-events';
 import { WorkflowTriggerMatcher } from './workflow-trigger.matcher';
 import { WorkflowExecutionEngine } from './workflow-execution.engine';
@@ -53,6 +55,23 @@ export class WorkflowEventListener {
     await this.handleEventTrigger(event.tenantSchema, 'trigger_payment', 'expired', event.customerId, {
       payment_id: event.paymentId,
       order_id: event.orderId,
+    });
+  }
+
+  @OnEvent('quote.created')
+  async onQuoteCreated(event: QuoteCreatedEvent): Promise<void> {
+    await this.handleEventTrigger(event.tenantSchema, 'trigger_quote', 'created', event.customerId, {
+      quote_id: event.quoteId,
+      quote_number: event.quoteNumber,
+      quote_total: event.totalAmount,
+    });
+  }
+
+  @OnEvent('quote.status_changed')
+  async onQuoteStatusChanged(event: QuoteStatusChangedEvent): Promise<void> {
+    await this.handleEventTrigger(event.tenantSchema, 'trigger_quote', event.newStatus, event.customerId, {
+      quote_id: event.quoteId,
+      quote_status: event.newStatus,
     });
   }
 

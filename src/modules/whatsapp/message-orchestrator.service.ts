@@ -128,6 +128,52 @@ export class MessageOrchestratorService {
   }
 
   /**
+   * Smart send: sends free-form text if within customer's 24h service window (FREE),
+   * otherwise falls back to a template message (PAID utility conversation).
+   *
+   * This saves cost by avoiding template charges when the customer recently messaged.
+   */
+  async sendSmartMessage(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    freeFormText: string,
+    templateFallback: {
+      name: string;
+      language: string;
+      components?: any[];
+    },
+  ): Promise<OrchestatedSendResult & { usedTemplate: boolean }> {
+    // Check if there's an active service window (customer messaged within 24h)
+    const hasServiceWindow = await this.hasActiveServiceWindow(tenantId, to);
+
+    if (hasServiceWindow) {
+      // Send free-form text → FREE (within service window)
+      this.logger.debug(`[SmartSend] Using free-form text for ${to} (within 24h service window)`);
+      const result = await this.sendText(tenantId, phoneNumberId, accessToken, to, freeFormText, 'service');
+      return { ...result, usedTemplate: false };
+    } else {
+      // Send template → PAID (no service window, template required)
+      this.logger.debug(`[SmartSend] Using template "${templateFallback.name}" for ${to} (outside 24h window)`);
+      const result = await this.sendTemplate(
+        tenantId, phoneNumberId, accessToken, to,
+        templateFallback.name, templateFallback.language, templateFallback.components, 'utility',
+      );
+      return { ...result, usedTemplate: true };
+    }
+  }
+
+  /**
+   * Check if a customer has an active service window (messaged within last 24h).
+   * If yes, free-form messages can be sent for FREE.
+   */
+  async hasActiveServiceWindow(tenantId: string, customerPhone: string): Promise<boolean> {
+    const session = await this.metering.findActiveServiceSession(tenantId, customerPhone);
+    return !!session;
+  }
+
+  /**
    * Pre-send checks: quota enforcement, rate limiting, and conversation metering.
    */
   private async preSendChecks(

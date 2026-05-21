@@ -805,6 +805,57 @@ const migration029CatalogCommerceExtension: TenantMigration = {
   },
 };
 
+const migration030Quotes: TenantMigration = {
+  name: '030_create_quotes',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE "${schema}".quotes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        quote_number VARCHAR(20) UNIQUE NOT NULL,
+        quote_number_seq INT NOT NULL DEFAULT 1,
+        customer_id UUID REFERENCES "${schema}".customers(id) ON DELETE SET NULL,
+        title VARCHAR(255) NOT NULL,
+        notes TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tax_rate DECIMAL(5,4) NOT NULL DEFAULT 0,
+        tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+        total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+        valid_until TIMESTAMPTZ,
+        sent_at TIMESTAMPTZ,
+        accepted_at TIMESTAMPTZ,
+        converted_at TIMESTAMPTZ,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT chk_quote_status CHECK (status IN ('draft', 'sent', 'accepted', 'rejected', 'expired', 'converted'))
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_quotes_customer ON "${schema}".quotes(customer_id)`);
+    await qr.query(`CREATE INDEX idx_quotes_status ON "${schema}".quotes(status)`);
+    await qr.query(`CREATE INDEX idx_quotes_created ON "${schema}".quotes(created_at DESC)`);
+
+    await qr.query(`
+      CREATE TABLE "${schema}".quote_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        quote_id UUID NOT NULL REFERENCES "${schema}".quotes(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES "${schema}".products(id) ON DELETE SET NULL,
+        description VARCHAR(500) NOT NULL,
+        quantity INT NOT NULL DEFAULT 1,
+        unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+        line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX idx_quote_items_quote ON "${schema}".quote_items(quote_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".quote_items CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".quotes CASCADE`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -835,4 +886,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration027WorkflowLastActivity,
   migration028CommerceSettings,
   migration029CatalogCommerceExtension,
+  migration030Quotes,
 ];

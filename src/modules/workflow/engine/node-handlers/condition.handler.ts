@@ -64,6 +64,15 @@ export class ConditionNodeHandler implements NodeHandler {
         return 'evening';
       }
 
+      case 'quote_status':
+        return this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+          const res = await qr.query(
+            `SELECT status FROM quotes WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [ctx.customerId],
+          );
+          return res[0]?.status || '';
+        });
+
       case 'customer_tag':
         return this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
           const res = await qr.query(

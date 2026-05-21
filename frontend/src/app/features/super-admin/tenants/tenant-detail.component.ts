@@ -27,6 +27,7 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
   customers: { label: 'Customers', desc: 'Customer management and segmentation', icon: 'pi-users' },
   campaigns: { label: 'Campaigns', desc: 'Broadcast and drip campaigns', icon: 'pi-megaphone' },
   conversations: { label: 'Conversations', desc: 'WhatsApp inbox and chat', icon: 'pi-comments' },
+  quotes: { label: 'Quotes', desc: 'Create and manage customer quotes', icon: 'pi-file-edit' },
   whatsappCatalog: { label: 'WhatsApp Catalog', desc: 'Product catalog sync', icon: 'pi-shopping-bag' },
   workflowBuilder: { label: 'Workflow Builder', desc: 'Visual automation builder', icon: 'pi-sitemap' },
   aiFeatures: { label: 'AI Features', desc: 'Chatbot and smart replies', icon: 'pi-sparkles' },
@@ -116,8 +117,9 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
             <p-tab value="1"><i class="pi pi-star mr-1.5" style="font-size:0.8rem"></i>Plan & Billing</p-tab>
             <p-tab value="2"><i class="pi pi-shield mr-1.5" style="font-size:0.8rem"></i>Features</p-tab>
             <p-tab value="3"><i class="pi pi-sitemap mr-1.5" style="font-size:0.8rem"></i>Workflows</p-tab>
-            <p-tab value="4"><i class="pi pi-phone mr-1.5" style="font-size:0.8rem"></i>Phones</p-tab>
-            <p-tab value="5"><i class="pi pi-cog mr-1.5" style="font-size:0.8rem"></i>Settings</p-tab>
+            <p-tab value="4"><i class="pi pi-file-edit mr-1.5" style="font-size:0.8rem"></i>Quotes</p-tab>
+            <p-tab value="5"><i class="pi pi-phone mr-1.5" style="font-size:0.8rem"></i>Phones</p-tab>
+            <p-tab value="6"><i class="pi pi-cog mr-1.5" style="font-size:0.8rem"></i>Settings</p-tab>
           </p-tablist>
           <p-tabpanels>
 
@@ -364,8 +366,59 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
               </div>
             </p-tabpanel>
 
-            <!-- ════════ TAB 4: Phones ════════ -->
+            <!-- ════════ TAB 4: Quotes ════════ -->
             <p-tabpanel value="4">
+              <div class="pt-4">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Tenant Quotes</h3>
+                  <button pButton label="View All Quotes" icon="pi pi-external-link" class="p-button-sm" severity="info" [routerLink]="['/admin/tenants', tenantId, 'quotes']"></button>
+                </div>
+                @if (quotesLoading()) {
+                  <div class="text-center py-12 text-gray-500"><i class="pi pi-spinner pi-spin" style="font-size:1.5rem"></i><p class="mt-2">Loading quotes...</p></div>
+                } @else if (!tenantQuotes().length) {
+                  <div class="text-center py-12">
+                    <i class="pi pi-file text-gray-300" style="font-size:3rem"></i>
+                    <p class="mt-3 text-gray-500">No quotes created by this tenant</p>
+                  </div>
+                } @else {
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div class="bg-gray-50 rounded-lg p-3 text-center">
+                      <p class="text-xs text-gray-500">Total</p>
+                      <p class="text-lg font-bold">{{ quoteStats().total || 0 }}</p>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-3 text-center">
+                      <p class="text-xs text-gray-500">Accepted</p>
+                      <p class="text-lg font-bold text-green-600">{{ quoteStats().accepted || 0 }}</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-3 text-center">
+                      <p class="text-xs text-gray-500">Sent</p>
+                      <p class="text-lg font-bold text-blue-600">{{ quoteStats().sent || 0 }}</p>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-3 text-center">
+                      <p class="text-xs text-gray-500">Converted</p>
+                      <p class="text-lg font-bold text-purple-600">{{ quoteStats().converted || 0 }}</p>
+                    </div>
+                  </div>
+                  <div class="space-y-2">
+                    @for (q of tenantQuotes(); track q.id) {
+                      <div class="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+                        <div>
+                          <p class="font-mono text-sm font-semibold">{{ q.quote_number }}</p>
+                          <p class="text-sm text-gray-500">{{ q.title }} - {{ q.customer_name || 'N/A' }}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                          <span class="text-sm font-semibold">\u20B9{{ parseFloat(q.total_amount || 0).toLocaleString('en-IN') }}</span>
+                          <span class="text-xs px-2 py-1 rounded-full" [class]="getQuoteStatusClass(q.status)">{{ q.status }}</span>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </p-tabpanel>
+
+            <!-- ════════ TAB 5: Phones ════════ -->
+            <p-tabpanel value="5">
               <div class="pt-4">
                 @if (tenant()!.phoneNumbers?.length) {
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -398,8 +451,8 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
               </div>
             </p-tabpanel>
 
-            <!-- ════════ TAB 5: Settings ════════ -->
-            <p-tabpanel value="5">
+            <!-- ════════ TAB 6: Settings ════════ -->
+            <p-tabpanel value="6">
               <div class="pt-4 space-y-6">
                 @if (settingsLoading()) {
                   <div class="text-center py-8 text-gray-500"><i class="pi pi-spinner pi-spin"></i> Loading settings...</div>
@@ -585,6 +638,12 @@ export class TenantDetailComponent implements OnInit {
   allPlans = signal<any[]>([]);
   workflows = signal<any[]>([]);
 
+  // Quotes
+  quotesLoading = signal(true);
+  tenantQuotes = signal<any[]>([]);
+  quoteStats = signal<any>({});
+  parseFloat = parseFloat;
+
   // Plan assignment
   selectedPlanId = '';
   planExpiry: Date | null = null;
@@ -643,6 +702,7 @@ export class TenantDetailComponent implements OnInit {
     this.loadSettings();
     this.loadPlans();
     this.loadWorkflows();
+    this.loadTenantQuotes();
   }
 
   // ─── Data loading ─────────────────────────────────────────────────────
@@ -682,6 +742,29 @@ export class TenantDetailComponent implements OnInit {
       next: (wfs) => { this.workflows.set(wfs || []); this.workflowsLoading.set(false); },
       error: () => { this.workflowsLoading.set(false); },
     });
+  }
+
+  loadTenantQuotes() {
+    this.quotesLoading.set(true);
+    this.api.get<any>(`/admin/tenants/${this.tenantId}/quotes`).subscribe({
+      next: (res) => { this.tenantQuotes.set(res.data || []); this.quotesLoading.set(false); },
+      error: () => { this.quotesLoading.set(false); },
+    });
+    this.api.get<any>(`/admin/tenants/${this.tenantId}/quotes/stats`).subscribe({
+      next: (s) => this.quoteStats.set(s),
+    });
+  }
+
+  getQuoteStatusClass(status: string): string {
+    const map: Record<string, string> = {
+      draft: 'bg-gray-100 text-gray-600',
+      sent: 'bg-blue-100 text-blue-700',
+      accepted: 'bg-green-100 text-green-700',
+      rejected: 'bg-red-100 text-red-700',
+      expired: 'bg-yellow-100 text-yellow-700',
+      converted: 'bg-purple-100 text-purple-700',
+    };
+    return map[status] || 'bg-gray-100 text-gray-600';
   }
 
   loadSettings() {

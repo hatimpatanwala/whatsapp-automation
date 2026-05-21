@@ -64,4 +64,10 @@ export class SuperAdminService {
     await this.subscriptionRepository.update(subscriptionId, data);
     return this.subscriptionRepository.findOne({ where: { id: subscriptionId } });
   }
+
+  async getTenantSchema(tenantId: string): Promise<string> {
+    const tenant = await this.tenantRepository.findOne({ where: { id: tenantId } });
+    if (!tenant) throw new Error(`Tenant ${tenantId} not found`);
+    return tenant.schemaName;
+  }
 }

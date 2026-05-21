@@ -394,6 +394,104 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                 }
               </div>
 
+              <!-- Admin WhatsApp Number -->
+              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div class="flex items-center gap-3 mb-4">
+                  <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                    <i class="pi pi-user text-indigo-600" style="font-size:1.1rem"></i>
+                  </div>
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-900">Admin WhatsApp Number</h3>
+                    <p class="text-sm text-gray-500">Your personal WhatsApp number to control orders, inventory & payments via chat</p>
+                  </div>
+                </div>
+
+                @if (adminWaVerified() && adminWaPhone()) {
+                  <!-- Verified state -->
+                  <div class="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="pi pi-check-circle text-green-600" style="font-size:0.9rem"></i>
+                      </div>
+                      <div>
+                        <p class="text-sm font-semibold text-gray-900">{{ adminWaPhone() }}</p>
+                        <p class="text-xs text-green-600">Verified — Admin control active</p>
+                      </div>
+                    </div>
+                    <div class="flex gap-2">
+                      <button pButton label="Change" icon="pi pi-pencil" class="p-button-sm p-button-outlined" (click)="startChangeAdminWa()"></button>
+                      <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger" pTooltip="Remove admin number" (click)="removeAdminWa()"></button>
+                    </div>
+                  </div>
+                } @else {
+                  <!-- Not verified — show setup form -->
+                  <div class="space-y-3">
+                    <p class="text-xs text-gray-500">
+                      Register your personal WhatsApp number to receive admin notifications and control your store via WhatsApp messages.
+                    </p>
+
+                    @if (!adminWaOtpSent()) {
+                      <div class="flex gap-2">
+                        <input pInputText [(ngModel)]="adminWaPhoneInput" placeholder="+919876543210" class="flex-1" />
+                        <button
+                          pButton
+                          label="Send OTP"
+                          icon="pi pi-whatsapp"
+                          severity="success"
+                          class="p-button-sm"
+                          [loading]="adminWaLoading()"
+                          [disabled]="!adminWaPhoneInput.trim()"
+                          (click)="sendAdminWaOtp()"
+                        ></button>
+                      </div>
+                    }
+
+                    @if (adminWaOtpSent()) {
+                      <p-message severity="info" styleClass="w-full">
+                        <div>
+                          <p class="font-semibold text-sm">Verification code sent!</p>
+                          <p class="text-xs mt-1">Check your WhatsApp messages on {{ adminWaPhoneInput }}</p>
+                        </div>
+                      </p-message>
+
+                      <div class="flex gap-2">
+                        <input
+                          pInputText
+                          [(ngModel)]="adminWaOtpCode"
+                          placeholder="123456"
+                          class="flex-1"
+                          maxlength="6"
+                          style="font-size:1.1rem;letter-spacing:0.25em;text-align:center"
+                        />
+                        <button
+                          pButton
+                          label="Verify"
+                          icon="pi pi-check"
+                          severity="success"
+                          class="p-button-sm"
+                          [loading]="adminWaLoading()"
+                          [disabled]="adminWaOtpCode.length < 6"
+                          (click)="verifyAdminWaOtp()"
+                        ></button>
+                      </div>
+
+                      <div class="flex items-center gap-3 text-xs">
+                        <span class="text-gray-400">Didn't receive it?</span>
+                        <button
+                          class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 text-xs"
+                          [disabled]="adminWaLoading()"
+                          (click)="sendAdminWaOtp()"
+                        >Resend Code</button>
+                      </div>
+                    }
+
+                    @if (adminWaError()) {
+                      <p-message severity="error" [text]="adminWaError()!" styleClass="w-full" />
+                    }
+                  </div>
+                }
+              </div>
+
               <!-- Manual config (hidden read-only reference) -->
               <!-- TODO: Re-enable manual WhatsApp config later
               <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
@@ -768,6 +866,15 @@ export class SettingsComponent implements OnInit {
   waConnectSuccess = signal<string | null>(null);
   settingsRegisterPhone = '';
 
+  // Admin WhatsApp state
+  adminWaPhone = signal<string | null>(null);
+  adminWaVerified = signal(false);
+  adminWaOtpSent = signal(false);
+  adminWaPhoneInput = '';
+  adminWaOtpCode = '';
+  adminWaLoading = signal(false);
+  adminWaError = signal<string | null>(null);
+
   // Phone number management
   showAddPhone = signal(false);
   newPhoneNumber = '';
@@ -946,6 +1053,9 @@ export class SettingsComponent implements OnInit {
 
     // Load phone numbers for this tenant
     this.loadPhoneNumbers();
+
+    // Load admin WhatsApp status
+    this.loadAdminWhatsappStatus();
 
     // Load persisted settings from backend
     // Note: keys arrive as camelCase due to global TransformResponseInterceptor
@@ -1312,6 +1422,91 @@ export class SettingsComponent implements OnInit {
       },
       error: () => {
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove phone number' });
+      },
+    });
+  }
+
+  // ─── Admin WhatsApp Number ──────────────────────────────────────────────────
+
+  private loadAdminWhatsappStatus() {
+    this.apiService.get<{ phone: string | null; verified: boolean }>('/settings/admin-whatsapp').subscribe({
+      next: (status) => {
+        this.adminWaPhone.set(status.phone);
+        this.adminWaVerified.set(status.verified);
+        if (status.phone) {
+          this.adminWaPhoneInput = status.phone;
+        }
+      },
+      error: () => {},
+    });
+  }
+
+  sendAdminWaOtp() {
+    this.adminWaError.set(null);
+    if (!this.adminWaPhoneInput.trim()) return;
+
+    this.adminWaLoading.set(true);
+    this.apiService.post<{ sent: boolean; message: string }>('/settings/admin-whatsapp/send-otp', { phone: this.adminWaPhoneInput.trim() }).subscribe({
+      next: () => {
+        this.adminWaLoading.set(false);
+        this.adminWaOtpSent.set(true);
+        this.messageService.add({ severity: 'success', summary: 'OTP Sent', detail: 'Check your WhatsApp for the verification code.' });
+      },
+      error: (err) => {
+        this.adminWaLoading.set(false);
+        this.adminWaError.set(err?.error?.message || 'Failed to send OTP');
+      },
+    });
+  }
+
+  verifyAdminWaOtp() {
+    this.adminWaError.set(null);
+    if (this.adminWaOtpCode.length < 6) return;
+
+    this.adminWaLoading.set(true);
+    this.apiService.post<{ verified: boolean; message: string }>('/settings/admin-whatsapp/verify-otp', {
+      phone: this.adminWaPhoneInput.trim(),
+      code: this.adminWaOtpCode,
+    }).subscribe({
+      next: (result) => {
+        this.adminWaLoading.set(false);
+        if (result.verified) {
+          this.adminWaPhone.set(this.adminWaPhoneInput.trim());
+          this.adminWaVerified.set(true);
+          this.adminWaOtpSent.set(false);
+          this.adminWaOtpCode = '';
+          this.messageService.add({ severity: 'success', summary: 'Verified!', detail: 'Admin WhatsApp number verified.' });
+        }
+      },
+      error: (err) => {
+        this.adminWaLoading.set(false);
+        this.adminWaError.set(err?.error?.message || 'Invalid code. Please try again.');
+      },
+    });
+  }
+
+  startChangeAdminWa() {
+    this.adminWaVerified.set(false);
+    this.adminWaOtpSent.set(false);
+    this.adminWaOtpCode = '';
+    this.adminWaPhoneInput = '';
+    this.adminWaError.set(null);
+  }
+
+  removeAdminWa() {
+    this.adminWaLoading.set(true);
+    this.apiService.delete('/settings/admin-whatsapp').subscribe({
+      next: () => {
+        this.adminWaLoading.set(false);
+        this.adminWaPhone.set(null);
+        this.adminWaVerified.set(false);
+        this.adminWaOtpSent.set(false);
+        this.adminWaPhoneInput = '';
+        this.messageService.add({ severity: 'success', summary: 'Removed', detail: 'Admin WhatsApp number removed.' });
+      },
+      error: () => {
+        this.adminWaLoading.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove admin WhatsApp number.' });
       },
     });
   }

@@ -154,6 +154,33 @@ export class ConversationMeteringService {
   }
 
   /**
+   * Find an active SERVICE session (user-initiated) for this tenant+customer.
+   * Used to determine if free-form messages can be sent for free (within 24h window).
+   */
+  async findActiveServiceSession(tenantId: string, customerPhone: string): Promise<ConversationSession | null> {
+    // Check cache first
+    const cacheKey = `session:service:${tenantId}:${customerPhone}`;
+    const cachedId = await this.redis.get(cacheKey);
+    if (cachedId) {
+      const session = await this.sessionRepo.findOne({ where: { id: cachedId, status: 'open', category: 'service' } });
+      if (session && new Date() < new Date(session.expiresAt)) return session;
+      await this.redis.del(cacheKey);
+    }
+
+    return this.sessionRepo.findOne({
+      where: {
+        tenantId,
+        customerPhone,
+        category: 'service',
+        origin: 'user_initiated',
+        status: 'open',
+        expiresAt: MoreThan(new Date()),
+      },
+      order: { startedAt: 'DESC' },
+    });
+  }
+
+  /**
    * Check if tenant is within quota for the given category.
    */
   async checkQuota(tenantId: string, category: ConversationCategory): Promise<{

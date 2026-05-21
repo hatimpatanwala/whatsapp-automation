@@ -64,7 +64,7 @@ export class OnboardingService {
       select: [
         'id', 'onboardingStatus', 'whatsappPhone', 'phoneNumberId',
         'wabaId', 'businessName', 'businessCategory', 'businessDescription',
-        'businessAddress', 'logoUrl',
+        'businessAddress', 'logoUrl', 'adminWhatsappNumber', 'adminWhatsappVerified',
       ],
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
@@ -78,6 +78,8 @@ export class OnboardingService {
       businessDescription: tenant.businessDescription || null,
       businessAddress: tenant.businessAddress || null,
       logoUrl: tenant.logoUrl || null,
+      adminWhatsappNumber: tenant.adminWhatsappNumber || null,
+      adminWhatsappVerified: tenant.adminWhatsappVerified || false,
     };
   }
 
