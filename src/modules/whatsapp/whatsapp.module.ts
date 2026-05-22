@@ -17,7 +17,7 @@ import { WorkflowModule } from '../workflow/workflow.module';
 import { WabaModule } from '../waba/waba.module';
 
 @Module({
-  imports: [TenantModule, forwardRef(() => WorkflowModule), WabaModule],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule)],
   controllers: [WhatsAppWebhookController],
   providers: [
     WhatsAppApiService,

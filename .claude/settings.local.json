@@ -129,7 +129,9 @@
       "Bash(npx --yes md-to-pdf --version)",
       "Bash(npx --yes md-to-pdf whatsapp-pricing-and-strategy.md --pdf-options '{\"format\": \"A4\", \"margin\": {\"top\": \"20mm\", \"bottom\": \"20mm\", \"left\": \"15mm\", \"right\": \"15mm\"}}')",
       "Bash(grep -E \"\\(json|js|ts\\)$\")",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(scp -i \"D:/whatsapp-automation/wa-commece.pem\" -o StrictHostKeyChecking=no deploy/Dockerfile.frontend deploy/Dockerfile.backend ubuntu@52.66.40.206:/opt/whatsapp-automation/deploy/)",
+      "Bash(scp:*)"
     ]
   }
 }
