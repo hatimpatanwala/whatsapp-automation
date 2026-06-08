@@ -75,6 +75,47 @@ export interface SessionStatus {
   updatedAt: string;
 }
 
+// ─── Personalization types ──────────────────────────────────────────────────
+
+export interface CategorySubcategory {
+  value: string;
+  label: string;
+}
+
+export interface CategoryInfo {
+  value: string;
+  label: string;
+  icon: string;
+  subcategories: CategorySubcategory[];
+  recommendedFeatures: string[];
+}
+
+export interface FeatureInfo {
+  key: string;
+  label: string;
+  description: string;
+  icon: string;
+  group: string;
+}
+
+export interface CategoriesResponse {
+  categories: CategoryInfo[];
+  features: FeatureInfo[];
+}
+
+export interface PersonalizePayload {
+  category: string;
+  subcategory: string;
+  selectedFeatures: string[];
+}
+
+export interface PersonalizeResult {
+  success: boolean;
+  created: { name: string; id: string }[];
+  errors: string[];
+  message: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class OnboardingService {
   private readonly api = inject(ApiService);
@@ -175,5 +216,22 @@ export class OnboardingService {
    */
   verifyAdminWhatsappOtp(phone: string, code: string): Observable<{ verified: boolean; message: string }> {
     return this.api.post('/onboarding/admin-whatsapp/verify-otp', { phone, code });
+  }
+
+  // ─── Personalization (category + features + auto-workflows) ─────────────────
+
+  /**
+   * Get business categories, subcategories, and available features.
+   */
+  getCategories(): Observable<CategoriesResponse> {
+    return this.api.get<CategoriesResponse>('/onboarding/categories');
+  }
+
+  /**
+   * Submit personalization: category, subcategory, and selected features.
+   * Auto-creates and activates workflows based on selections.
+   */
+  personalize(payload: PersonalizePayload): Observable<PersonalizeResult> {
+    return this.api.post<PersonalizeResult>('/onboarding/personalize', payload);
   }
 }

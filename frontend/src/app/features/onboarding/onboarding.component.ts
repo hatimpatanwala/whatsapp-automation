@@ -18,6 +18,9 @@ import {
   StartOnboardingResult,
   MigrationGuide,
   OnboardingState,
+  CategoryInfo,
+  FeatureInfo,
+  PersonalizeResult,
 } from '../../core/services/onboarding.service';
 import {
   EmbeddedSignupService,
@@ -612,16 +615,140 @@ import {
             </div>
           }
 
-          <!-- ===== STEP 4: Complete ===== -->
+          <!-- ===== STEP 4: Personalization ===== -->
           @if (activeStep() === 3) {
+            <div class="p-8">
+              <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <i class="pi pi-sparkles text-amber-600" style="font-size:1.1rem"></i>
+                </div>
+                <div>
+                  <h2 class="text-xl font-bold text-gray-900">Personalize Your Store</h2>
+                  <p class="text-sm text-gray-500">Select your niche and automations — we'll create workflows for you</p>
+                </div>
+              </div>
+
+              <div class="space-y-5">
+                <!-- Subcategory selection -->
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-sm font-semibold text-gray-700">Business Niche <span class="text-red-400">*</span></label>
+                  <p-select
+                    [(ngModel)]="bizSubcategory"
+                    [options]="subcategoryOptions()"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Select your specific niche"
+                    styleClass="w-full"
+                  />
+                  <p class="text-xs text-gray-400">This helps us tailor your automation workflows</p>
+                </div>
+
+                <!-- Feature selection -->
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center justify-between">
+                    <label class="text-sm font-semibold text-gray-700">Select Automations</label>
+                    <span class="text-xs text-primary-500 font-medium">{{ selectedFeatures().size }} / {{ allFeatures().length }} selected</span>
+                  </div>
+                  <div class="flex items-center gap-2 -mt-1">
+                    <button class="text-xs text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 font-medium" (click)="selectRecommended()">Recommended</button>
+                    <span class="text-gray-300">|</span>
+                    <button class="text-xs text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 font-medium" (click)="selectAllFeatures()">Select All</button>
+                    <span class="text-gray-300">|</span>
+                    <button class="text-xs text-gray-400 hover:underline border-0 bg-transparent cursor-pointer p-0" (click)="clearFeatures()">Clear All</button>
+                  </div>
+
+                  <!-- Grouped features -->
+                  @for (group of featureGroups(); track group.name) {
+                    <div class="mt-3">
+                      <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{{ group.name }}</p>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        @for (feature of group.features; track feature.key) {
+                          <div
+                            class="border rounded-xl p-3 cursor-pointer transition-all hover:shadow-md"
+                            [class.border-primary-500]="isFeatureSelected(feature.key)"
+                            [class.bg-primary-50]="isFeatureSelected(feature.key)"
+                            [class.border-gray-200]="!isFeatureSelected(feature.key)"
+                            [class.bg-white]="!isFeatureSelected(feature.key)"
+                            (click)="toggleFeature(feature.key)"
+                          >
+                            <div class="flex items-start gap-3">
+                              <div class="flex-shrink-0 mt-0.5">
+                                <div
+                                  class="w-7 h-7 rounded-lg flex items-center justify-center"
+                                  [class.bg-primary-500]="isFeatureSelected(feature.key)"
+                                  [class.bg-gray-100]="!isFeatureSelected(feature.key)"
+                                >
+                                  @if (isFeatureSelected(feature.key)) {
+                                    <i class="pi pi-check text-white" style="font-size:0.7rem"></i>
+                                  } @else {
+                                    <i class="pi {{ feature.icon }} text-gray-500" style="font-size:0.7rem"></i>
+                                  }
+                                </div>
+                              </div>
+                              <div class="flex-1 min-w-0">
+                                <p class="text-sm font-semibold" [class.text-primary-700]="isFeatureSelected(feature.key)" [class.text-gray-800]="!isFeatureSelected(feature.key)">{{ feature.label }}</p>
+                                <p class="text-xs text-gray-500 mt-0.5 leading-relaxed">{{ feature.description }}</p>
+                              </div>
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+
+                @if (personalizeError()) {
+                  <p-message severity="error" [text]="personalizeError()!" styleClass="w-full" />
+                }
+              </div>
+
+              <div class="flex justify-between mt-8">
+                <div class="flex gap-2">
+                  <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(2)"></button>
+                  <button pButton label="Skip" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="activeStep.set(4)"></button>
+                </div>
+                <button
+                  pButton
+                  [label]="personalizeLoading() ? 'Creating Workflows...' : 'Create & Continue'"
+                  icon="pi pi-sparkles"
+                  iconPos="right"
+                  severity="success"
+                  [loading]="personalizeLoading()"
+                  [disabled]="selectedFeatures().size === 0 || !bizSubcategory"
+                  (click)="submitPersonalization()"
+                ></button>
+              </div>
+            </div>
+          }
+
+          <!-- ===== STEP 5: Complete ===== -->
+          @if (activeStep() === 4) {
             <div class="p-8 text-center">
               <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i class="pi pi-check text-green-600" style="font-size:2.5rem"></i>
               </div>
               <h2 class="text-2xl font-bold text-gray-900">You're All Set!</h2>
               <p class="text-gray-500 mt-2 max-w-md mx-auto">
-                Your WhatsApp Commerce store is ready to go. Start adding products, setting up workflows, and serving customers.
+                Your WhatsApp Commerce store is ready to go. Start adding products and serving customers.
               </p>
+
+              <!-- Show created workflows -->
+              @if (personalizeResult()?.created?.length) {
+                <div class="mt-6 bg-green-50 border border-green-200 rounded-xl p-5 text-left max-w-md mx-auto">
+                  <div class="flex items-center gap-2 mb-3">
+                    <i class="pi pi-bolt text-green-600" style="font-size:0.9rem"></i>
+                    <p class="text-sm font-bold text-green-900">{{ personalizeResult()!.created.length }} Workflows Created & Activated</p>
+                  </div>
+                  <ul class="space-y-2">
+                    @for (wf of personalizeResult()!.created; track wf.id) {
+                      <li class="flex items-center gap-2 text-sm text-green-800">
+                        <i class="pi pi-check-circle text-green-500" style="font-size:0.75rem"></i>
+                        {{ wf.name }}
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
 
               <div class="grid grid-cols-3 gap-4 mt-8 max-w-lg mx-auto">
                 <div class="bg-gray-50 rounded-xl p-4">
@@ -630,7 +757,7 @@ import {
                 </div>
                 <div class="bg-gray-50 rounded-xl p-4">
                   <i class="pi pi-sitemap text-primary-500 mb-2" style="font-size:1.5rem"></i>
-                  <p class="text-xs font-semibold text-gray-700">Build Workflows</p>
+                  <p class="text-xs font-semibold text-gray-700">View Workflows</p>
                 </div>
                 <div class="bg-gray-50 rounded-xl p-4">
                   <i class="pi pi-comments text-primary-500 mb-2" style="font-size:1.5rem"></i>
@@ -645,7 +772,7 @@ import {
         </div>
 
         <!-- Skip link at bottom -->
-        @if (activeStep() < 3) {
+        @if (activeStep() < 4) {
           <p class="text-center text-xs text-gray-400 mt-4">
             Need help?
             <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" class="text-primary-500 hover:underline">WhatsApp API Docs</a>
@@ -672,6 +799,7 @@ export class OnboardingComponent implements OnInit {
     { key: 'phone', label: 'WhatsApp Number' },
     { key: 'admin', label: 'Admin WhatsApp' },
     { key: 'profile', label: 'Business Profile' },
+    { key: 'personalize', label: 'Personalize' },
     { key: 'complete', label: 'Complete' },
   ];
 
@@ -751,6 +879,16 @@ export class OnboardingComponent implements OnInit {
     { label: 'Other', value: 'other' },
   ];
 
+  // Step 3: Personalization
+  allCategories = signal<CategoryInfo[]>([]);
+  allFeatures = signal<FeatureInfo[]>([]);
+  bizSubcategory = '';
+  subcategoryOptions = signal<{ label: string; value: string }[]>([]);
+  selectedFeatures = signal<Set<string>>(new Set());
+  personalizeLoading = signal(false);
+  personalizeError = signal<string | null>(null);
+  personalizeResult = signal<PersonalizeResult | null>(null);
+
   ngOnInit() {
     this.onboardingService.getStatus().subscribe({
       next: (status) => {
@@ -765,7 +903,7 @@ export class OnboardingComponent implements OnInit {
             }
             break;
           case 'profile_complete':
-            this.activeStep.set(3);
+            this.loadCategoriesAndGoToPersonalize();
             break;
           case 'completed':
             this.router.navigate(['/dashboard']);
@@ -952,11 +1090,118 @@ export class OnboardingComponent implements OnInit {
     }).subscribe({
       next: () => {
         this.loading.set(false);
-        this.activeStep.set(3);
+        this.loadCategoriesAndGoToPersonalize();
       },
       error: (err) => {
         this.loading.set(false);
         this.profileError.set(err?.error?.message || 'Failed to save profile');
+      },
+    });
+  }
+
+  loadCategoriesAndGoToPersonalize() {
+    this.onboardingService.getCategories().subscribe({
+      next: (data) => {
+        this.allCategories.set(data.categories);
+        this.allFeatures.set(data.features);
+
+        // Set subcategories based on selected category
+        this.updateSubcategories();
+
+        // Pre-select recommended features for the selected category
+        const cat = data.categories.find(c => c.value === this.bizCategory);
+        if (cat) {
+          this.selectedFeatures.set(new Set(cat.recommendedFeatures));
+        }
+
+        this.activeStep.set(3);
+      },
+      error: () => {
+        // If categories fail to load, skip to complete
+        this.activeStep.set(4);
+      },
+    });
+  }
+
+  updateSubcategories() {
+    const cat = this.allCategories().find(c => c.value === this.bizCategory);
+    if (cat) {
+      this.subcategoryOptions.set(cat.subcategories.map(s => ({ label: s.label, value: s.value })));
+      if (!this.bizSubcategory && cat.subcategories.length > 0) {
+        this.bizSubcategory = cat.subcategories[0].value;
+      }
+    }
+  }
+
+  featureGroups = computed(() => {
+    const features = this.allFeatures();
+    const groups: { name: string; features: FeatureInfo[] }[] = [];
+    const groupMap = new Map<string, FeatureInfo[]>();
+    for (const f of features) {
+      const g = f.group || 'Other';
+      if (!groupMap.has(g)) groupMap.set(g, []);
+      groupMap.get(g)!.push(f);
+    }
+    for (const [name, feats] of groupMap) {
+      groups.push({ name, features: feats });
+    }
+    return groups;
+  });
+
+  selectAllFeatures() {
+    this.selectedFeatures.set(new Set(this.allFeatures().map(f => f.key)));
+  }
+
+  selectRecommended() {
+    const cat = this.allCategories().find(c => c.value === this.bizCategory);
+    if (cat) {
+      this.selectedFeatures.set(new Set(cat.recommendedFeatures));
+    }
+  }
+
+  clearFeatures() {
+    this.selectedFeatures.set(new Set());
+  }
+
+  toggleFeature(featureKey: string) {
+    const current = new Set(this.selectedFeatures());
+    if (current.has(featureKey)) {
+      current.delete(featureKey);
+    } else {
+      current.add(featureKey);
+    }
+    this.selectedFeatures.set(current);
+  }
+
+  isFeatureSelected(featureKey: string): boolean {
+    return this.selectedFeatures().has(featureKey);
+  }
+
+  submitPersonalization() {
+    this.personalizeError.set(null);
+    if (!this.bizSubcategory) {
+      this.personalizeError.set('Please select a subcategory');
+      return;
+    }
+    if (this.selectedFeatures().size === 0) {
+      this.personalizeError.set('Please select at least one feature');
+      return;
+    }
+
+    this.personalizeLoading.set(true);
+    this.onboardingService.personalize({
+      category: this.bizCategory,
+      subcategory: this.bizSubcategory,
+      selectedFeatures: Array.from(this.selectedFeatures()),
+    }).subscribe({
+      next: (result) => {
+        this.personalizeLoading.set(false);
+        this.personalizeResult.set(result);
+        this.activeStep.set(4);
+      },
+      error: (err) => {
+        this.personalizeLoading.set(false);
+        this.personalizeError.set(err?.error?.message || 'Failed to create workflows');
       },
     });
   }

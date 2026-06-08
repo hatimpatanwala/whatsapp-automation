@@ -5,6 +5,7 @@ import { Request } from 'express';
 import { OnboardingService, BusinessProfileDto } from './onboarding.service';
 import { OnboardingEngineService } from './engine/onboarding-engine.service';
 import { AdminWhatsAppService } from './admin-whatsapp.service';
+import { PersonalizationService, PersonalizeDto } from './personalization.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
@@ -15,6 +16,7 @@ export class OnboardingController {
     private readonly onboardingService: OnboardingService,
     private readonly onboardingEngine: OnboardingEngineService,
     private readonly adminWhatsAppService: AdminWhatsAppService,
+    private readonly personalizationService: PersonalizationService,
   ) {}
 
   @Get('status')
@@ -194,5 +196,27 @@ export class OnboardingController {
   @HttpCode(200)
   async skipAdminWhatsapp() {
     return { skipped: true };
+  }
+
+  // ─── Personalization (business category + feature selection + auto-workflows) ──
+
+  /**
+   * Get business categories, subcategories, and available features.
+   */
+  @Get('categories')
+  @Roles('owner', 'seller')
+  async getCategories() {
+    return this.personalizationService.getCategories();
+  }
+
+  /**
+   * Personalize the tenant: save category/subcategory and auto-create workflows.
+   */
+  @Post('personalize')
+  @Roles('owner')
+  @HttpCode(200)
+  async personalize(@Req() req: Request, @Body() dto: PersonalizeDto) {
+    const tenantId = (req.session as any).tenantId;
+    return this.personalizationService.personalize(tenantId, dto);
   }
 }
