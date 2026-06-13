@@ -9,6 +9,8 @@ services:
     image: postgres:16-alpine
     container_name: wa-postgres
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-whatsapp_commerce}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
@@ -46,6 +48,8 @@ services:
     image: redis:7-alpine
     container_name: wa-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     command: >
       redis-server
         --maxmemory 64mb
@@ -75,6 +79,8 @@ services:
       dockerfile: deploy/Dockerfile.backend
     container_name: wa-backend
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -170,7 +176,7 @@ services:
     container_name: wa-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       backend:
         condition: service_healthy
