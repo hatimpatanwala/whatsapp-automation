@@ -377,7 +377,7 @@ import {
               </div>
 
               <div class="flex justify-between mt-8">
-                <button pButton label="Skip for Now" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="skipOnboarding()"></button>
+                <button pButton label="Skip for Now" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="skipToPersonalize()"></button>
                 @if (showManualRegistration() && (!sessionId() || sessionState() === 'failed' || sessionState() === 'expired')) {
                   <button
                     pButton
@@ -443,7 +443,7 @@ import {
               </div>
 
               <div class="space-y-4">
-                @if (!adminOtpSent() && !adminVerified()) {
+                @if (!adminOtpSent() && !adminVerified() && !adminSaved()) {
                   <div class="flex flex-col gap-1.5">
                     <label class="text-sm font-semibold text-gray-700">Your Personal WhatsApp Number</label>
                     <div class="flex gap-2">
@@ -465,7 +465,7 @@ import {
                     </div>
                     <p class="text-xs text-gray-400">
                       <i class="pi pi-info-circle mr-1"></i>
-                      We'll send a verification code to this number via WhatsApp to confirm it's yours.
+                      We'll verify this number with an OTP. You can change or remove it anytime from Settings.
                     </p>
                   </div>
                 }
@@ -474,7 +474,7 @@ import {
                   <p-message severity="info" styleClass="w-full">
                     <div>
                       <p class="font-semibold">Verification Code Sent!</p>
-                      <p class="text-sm mt-1">Check your WhatsApp messages on {{ adminCountryCode }}{{ adminPhone }} for a 6-digit code.</p>
+                      <p class="text-sm mt-1">Enter the 6-digit OTP to verify {{ adminCountryCode }}{{ adminPhone }}.</p>
                     </div>
                   </p-message>
 
@@ -511,13 +511,26 @@ import {
                   </div>
                 }
 
-                @if (adminVerified()) {
+                @if (adminVerified() || adminSaved()) {
                   <p-message severity="success" styleClass="w-full">
                     <div>
-                      <p class="font-semibold">WhatsApp Number Verified!</p>
-                      <p class="text-sm mt-1">Your personal number {{ adminCountryCode }}{{ adminPhone }} is now connected for admin control.</p>
+                      <p class="font-semibold">Admin WhatsApp Number {{ adminVerified() ? 'Verified' : 'Saved' }}!</p>
+                      <p class="text-sm mt-1">{{ adminCountryCode }}{{ adminPhone }} is now set as your admin control number.</p>
                     </div>
                   </p-message>
+
+                  <div class="flex items-center gap-2 text-xs">
+                    <button
+                      class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 text-xs font-medium"
+                      (click)="changeAdminPhone()"
+                    >Change Number</button>
+                    <span class="text-gray-300">|</span>
+                    <button
+                      class="text-red-500 hover:underline border-0 bg-transparent cursor-pointer p-0 text-xs"
+                      [disabled]="adminLoading()"
+                      (click)="removeAdminPhone()"
+                    >Remove</button>
+                  </div>
                 }
 
                 @if (adminError()) {
@@ -530,11 +543,11 @@ import {
                   <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(0)"></button>
                   <button pButton label="Skip for Now" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="activeStep.set(2)"></button>
                 </div>
-                @if (!adminOtpSent() && !adminVerified()) {
+                @if (!adminOtpSent() && !adminVerified() && !adminSaved()) {
                   <button
                     pButton
-                    label="Send OTP via WhatsApp"
-                    icon="pi pi-whatsapp"
+                    label="Send OTP"
+                    icon="pi pi-key"
                     iconPos="right"
                     severity="success"
                     [loading]="adminLoading()"
@@ -542,7 +555,7 @@ import {
                     (click)="sendAdminOtp()"
                   ></button>
                 }
-                @if (adminVerified()) {
+                @if (adminVerified() || adminSaved()) {
                   <button
                     pButton
                     label="Continue"
@@ -629,9 +642,23 @@ import {
               </div>
 
               <div class="space-y-5">
+                <!-- Category selection (shown if user skipped business profile) -->
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-sm font-semibold text-gray-700">Business Category</label>
+                  <p-select
+                    [(ngModel)]="bizCategory"
+                    [options]="categoryDropdown()"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Select your business type"
+                    styleClass="w-full"
+                    (ngModelChange)="onCategoryChange()"
+                  />
+                </div>
+
                 <!-- Subcategory selection -->
                 <div class="flex flex-col gap-1.5">
-                  <label class="text-sm font-semibold text-gray-700">Business Niche <span class="text-red-400">*</span></label>
+                  <label class="text-sm font-semibold text-gray-700">Business Niche</label>
                   <p-select
                     [(ngModel)]="bizSubcategory"
                     [options]="subcategoryOptions()"
@@ -703,20 +730,30 @@ import {
               </div>
 
               <div class="flex justify-between mt-8">
+                <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(2)"></button>
                 <div class="flex gap-2">
-                  <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-text" (click)="activeStep.set(2)"></button>
-                  <button pButton label="Skip" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="activeStep.set(4)"></button>
+                  @if (selectedFeatures().size === 0) {
+                    <button
+                      pButton
+                      label="Continue Without Workflows"
+                      icon="pi pi-arrow-right"
+                      iconPos="right"
+                      severity="secondary"
+                      (click)="finishOnboarding()"
+                    ></button>
+                  } @else {
+                    <button
+                      pButton
+                      [label]="personalizeLoading() ? 'Creating Workflows...' : 'Create & Continue'"
+                      icon="pi pi-sparkles"
+                      iconPos="right"
+                      severity="success"
+                      [loading]="personalizeLoading()"
+                      [disabled]="!bizSubcategory"
+                      (click)="submitPersonalization()"
+                    ></button>
+                  }
                 </div>
-                <button
-                  pButton
-                  [label]="personalizeLoading() ? 'Creating Workflows...' : 'Create & Continue'"
-                  icon="pi pi-sparkles"
-                  iconPos="right"
-                  severity="success"
-                  [loading]="personalizeLoading()"
-                  [disabled]="selectedFeatures().size === 0 || !bizSubcategory"
-                  (click)="submitPersonalization()"
-                ></button>
               </div>
             </div>
           }
@@ -772,12 +809,12 @@ import {
         </div>
 
         <!-- Skip link at bottom -->
-        @if (activeStep() < 4) {
+        @if (activeStep() < 3) {
           <p class="text-center text-xs text-gray-400 mt-4">
             Need help?
             <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" class="text-primary-500 hover:underline">WhatsApp API Docs</a>
             · You can also
-            <button class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0" (click)="skipOnboarding()">skip and set up later</button>
+            <button class="text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0" (click)="skipToPersonalize()">skip to personalization</button>
           </p>
         }
       </div>
@@ -850,6 +887,7 @@ export class OnboardingComponent implements OnInit {
   adminOtpSent = signal(false);
   adminOtpCode = '';
   adminVerified = signal(false);
+  adminSaved = signal(false);
   adminError = signal<string | null>(null);
   adminLoading = signal(false);
 
@@ -917,6 +955,7 @@ export class OnboardingComponent implements OnInit {
         if (status.adminWhatsappNumber) {
           this.adminPhone = status.adminWhatsappNumber.replace(/^\+\d{1,3}/, '');
           this.adminVerified.set(status.adminWhatsappVerified);
+          this.adminSaved.set(!!status.adminWhatsappNumber);
         }
         if (status.businessName) this.bizName = status.businessName;
         if (status.businessCategory) this.bizCategory = status.businessCategory;
@@ -1059,6 +1098,7 @@ export class OnboardingComponent implements OnInit {
         this.adminLoading.set(false);
         if (result.verified) {
           this.adminVerified.set(true);
+          this.adminSaved.set(true);
           this.messageService.add({ severity: 'success', summary: 'Verified!', detail: 'Your admin WhatsApp number is now connected.' });
         }
       },
@@ -1067,6 +1107,41 @@ export class OnboardingComponent implements OnInit {
         this.adminError.set(err?.error?.message || 'Invalid code. Please try again.');
       },
     });
+  }
+
+  changeAdminPhone() {
+    this.adminSaved.set(false);
+    this.adminVerified.set(false);
+    this.adminOtpSent.set(false);
+    this.adminOtpCode = '';
+    this.adminPhone = '';
+    this.adminError.set(null);
+  }
+
+  removeAdminPhone() {
+    this.adminLoading.set(true);
+    this.adminError.set(null);
+    this.onboardingService.removeAdminWhatsapp().subscribe({
+      next: () => {
+        this.adminLoading.set(false);
+        this.adminSaved.set(false);
+        this.adminVerified.set(false);
+        this.adminOtpSent.set(false);
+        this.adminOtpCode = '';
+        this.adminPhone = '';
+        this.messageService.add({ severity: 'info', summary: 'Removed', detail: 'Admin WhatsApp number removed.' });
+      },
+      error: (err) => {
+        this.adminLoading.set(false);
+        this.adminError.set(err?.error?.message || 'Failed to remove number.');
+      },
+    });
+  }
+
+  // ─── Skip to personalization ───────────────────────────────────────────
+
+  skipToPersonalize() {
+    this.loadCategoriesAndGoToPersonalize();
   }
 
   saveProfile() {
@@ -1105,6 +1180,11 @@ export class OnboardingComponent implements OnInit {
         this.allCategories.set(data.categories);
         this.allFeatures.set(data.features);
 
+        // If no category selected yet, default to first one
+        if (!this.bizCategory && data.categories.length > 0) {
+          this.bizCategory = data.categories[0].value;
+        }
+
         // Set subcategories based on selected category
         this.updateSubcategories();
 
@@ -1117,8 +1197,8 @@ export class OnboardingComponent implements OnInit {
         this.activeStep.set(3);
       },
       error: () => {
-        // If categories fail to load, skip to complete
-        this.activeStep.set(4);
+        // If categories fail to load, go to complete
+        this.finishOnboarding();
       },
     });
   }
@@ -1130,6 +1210,19 @@ export class OnboardingComponent implements OnInit {
       if (!this.bizSubcategory && cat.subcategories.length > 0) {
         this.bizSubcategory = cat.subcategories[0].value;
       }
+    }
+  }
+
+  categoryDropdown = computed(() => {
+    return this.allCategories().map(c => ({ label: c.label, value: c.value }));
+  });
+
+  onCategoryChange() {
+    this.bizSubcategory = '';
+    this.updateSubcategories();
+    const cat = this.allCategories().find(c => c.value === this.bizCategory);
+    if (cat) {
+      this.selectedFeatures.set(new Set(cat.recommendedFeatures));
     }
   }
 
@@ -1214,10 +1307,7 @@ export class OnboardingComponent implements OnInit {
   }
 
   skipOnboarding() {
-    this.onboardingService.skipOnboarding().subscribe({
-      next: () => this.router.navigate(['/dashboard']),
-      error: () => this.router.navigate(['/dashboard']),
-    });
+    this.skipToPersonalize();
   }
 
   // ─── Embedded Signup ──────────────────────────────────────────────

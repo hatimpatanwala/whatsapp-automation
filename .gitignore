@@ -10,3 +10,8 @@ coverage/
 pgdata/
 redisdata/
 .playwright-mcp
+MobaXterm_Portable_v25.3/MobaXterm.ini
+MobaXterm_Portable_v25.3/CygUtils.plugin
+MobaXterm_Portable_v25.3/CygUtils64.plugin
+MobaXterm_Portable_v25.3/MobaXterm backup.zip
+MobaXterm_Portable_v25.3/MobaXterm_Personal_25.3.exe

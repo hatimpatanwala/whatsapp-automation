@@ -3,9 +3,10 @@ import { Request } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { SignupDto } from './dto/signup.dto';
+import { SignupDto, SendEmailOtpDto, VerifyEmailOtpDto } from './dto/signup.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,6 +20,7 @@ import { TenantProvisioningService } from '../tenant/tenant-provisioning.service
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly emailVerification: EmailVerificationService,
     private readonly tenantProvisioning: TenantProvisioningService,
     @InjectRepository(Tenant)
     private readonly tenantRepository: Repository<Tenant>,
@@ -57,53 +59,92 @@ export class AuthController {
   }
 
   /**
-   * Public self-service signup: creates a new tenant with a trial plan (100 conversations).
-   * Auto-logs in the user after signup and redirects to onboarding.
+   * Step 1 of signup: validate email uniqueness and send verification OTP.
+   */
+  @Post('send-email-otp')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async sendEmailOtp(@Body() dto: SendEmailOtpDto) {
+    // Check if email is already registered
+    const emailTaken = await this.isEmailTaken(dto.email);
+    if (emailTaken) {
+      return { error: true, message: 'An account with this email already exists. Please login instead.' };
+    }
+
+    return this.emailVerification.sendOtp(dto);
+  }
+
+  /**
+   * Step 2 of signup: verify OTP, create tenant, and auto-login.
+   */
+  @Post('verify-email-otp')
+  @Public()
+  @HttpCode(HttpStatus.CREATED)
+  async verifyEmailOtp(@Body() dto: VerifyEmailOtpDto, @Req() req: Request) {
+    const signupData = this.emailVerification.verifyOtp(dto.email, dto.code);
+
+    // Double-check email uniqueness
+    const emailTaken = await this.isEmailTaken(signupData.email);
+    if (emailTaken) {
+      return { error: true, message: 'An account with this email already exists. Please login instead.' };
+    }
+
+    // Generate slug
+    const baseName = (signupData.businessName || signupData.name).toLowerCase();
+    const slug = baseName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      + '-' + Date.now().toString(36);
+
+    // Create tenant with trial plan
+    const tenant = await this.tenantProvisioning.provisionTenant({
+      name: signupData.businessName || signupData.name + "'s Store",
+      slug,
+      plan: 'trial',
+      ownerName: signupData.name,
+      ownerEmail: signupData.email,
+      ownerPassword: signupData.password,
+    });
+
+    // Auto-login
+    const loginResult = await this.authService.unifiedLogin(signupData.email, signupData.password);
+    req.session.userId = loginResult.user.id;
+    req.session.userRole = loginResult.user.role;
+    req.session.tenantId = loginResult.tenantId;
+    req.session.tenantSchema = loginResult.tenantSchema;
+
+    return {
+      type: 'tenant_user',
+      user: loginResult.user,
+      tenantId: loginResult.tenantId,
+      tenant: { id: tenant.id, name: tenant.name },
+    };
+  }
+
+  /**
+   * Legacy signup endpoint (direct create without email verification).
+   * Kept for backward compatibility — new registrations should use send-email-otp → verify-email-otp.
    */
   @Post('signup')
   @Public()
   @HttpCode(HttpStatus.CREATED)
   async signup(@Body() dto: SignupDto, @Req() req: Request) {
-    // Generate a URL-safe slug from business name or user name
     const baseName = (dto.businessName || dto.name).toLowerCase();
     const slug = baseName.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       + '-' + Date.now().toString(36);
 
-    // Check if email is already registered
-    const existingTenants = await this.tenantRepository.find({
-      where: { status: 'active' },
-      select: ['id', 'schemaName'],
-    });
-
-    for (const t of existingTenants) {
-      try {
-        const existingUser = await this.authService['connectionManager'].executeInTenantContext(
-          t.schemaName,
-          async (qr) => {
-            const result = await qr.query(`SELECT id FROM users WHERE email = $1`, [dto.email]);
-            return result[0] || null;
-          },
-        );
-        if (existingUser) {
-          return { error: true, message: 'An account with this email already exists. Please login instead.' };
-        }
-      } catch {
-        continue;
-      }
+    const emailTaken = await this.isEmailTaken(dto.email);
+    if (emailTaken) {
+      return { error: true, message: 'An account with this email already exists. Please login instead.' };
     }
 
-    // Create tenant with trial plan
     const tenant = await this.tenantProvisioning.provisionTenant({
       name: dto.businessName || dto.name + "'s Store",
       slug,
       plan: 'trial',
-      ownerPhone: dto.phone,
       ownerName: dto.name,
       ownerEmail: dto.email,
       ownerPassword: dto.password,
     });
 
-    // Auto-login the new user
     const loginResult = await this.authService.unifiedLogin(dto.email, dto.password);
     req.session.userId = loginResult.user.id;
     req.session.userRole = loginResult.user.role;
@@ -116,6 +157,29 @@ export class AuthController {
       tenantId: loginResult.tenantId,
       tenant: { id: tenant.id, name: tenant.name },
     };
+  }
+
+  private async isEmailTaken(email: string): Promise<boolean> {
+    const existingTenants = await this.tenantRepository.find({
+      where: { status: 'active' },
+      select: ['id', 'schemaName'],
+    });
+
+    for (const t of existingTenants) {
+      try {
+        const existingUser = await this.authService['connectionManager'].executeInTenantContext(
+          t.schemaName,
+          async (qr) => {
+            const result = await qr.query(`SELECT id FROM users WHERE email = $1`, [email]);
+            return result[0] || null;
+          },
+        );
+        if (existingUser) return true;
+      } catch {
+        continue;
+      }
+    }
+    return false;
   }
 
   @Post('register')

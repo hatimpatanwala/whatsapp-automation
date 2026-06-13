@@ -8,17 +8,25 @@ import { v4 as uuidv4 } from 'uuid';
 export class MediaService {
   private readonly s3Client: S3Client;
   private readonly bucket: string;
+  private readonly region: string;
   private readonly cloudfrontDomain: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.s3Client = new S3Client({
+    const accessKeyId = configService.get<string>('AWS_ACCESS_KEY_ID', '');
+    const secretAccessKey = configService.get<string>('AWS_SECRET_ACCESS_KEY', '');
+
+    const s3Config: any = {
       region: configService.get<string>('AWS_REGION', 'ap-south-1'),
-      credentials: {
-        accessKeyId: configService.get<string>('AWS_ACCESS_KEY_ID', ''),
-        secretAccessKey: configService.get<string>('AWS_SECRET_ACCESS_KEY', ''),
-      },
-    });
+    };
+
+    // Only set explicit credentials if provided — otherwise SDK uses IAM role / instance profile
+    if (accessKeyId && secretAccessKey) {
+      s3Config.credentials = { accessKeyId, secretAccessKey };
+    }
+
+    this.s3Client = new S3Client(s3Config);
     this.bucket = configService.get<string>('S3_BUCKET', 'whatsapp-commerce-media');
+    this.region = configService.get<string>('AWS_REGION', 'ap-south-1');
     this.cloudfrontDomain = configService.get<string>('CLOUDFRONT_DOMAIN', '');
   }
 
@@ -34,7 +42,7 @@ export class MediaService {
     const uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
     const fileUrl = this.cloudfrontDomain
       ? `https://${this.cloudfrontDomain}/${key}`
-      : `https://${this.bucket}.s3.amazonaws.com/${key}`;
+      : `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
 
     return { uploadUrl, fileUrl };
   }
@@ -51,6 +59,6 @@ export class MediaService {
 
     return this.cloudfrontDomain
       ? `https://${this.cloudfrontDomain}/${key}`
-      : `https://${this.bucket}.s3.amazonaws.com/${key}`;
+      : `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 }

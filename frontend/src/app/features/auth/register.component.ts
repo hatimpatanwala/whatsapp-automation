@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
@@ -13,6 +13,7 @@ import { AuthService } from '../../core/services/auth.service';
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     ReactiveFormsModule,
     RouterLink,
     InputTextModule,
@@ -52,57 +53,116 @@ import { AuthService } from '../../core/services/auth.service';
 
       <div class="wa-login-right">
         <div class="wa-login-card">
-          <h2>Create your account</h2>
-          <p class="wa-login-subtitle">Start your free trial with 100 conversations</p>
+          @if (!otpSent()) {
+            <!-- Step 1: Signup Form -->
+            <h2>Create your account</h2>
+            <p class="wa-login-subtitle">Start your free trial with 100 conversations</p>
 
-          @if (errorMessage()) {
-            <p-message severity="error" [text]="errorMessage()!" styleClass="w-full mb-4" />
+            @if (errorMessage()) {
+              <p-message severity="error" [text]="errorMessage()!" styleClass="w-full mb-4" />
+            }
+
+            <form [formGroup]="signupForm" (ngSubmit)="sendOtp()" class="wa-login-form">
+              <div class="wa-form-field">
+                <label for="name">Your name</label>
+                <input pInputText id="name" type="text" formControlName="name" placeholder="John Doe" />
+              </div>
+
+              <div class="wa-form-field">
+                <label for="businessName">Business name <span class="optional">(optional)</span></label>
+                <input pInputText id="businessName" type="text" formControlName="businessName" placeholder="My Awesome Store" />
+              </div>
+
+              <div class="wa-form-field">
+                <label for="email">Email address</label>
+                <input pInputText id="email" type="email" formControlName="email" placeholder="you&#64;example.com" />
+              </div>
+
+              <div class="wa-form-field">
+                <label for="password">Password</label>
+                <p-password
+                  formControlName="password"
+                  placeholder="Min. 6 characters"
+                  [toggleMask]="true"
+                  styleClass="w-full"
+                  inputStyleClass="w-full"
+                />
+              </div>
+
+              <button
+                pButton
+                type="submit"
+                label="Send Verification Code"
+                icon="pi pi-envelope"
+                iconPos="right"
+                [loading]="loading()"
+                [disabled]="signupForm.invalid || loading()"
+                class="w-full wa-login-btn"
+                severity="success"
+              ></button>
+            </form>
+          } @else {
+            <!-- Step 2: Email OTP Verification -->
+            <div class="text-center mb-4">
+              <div class="wa-otp-icon">
+                <i class="pi pi-envelope" style="font-size:1.5rem; color: #059669"></i>
+              </div>
+              <h2>Verify your email</h2>
+              <p class="wa-login-subtitle">
+                We sent a 6-digit code to<br/>
+                <strong>{{ signupForm.value.email }}</strong>
+              </p>
+            </div>
+
+            @if (errorMessage()) {
+              <p-message severity="error" [text]="errorMessage()!" styleClass="w-full mb-4" />
+            }
+
+            @if (successMessage()) {
+              <p-message severity="success" [text]="successMessage()!" styleClass="w-full mb-4" />
+            }
+
+            <div class="wa-login-form">
+              <div class="wa-form-field">
+                <label for="otp">Verification Code</label>
+                <input
+                  pInputText
+                  id="otp"
+                  type="text"
+                  [(ngModel)]="otpCode"
+                  placeholder="123456"
+                  maxlength="6"
+                  class="wa-otp-input"
+                />
+              </div>
+
+              <button
+                pButton
+                label="Create Account"
+                icon="pi pi-user-plus"
+                iconPos="right"
+                [loading]="loading()"
+                [disabled]="otpCode.length < 6 || loading()"
+                class="w-full wa-login-btn"
+                severity="success"
+                (click)="verifyOtp()"
+              ></button>
+
+              <div class="wa-resend-row">
+                <span class="text-gray-400">Didn't receive it?</span>
+                <button
+                  class="wa-resend-btn"
+                  [disabled]="loading()"
+                  (click)="resendOtp()"
+                >Resend Code</button>
+                <span class="text-gray-300">|</span>
+                <button
+                  class="wa-resend-btn"
+                  (click)="goBack()"
+                >Change Email</button>
+              </div>
+            </div>
           }
-
-          <form [formGroup]="signupForm" (ngSubmit)="onSignup()" class="wa-login-form">
-            <div class="wa-form-field">
-              <label for="name">Your name</label>
-              <input pInputText id="name" type="text" formControlName="name" placeholder="John Doe" />
-            </div>
-
-            <div class="wa-form-field">
-              <label for="businessName">Business name <span class="optional">(optional)</span></label>
-              <input pInputText id="businessName" type="text" formControlName="businessName" placeholder="My Awesome Store" />
-            </div>
-
-            <div class="wa-form-field">
-              <label for="email">Email address</label>
-              <input pInputText id="email" type="email" formControlName="email" placeholder="you&#64;example.com" />
-            </div>
-
-            <div class="wa-form-field">
-              <label for="phone">Phone number <span class="optional">(optional)</span></label>
-              <input pInputText id="phone" type="tel" formControlName="phone" placeholder="+91 98765 43210" />
-            </div>
-
-            <div class="wa-form-field">
-              <label for="password">Password</label>
-              <p-password
-                formControlName="password"
-                placeholder="Min. 6 characters"
-                [toggleMask]="true"
-                styleClass="w-full"
-                inputStyleClass="w-full"
-              />
-            </div>
-
-            <button
-              pButton
-              type="submit"
-              label="Create account"
-              icon="pi pi-user-plus"
-              iconPos="right"
-              [loading]="loading()"
-              [disabled]="signupForm.invalid || loading()"
-              class="w-full wa-login-btn"
-              severity="success"
-            ></button>
-          </form>
 
           <p class="wa-signup-link">
             Already have an account? <a routerLink="/auth/login">Sign in</a>
@@ -235,6 +295,44 @@ import { AuthService } from '../../core/services/auth.service';
       color: #9ca3af;
     }
 
+    .wa-otp-icon {
+      width: 56px;
+      height: 56px;
+      background: #ecfdf5;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+    }
+
+    .wa-otp-input {
+      font-size: 1.4rem !important;
+      letter-spacing: 0.4em;
+      text-align: center;
+    }
+
+    .wa-resend-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .wa-resend-btn {
+      color: #059669;
+      font-weight: 600;
+      font-size: 0.8rem;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .wa-resend-btn:hover { text-decoration: underline; }
+    .wa-resend-btn:disabled { opacity: 0.5; cursor: default; }
+
     .wa-login-btn { margin-top: 0.5rem; }
 
     .wa-signup-link {
@@ -277,43 +375,81 @@ export class RegisterComponent {
   readonly year = new Date().getFullYear();
   loading = signal(false);
   errorMessage = signal<string | null>(null);
+  successMessage = signal<string | null>(null);
+  otpSent = signal(false);
+  otpCode = '';
 
   signupForm = this.fb.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
     businessName: [''],
     email: ['', [Validators.required, Validators.email]],
-    phone: [''],
     password: ['', [Validators.required, Validators.minLength(6)]],
   });
 
-  onSignup() {
+  sendOtp() {
     if (this.signupForm.invalid) return;
     this.loading.set(true);
     this.errorMessage.set(null);
 
-    const { name, businessName, email, phone, password } = this.signupForm.value;
+    const { name, businessName, email, password } = this.signupForm.value;
 
-    this.authService.signup({
+    this.authService.sendEmailOtp({
       name: name!,
       email: email!,
-      phone: phone || undefined,
       password: password!,
       businessName: businessName || undefined,
     }).subscribe({
       next: (res) => {
+        this.loading.set(false);
         if (res.error) {
-          this.errorMessage.set(res.message ?? 'Registration failed.');
-          this.loading.set(false);
+          this.errorMessage.set(res.message ?? 'Failed to send verification code.');
           return;
         }
-        // Redirect to onboarding (or dashboard, session is already set)
+        this.otpSent.set(true);
+        this.successMessage.set(null);
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.errorMessage.set(err?.error?.message ?? 'Failed to send verification code. Please try again.');
+      },
+    });
+  }
+
+  verifyOtp() {
+    if (this.otpCode.length < 6) return;
+    this.loading.set(true);
+    this.errorMessage.set(null);
+
+    this.authService.verifyEmailOtp({
+      email: this.signupForm.value.email!,
+      code: this.otpCode,
+    }).subscribe({
+      next: (res) => {
+        this.loading.set(false);
+        if (res.error) {
+          this.errorMessage.set(res.message ?? 'Verification failed.');
+          return;
+        }
         this.router.navigate(['/onboarding']);
       },
       error: (err) => {
-        this.errorMessage.set(err?.error?.message ?? 'Registration failed. Please try again.');
         this.loading.set(false);
+        this.errorMessage.set(err?.error?.message ?? 'Invalid verification code. Please try again.');
       },
-      complete: () => this.loading.set(false),
     });
+  }
+
+  resendOtp() {
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+    this.sendOtp();
+    this.successMessage.set('Verification code resent.');
+  }
+
+  goBack() {
+    this.otpSent.set(false);
+    this.otpCode = '';
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
   }
 }

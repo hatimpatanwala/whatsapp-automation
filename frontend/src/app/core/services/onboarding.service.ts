@@ -218,6 +218,20 @@ export class OnboardingService {
     return this.api.post('/onboarding/admin-whatsapp/verify-otp', { phone, code });
   }
 
+  /**
+   * Save admin WhatsApp number directly (no OTP verification).
+   */
+  saveAdminWhatsapp(phone: string): Observable<{ saved: boolean; phone: string; message: string }> {
+    return this.api.post('/onboarding/admin-whatsapp/save', { phone });
+  }
+
+  /**
+   * Remove admin WhatsApp number.
+   */
+  removeAdminWhatsapp(): Observable<{ removed: boolean; message: string }> {
+    return this.api.delete('/onboarding/admin-whatsapp');
+  }
+
   // ─── Personalization (category + features + auto-workflows) ─────────────────
 
   /**

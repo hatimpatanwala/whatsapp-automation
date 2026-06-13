@@ -59,6 +59,9 @@ export class AdminWhatsAppService {
     }
     const fullPhone = normalized.startsWith('+') ? normalized : `+${normalized}`;
 
+    // Check uniqueness
+    await this.checkAdminPhoneUniqueness(fullPhone, tenantId);
+
     // Rate limit: max 3 sends per 15 minutes
     this.enforceRateLimit(tenantId);
 
@@ -124,6 +127,37 @@ export class AdminWhatsAppService {
     return { verified: true, message: 'WhatsApp number verified successfully!' };
   }
 
+  /**
+   * Save admin WhatsApp number directly (static mode — no OTP verification).
+   * Checks that the number isn't already used by another admin.
+   */
+  async saveAdminWhatsapp(tenantId: string, phone: string) {
+    const normalized = phone.replace(/[\s\-()]/g, '');
+    if (!/^\+?\d{10,15}$/.test(normalized)) {
+      throw new BadRequestException('Invalid phone number format. Use international format, e.g. +919876543210');
+    }
+    const fullPhone = normalized.startsWith('+') ? normalized : `+${normalized}`;
+
+    // Check uniqueness — no other tenant should have this number as admin WhatsApp
+    await this.checkAdminPhoneUniqueness(fullPhone, tenantId);
+
+    await this.tenantRepo.update(tenantId, {
+      adminWhatsappNumber: fullPhone,
+      adminWhatsappVerified: false,
+    });
+
+    this.logger.log(`Admin WhatsApp saved (static): ${fullPhone} for tenant ${tenantId}`);
+    return { saved: true, phone: fullPhone, message: 'Admin WhatsApp number saved successfully.' };
+  }
+
+  /**
+   * Update (change) admin WhatsApp number.
+   * Checks uniqueness and saves the new number.
+   */
+  async updateAdminWhatsapp(tenantId: string, phone: string) {
+    return this.saveAdminWhatsapp(tenantId, phone);
+  }
+
   async removeAdminWhatsapp(tenantId: string) {
     await this.tenantRepo.update(tenantId, {
       adminWhatsappNumber: null as any,
@@ -131,6 +165,19 @@ export class AdminWhatsAppService {
     });
     this.logger.log(`Admin WhatsApp removed for tenant ${tenantId}`);
     return { removed: true, message: 'Admin WhatsApp number removed.' };
+  }
+
+  /**
+   * Check that the phone number is not already registered as admin WhatsApp for another tenant.
+   */
+  private async checkAdminPhoneUniqueness(phone: string, excludeTenantId: string) {
+    const existing = await this.tenantRepo.findOne({
+      where: { adminWhatsappNumber: phone },
+      select: ['id'],
+    });
+    if (existing && existing.id !== excludeTenantId) {
+      throw new BadRequestException('This WhatsApp number is already registered as admin for another account.');
+    }
   }
 
   private enforceRateLimit(tenantId: string) {

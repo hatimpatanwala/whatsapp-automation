@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Body, Req, Param, UseGuards, HttpCode, UnauthorizedException,
+  Controller, Get, Post, Delete, Body, Req, Param, UseGuards, HttpCode, UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { OnboardingService, BusinessProfileDto } from './onboarding.service';
@@ -186,6 +186,27 @@ export class OnboardingController {
   async verifyAdminWhatsappOtp(@Req() req: Request, @Body() body: { phone: string; code: string }) {
     const tenantId = (req.session as any).tenantId;
     return this.adminWhatsAppService.verifyOtp(tenantId, body.phone, body.code);
+  }
+
+  /**
+   * Save admin WhatsApp number directly (static — no OTP verification).
+   */
+  @Post('admin-whatsapp/save')
+  @Roles('owner')
+  @HttpCode(200)
+  async saveAdminWhatsapp(@Req() req: Request, @Body() body: { phone: string }) {
+    const tenantId = (req.session as any).tenantId;
+    return this.adminWhatsAppService.saveAdminWhatsapp(tenantId, body.phone);
+  }
+
+  /**
+   * Remove admin WhatsApp number.
+   */
+  @Delete('admin-whatsapp')
+  @Roles('owner')
+  async removeAdminWhatsapp(@Req() req: Request) {
+    const tenantId = (req.session as any).tenantId;
+    return this.adminWhatsAppService.removeAdminWhatsapp(tenantId);
   }
 
   /**

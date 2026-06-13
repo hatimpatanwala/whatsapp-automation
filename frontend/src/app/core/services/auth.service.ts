@@ -19,9 +19,20 @@ export interface LoginResponse {
 export interface SignupPayload {
   name: string;
   email: string;
-  phone?: string;
   password: string;
   businessName?: string;
+}
+
+export interface SendEmailOtpPayload {
+  name: string;
+  email: string;
+  password: string;
+  businessName?: string;
+}
+
+export interface VerifyEmailOtpPayload {
+  email: string;
+  code: string;
 }
 
 export interface SignupResponse {
@@ -119,6 +130,25 @@ export class AuthService {
     return this.api.http.post<SignupResponse>(this.api.url('/auth/signup'), payload, {
       withCredentials: true,
     }).pipe(
+      tap((res) => {
+        if (!res.error && res.user) {
+          this.currentUser.set(res.user);
+          this.currentAdmin.set(null);
+        }
+      }),
+    );
+  }
+
+  sendEmailOtp(payload: SendEmailOtpPayload): Observable<{ sent?: boolean; error?: boolean; message?: string }> {
+    return this.api.http.post<{ sent?: boolean; error?: boolean; message?: string }>(
+      this.api.url('/auth/send-email-otp'), payload, { withCredentials: true },
+    );
+  }
+
+  verifyEmailOtp(payload: VerifyEmailOtpPayload): Observable<SignupResponse> {
+    return this.api.http.post<SignupResponse>(
+      this.api.url('/auth/verify-email-otp'), payload, { withCredentials: true },
+    ).pipe(
       tap((res) => {
         if (!res.error && res.user) {
           this.currentUser.set(res.user);
