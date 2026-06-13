@@ -12,8 +12,9 @@ RUN apk add --no-cache python3 make g++ vips-dev pkgconfig
 
 # Install dependencies — sharp 0.34 requires node-gyp as a local dependency on Alpine
 COPY package*.json ./
-RUN npm install -g node-gyp \
-    && npm install --force
+RUN npm install --ignore-scripts --force \
+    && npm install @img/sharp-linuxmusl-x64 --force \
+    && npm rebuild --ignore-scripts --force
 
 # Copy source code
 COPY tsconfig*.json nest-cli.json ./
