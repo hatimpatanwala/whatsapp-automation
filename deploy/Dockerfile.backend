@@ -12,8 +12,8 @@ RUN apk add --no-cache python3 make g++ vips-dev pkgconfig
 
 # Install dependencies — sharp 0.34 requires node-gyp as a local dependency on Alpine
 COPY package*.json ./
-RUN npm install --ignore-scripts --force \
-    && npm install node-gyp@latest --save-optional --force \
+RUN npm install -g node-gyp \
+    && npm install --ignore-scripts --force \
     && npm rebuild --force
 
 # Copy source code
