@@ -55,7 +55,8 @@ export class EmailVerificationService {
 
     this.enforceRateLimit(email);
 
-    const code = this.isDev ? this.STATIC_OTP : Math.floor(100000 + Math.random() * 900000).toString();
+    const useStaticOtp = this.isDev || !this.transporter;
+    const code = useStaticOtp ? this.STATIC_OTP : Math.floor(100000 + Math.random() * 900000).toString();
 
     this.otpStore.set(email, {
       code,

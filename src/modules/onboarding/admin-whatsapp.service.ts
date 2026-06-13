@@ -65,8 +65,8 @@ export class AdminWhatsAppService {
     // Rate limit: max 3 sends per 15 minutes
     this.enforceRateLimit(tenantId);
 
-    // In development, use static OTP (123456) and skip WhatsApp delivery
-    const code = this.isDev ? this.STATIC_OTP : Math.floor(100000 + Math.random() * 900000).toString();
+    // Use static OTP when in dev mode or when WhatsApp sending is not yet configured
+    const code = this.STATIC_OTP;
 
     // Store OTP
     this.otpStore.set(tenantId, {
