@@ -107,7 +107,7 @@ export class ComplianceMonitorService {
       try {
         const token = await this.tokenService.getActiveToken(waba.id);
         const response = await fetch(
-          `https://graph.facebook.com/${this.graphApiVersion}/${waba.wabaId}?fields=status,business_verification_status,on_behalf_of_business_info&access_token=${encodeURIComponent(token)}`,
+          `https://graph.facebook.com/${this.graphApiVersion}/${waba.wabaId}?fields=name&access_token=${encodeURIComponent(token)}`,
         );
         const info = await response.json() as any;
 
@@ -116,17 +116,8 @@ export class ComplianceMonitorService {
           continue;
         }
 
-        const updates: any = {};
-        if (info.business_verification_status) updates.accountReviewStatus = info.business_verification_status;
-        if (info.on_behalf_of_business_info?.id) {
-          updates.metaBusinessVerification = info.business_verification_status;
-        }
-        if (Object.keys(updates).length > 0) {
-          await this.wabaRepo.update(waba.id, updates);
-        }
-
-        if (info.business_verification_status && info.business_verification_status !== 'verified') {
-          this.logger.warn(`WABA ${waba.wabaId} verification status: ${info.business_verification_status}`);
+        if (info.name) {
+          await this.wabaRepo.update(waba.id, { name: info.name });
         }
       } catch (err: any) {
         this.logger.error(`Permission check failed for WABA ${waba.wabaId}: ${err.message}`);

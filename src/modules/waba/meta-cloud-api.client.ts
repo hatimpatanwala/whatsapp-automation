@@ -23,7 +23,7 @@ export class MetaCloudApiClient {
 
   async getWabaInfo(wabaId: string, accessToken: string): Promise<any> {
     return this.request('GET', `/${wabaId}`, accessToken, null, {
-      fields: 'name,status,business_verification_status,on_behalf_of_business_info,primary_funding_id',
+      fields: 'name',
     });
   }
 

@@ -145,11 +145,11 @@ export class EmbeddedSignupService {
 
       // Step 4: Sync the WABA
       const wabaInfo = await this.fetchGraphApi(`/${wabaId}`, userToken, {
-        fields: 'name,status,business_verification_status,on_behalf_of_business_info,primary_funding_id',
+        fields: 'name',
       });
       const waba = await this.wabaService.syncFromMeta(wabaId, wabaInfo);
       session.wabaAccountId = waba.id;
-      session.businessId = wabaInfo.on_behalf_of_business_info?.id || null;
+      session.businessId = session.businessId || null;
       await this.transition(session, 'waba_synced');
 
       // Step 5: Generate system user token (long-lived, non-expiring)
