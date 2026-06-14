@@ -354,30 +354,38 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                     @for (phone of tenantPhones(); track phone.id) {
                       <div class="flex items-center justify-between border border-gray-200 rounded-xl p-4">
                         <div class="flex items-center gap-3">
-                          <div class="w-8 h-8 rounded-full flex items-center justify-center"
-                            [class.bg-green-100]="phone.status === 'active'"
-                            [class.bg-gray-100]="phone.status !== 'active'"
-                          >
-                            <i class="pi pi-phone" style="font-size:0.8rem"
-                              [class.text-green-600]="phone.status === 'active'"
-                              [class.text-gray-400]="phone.status !== 'active'"
-                            ></i>
+                          <div [class]="'w-8 h-8 rounded-full flex items-center justify-center ' + phoneState(phone).bg">
+                            <i [class]="phoneState(phone).icon" style="font-size:0.8rem"></i>
                           </div>
                           <div>
                             <p class="text-sm font-semibold text-gray-900">{{ phone.phoneNumber }}</p>
-                            <p class="text-xs text-gray-500">{{ phone.displayName || 'WhatsApp Business' }}</p>
+                            <p class="text-xs"
+                              [class.text-gray-500]="phone.status === 'active' || phone.status === 'inactive'"
+                              [class.text-amber-600]="phone.status === 'pending_verification'"
+                              [class.text-blue-600]="phone.status === 'pending_registration'"
+                            >{{ phone.status === 'active' ? (phone.displayName || 'WhatsApp Business') : phoneState(phone).hint }}</p>
                           </div>
                         </div>
                         <div class="flex items-center gap-2">
-                          <p-toggleswitch
-                            [ngModel]="phone.status === 'active'"
-                            (onChange)="togglePhoneStatus(phone)"
-                            pTooltip="Toggle active/inactive"
-                          />
-                          <p-tag
-                            [value]="phone.status === 'active' ? 'Active' : 'Inactive'"
-                            [severity]="phone.status === 'active' ? 'success' : 'warn'"
-                          />
+                          <p-tag [value]="phoneState(phone).label" [severity]="phoneState(phone).severity" [pTooltip]="phoneState(phone).hint" />
+
+                          @if (phone.status === 'pending_verification') {
+                            <button pButton label="Enter Code" icon="pi pi-key" severity="warn" class="p-button-sm p-button-outlined"
+                              (click)="resumeVerification(phone)"></button>
+                          }
+                          @if (phone.status === 'pending_registration') {
+                            <button pButton label="Retry" icon="pi pi-refresh" class="p-button-sm p-button-text"
+                              [loading]="retryingId() === phone.id"
+                              pTooltip="Retry activation now"
+                              (click)="retryActivation(phone)"></button>
+                          }
+                          @if (phone.status === 'active' || phone.status === 'inactive') {
+                            <p-toggleswitch
+                              [ngModel]="phone.status === 'active'"
+                              (onChange)="togglePhoneStatus(phone)"
+                              pTooltip="Toggle active/inactive"
+                            />
+                          }
                           <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger"
                             pTooltip="Remove this number"
                             (click)="removePhoneNumber(phone.id)"></button>
@@ -883,7 +891,8 @@ export class SettingsComponent implements OnInit {
   addPhonePhase = signal<'input' | 'verify' | 'done'>('input');
   addPhoneVerifyCode = '';
   addPhoneId = signal<string | null>(null);
-  tenantPhones = signal<Array<{ id: string; phoneNumber: string; displayName: string; status: string }>>([]);
+  tenantPhones = signal<Array<{ id: string; phoneNumber: string; displayName: string; status: string; registrationStatus?: string; codeVerificationStatus?: string; webhookSubscribed?: boolean }>>([]);
+  retryingId = signal<string | null>(null);
 
   biz = {
     name: '',
@@ -1316,6 +1325,79 @@ export class SettingsComponent implements OnInit {
     this.apiService.get<any[]>('/settings/phones').subscribe({
       next: (phones) => this.tenantPhones.set(phones || []),
       error: () => {},
+    });
+  }
+
+  /** Map a phone's backend status to an explicit, user-facing activation state. */
+  phoneState(phone: { status: string; codeVerificationStatus?: string; webhookSubscribed?: boolean }): {
+    label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary'; icon: string; bg: string; hint: string;
+  } {
+    switch (phone.status) {
+      case 'active':
+        return {
+          label: 'Active', severity: 'success', icon: 'pi pi-check-circle text-green-600', bg: 'bg-green-100',
+          hint: phone.webhookSubscribed === false
+            ? 'Active — can send & receive. Finishing webhook setup in the background.'
+            : 'Active — can send and receive WhatsApp messages.',
+        };
+      case 'pending_verification':
+        return {
+          label: 'Verify Code', severity: 'warn', icon: 'pi pi-key text-amber-600', bg: 'bg-amber-100',
+          hint: 'A 6-digit code was sent to this number — enter it to activate.',
+        };
+      case 'pending_registration':
+        return {
+          label: 'Activating…', severity: 'info', icon: 'pi pi-spin pi-spinner text-blue-600', bg: 'bg-blue-100',
+          hint: 'Setting up on WhatsApp — this retries automatically every few minutes.',
+        };
+      case 'inactive':
+        return {
+          label: 'Inactive', severity: 'secondary', icon: 'pi pi-pause-circle text-gray-400', bg: 'bg-gray-100',
+          hint: 'Turned off. Toggle to reactivate.',
+        };
+      default:
+        return {
+          label: (phone.status || 'unknown').replace(/_/g, ' '), severity: 'secondary',
+          icon: 'pi pi-info-circle text-gray-400', bg: 'bg-gray-100', hint: 'Current status.',
+        };
+    }
+  }
+
+  /** Re-open the OTP entry panel for a number stuck at pending verification. */
+  resumeVerification(phone: { id: string; phoneNumber: string }) {
+    this.showAddPhone.set(true);
+    this.newPhoneNumber = phone.phoneNumber;
+    this.addPhoneId.set(phone.id);
+    this.addPhoneVerifyCode = '';
+    this.addPhoneResult.set({ status: 'needs_verification', phone: phone.phoneNumber, message: 'Enter the 6-digit code sent to this number.' });
+    this.addPhonePhase.set('verify');
+  }
+
+  /** Manually re-run the activation pipeline for a number stuck pending registration. */
+  retryActivation(phone: { id: string; phoneNumber: string }) {
+    this.retryingId.set(phone.id);
+    this.apiService.post<RegisterNumberResult>('/settings/phones', { phone: phone.phoneNumber }).subscribe({
+      next: (result) => {
+        this.retryingId.set(null);
+        if (result.status === 'registered') {
+          this.messageService.add({ severity: 'success', summary: 'Activated', detail: result.message });
+        } else if (result.status === 'needs_verification') {
+          this.messageService.add({ severity: 'info', summary: 'Verification needed', detail: result.message });
+          this.showAddPhone.set(true);
+          this.newPhoneNumber = phone.phoneNumber;
+          this.addPhoneId.set(result.phoneId || phone.id);
+          this.addPhoneResult.set(result);
+          this.addPhonePhase.set('verify');
+        } else {
+          this.messageService.add({ severity: 'warn', summary: 'Status', detail: result.message });
+        }
+        this.loadPhoneNumbers();
+        this.authService.rehydrateSession().subscribe();
+      },
+      error: (err) => {
+        this.retryingId.set(null);
+        this.messageService.add({ severity: 'error', summary: 'Retry failed', detail: err?.error?.message || 'Could not retry activation' });
+      },
     });
   }
 
