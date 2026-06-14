@@ -296,7 +296,8 @@ export class OnboardingService {
       );
       const data = await response.json() as any;
       if (!response.ok) {
-        throw new BadRequestException(data.error?.message || 'Failed to request verification code');
+        this.logger.warn(`request_code (resend) failed for ${phone.phoneNumberId}: ${JSON.stringify(data.error)}`);
+        throw new BadRequestException(this.metaErrorMessage(data.error, 'Failed to request verification code.'));
       }
 
       await this.phoneNumberRepository.update(phone.id, {
@@ -340,7 +341,8 @@ export class OnboardingService {
         const msg = (data.error?.message || '').toLowerCase();
         // "already verified" is not an error for us — proceed to activation.
         if (!msg.includes('already')) {
-          throw new BadRequestException(data.error?.message || 'Invalid verification code');
+          this.logger.warn(`verify_code failed for ${phone.phoneNumberId}: ${JSON.stringify(data.error)}`);
+          throw new BadRequestException(this.metaErrorMessage(data.error, 'Invalid verification code.'));
         }
       }
     } catch (err: any) {
@@ -598,6 +600,21 @@ export class OnboardingService {
   }
 
   /**
+   * Extract the most useful, user-facing message from a Meta Graph API error.
+   * Meta puts a short technical string in `message` but the actionable text the
+   * user actually needs in `error_user_title` / `error_user_msg`.
+   */
+  private metaErrorMessage(error: any, fallback = 'WhatsApp request failed.'): string {
+    if (!error) return fallback;
+    const title = error.error_user_title;
+    const userMsg = error.error_user_msg;
+    if (title && userMsg && title !== userMsg) return `${title}: ${userMsg}`;
+    if (userMsg) return userMsg;
+    if (title) return title;
+    return error.message || fallback;
+  }
+
+  /**
    * Look up a number on a WABA's phone list at Meta and return its onboarding
    * state. Resilient to field deprecations (retries without the fields param).
    */
@@ -658,8 +675,8 @@ export class OnboardingService {
       );
       const data = await res.json() as any;
       if (!res.ok) {
-        this.logger.warn(`request_code failed for ${phoneNumberId}: ${data.error?.message}`);
-        return { sent: false, error: data.error?.message || 'WhatsApp could not send the verification code.' };
+        this.logger.warn(`request_code failed for ${phoneNumberId}: ${JSON.stringify(data.error)}`);
+        return { sent: false, error: this.metaErrorMessage(data.error, 'WhatsApp could not send the verification code.') };
       }
       return { sent: true };
     } catch (err: any) {
@@ -919,7 +936,7 @@ export class OnboardingService {
 
       // Other Meta API errors — surface the real reason to the tenant.
       this.logger.warn(`Unrecognized Meta error for ${phone}: ${JSON.stringify(data)}`);
-      return { phoneNumberId: null, alreadyTaken: false, metaError: errorMsg || 'WhatsApp registration was rejected by Meta.' };
+      return { phoneNumberId: null, alreadyTaken: false, metaError: this.metaErrorMessage(data.error, 'WhatsApp registration was rejected by Meta.') };
     } catch (err: any) {
       this.logger.warn(`Meta phone registration network error: ${err.message}`);
       return { phoneNumberId: null, alreadyTaken: false, metaError: `Could not reach WhatsApp: ${err.message}` };
