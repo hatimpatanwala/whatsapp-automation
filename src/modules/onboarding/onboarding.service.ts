@@ -167,9 +167,10 @@ export class OnboardingService {
     }
 
     // Pass 2: not on any of our WABAs → add it, failing over across candidates.
+    const verifiedName = await this.resolveVerifiedName(tenantId);
     let lastError: string | undefined;
     for (const { waba, token } of candidates) {
-      const reg = await this.registerPhoneOnMeta(fullPhone, waba.wabaId, token);
+      const reg = await this.registerPhoneOnMeta(fullPhone, waba.wabaId, token, verifiedName);
 
       // Globally taken (another WABA/WA Business app/BSP) — other WABAs won't help.
       if (reg.alreadyTaken) {
@@ -505,6 +506,19 @@ export class OnboardingService {
   }
 
   /**
+   * Resolve the display name to register a number under at Meta (verified_name
+   * is required by POST /{waba}/phone_numbers). Uses the tenant's business name.
+   */
+  private async resolveVerifiedName(tenantId: string): Promise<string> {
+    const tenant = await this.tenantRepository.findOne({
+      where: { id: tenantId },
+      select: ['businessName', 'name'],
+    });
+    const name = (tenant?.businessName || tenant?.name || '').trim();
+    return name || 'Business';
+  }
+
+  /**
    * All active WABAs that have a usable token, smartly ordered for assignment:
    * the WABA hosting the FEWEST phone numbers comes first (load balancing).
    */
@@ -823,6 +837,7 @@ export class OnboardingService {
     phone: string,
     wabaId: string,
     accessToken: string,
+    verifiedName: string,
   ): Promise<{
     phoneNumberId: string | null;
     alreadyTaken: boolean;
@@ -830,7 +845,11 @@ export class OnboardingService {
     instructions?: string[];
   }> {
     try {
+      // Meta expects `cc` = country code and `phone_number` = the NATIONAL number
+      // (without the country code), plus a required `verified_name` (display name).
       const rawNumber = phone.replace(/^\+/, '');
+      const cc = this.extractCountryCode(rawNumber);
+      const nationalNumber = rawNumber.startsWith(cc) ? rawNumber.slice(cc.length) : rawNumber;
       const response = await fetch(
         `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/phone_numbers`,
         {
@@ -840,8 +859,9 @@ export class OnboardingService {
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
-            cc: this.extractCountryCode(rawNumber),
-            phone_number: rawNumber,
+            cc,
+            phone_number: nationalNumber,
+            verified_name: verifiedName,
             migrate_phone_number: false,
           }),
         },
