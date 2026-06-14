@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Query, Req, UseGuards, Optional, Logger } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Query, Req, Res, UseGuards, UseInterceptors, UploadedFile, Optional, Logger, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Request, Response } from 'express';
 import { ProductService } from './product.service';
 import { CategoryService } from './category.service';
 import { MetaCatalogSyncService } from './meta-catalog-sync.service';
+import { BulkUploadService } from './bulk-upload.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
@@ -16,12 +18,48 @@ export class ProductController {
   constructor(
     private readonly productService: ProductService,
     private readonly categoryService: CategoryService,
+    private readonly bulkUploadService: BulkUploadService,
     @Optional() private readonly catalogSyncService?: MetaCatalogSyncService,
   ) {}
 
   @Get('categories')
   async getCategories(@Req() req: Request) {
     return this.categoryService.findAll(req.tenantContext.schemaName);
+  }
+
+  @Get('bulk-upload/template')
+  @Roles('owner', 'seller')
+  async downloadTemplate(@Req() req: Request, @Res() res: Response) {
+    const buffer = await this.bulkUploadService.generateTemplate(req.tenantContext.schemaName);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=product-upload-template.xlsx');
+    res.send(Buffer.from(buffer));
+  }
+
+  @Post('bulk-upload')
+  @Roles('owner', 'seller')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async bulkUpload(@Req() req: Request, @UploadedFile() file: { buffer: Buffer; originalname: string; size: number }) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    if (!file.originalname.match(/\.xlsx$/i)) {
+      throw new BadRequestException('Only .xlsx files are supported');
+    }
+    await this.bulkUploadService.processUpload(req.tenantContext.schemaName, file.buffer);
+    return { message: 'Upload started', status: 'processing' };
+  }
+
+  @Get('bulk-upload/status')
+  async getBulkUploadStatus(@Req() req: Request) {
+    return this.bulkUploadService.getStatus(req.tenantContext.schemaName);
+  }
+
+  @Post('bulk-upload/clear')
+  @Roles('owner', 'seller')
+  async clearBulkUploadStatus(@Req() req: Request) {
+    this.bulkUploadService.clearStatus(req.tenantContext.schemaName);
+    return { message: 'Status cleared' };
   }
 
   @Get()

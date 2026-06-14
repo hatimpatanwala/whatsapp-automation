@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, inject, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
@@ -12,6 +12,8 @@ import { ConfirmationService, MessageService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
+import { ProgressBarModule } from 'primeng/progressbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { ProductService, ProductListParams } from '../../core/services/product.service';
 import { Product, Category } from '../../core/models';
 import { Subject } from 'rxjs';
@@ -26,6 +28,15 @@ interface ProductRow {
   stock: number;
   status: 'active' | 'draft' | 'archived' | 'out_of_stock';
   imageUrl: string;
+}
+
+interface BulkUploadStatus {
+  status: 'idle' | 'processing' | 'completed' | 'failed';
+  total: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  errors: { row: number; name: string; error: string }[];
 }
 
 @Component({
@@ -44,12 +55,72 @@ interface ProductRow {
     FormsModule,
     IconFieldModule,
     InputIconModule,
+    ProgressBarModule,
+    TooltipModule,
   ],
   providers: [ConfirmationService, MessageService],
   template: `
     <div class="p-6 space-y-5">
       <p-toast />
       <p-confirmDialog />
+      <input #fileInput type="file" accept=".xlsx" class="hidden" (change)="onFileSelected($event)" />
+
+      <!-- Bulk Upload Progress Banner -->
+      @if (uploadStatus().status === 'processing') {
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center gap-3 mb-2">
+            <i class="pi pi-spin pi-spinner text-blue-600" style="font-size:1.2rem"></i>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-blue-800">Bulk Upload in Progress</p>
+              <p class="text-xs text-blue-600">{{ uploadStatus().processed }} of {{ uploadStatus().total }} products processed</p>
+            </div>
+            <span class="text-sm font-bold text-blue-700">{{ uploadProgress() }}%</span>
+          </div>
+          <p-progressBar [value]="uploadProgress()" [showValue]="false" styleClass="h-2" />
+        </div>
+      }
+
+      @if (uploadStatus().status === 'completed') {
+        <div class="bg-green-50 border border-green-200 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <i class="pi pi-check-circle text-green-600" style="font-size:1.3rem"></i>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-green-800">Bulk Upload Complete</p>
+              <p class="text-xs text-green-600">
+                {{ uploadStatus().succeeded }} succeeded, {{ uploadStatus().failed }} failed out of {{ uploadStatus().total }}
+              </p>
+            </div>
+            @if (uploadStatus().errors.length > 0) {
+              <button pButton label="View Errors" icon="pi pi-exclamation-triangle" class="p-button-outlined p-button-sm p-button-warning" (click)="showErrors = !showErrors"></button>
+            }
+            <button pButton icon="pi pi-times" class="p-button-text p-button-sm p-button-rounded" pTooltip="Dismiss" (click)="dismissUploadStatus()"></button>
+          </div>
+          @if (showErrors && uploadStatus().errors.length > 0) {
+            <div class="mt-3 max-h-40 overflow-y-auto bg-white rounded-lg border border-red-100 p-3">
+              @for (err of uploadStatus().errors; track err.row) {
+                <div class="text-xs text-red-600 py-1 border-b border-red-50 last:border-0">
+                  <span class="font-semibold">Row {{ err.row }}</span>
+                  @if (err.name) { <span> ({{ err.name }})</span> }
+                  <span>: {{ err.error }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (uploadStatus().status === 'failed' && uploadStatus().processed === 0) {
+        <div class="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center gap-3">
+            <i class="pi pi-times-circle text-red-600" style="font-size:1.3rem"></i>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-red-800">Bulk Upload Failed</p>
+              <p class="text-xs text-red-600">{{ uploadStatus().errors[0]?.error || 'An unexpected error occurred' }}</p>
+            </div>
+            <button pButton icon="pi pi-times" class="p-button-text p-button-sm p-button-rounded" pTooltip="Dismiss" (click)="dismissUploadStatus()"></button>
+          </div>
+        </div>
+      }
 
       <!-- Header -->
       <div class="flex items-center justify-between">
@@ -57,8 +128,20 @@ interface ProductRow {
           <h1 class="text-2xl font-bold text-gray-900">Products</h1>
           <p class="text-gray-500 text-sm">Manage your product catalog</p>
         </div>
-        <button pButton label="Add Product" icon="pi pi-plus" severity="success" routerLink="new"></button>
+        <div class="flex items-center gap-2">
+          <button pButton label="Download Template" icon="pi pi-download" class="p-button-outlined p-button-sm" (click)="downloadTemplate()" [disabled]="isUploading()"></button>
+          <button pButton label="Bulk Upload" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()"></button>
+          <button pButton label="Add Product" icon="pi pi-plus" severity="success" routerLink="new" [disabled]="isUploading()"></button>
+        </div>
       </div>
+
+      <!-- Upload Lock Overlay Message -->
+      @if (isUploading()) {
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 shadow-sm flex items-center gap-2">
+          <i class="pi pi-lock text-amber-600"></i>
+          <span class="text-sm text-amber-700">Product actions are locked while bulk upload is in progress</span>
+        </div>
+      }
 
       <!-- Filters -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3 items-center">
@@ -88,7 +171,7 @@ interface ProductRow {
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" [class.opacity-60]="isUploading()" [class.pointer-events-none]="isUploading()">
         <p-table
           [value]="products()"
           [paginator]="true"
@@ -135,7 +218,7 @@ interface ProductRow {
                 </div>
               </td>
               <td class="text-gray-600 text-sm">{{ product.category }}</td>
-              <td class="font-semibold text-gray-900">\u20B9{{ product.price | number }}</td>
+              <td class="font-semibold text-gray-900">₹{{ product.price | number }}</td>
               <td>
                 <span
                   class="font-medium text-sm"
@@ -159,6 +242,7 @@ interface ProductRow {
                     class="p-button-text p-button-sm p-button-rounded"
                     pTooltip="Edit"
                     [routerLink]="[product.id, 'edit']"
+                    [disabled]="isUploading()"
                   ></button>
                   <button
                     pButton
@@ -166,6 +250,7 @@ interface ProductRow {
                     class="p-button-text p-button-sm p-button-rounded p-button-danger"
                     pTooltip="Delete"
                     (click)="confirmDelete(product)"
+                    [disabled]="isUploading()"
                   ></button>
                 </div>
               </td>
@@ -185,10 +270,12 @@ interface ProductRow {
     </div>
   `,
 })
-export class ProductListComponent implements OnInit {
+export class ProductListComponent implements OnInit, OnDestroy {
   private readonly confirmationService = inject(ConfirmationService);
   private readonly messageService = inject(MessageService);
   private readonly productService = inject(ProductService);
+
+  @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
 
   loading = signal(true);
   products = signal<ProductRow[]>([]);
@@ -201,8 +288,18 @@ export class ProductListComponent implements OnInit {
   currentPage = 1;
   currentSortField = '';
   currentSortOrder: 'asc' | 'desc' = 'asc';
+  showErrors = false;
+
+  uploadStatus = signal<BulkUploadStatus>({
+    status: 'idle', total: 0, processed: 0, succeeded: 0, failed: 0, errors: [],
+  });
+  uploadStarting = signal(false);
+  isUploading = signal(false);
+
+  uploadProgress = signal(0);
 
   private searchSubject = new Subject<string>();
+  private pollTimer: any = null;
 
   statusOptions = [
     { label: 'All Statuses', value: '' },
@@ -219,6 +316,7 @@ export class ProductListComponent implements OnInit {
   ngOnInit() {
     this.loadCategories();
     this.loadProducts();
+    this.checkUploadStatus();
 
     this.searchSubject
       .pipe(debounceTime(400), distinctUntilChanged())
@@ -226,6 +324,10 @@ export class ProductListComponent implements OnInit {
         this.currentPage = 1;
         this.loadProducts();
       });
+  }
+
+  ngOnDestroy() {
+    this.stopPolling();
   }
 
   onSearchInput() {
@@ -270,6 +372,8 @@ export class ProductListComponent implements OnInit {
   }
 
   confirmDelete(product: ProductRow) {
+    if (this.isUploading()) return;
+
     this.confirmationService.confirm({
       message: `Delete "${product.name}"? This action cannot be undone.`,
       header: 'Confirm Delete',
@@ -281,7 +385,7 @@ export class ProductListComponent implements OnInit {
             this.messageService.add({ severity: 'success', summary: 'Deleted', detail: `${product.name} removed` });
             this.loadProducts();
           },
-          error: (err) => {
+          error: () => {
             this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete product' });
           },
         });
@@ -292,6 +396,114 @@ export class ProductListComponent implements OnInit {
   onImgError(event: Event) {
     (event.target as HTMLImageElement).src = 'https://via.placeholder.com/40';
   }
+
+  // ─── Bulk Upload ──────────────────────────────────────────────────────────
+
+  downloadTemplate() {
+    this.productService.downloadBulkTemplate().subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'product-upload-template.xlsx';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download template' });
+      },
+    });
+  }
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx')) {
+      this.messageService.add({ severity: 'warn', summary: 'Invalid File', detail: 'Please upload an .xlsx file' });
+      input.value = '';
+      return;
+    }
+
+    this.uploadStarting.set(true);
+    this.productService.bulkUpload(file).subscribe({
+      next: () => {
+        this.uploadStarting.set(false);
+        this.isUploading.set(true);
+        this.messageService.add({ severity: 'info', summary: 'Upload Started', detail: 'Products are being uploaded in the background' });
+        this.startPolling();
+      },
+      error: (err) => {
+        this.uploadStarting.set(false);
+        const msg = err.error?.message || 'Failed to start upload';
+        this.messageService.add({ severity: 'error', summary: 'Upload Failed', detail: msg });
+      },
+    });
+
+    input.value = '';
+  }
+
+  dismissUploadStatus() {
+    this.productService.clearBulkUploadStatus().subscribe();
+    this.uploadStatus.set({ status: 'idle', total: 0, processed: 0, succeeded: 0, failed: 0, errors: [] });
+    this.showErrors = false;
+    this.loadProducts();
+  }
+
+  private checkUploadStatus() {
+    this.productService.getBulkUploadStatus().subscribe({
+      next: (status) => {
+        this.uploadStatus.set(status);
+        this.updateProgress(status);
+        if (status.status === 'processing') {
+          this.isUploading.set(true);
+          this.startPolling();
+        }
+      },
+    });
+  }
+
+  private startPolling() {
+    this.stopPolling();
+    this.pollTimer = setInterval(() => {
+      this.productService.getBulkUploadStatus().subscribe({
+        next: (status) => {
+          this.uploadStatus.set(status);
+          this.updateProgress(status);
+
+          if (status.status === 'completed' || status.status === 'failed') {
+            this.isUploading.set(false);
+            this.stopPolling();
+            this.loadProducts();
+
+            if (status.status === 'completed') {
+              this.messageService.add({
+                severity: status.failed > 0 ? 'warn' : 'success',
+                summary: 'Upload Complete',
+                detail: `${status.succeeded} products added${status.failed > 0 ? `, ${status.failed} failed` : ''}`,
+              });
+            }
+          }
+        },
+      });
+    }, 2000);
+  }
+
+  private stopPolling() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  private updateProgress(status: BulkUploadStatus) {
+    this.uploadProgress.set(
+      status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0,
+    );
+  }
+
+  // ─── Data Loading ─────────────────────────────────────────────────────────
 
   private loadProducts() {
     this.loading.set(true);
@@ -322,7 +534,7 @@ export class ProductListComponent implements OnInit {
         this.totalRecords.set(response.total);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: () => {
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to load products' });
         this.loading.set(false);
       },
@@ -336,9 +548,6 @@ export class ProductListComponent implements OnInit {
           { label: 'All Categories', value: '' },
           ...categories.map((c) => ({ label: c.name, value: c.id })),
         ];
-      },
-      error: () => {
-        // Keep default "All Categories" option on failure
       },
     });
   }

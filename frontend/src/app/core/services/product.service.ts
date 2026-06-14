@@ -95,6 +95,40 @@ export class ProductService {
     return this.api.post('/products/sync-catalog', { productIds });
   }
 
+  // ─── Bulk Upload ───────────────────────────────────────────────────────────
+
+  downloadBulkTemplate(): Observable<Blob> {
+    return this.api.http.get(this.api.url('/products/bulk-upload/template'), {
+      responseType: 'blob',
+      withCredentials: true,
+    });
+  }
+
+  bulkUpload(file: File): Observable<{ message: string; status: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.api.http.post<{ message: string; status: string }>(
+      this.api.url('/products/bulk-upload'),
+      formData,
+      { withCredentials: true },
+    );
+  }
+
+  getBulkUploadStatus(): Observable<{
+    status: 'idle' | 'processing' | 'completed' | 'failed';
+    total: number;
+    processed: number;
+    succeeded: number;
+    failed: number;
+    errors: { row: number; name: string; error: string }[];
+  }> {
+    return this.api.get('/products/bulk-upload/status');
+  }
+
+  clearBulkUploadStatus(): Observable<any> {
+    return this.api.post('/products/bulk-upload/clear', {});
+  }
+
   // ─── Categories ────────────────────────────────────────────────────────────
 
   getCategories(params?: QueryParams): Observable<Category[]> {
