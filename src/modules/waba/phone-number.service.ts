@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
@@ -104,6 +104,23 @@ export class PhoneNumberService {
 
   async updateStatus(phoneId: string, status: 'active' | 'inactive'): Promise<PhoneNumber> {
     const phone = await this.findById(phoneId);
+
+    // Activating is only meaningful once the number is actually registered &
+    // verified on Meta. Otherwise flipping the local flag to "active" is
+    // misleading (the number can't send/receive) and removes it from the
+    // auto-retry cron. Block it with a clear explanation instead.
+    if (status === 'active') {
+      const registered = !!phone.phoneNumberId && phone.registrationStatus === 'registered';
+      if (!registered) {
+        throw new BadRequestException(
+          'This number is not registered on WhatsApp yet, so it can\'t be activated here. ' +
+          'It must be registered and verified (OTP) from the tenant\'s Settings → WhatsApp page first. ' +
+          `Current state: ${phone.phoneNumberId ? 'added to WABA but not verified' : 'not yet added to a WABA'} ` +
+          `(registration: ${phone.registrationStatus}, verification: ${phone.codeVerificationStatus}).`,
+        );
+      }
+    }
+
     await this.phoneRepo.update(phoneId, { status });
     return this.findById(phoneId);
   }

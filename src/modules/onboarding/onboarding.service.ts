@@ -187,26 +187,28 @@ export class OnboardingService {
           waba.id, fullPhone, reg.phoneNumberId, tenantId, 'pending_verification', 'pending',
         );
         await this.updateTenantWithPhone(tenantId, fullPhone, phoneRecord);
-        const sent = await this.requestCodeOnMeta(reg.phoneNumberId, token);
+        const code = await this.requestCodeOnMeta(reg.phoneNumberId, token);
         await this.phoneNumberRepository.update(phoneRecord.id, { codeVerificationStatus: 'code_sent' });
-        this.logger.log(`Phone ${fullPhone} added to WABA ${waba.wabaId} (tenant ${tenantId}); OTP sent=${sent}`);
+        this.logger.log(`Phone ${fullPhone} added to WABA ${waba.wabaId} (tenant ${tenantId}); OTP sent=${code.sent}`);
         return {
           status: 'needs_verification',
           phone: fullPhone,
           phoneId: phoneRecord.id,
           needsVerification: true,
-          message: sent
+          message: code.sent
             ? 'Number added! A 6-digit code was sent via SMS — enter it below to activate.'
-            : 'Number added! Tap "Resend SMS" to receive your verification code.',
+            : `Number added, but WhatsApp could not send the code: ${code.error} You can tap "Resend SMS" to try again.`,
         };
       }
 
-      // Generic failure on this WABA (bad token, capacity, transient) → try next.
-      lastError = `WABA ${waba.wabaId} could not add the number`;
-      this.logger.warn(`Add failed on WABA ${waba.wabaId} for ${fullPhone}; trying next WABA`);
+      // Generic failure on this WABA (bad token, capacity, transient) → try next,
+      // remembering the real Meta reason so we can tell the tenant.
+      lastError = reg.metaError || `WABA ${waba.wabaId} could not add the number.`;
+      this.logger.warn(`Add failed on WABA ${waba.wabaId} for ${fullPhone}: ${lastError}; trying next WABA`);
     }
 
-    // All WABAs exhausted → save locally for the retry cron to pick up.
+    // All WABAs exhausted → save locally for the retry cron to pick up, and tell
+    // the tenant exactly what Meta said.
     const fallbackWaba = candidates[0].waba;
     const phoneRecord = await this.upsertPhoneRecord(
       fallbackWaba.id, fullPhone, null, tenantId, 'pending_registration', 'not_started',
@@ -217,7 +219,9 @@ export class OnboardingService {
       status: 'registered',
       phone: fullPhone,
       phoneId: phoneRecord.id,
-      message: 'Number saved. Automatic activation could not be completed right now — it will be retried automatically.',
+      message: lastError
+        ? `WhatsApp couldn't register this number yet: ${lastError} We'll keep retrying automatically — or tap Retry.`
+        : 'Number saved. Automatic activation could not be completed right now — it will be retried automatically.',
     };
   }
 
@@ -250,7 +254,7 @@ export class OnboardingService {
       // Register failed (likely still needs verification) → fall through to OTP.
     }
 
-    const sent = await this.requestCodeOnMeta(onWaba.id, token);
+    const code = await this.requestCodeOnMeta(onWaba.id, token);
     await this.phoneNumberRepository.update(phoneRecord.id, {
       codeVerificationStatus: 'code_sent',
       status: 'pending_verification',
@@ -262,9 +266,9 @@ export class OnboardingService {
       phone: fullPhone,
       phoneId: phoneRecord.id,
       needsVerification: true,
-      message: sent
+      message: code.sent
         ? 'A 6-digit verification code was sent to this number. Enter it below to activate.'
-        : 'This number needs verification. Tap "Resend SMS" to receive a code.',
+        : `This number needs verification, but WhatsApp could not send the code: ${code.error} Tap "Resend SMS" to try again.`,
     };
   }
 
@@ -642,7 +646,7 @@ export class OnboardingService {
     phoneNumberId: string,
     accessToken: string,
     method: 'SMS' | 'VOICE' = 'SMS',
-  ): Promise<boolean> {
+  ): Promise<{ sent: boolean; error?: string }> {
     try {
       const res = await fetch(
         `https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/request_code`,
@@ -655,12 +659,12 @@ export class OnboardingService {
       const data = await res.json() as any;
       if (!res.ok) {
         this.logger.warn(`request_code failed for ${phoneNumberId}: ${data.error?.message}`);
-        return false;
+        return { sent: false, error: data.error?.message || 'WhatsApp could not send the verification code.' };
       }
-      return true;
+      return { sent: true };
     } catch (err: any) {
       this.logger.warn(`request_code error for ${phoneNumberId}: ${err.message}`);
-      return false;
+      return { sent: false, error: `Could not reach WhatsApp to send the code: ${err.message}` };
     }
   }
 
@@ -843,6 +847,7 @@ export class OnboardingService {
     alreadyTaken: boolean;
     errorMessage?: string;
     instructions?: string[];
+    metaError?: string;
   }> {
     try {
       // Meta expects `cc` = country code and `phone_number` = the NATIONAL number
@@ -912,12 +917,12 @@ export class OnboardingService {
         };
       }
 
-      // Other Meta API errors — save locally for admin to fix
+      // Other Meta API errors — surface the real reason to the tenant.
       this.logger.warn(`Unrecognized Meta error for ${phone}: ${JSON.stringify(data)}`);
-      return { phoneNumberId: null, alreadyTaken: false };
+      return { phoneNumberId: null, alreadyTaken: false, metaError: errorMsg || 'WhatsApp registration was rejected by Meta.' };
     } catch (err: any) {
       this.logger.warn(`Meta phone registration network error: ${err.message}`);
-      return { phoneNumberId: null, alreadyTaken: false };
+      return { phoneNumberId: null, alreadyTaken: false, metaError: `Could not reach WhatsApp: ${err.message}` };
     }
   }
 

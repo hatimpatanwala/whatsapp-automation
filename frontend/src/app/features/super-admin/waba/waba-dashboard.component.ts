@@ -570,7 +570,7 @@ export class WabaDashboardComponent implements OnInit {
   unassignPhone(p: WabaPhoneNumber) { this.wabaService.unassignPhone(p.id).subscribe({ next: () => { this.toast('success', 'Unassigned'); this.loadAll(); } }); }
   togglePhoneStatus(p: WabaPhoneNumber) {
     const s = p.status === 'active' ? 'inactive' : 'active';
-    this.wabaService.updatePhoneStatus(p.id, s).subscribe({ next: () => { this.toast('success', `Phone ${s}`); this.loadAll(); }, error: (e) => this.toast('error', e.error?.message || 'Failed') });
+    this.wabaService.updatePhoneStatus(p.id, s).subscribe({ next: () => { this.toast('success', `Phone ${s}`); this.loadAll(); }, error: (e) => { this.toast('error', e.error?.message || 'Failed'); this.loadAll(); } });
   }
   openOnboardDialog(p: WabaPhoneNumber) {
     if (p.tenantId) { this.wabaService.startOnboarding(p.id, p.tenantId).subscribe({ next: (s) => this.toast('info', `Onboarding: ${s.step}`) }); }
