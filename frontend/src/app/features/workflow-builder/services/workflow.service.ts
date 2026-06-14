@@ -1,12 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { map, of } from 'rxjs';
 import {
   WorkflowDefinition,
   WorkflowNodeData,
   WorkflowEdgeData,
   NODE_TYPE_DEFINITIONS,
   NodeTypeDefinition,
+  EntityType,
 } from '../models/workflow.models';
 
 @Injectable({ providedIn: 'root' })
@@ -54,6 +56,39 @@ export class WorkflowService {
 
   getExecutions(id: string, params?: { page?: number; limit?: number }): Observable<any> {
     return this.api.get(`/workflows/${id}/executions`, params as any);
+  }
+
+  // === Entity dropdown options ===
+
+  getEntityOptions(entityType: EntityType): Observable<{ label: string; value: string }[]> {
+    switch (entityType) {
+      case 'workflows':
+        return this.api.get('/workflows', { limit: 100 }).pipe(
+          map((res: any) => {
+            const items = res?.data?.data || res?.data || [];
+            return items.map((w: any) => ({ label: w.name, value: w.id }));
+          }),
+        );
+      case 'templates':
+        return this.api.get('/campaigns/templates').pipe(
+          map((res: any) => {
+            const items = res?.data || [];
+            return items.map((t: any) => ({
+              label: t.templateName || t.name,
+              value: t.templateName || t.name,
+            }));
+          }),
+        );
+      case 'categories':
+        return this.api.get('/categories').pipe(
+          map((res: any) => {
+            const items = res?.data || [];
+            return items.map((c: any) => ({ label: c.name, value: c.id }));
+          }),
+        );
+      default:
+        return of([]);
+    }
   }
 
   // === Template / Local Methods ===

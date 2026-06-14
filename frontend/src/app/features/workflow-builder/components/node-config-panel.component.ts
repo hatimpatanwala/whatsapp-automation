@@ -1,4 +1,4 @@
-import { Component, input, output, computed, signal } from '@angular/core';
+import { Component, input, output, computed, signal, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -14,7 +14,9 @@ import {
   NodeTypeDefinition,
   ConfigField,
   NODE_TYPE_DEFINITIONS,
+  EntityType,
 } from '../models/workflow.models';
+import { WorkflowService } from '../services/workflow.service';
 
 @Component({
   selector: 'wa-node-config-panel',
@@ -83,7 +85,8 @@ import {
             <p-divider />
             <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Configuration</h4>
 
-            @for (field of nodeDef()!.configFields; track field.key) {
+            @for (field of nodeDef()!.configFields; track $index) {
+              @if (isFieldVisible(field, n)) {
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-semibold text-gray-600">
                   {{ field.label }}
@@ -124,6 +127,21 @@ import {
                       styleClass="w-full"
                     />
                   }
+                  @case ('entity-select') {
+                    <p-select
+                      [ngModel]="n.config[field.key] || ''"
+                      (ngModelChange)="updateConfig(field.key, $event)"
+                      [options]="entityOptions()[field.entityType!] || []"
+                      optionLabel="label"
+                      optionValue="value"
+                      [placeholder]="field.placeholder || 'Select...'"
+                      [filter]="true"
+                      filterPlaceholder="Search..."
+                      [showClear]="true"
+                      styleClass="w-full"
+                      [loading]="entityLoading()[field.entityType!] || false"
+                    />
+                  }
                   @case ('number') {
                     <p-inputNumber
                       [ngModel]="n.config[field.key] ?? field.defaultValue ?? 0"
@@ -153,6 +171,7 @@ import {
                   }
                 }
               </div>
+              }
             }
           }
 
@@ -206,6 +225,8 @@ import {
   `,
 })
 export class NodeConfigPanelComponent {
+  private readonly workflowService = inject(WorkflowService);
+
   node = input<WorkflowNodeData | null>(null);
 
   nodeUpdated = output<WorkflowNodeData>();
@@ -213,16 +234,34 @@ export class NodeConfigPanelComponent {
   duplicateNode = output<WorkflowNodeData>();
   panelClosed = output<void>();
 
+  entityOptions = signal<Record<string, { label: string; value: string }[]>>({});
+  entityLoading = signal<Record<string, boolean>>({});
+
   private nodeDefCache = new Map<string, NodeTypeDefinition>();
+  private loadedEntities = new Set<string>();
 
   constructor() {
     NODE_TYPE_DEFINITIONS.forEach(d => this.nodeDefCache.set(d.type, d));
+
+    effect(() => {
+      const def = this.nodeDef();
+      if (!def) return;
+      const entityFields = def.configFields.filter(f => f.type === 'entity-select' && f.entityType);
+      for (const field of entityFields) {
+        this.loadEntityOptions(field.entityType!);
+      }
+    });
   }
 
   nodeDef = computed(() => {
     const n = this.node();
     return n ? this.nodeDefCache.get(n.type) : undefined;
   });
+
+  isFieldVisible(field: ConfigField, node: WorkflowNodeData): boolean {
+    if (!field.showWhen) return true;
+    return node.config[field.showWhen.field] === field.showWhen.value;
+  }
 
   updateField(field: 'label' | 'description', value: string) {
     const n = this.node();
@@ -234,5 +273,22 @@ export class NodeConfigPanelComponent {
     const n = this.node();
     if (!n) return;
     this.nodeUpdated.emit({ ...n, config: { ...n.config, [key]: value } });
+  }
+
+  private loadEntityOptions(entityType: EntityType) {
+    if (this.loadedEntities.has(entityType)) return;
+    this.loadedEntities.add(entityType);
+
+    this.entityLoading.update(l => ({ ...l, [entityType]: true }));
+
+    this.workflowService.getEntityOptions(entityType).subscribe({
+      next: (options) => {
+        this.entityOptions.update(o => ({ ...o, [entityType]: options }));
+        this.entityLoading.update(l => ({ ...l, [entityType]: false }));
+      },
+      error: () => {
+        this.entityLoading.update(l => ({ ...l, [entityType]: false }));
+      },
+    });
   }
 }

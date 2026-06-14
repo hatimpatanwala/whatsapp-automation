@@ -11,14 +11,18 @@ export interface NodeTypeDefinition {
   configFields: ConfigField[];
 }
 
+export type EntityType = 'workflows' | 'templates' | 'categories';
+
 export interface ConfigField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'select' | 'number' | 'boolean' | 'buttons' | 'products' | 'template';
+  type: 'text' | 'textarea' | 'select' | 'number' | 'boolean' | 'buttons' | 'products' | 'template' | 'entity-select';
   options?: { label: string; value: string }[];
   placeholder?: string;
   required?: boolean;
   defaultValue?: any;
+  entityType?: EntityType;
+  showWhen?: { field: string; value: string };
 }
 
 export interface WorkflowNodeData {
@@ -182,7 +186,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#25D366',
     maxOutputs: 1,
     configFields: [
-      { key: 'templateName', label: 'Template Name', type: 'text' },
+      { key: 'templateName', label: 'Template', type: 'entity-select', entityType: 'templates', placeholder: 'Select a template' },
       { key: 'language', label: 'Language', type: 'select', options: [{ label: 'English', value: 'en' }, { label: 'Hindi', value: 'hi' }], defaultValue: 'en' },
     ],
   },
@@ -198,6 +202,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     maxOutputs: 1,
     configFields: [
       { key: 'categoryFilter', label: 'Category Filter', type: 'select', options: [{ label: 'All Categories', value: '' }, { label: 'Specific Category', value: 'specific' }] },
+      { key: 'categoryId', label: 'Category', type: 'entity-select', entityType: 'categories', placeholder: 'Select a category', showWhen: { field: 'categoryFilter', value: 'specific' } },
       { key: 'maxProducts', label: 'Max Products', type: 'number', defaultValue: 10 },
       { key: 'sortBy', label: 'Sort By', type: 'select', options: [{ label: 'Popular', value: 'popular' }, { label: 'Price Low→High', value: 'price_asc' }, { label: 'Price High→Low', value: 'price_desc' }, { label: 'Newest', value: 'newest' }] },
     ],
@@ -276,7 +281,8 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     maxOutputs: 1,
     configFields: [
       { key: 'filterBy', label: 'Filter By', type: 'select', options: [{ label: 'Category', value: 'category' }, { label: 'Price Range', value: 'price' }, { label: 'In Stock Only', value: 'in_stock' }, { label: 'On Sale', value: 'on_sale' }] },
-      { key: 'value', label: 'Value', type: 'text' },
+      { key: 'filterCategory', label: 'Category', type: 'entity-select', entityType: 'categories', placeholder: 'Select a category', showWhen: { field: 'filterBy', value: 'category' } },
+      { key: 'value', label: 'Value', type: 'text', showWhen: { field: 'filterBy', value: 'price' } },
     ],
   },
   {
@@ -465,7 +471,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#0ea5e9',
     maxOutputs: 0,
     configFields: [
-      { key: 'workflowId', label: 'Target Workflow (ID or Name)', type: 'text', placeholder: 'e.g. Order Flow or workflow UUID', required: true },
+      { key: 'workflowId', label: 'Target Workflow', type: 'entity-select', entityType: 'workflows', placeholder: 'Select a workflow', required: true },
       { key: 'passVariables', label: 'Pass Variables to Target', type: 'boolean', defaultValue: true },
     ],
   },

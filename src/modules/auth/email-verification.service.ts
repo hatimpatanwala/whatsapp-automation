@@ -35,16 +35,24 @@ export class EmailVerificationService {
     this.fromEmail = configService.get<string>('SMTP_FROM', 'noreply@wacommerce.com');
 
     if (smtpHost) {
-      this.transporter = nodemailer.createTransport({
+      const smtpUser = configService.get<string>('SMTP_USER', '');
+      const smtpPass = configService.get<string>('SMTP_PASS', '');
+      const smtpPort = configService.get<number>('SMTP_PORT', 25);
+
+      const transportOpts: any = {
         host: smtpHost,
-        port: configService.get<number>('SMTP_PORT', 587),
-        secure: configService.get<number>('SMTP_PORT', 587) === 465,
-        auth: {
-          user: configService.get<string>('SMTP_USER', ''),
-          pass: configService.get<string>('SMTP_PASS', ''),
-        },
-      });
-      this.logger.log('SMTP transport configured');
+        port: smtpPort,
+        secure: smtpPort === 465,
+      };
+
+      if (smtpUser && smtpPass) {
+        transportOpts.auth = { user: smtpUser, pass: smtpPass };
+      } else {
+        transportOpts.tls = { rejectUnauthorized: false };
+      }
+
+      this.transporter = nodemailer.createTransport(transportOpts);
+      this.logger.log(`SMTP transport configured (host=${smtpHost}, port=${smtpPort}, auth=${!!smtpUser})`);
     } else if (!this.isDev) {
       this.logger.warn('No SMTP_HOST configured — email OTPs will be logged only');
     }
@@ -55,8 +63,9 @@ export class EmailVerificationService {
 
     this.enforceRateLimit(email);
 
-    const useStaticOtp = this.isDev || !this.transporter;
-    const code = useStaticOtp ? this.STATIC_OTP : Math.floor(100000 + Math.random() * 900000).toString();
+    const code = this.transporter
+      ? Math.floor(100000 + Math.random() * 900000).toString()
+      : this.STATIC_OTP;
 
     this.otpStore.set(email, {
       code,

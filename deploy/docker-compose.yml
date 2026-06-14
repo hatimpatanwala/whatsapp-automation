@@ -151,6 +151,13 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123456}
       ADMIN_NAME: ${ADMIN_NAME:-Platform Admin}
 
+      # SMTP / Email
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@whatsappdemo.duckdns.org}
+
       # Observability (optional)
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}

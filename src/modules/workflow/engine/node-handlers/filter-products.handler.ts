@@ -11,10 +11,18 @@ export class FilterProductsNodeHandler implements NodeHandler {
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     const filterBy = node.config.filterBy || 'in_stock';
     const value = node.config.value || '';
+    const filterCategory = node.config.filterCategory || '';
 
     const products = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
       switch (filterBy) {
         case 'category':
+          if (filterCategory) {
+            return qr.query(
+              `SELECT p.id, p.name, p.price FROM products p
+               WHERE p.is_active = true AND p.category_id = $1`,
+              [filterCategory],
+            );
+          }
           return qr.query(
             `SELECT p.id, p.name, p.price FROM products p
              JOIN categories c ON p.category_id = c.id

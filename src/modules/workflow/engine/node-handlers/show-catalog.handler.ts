@@ -21,7 +21,20 @@ export class ShowCatalogNodeHandler implements NodeHandler {
       : sortBy === 'price_desc' ? 'p.price DESC'
       : 'p.created_at DESC';
 
+    const categoryId = node.config.categoryId || '';
+
     const products = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      if (categoryId) {
+        return qr.query(
+          `SELECT p.id, p.name, p.price, c.name as category_name
+           FROM products p
+           LEFT JOIN categories c ON p.category_id = c.id
+           WHERE p.is_active = true AND p.category_id = $1
+           ORDER BY ${orderClause}
+           LIMIT $2`,
+          [categoryId, maxProducts],
+        );
+      }
       return qr.query(
         `SELECT p.id, p.name, p.price, c.name as category_name
          FROM products p
