@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
@@ -109,56 +110,36 @@ export class OnboardingService {
     });
 
     if (existingInPool) {
-      if (existingInPool.tenantId === tenantId) {
-        // Already assigned to this tenant — ensure tenant record is in sync
-        // If phone_number_id is missing, try to resolve it from Meta
-        if (!existingInPool.phoneNumberId && existingInPool.wabaAccountId) {
-          await this.syncPhoneNumberIdFromMeta(existingInPool);
-        }
-        await this.updateTenantWithPhone(tenantId, fullPhone, existingInPool);
-        return {
-          status: 'registered',
-          phone: fullPhone,
-          message: 'This number is already registered to your account.',
-          phoneId: existingInPool.id,
-        };
-      }
-      if (existingInPool.tenantId) {
+      // Already assigned to another tenant → unavailable.
+      if (existingInPool.tenantId && existingInPool.tenantId !== tenantId) {
         return {
           status: 'already_occupied',
           phone: fullPhone,
           message: 'This number is already in use by another account on the platform.',
         };
       }
-      // Exists but unassigned — assign to this tenant
-      await this.phoneNumberRepository.update(existingInPool.id, {
-        tenantId,
-        status: 'active',
-      });
-
-      // If phone_number_id is missing, try to resolve it from Meta
-      if (!existingInPool.phoneNumberId && existingInPool.wabaAccountId) {
-        await this.syncPhoneNumberIdFromMeta(existingInPool);
+      // Already ours AND fully active → nothing to do.
+      if (existingInPool.tenantId === tenantId && existingInPool.status === 'active' && existingInPool.phoneNumberId) {
+        await this.updateTenantWithPhone(tenantId, fullPhone, existingInPool);
+        return {
+          status: 'registered',
+          phone: fullPhone,
+          message: 'This number is already registered and active on your account.',
+          phoneId: existingInPool.id,
+        };
       }
-
-      await this.updateTenantWithPhone(tenantId, fullPhone, existingInPool);
-      return {
-        status: 'registered',
-        phone: fullPhone,
-        message: 'Number activated and assigned to your account!',
-        phoneId: existingInPool.id,
-      };
+      // Otherwise (ours-but-not-active, or unassigned) → claim it and let the
+      // automated Meta flow below resume activation / send the OTP.
+      await this.phoneNumberRepository.update(existingInPool.id, { tenantId });
     }
 
-    // Check 2: Get the platform's shared WABA
+    // Check 2: Get the platform's shared WABA + access token
     const platformWaba = await this.getPlatformWaba();
     if (!platformWaba) {
       throw new BadRequestException(
         'Platform WhatsApp Business Account is not configured. Please contact support.',
       );
     }
-
-    // Check 3: Get the platform's access token
     const accessToken = await this.metaTokenService.getActiveToken(platformWaba.id);
     if (!accessToken) {
       throw new BadRequestException(
@@ -166,15 +147,58 @@ export class OnboardingService {
       );
     }
 
-    // Step 4: Try to register the number on Meta — this is the single source of truth.
-    // Meta will tell us if the number is already on another WABA, has WA Business, etc.
+    // Check 3: Is the number ALREADY on our platform WABA at Meta? (e.g. a
+    // previous attempt added it.) If so we don't re-add — we resume from
+    // wherever it left off, fully automatically.
+    const onWaba = await this.findNumberOnWaba(platformWaba.wabaId, fullPhone, accessToken);
+    if (onWaba) {
+      const phoneRecord = await this.upsertPhoneRecord(platformWaba.id, fullPhone, onWaba.id, tenantId);
+
+      // Already verified (or fully connected) → register on Cloud API +
+      // subscribe webhooks automatically. No OTP needed.
+      if (onWaba.status === 'CONNECTED' || onWaba.codeVerificationStatus === 'VERIFIED') {
+        const result = await this.activatePhoneOnMeta(phoneRecord, platformWaba, accessToken);
+        await this.updateTenantWithPhone(tenantId, fullPhone, phoneRecord);
+        if (result.active) {
+          return {
+            status: 'registered',
+            phone: fullPhone,
+            phoneId: phoneRecord.id,
+            message: result.warning
+              ? `Number connected and activated automatically. ${result.warning}`
+              : 'Number connected and activated automatically — you\'re all set!',
+          };
+        }
+        // Register failed (likely still needs verification) → fall through to OTP.
+      }
+
+      // Not yet verified → send the OTP automatically so the user can finish.
+      const sent = await this.requestCodeOnMeta(onWaba.id, accessToken);
+      await this.phoneNumberRepository.update(phoneRecord.id, {
+        codeVerificationStatus: 'code_sent',
+        status: 'pending_verification',
+        registrationStatus: 'pending',
+      });
+      await this.updateTenantWithPhone(tenantId, fullPhone, phoneRecord);
+      return {
+        status: 'needs_verification',
+        phone: fullPhone,
+        phoneId: phoneRecord.id,
+        needsVerification: true,
+        message: sent
+          ? 'A 6-digit verification code was sent to this number. Enter it below to activate.'
+          : 'This number needs verification. Tap "Resend SMS" to receive a code.',
+      };
+    }
+
+    // Check 4: Not on our WABA yet → add it. Meta is the source of truth and
+    // will tell us if it's on another WABA / WA Business app / BSP.
     const registrationResult = await this.registerPhoneOnMeta(
       fullPhone,
       platformWaba.wabaId,
       accessToken,
     );
 
-    // If Meta said the number is already taken (on another WABA, WA Business app, or BSP)
     if (registrationResult.alreadyTaken) {
       return {
         status: 'already_business',
@@ -184,40 +208,39 @@ export class OnboardingService {
       };
     }
 
-    // Step 5: Save to our pool and assign to tenant
-    const phoneRecord = this.phoneNumberRepository.create({
-      wabaAccountId: platformWaba.id,
-      phoneNumber: fullPhone,
-      phoneNumberId: registrationResult.phoneNumberId || null,
-      displayName: fullPhone,
-      status: registrationResult.phoneNumberId ? 'pending_verification' : 'pending_registration',
-      registrationStatus: registrationResult.phoneNumberId ? 'pending' : 'not_started',
-      tenantId,
-    });
-    await this.phoneNumberRepository.save(phoneRecord);
-
-    // Step 6: Update tenant record
-    await this.updateTenantWithPhone(tenantId, fullPhone, phoneRecord);
-
-    this.logger.log(`Phone ${fullPhone} registered under platform WABA for tenant ${tenantId}`);
-
-    // If we got a phoneNumberId back, the number needs OTP verification
     if (registrationResult.phoneNumberId) {
+      // Added to our WABA — save, then auto-send the verification code so the
+      // user only has to type the OTP (the one step Meta requires a human for).
+      const phoneRecord = await this.upsertPhoneRecord(
+        platformWaba.id, fullPhone, registrationResult.phoneNumberId, tenantId,
+        'pending_verification', 'pending',
+      );
+      await this.updateTenantWithPhone(tenantId, fullPhone, phoneRecord);
+      const sent = await this.requestCodeOnMeta(registrationResult.phoneNumberId, accessToken);
+      await this.phoneNumberRepository.update(phoneRecord.id, { codeVerificationStatus: 'code_sent' });
+      this.logger.log(`Phone ${fullPhone} added to platform WABA for tenant ${tenantId}; OTP sent=${sent}`);
       return {
         status: 'needs_verification',
         phone: fullPhone,
-        message: 'Number added to our platform! Please verify it with the SMS code sent to this number.',
         phoneId: phoneRecord.id,
         needsVerification: true,
+        message: sent
+          ? 'Number added! A 6-digit code was sent via SMS — enter it below to activate.'
+          : 'Number added! Tap "Resend SMS" to receive your verification code.',
       };
     }
 
-    // Meta API failed but we saved locally — admin can fix
+    // Meta add failed with an unrecognized error → save locally so it can be retried.
+    const phoneRecord = await this.upsertPhoneRecord(
+      platformWaba.id, fullPhone, null, tenantId, 'pending_registration', 'not_started',
+    );
+    await this.updateTenantWithPhone(tenantId, fullPhone, phoneRecord);
+    this.logger.warn(`Phone ${fullPhone} saved locally for tenant ${tenantId}; Meta registration could not complete automatically`);
     return {
       status: 'registered',
       phone: fullPhone,
-      message: 'Number saved. It will be activated once the administrator completes setup on Meta.',
       phoneId: phoneRecord.id,
+      message: 'Number saved. Automatic activation could not be completed right now — it will be retried automatically.',
     };
   }
 
@@ -274,6 +297,7 @@ export class OnboardingService {
     const platformWaba = await this.getPlatformWaba();
     const accessToken = await this.metaTokenService.getActiveToken(platformWaba!.id);
 
+    // 1) Verify the OTP with Meta
     try {
       const response = await fetch(
         `https://graph.facebook.com/${this.graphApiVersion}/${phone.phoneNumberId}/verify_code`,
@@ -285,30 +309,44 @@ export class OnboardingService {
       );
       const data = await response.json() as any;
       if (!response.ok) {
-        throw new BadRequestException(data.error?.message || 'Invalid verification code');
+        const msg = (data.error?.message || '').toLowerCase();
+        // "already verified" is not an error for us — proceed to activation.
+        if (!msg.includes('already')) {
+          throw new BadRequestException(data.error?.message || 'Invalid verification code');
+        }
       }
-
-      // Mark phone as verified and active
-      await this.phoneNumberRepository.update(phone.id, {
-        status: 'active',
-        registrationStatus: 'registered',
-        codeVerificationStatus: 'verified',
-      });
-
-      // Also update tenant with the phoneNumberId if not already set
-      const tenant = await this.tenantRepository.findOne({ where: { id: tenantId } });
-      if (tenant && !tenant.phoneNumberId) {
-        await this.tenantRepository.update(tenantId, {
-          phoneNumberId: phone.phoneNumberId,
-        });
-      }
-
-      return { verified: true, message: 'Phone number verified and activated!' };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       this.logger.warn(`Verification failed: ${err.message}`);
       throw new BadRequestException('Verification failed. Please check the code and try again.');
     }
+
+    await this.phoneNumberRepository.update(phone.id, { codeVerificationStatus: 'verified' });
+
+    // 2) Auto-register on the Cloud API (with a PIN) and subscribe webhooks — no
+    // further manual/admin steps. After this the number can send & receive.
+    const result = await this.activatePhoneOnMeta(phone, platformWaba!, accessToken);
+
+    // 3) Point the tenant at this phone number id
+    const tenant = await this.tenantRepository.findOne({ where: { id: tenantId } });
+    if (tenant && !tenant.phoneNumberId) {
+      await this.tenantRepository.update(tenantId, { phoneNumberId: phone.phoneNumberId });
+    }
+
+    if (result.active) {
+      return {
+        verified: true,
+        active: true,
+        message: result.warning
+          ? `Phone number verified and activated! ${result.warning}`
+          : 'Phone number verified and activated — ready to send and receive messages!',
+      };
+    }
+    return {
+      verified: true,
+      active: false,
+      message: `Number verified, but final activation needs attention: ${result.warning || 'please try again'}`,
+    };
   }
 
   /**
@@ -361,6 +399,203 @@ export class OnboardingService {
       where: { status: 'active' },
       order: { createdAt: 'ASC' },
     });
+  }
+
+  /**
+   * Generate a random 6-digit Cloud API two-step verification PIN.
+   */
+  private generatePin(): string {
+    return String(randomInt(0, 1000000)).padStart(6, '0');
+  }
+
+  /**
+   * Look up a number on a WABA's phone list at Meta and return its onboarding
+   * state. Resilient to field deprecations (retries without the fields param).
+   */
+  private async findNumberOnWaba(
+    wabaId: string,
+    phone: string,
+    accessToken: string,
+  ): Promise<{ id: string; codeVerificationStatus: string; status: string; verifiedName?: string } | null> {
+    const target = phone.replace(/[^0-9]/g, '');
+    const fetchList = async (withFields: boolean): Promise<any> => {
+      const url = new URL(`https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/phone_numbers`);
+      if (withFields) {
+        url.searchParams.set('fields', 'id,display_phone_number,code_verification_status,status,verified_name');
+      }
+      url.searchParams.set('limit', '100');
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+      return res.json();
+    };
+    try {
+      let data = await fetchList(true);
+      if (data?.error) data = await fetchList(false); // a requested field may be unsupported
+      if (!data?.data) return null;
+      for (const p of data.data) {
+        const disp = (p.display_phone_number || '').replace(/[^0-9]/g, '');
+        if (disp && (disp === target || target.endsWith(disp) || disp.endsWith(target))) {
+          return {
+            id: p.id,
+            codeVerificationStatus: p.code_verification_status || 'NOT_VERIFIED',
+            status: p.status || 'UNKNOWN',
+            verifiedName: p.verified_name,
+          };
+        }
+      }
+      return null;
+    } catch (err: any) {
+      this.logger.warn(`findNumberOnWaba failed for ${phone}: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Request a verification code (OTP) from Meta for a phone number id.
+   * Returns true if Meta accepted the request.
+   */
+  private async requestCodeOnMeta(
+    phoneNumberId: string,
+    accessToken: string,
+    method: 'SMS' | 'VOICE' = 'SMS',
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/request_code`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ code_method: method, language: 'en_US' }),
+        },
+      );
+      const data = await res.json() as any;
+      if (!res.ok) {
+        this.logger.warn(`request_code failed for ${phoneNumberId}: ${data.error?.message}`);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      this.logger.warn(`request_code error for ${phoneNumberId}: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Register the number on the WhatsApp Cloud API (POST /{id}/register with a
+   * PIN). This is what actually makes a verified number able to send/receive.
+   * Treats "already registered" as success and persists the PIN we used.
+   */
+  private async registerOnCloudApi(
+    phone: PhoneNumber,
+    accessToken: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const pin = phone.metadata?.cloudApiPin || this.generatePin();
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/${this.graphApiVersion}/${phone.phoneNumberId}/register`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+        },
+      );
+      const data = await res.json() as any;
+      const msg = (data.error?.message || '').toLowerCase();
+      const alreadyRegistered = msg.includes('already') && (msg.includes('regist') || msg.includes('connect'));
+      if ((res.ok && data.success) || alreadyRegistered) {
+        await this.phoneNumberRepository.update(phone.id, {
+          isPinEnabled: true,
+          metadata: { ...(phone.metadata || {}), cloudApiPin: pin },
+        });
+        return { ok: true };
+      }
+      this.logger.warn(`Cloud API register failed for ${phone.phoneNumberId}: ${data.error?.message}`);
+      return { ok: false, error: data.error?.message || 'Cloud API registration failed' };
+    } catch (err: any) {
+      this.logger.warn(`Cloud API register error for ${phone.phoneNumberId}: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Subscribe our app to the WABA's webhooks (idempotent on Meta's side).
+   */
+  private async subscribeWabaWebhook(wabaId: string, accessToken: string): Promise<boolean> {
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/subscribed_apps`,
+        { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const data = await res.json() as any;
+      if (res.ok && data.success) return true;
+      this.logger.warn(`Webhook subscribe failed for WABA ${wabaId}: ${data.error?.message}`);
+      return false;
+    } catch (err: any) {
+      this.logger.warn(`Webhook subscribe error for WABA ${wabaId}: ${err.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Finalize activation: register on Cloud API + subscribe webhooks + mark the
+   * local record active. Used both after OTP verification and when a number is
+   * found already-verified on our WABA.
+   */
+  private async activatePhoneOnMeta(
+    phone: PhoneNumber,
+    waba: WabaAccount,
+    accessToken: string,
+  ): Promise<{ active: boolean; warning?: string }> {
+    const reg = await this.registerOnCloudApi(phone, accessToken);
+    const subscribed = await this.subscribeWabaWebhook(waba.wabaId, accessToken);
+
+    if (reg.ok) {
+      await this.phoneNumberRepository.update(phone.id, {
+        status: 'active',
+        registrationStatus: 'registered',
+        codeVerificationStatus: 'verified',
+        webhookSubscribed: subscribed,
+        lastOnboardedAt: new Date(),
+      });
+      return {
+        active: true,
+        warning: subscribed ? undefined : 'Webhook subscription is pending and will be retried automatically.',
+      };
+    }
+
+    await this.phoneNumberRepository.update(phone.id, { webhookSubscribed: subscribed });
+    return { active: false, warning: reg.error };
+  }
+
+  /**
+   * Create or update the local phone record for a number, keyed by phone number.
+   */
+  private async upsertPhoneRecord(
+    wabaAccountId: string,
+    phone: string,
+    phoneNumberId: string | null,
+    tenantId: string,
+    status = 'pending_verification',
+    registrationStatus = 'pending',
+  ): Promise<PhoneNumber> {
+    const existing = await this.phoneNumberRepository.findOne({ where: { phoneNumber: phone } });
+    if (existing) {
+      await this.phoneNumberRepository.update(existing.id, {
+        wabaAccountId,
+        tenantId,
+        ...(phoneNumberId ? { phoneNumberId } : {}),
+      });
+      return (await this.phoneNumberRepository.findOne({ where: { id: existing.id } }))!;
+    }
+    const record = this.phoneNumberRepository.create({
+      wabaAccountId,
+      phoneNumber: phone,
+      phoneNumberId: phoneNumberId || null,
+      displayName: phone,
+      status,
+      registrationStatus,
+      tenantId,
+    });
+    return this.phoneNumberRepository.save(record);
   }
 
   /**
