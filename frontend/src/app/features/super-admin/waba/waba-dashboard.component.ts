@@ -456,16 +456,36 @@ import {
     </p-dialog>
 
     <!-- ═══ Assign Phone Dialog ═══ -->
-    <p-dialog header="Assign Phone to Tenant" [(visible)]="showAssignDialog" [modal]="true" [style]="{ width: '25rem' }">
+    <p-dialog header="Assign Phone to Tenant" [(visible)]="showAssignDialog" [modal]="true" [style]="{ width: '28rem' }">
       <div class="flex flex-col gap-4 pt-2">
+        @if (selectedPhone) {
+          <div class="bg-gray-100 rounded-lg p-3">
+            <p class="text-xs text-gray-500">Phone number</p>
+            <p class="text-sm font-semibold text-gray-900">{{ selectedPhone.phoneNumber }}</p>
+          </div>
+        }
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium text-gray-700">Tenant ID</label>
-          <input pInputText [(ngModel)]="assignTenantId" placeholder="Tenant UUID" />
+          <label class="text-sm font-medium text-gray-700">Tenant</label>
+          <p-select
+            [(ngModel)]="assignTenantId"
+            [options]="assignableTenants()"
+            optionLabel="label"
+            optionValue="id"
+            [filter]="true"
+            filterBy="label,slug"
+            [showClear]="true"
+            appendTo="body"
+            placeholder="Select a tenant"
+            [loading]="assignTenantsLoading()"
+            styleClass="w-full"
+            emptyMessage="No unassigned tenants"
+          />
+          <span class="text-xs text-gray-400">Only tenants without a number assigned are shown.</span>
         </div>
       </div>
       <ng-template pTemplate="footer">
         <button pButton label="Cancel" class="p-button-text" (click)="showAssignDialog = false"></button>
-        <button pButton label="Assign" icon="pi pi-check" severity="success" (click)="confirmAssignPhone()"></button>
+        <button pButton label="Assign" icon="pi pi-check" severity="success" (click)="confirmAssignPhone()" [disabled]="!assignTenantId"></button>
       </ng-template>
     </p-dialog>
 
@@ -511,6 +531,8 @@ export class WabaDashboardComponent implements OnInit {
   syncAccessToken = '';
   assignTenantId = '';
   selectedPhone: WabaPhoneNumber | null = null;
+  assignableTenants = signal<Array<{ id: string; name: string; slug: string; businessName: string | null; label: string }>>([]);
+  assignTenantsLoading = signal(false);
   showRegisterForTenantDialog = false;
   registerForTenantPhone = '';
   registerForTenantId = '';
@@ -621,7 +643,21 @@ export class WabaDashboardComponent implements OnInit {
     });
   }
 
-  openAssignDialog(p: WabaPhoneNumber) { this.selectedPhone = p; this.assignTenantId = ''; this.showAssignDialog = true; }
+  openAssignDialog(p: WabaPhoneNumber) {
+    this.selectedPhone = p;
+    this.assignTenantId = '';
+    this.showAssignDialog = true;
+    this.assignTenantsLoading.set(true);
+    this.wabaService.getAssignableTenants().subscribe({
+      next: (tenants) => {
+        this.assignableTenants.set(
+          tenants.map((t) => ({ ...t, label: t.businessName ? `${t.businessName} (${t.name})` : t.name })),
+        );
+        this.assignTenantsLoading.set(false);
+      },
+      error: () => { this.assignTenantsLoading.set(false); this.toast('error', 'Failed to load tenants'); },
+    });
+  }
   confirmAssignPhone() {
     if (!this.selectedPhone || !this.assignTenantId) return;
     this.wabaService.assignPhone(this.selectedPhone.id, this.assignTenantId).subscribe({

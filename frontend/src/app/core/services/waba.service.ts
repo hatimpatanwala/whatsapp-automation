@@ -153,6 +153,10 @@ export class WabaService {
     return this.api.post<WabaPhoneNumber>(`/admin/waba/phones/${phoneId}/assign`, { phoneId, tenantId });
   }
 
+  getAssignableTenants(): Observable<Array<{ id: string; name: string; slug: string; businessName: string | null }>> {
+    return this.api.get<Array<{ id: string; name: string; slug: string; businessName: string | null }>>('/admin/waba/assignable-tenants');
+  }
+
   unassignPhone(phoneId: string): Observable<WabaPhoneNumber> {
     return this.api.post<WabaPhoneNumber>(`/admin/waba/phones/${phoneId}/unassign`, {});
   }

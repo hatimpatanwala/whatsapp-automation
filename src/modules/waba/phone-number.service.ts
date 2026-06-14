@@ -21,6 +21,24 @@ export class PhoneNumberService {
     return this.phoneRepo.find({ where, relations: ['tenant', 'wabaAccount'] });
   }
 
+  /**
+   * Tenants that do NOT already have a phone number assigned — for the
+   * super-admin "Assign number to tenant" picker.
+   */
+  async getAssignableTenants(): Promise<Array<{ id: string; name: string; slug: string; businessName: string | null }>> {
+    const assignedRows = await this.phoneRepo
+      .createQueryBuilder('p')
+      .select('DISTINCT p.tenant_id', 'tenantId')
+      .where('p.tenant_id IS NOT NULL')
+      .getRawMany();
+    const assignedIds = new Set(assignedRows.map((r) => r.tenantId));
+
+    const tenants = await this.tenantRepo.find({ order: { name: 'ASC' } });
+    return tenants
+      .filter((t) => !assignedIds.has(t.id))
+      .map((t) => ({ id: t.id, name: t.name, slug: t.slug, businessName: t.businessName || null }));
+  }
+
   async findById(id: string): Promise<PhoneNumber> {
     const phone = await this.phoneRepo.findOne({ where: { id }, relations: ['tenant', 'wabaAccount'] });
     if (!phone) throw new NotFoundException('Phone number not found');

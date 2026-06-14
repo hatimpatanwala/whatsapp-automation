@@ -163,6 +163,12 @@ export class WabaController {
     return this.phoneService.findAll(wabaAccountId);
   }
 
+  // Tenants without a number assigned — for the assign picker.
+  @Get('assignable-tenants')
+  async assignableTenants() {
+    return this.phoneService.getAssignableTenants();
+  }
+
   // Released numbers still sitting on a WABA that must be removed in WhatsApp
   // Manager. Declared before phones/:id so the literal path matches first.
   @Get('phones/pending-removal')
