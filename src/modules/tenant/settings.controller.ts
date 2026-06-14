@@ -170,27 +170,10 @@ export class SettingsController {
   async removePhone(@Req() req: Request, @Param('id') phoneId: string) {
     const tenantId = req.session?.['tenantId'] || (req as any).tenantContext?.id;
 
-    const phone = await this.phoneNumberRepo.findOne({ where: { id: phoneId, tenantId } });
-    if (!phone) {
-      throw new BadRequestException('Phone number not found or not assigned to your account.');
-    }
-
-    // Unassign from tenant (don't delete from pool — just remove tenant assignment)
-    await this.phoneNumberRepo.update(phoneId, { tenantId: null as any });
-
-    // Clear tenant's phone_number_id if it matches the removed phone
-    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
-    if (tenant && tenant.phoneNumberId === phone.phoneNumberId) {
-      await this.tenantRepo.update(tenantId, {
-        phoneNumberId: null as any,
-        wabaId: null as any,
-        whatsappPhone: null as any,
-      });
-    }
-
-    this.logger.log(`Phone ${phone.phoneNumber} removed from tenant ${tenantId}`);
-
-    return { message: 'Phone number removed from your account.' };
+    // Fully release: deregister + delete from our WABA at Meta, clear tenant
+    // pointers, and hard-delete the local record so the number is free to use
+    // on another account or platform.
+    return this.onboardingService.releaseNumber(tenantId, phoneId);
   }
 
   /**

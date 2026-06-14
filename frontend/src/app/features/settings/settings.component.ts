@@ -12,6 +12,7 @@ import { DividerModule } from 'primeng/divider';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
 import { MessageModule } from 'primeng/message';
+import { DialogModule } from 'primeng/dialog';
 import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
@@ -35,6 +36,7 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
     TagModule,
     TooltipModule,
     MessageModule,
+    DialogModule,
   ],
   providers: [MessageService],
   template: `
@@ -388,7 +390,7 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                           }
                           <button pButton icon="pi pi-trash" class="p-button-sm p-button-text p-button-danger"
                             pTooltip="Remove this number"
-                            (click)="removePhoneNumber(phone.id)"></button>
+                            (click)="askRemovePhone(phone)"></button>
                         </div>
                       </div>
                     }
@@ -851,6 +853,30 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
         </p-tabpanels>
       </p-tabs>
     </div>
+
+    <!-- ═══ Remove Number Warning Dialog ═══ -->
+    <p-dialog header="Remove this number?" [(visible)]="showRemovePhoneDialog" [modal]="true" [style]="{ width: '32rem' }">
+      <div class="flex flex-col gap-4 pt-2">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p class="text-sm text-red-700">
+            <i class="pi pi-exclamation-triangle mr-1"></i>
+            This permanently removes <span class="font-semibold">{{ phoneToDelete()?.phoneNumber }}</span> from your account and
+            <span class="font-semibold">releases it from our WhatsApp Business Account</span>. The number becomes free to use on
+            another account or platform.
+          </p>
+        </div>
+        <ul class="text-xs text-gray-600 space-y-1 list-disc pl-5">
+          <li>It will be deregistered from WhatsApp and detached from our WABA on Meta.</li>
+          <li>It will be deleted from our database.</li>
+          <li>To use it here again you'll have to re-register and re-verify with a new OTP.</li>
+          <li>This cannot be undone.</li>
+        </ul>
+      </div>
+      <ng-template pTemplate="footer">
+        <button pButton label="Cancel" class="p-button-text" (click)="showRemovePhoneDialog = false" [disabled]="deletingPhone()"></button>
+        <button pButton label="Remove & Release" icon="pi pi-trash" severity="danger" (click)="removePhoneNumber()" [loading]="deletingPhone()"></button>
+      </ng-template>
+    </p-dialog>
   `,
 })
 export class SettingsComponent implements OnInit {
@@ -893,6 +919,9 @@ export class SettingsComponent implements OnInit {
   addPhoneId = signal<string | null>(null);
   tenantPhones = signal<Array<{ id: string; phoneNumber: string; displayName: string; status: string; registrationStatus?: string; codeVerificationStatus?: string; webhookSubscribed?: boolean }>>([]);
   retryingId = signal<string | null>(null);
+  showRemovePhoneDialog = false;
+  phoneToDelete = signal<{ id: string; phoneNumber: string } | null>(null);
+  deletingPhone = signal(false);
 
   biz = {
     name: '',
@@ -1495,15 +1524,34 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  /** Remove a phone number from this tenant */
-  removePhoneNumber(phoneId: string) {
-    this.apiService.delete(`/settings/phones/${phoneId}`).subscribe({
-      next: () => {
-        this.messageService.add({ severity: 'success', summary: 'Removed', detail: 'Phone number removed' });
+  /** Open the warning dialog before removing a number. */
+  askRemovePhone(phone: { id: string; phoneNumber: string }) {
+    this.phoneToDelete.set({ id: phone.id, phoneNumber: phone.phoneNumber });
+    this.showRemovePhoneDialog = true;
+  }
+
+  /** Confirm removal: releases the number from Meta/our WABA and deletes it. */
+  removePhoneNumber() {
+    const target = this.phoneToDelete();
+    if (!target) return;
+    this.deletingPhone.set(true);
+    this.apiService.delete<{ message: string; freed: boolean }>(`/settings/phones/${target.id}`).subscribe({
+      next: (res) => {
+        this.deletingPhone.set(false);
+        this.showRemovePhoneDialog = false;
+        this.phoneToDelete.set(null);
+        this.messageService.add({
+          severity: res?.freed === false ? 'warn' : 'success',
+          summary: 'Number removed',
+          detail: res?.message || 'Phone number removed and released.',
+          life: 6000,
+        });
         this.loadPhoneNumbers();
+        this.authService.rehydrateSession().subscribe();
       },
-      error: () => {
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove phone number' });
+      error: (err) => {
+        this.deletingPhone.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.message || 'Failed to remove phone number' });
       },
     });
   }
