@@ -861,16 +861,22 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
           <p class="text-sm text-red-700">
             <i class="pi pi-exclamation-triangle mr-1"></i>
             This permanently removes <span class="font-semibold">{{ phoneToDelete()?.phoneNumber }}</span> from your account and
-            <span class="font-semibold">releases it from our WhatsApp Business Account</span>. The number becomes free to use on
-            another account or platform.
+            deletes it from our system. This cannot be undone.
           </p>
         </div>
         <ul class="text-xs text-gray-600 space-y-1 list-disc pl-5">
-          <li>It will be deregistered from WhatsApp and detached from our WABA on Meta.</li>
-          <li>It will be deleted from our database.</li>
+          <li>If it was connected, it will be deregistered from WhatsApp hosting.</li>
+          <li>It will be deleted from our database and unassigned from your account.</li>
           <li>To use it here again you'll have to re-register and re-verify with a new OTP.</li>
-          <li>This cannot be undone.</li>
         </ul>
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p class="text-xs text-amber-800">
+            <i class="pi pi-info-circle mr-1"></i>
+            <span class="font-semibold">Note:</span> WhatsApp does not allow removing a number from the Business Account via API.
+            The number stays listed in WhatsApp Manager until you remove it there (or, if unverified, until Meta auto-expires it) —
+            and it can't be used on another account until then.
+          </p>
+        </div>
       </div>
       <ng-template pTemplate="footer">
         <button pButton label="Cancel" class="p-button-text" (click)="showRemovePhoneDialog = false" [disabled]="deletingPhone()"></button>
