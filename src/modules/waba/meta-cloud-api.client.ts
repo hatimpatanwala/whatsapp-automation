@@ -23,13 +23,13 @@ export class MetaCloudApiClient {
 
   async getWabaInfo(wabaId: string, accessToken: string): Promise<any> {
     return this.request('GET', `/${wabaId}`, accessToken, null, {
-      fields: 'name,owner_business_info',
+      fields: 'name,status,business_verification_status,on_behalf_of_business_info,primary_funding_id',
     });
   }
 
   async getPhoneNumbers(wabaId: string, accessToken: string): Promise<any[]> {
     const response = await this.request('GET', `/${wabaId}/phone_numbers`, accessToken, null, {
-      fields: 'id,display_phone_number,verified_name,quality_rating',
+      fields: 'id,display_phone_number,verified_name,quality_rating,messaging_limit_tier,name_status,is_official_business_account',
     });
     return response.data || [];
   }

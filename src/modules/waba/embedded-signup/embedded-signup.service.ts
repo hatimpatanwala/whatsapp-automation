@@ -145,11 +145,11 @@ export class EmbeddedSignupService {
 
       // Step 4: Sync the WABA
       const wabaInfo = await this.fetchGraphApi(`/${wabaId}`, userToken, {
-        fields: 'name,owner_business_info,business',
+        fields: 'name,status,business_verification_status,on_behalf_of_business_info,primary_funding_id',
       });
       const waba = await this.wabaService.syncFromMeta(wabaId, wabaInfo);
       session.wabaAccountId = waba.id;
-      session.businessId = wabaInfo.business?.id || wabaInfo.owner_business_info?.id || null;
+      session.businessId = wabaInfo.on_behalf_of_business_info?.id || null;
       await this.transition(session, 'waba_synced');
 
       // Step 5: Generate system user token (long-lived, non-expiring)
@@ -178,7 +178,7 @@ export class EmbeddedSignupService {
 
       // Step 6: Fetch and sync phone numbers
       const phones = await this.fetchGraphApi(`/${wabaId}/phone_numbers`, finalToken, {
-        fields: 'id,display_phone_number,verified_name,quality_rating,messaging_limit,name_status,is_official_business_account',
+        fields: 'id,display_phone_number,verified_name,quality_rating,messaging_limit_tier,name_status,is_official_business_account',
       });
 
       let assignedPhone: any = null;

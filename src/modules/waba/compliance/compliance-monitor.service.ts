@@ -107,7 +107,7 @@ export class ComplianceMonitorService {
       try {
         const token = await this.tokenService.getActiveToken(waba.id);
         const response = await fetch(
-          `https://graph.facebook.com/${this.graphApiVersion}/${waba.wabaId}?fields=account_review_status,messaging_limit_tier,owner_business_info{verification_status}&access_token=${encodeURIComponent(token)}`,
+          `https://graph.facebook.com/${this.graphApiVersion}/${waba.wabaId}?fields=status,business_verification_status,on_behalf_of_business_info&access_token=${encodeURIComponent(token)}`,
         );
         const info = await response.json() as any;
 
@@ -116,19 +116,17 @@ export class ComplianceMonitorService {
           continue;
         }
 
-        // Update WABA record
         const updates: any = {};
-        if (info.account_review_status) updates.accountReviewStatus = info.account_review_status;
-        if (info.messaging_limit_tier) updates.messagingLimitTier = info.messaging_limit_tier;
-        if (info.owner_business_info?.verification_status) {
-          updates.metaBusinessVerification = info.owner_business_info.verification_status;
+        if (info.business_verification_status) updates.accountReviewStatus = info.business_verification_status;
+        if (info.on_behalf_of_business_info?.id) {
+          updates.metaBusinessVerification = info.business_verification_status;
         }
         if (Object.keys(updates).length > 0) {
           await this.wabaRepo.update(waba.id, updates);
         }
 
-        if (info.account_review_status && info.account_review_status !== 'APPROVED') {
-          this.logger.warn(`WABA ${waba.wabaId} review status: ${info.account_review_status}`);
+        if (info.business_verification_status && info.business_verification_status !== 'verified') {
+          this.logger.warn(`WABA ${waba.wabaId} verification status: ${info.business_verification_status}`);
         }
       } catch (err: any) {
         this.logger.error(`Permission check failed for WABA ${waba.wabaId}: ${err.message}`);
