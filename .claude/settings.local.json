@@ -131,7 +131,19 @@
       "Bash(grep -E \"\\(json|js|ts\\)$\")",
       "Bash(ssh:*)",
       "Bash(scp -i \"D:/whatsapp-automation/wa-commece.pem\" -o StrictHostKeyChecking=no deploy/Dockerfile.frontend deploy/Dockerfile.backend ubuntu@52.66.40.206:/opt/whatsapp-automation/deploy/)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git reset *)",
+      "Bash(git checkout *)",
+      "Bash(grep -n \"xlsx\\\\|exceljs\\\\|csv-parse\\\\|papaparse\\\\|multer\" package.json)",
+      "Bash(ls src/modules/catalog/)",
+      "Bash(PGPASSWORD='H@t1502501448' psql *)",
+      "PowerShell(psql *)",
+      "Bash(git commit *)",
+      "Bash(gh run *)",
+      "Bash(git rm *)"
     ]
   }
 }

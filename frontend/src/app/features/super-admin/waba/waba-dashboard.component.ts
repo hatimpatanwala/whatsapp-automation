@@ -108,7 +108,11 @@ import {
                       <td><p-tag [value]="account.status" [severity]="account.status === 'active' ? 'success' : 'danger'" styleClass="text-xs capitalize" /></td>
                       <td class="text-gray-600">{{ account.phoneNumbers?.length || 0 }}</td>
                       <td>
-                        <button pButton icon="pi pi-key" class="p-button-text p-button-sm p-button-rounded text-amber-400" pTooltip="Update Token" (click)="openTokenDialog(account)"></button>
+                        <div class="flex items-center gap-1">
+                          <button pButton icon="pi pi-sync" class="p-button-text p-button-sm p-button-rounded text-blue-400" pTooltip="Re-sync from Meta" (click)="resyncAccount(account)"></button>
+                          <button pButton icon="pi pi-key" class="p-button-text p-button-sm p-button-rounded text-amber-400" pTooltip="Update Token" (click)="openTokenDialog(account)"></button>
+                          <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded text-red-400" pTooltip="Delete account" (click)="openDeleteDialog(account)"></button>
+                        </div>
                       </td>
                     </tr>
                   </ng-template>
@@ -404,6 +408,26 @@ import {
         <button pButton label="Assign" icon="pi pi-check" severity="success" (click)="confirmAssignPhone()"></button>
       </ng-template>
     </p-dialog>
+
+    <!-- ═══ Delete WABA Account Dialog ═══ -->
+    <p-dialog header="Delete WABA Account" [(visible)]="showDeleteDialog" [modal]="true" [style]="{ width: '30rem' }">
+      <div class="flex flex-col gap-4 pt-2">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p class="text-sm text-red-700">
+            <i class="pi pi-exclamation-triangle mr-1"></i>
+            This permanently removes the account along with its stored token, phone numbers and synced templates. This cannot be undone.
+          </p>
+        </div>
+        <div class="bg-gray-100 rounded-lg p-3">
+          <p class="text-xs text-gray-500">Account</p>
+          <p class="text-sm font-semibold text-gray-900">{{ deleteTarget?.name }} <span class="text-xs text-gray-500 font-mono">{{ deleteTarget?.wabaId }}</span></p>
+        </div>
+      </div>
+      <ng-template pTemplate="footer">
+        <button pButton label="Cancel" class="p-button-text" (click)="showDeleteDialog = false"></button>
+        <button pButton label="Delete" icon="pi pi-trash" severity="danger" (click)="confirmDeleteWaba()" [loading]="syncing()"></button>
+      </ng-template>
+    </p-dialog>
   `,
 })
 export class WabaDashboardComponent implements OnInit {
@@ -432,6 +456,8 @@ export class WabaDashboardComponent implements OnInit {
   registerForTenantResult = signal<{ status: string; message: string } | null>(null);
   tokenDialogAccount: WabaAccount | null = null;
   newTokenValue = '';
+  showDeleteDialog = false;
+  deleteTarget: WabaAccount | null = null;
 
   newWaba = { name: '', wabaId: '', businessId: '', accessToken: '', currency: 'INR', timezone: 'Asia/Kolkata' };
   currencies = [{ label: 'INR', value: 'INR' }, { label: 'USD', value: 'USD' }, { label: 'NGN', value: 'NGN' }, { label: 'GHS', value: 'GHS' }, { label: 'KES', value: 'KES' }];
@@ -461,18 +487,47 @@ export class WabaDashboardComponent implements OnInit {
   saveNewWaba() {
     if (!this.newWaba.wabaId || !this.newWaba.businessId || !this.newWaba.name) { this.toast('warn', 'Fill required fields'); return; }
     this.syncing.set(true);
-    this.wabaService.createAccount({ wabaId: this.newWaba.wabaId, name: this.newWaba.name, businessId: this.newWaba.businessId, currency: this.newWaba.currency, timezone: this.newWaba.timezone } as any).subscribe({
+    // Pass the token so the backend auto-syncs (stores token + pulls phone numbers) on first add.
+    this.wabaService.createAccount({
+      wabaId: this.newWaba.wabaId,
+      name: this.newWaba.name,
+      businessId: this.newWaba.businessId,
+      currency: this.newWaba.currency,
+      timezone: this.newWaba.timezone,
+      accessToken: this.newWaba.accessToken || undefined,
+    } as any).subscribe({
       next: (waba) => {
-        if (this.newWaba.accessToken) {
-          this.wabaService.storeToken(waba.id, this.newWaba.accessToken, 'system_user').subscribe({
-            next: () => { this.syncing.set(false); this.showAddWabaDialog = false; this.toast('success', 'WABA created & token stored'); this.newWaba = { name: '', wabaId: '', businessId: '', accessToken: '', currency: 'INR', timezone: 'Asia/Kolkata' }; this.loadAll(); },
-            error: () => { this.syncing.set(false); this.toast('warn', 'Created but token failed'); this.showAddWabaDialog = false; this.loadAll(); },
-          });
+        this.syncing.set(false);
+        this.showAddWabaDialog = false;
+        if (waba.syncWarning) {
+          this.toast('warn', `Account created, but sync failed: ${waba.syncWarning}`);
+        } else if (this.newWaba.accessToken) {
+          this.toast('success', `WABA created & synced (${waba.syncedPhones ?? 0} phone number(s))`);
         } else {
-          this.syncing.set(false); this.showAddWabaDialog = false; this.toast('success', 'WABA created'); this.newWaba = { name: '', wabaId: '', businessId: '', accessToken: '', currency: 'INR', timezone: 'Asia/Kolkata' }; this.loadAll();
+          this.toast('success', 'WABA created');
         }
+        this.newWaba = { name: '', wabaId: '', businessId: '', accessToken: '', currency: 'INR', timezone: 'Asia/Kolkata' };
+        this.loadAll();
       },
       error: (e) => { this.syncing.set(false); this.toast('error', e.error?.message || 'Failed'); },
+    });
+  }
+
+  openDeleteDialog(a: WabaAccount) { this.deleteTarget = a; this.showDeleteDialog = true; }
+  confirmDeleteWaba() {
+    if (!this.deleteTarget) return;
+    this.syncing.set(true);
+    this.wabaService.deleteAccount(this.deleteTarget.id).subscribe({
+      next: () => { this.syncing.set(false); this.showDeleteDialog = false; this.toast('success', 'WABA account deleted'); this.deleteTarget = null; this.loadAll(); },
+      error: (e) => { this.syncing.set(false); this.toast('error', e.error?.message || 'Delete failed'); },
+    });
+  }
+
+  resyncAccount(a: WabaAccount) {
+    this.toast('info', 'Re-syncing from Meta…');
+    this.wabaService.resyncAccount(a.id).subscribe({
+      next: (r) => { this.toast('success', `Re-synced (${r.syncedPhones ?? 0} phone number(s))`); this.loadAll(); },
+      error: (e) => this.toast('error', e.error?.message || 'Re-sync failed'),
     });
   }
 

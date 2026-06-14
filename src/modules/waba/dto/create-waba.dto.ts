@@ -17,6 +17,12 @@ export class CreateWabaDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  // When provided, the account is created and immediately synced from Meta
+  // (token stored + phone numbers pulled).
+  @IsOptional()
+  @IsString()
+  accessToken?: string;
 }
 
 export class AssignPhoneDto {

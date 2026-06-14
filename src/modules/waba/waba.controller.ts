@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, BadRequestException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, BadRequestException, Logger } from '@nestjs/common';
 import { WabaService } from './waba.service';
 import { PhoneNumberService } from './phone-number.service';
 import { MetaTokenService } from './meta-token.service';
@@ -61,7 +61,73 @@ export class WabaController {
       resourceId: waba.id,
       details: { wabaId: dto.wabaId },
     });
+
+    // Auto-sync from Meta on first add when a token is supplied: store the token
+    // and pull phone numbers. The account stays created even if the sync fails
+    // (e.g. wrong ID) — we surface the reason in the response instead of 500ing.
+    if (dto.accessToken) {
+      await this.tokenService.storeToken(waba.id, dto.accessToken, 'system_user');
+      try {
+        const phones = await this.metaApi.getPhoneNumbers(dto.wabaId, dto.accessToken);
+        for (const phoneData of phones) {
+          await this.phoneService.syncFromMeta(waba.id, phoneData);
+        }
+        await this.auditService.log({
+          actorType: 'admin',
+          actorId: 'system',
+          action: 'waba.sync',
+          resourceType: 'waba_account',
+          resourceId: waba.id,
+          details: { phonesSync: phones.length, trigger: 'auto_on_create' },
+        });
+        return { ...(await this.wabaService.findById(waba.id)), syncedPhones: phones.length };
+      } catch (err: any) {
+        this.logger.warn(`Auto-sync failed for new WABA ${dto.wabaId}: ${err?.message}`);
+        return { ...(await this.wabaService.findById(waba.id)), syncWarning: err?.message || 'Auto-sync failed' };
+      }
+    }
+
     return waba;
+  }
+
+  @Post('accounts/:id/resync')
+  async resyncAccount(@Param('id') id: string) {
+    const waba = await this.wabaService.findById(id);
+    const token = await this.tokenService.getActiveToken(waba.id, 'system_user');
+
+    const info = await this.metaApi.getWabaInfo(waba.wabaId, token);
+    await this.wabaService.syncFromMeta(waba.wabaId, info);
+
+    const phones = await this.metaApi.getPhoneNumbers(waba.wabaId, token);
+    for (const phoneData of phones) {
+      await this.phoneService.syncFromMeta(waba.id, phoneData);
+    }
+
+    await this.auditService.log({
+      actorType: 'admin',
+      actorId: 'system',
+      action: 'waba.sync',
+      resourceType: 'waba_account',
+      resourceId: waba.id,
+      details: { phonesSync: phones.length, trigger: 'manual_resync' },
+    });
+
+    return { ...(await this.wabaService.findById(id)), syncedPhones: phones.length };
+  }
+
+  @Delete('accounts/:id')
+  async deleteAccount(@Param('id') id: string) {
+    const waba = await this.wabaService.findById(id);
+    await this.wabaService.remove(id);
+    await this.auditService.log({
+      actorType: 'admin',
+      actorId: 'system',
+      action: 'waba.delete',
+      resourceType: 'waba_account',
+      resourceId: id,
+      details: { wabaId: waba.wabaId, name: waba.name },
+    });
+    return { success: true, deleted: id };
   }
 
   @Post('accounts/sync')

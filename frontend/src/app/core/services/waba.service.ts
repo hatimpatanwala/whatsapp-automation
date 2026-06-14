@@ -120,8 +120,16 @@ export class WabaService {
     return this.api.get<WabaAccount>(`/admin/waba/accounts/${id}`);
   }
 
-  createAccount(data: Partial<WabaAccount>): Observable<WabaAccount> {
-    return this.api.post<WabaAccount>('/admin/waba/accounts', data);
+  createAccount(data: Partial<WabaAccount> & { accessToken?: string }): Observable<WabaAccount & { syncedPhones?: number; syncWarning?: string }> {
+    return this.api.post<WabaAccount & { syncedPhones?: number; syncWarning?: string }>('/admin/waba/accounts', data);
+  }
+
+  deleteAccount(id: string): Observable<{ success: boolean; deleted: string }> {
+    return this.api.delete<{ success: boolean; deleted: string }>(`/admin/waba/accounts/${id}`);
+  }
+
+  resyncAccount(id: string): Observable<WabaAccount & { syncedPhones?: number }> {
+    return this.api.post<WabaAccount & { syncedPhones?: number }>(`/admin/waba/accounts/${id}/resync`, {});
   }
 
   syncAccount(wabaId: string, accessToken: string): Observable<WabaAccount> {
