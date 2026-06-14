@@ -65,7 +65,10 @@ export class AdminWhatsAppService {
     // Rate limit: max 3 sends per 15 minutes
     this.enforceRateLimit(tenantId);
 
-    // Use static OTP when in dev mode or when WhatsApp sending is not yet configured
+    // ─── STATIC OTP MODE (temporary) ────────────────────────────────────────
+    // OTP generation and WhatsApp delivery are intentionally disabled for now.
+    // The OTP is hard-coded to 123456 (this.STATIC_OTP). To restore dynamic
+    // OTP generation + WhatsApp sending, re-enable the commented block below.
     const code = this.STATIC_OTP;
 
     // Store OTP
@@ -76,6 +79,9 @@ export class AdminWhatsAppService {
       attempts: 0,
     });
 
+    this.logger.log(`[STATIC OTP] Admin WhatsApp OTP for tenant ${tenantId}: ${code} (generation & WhatsApp sending disabled)`);
+
+    /* ── OTP generation + WhatsApp delivery disabled while static OTP is active ──
     if (this.isDev) {
       this.logger.log(`[DEV] Admin WhatsApp OTP for tenant ${tenantId}: ${code} (static, not sent via WhatsApp)`);
     } else {
@@ -83,6 +89,7 @@ export class AdminWhatsAppService {
       await this.sendWhatsAppOtp(fullPhone, code);
       this.logger.log(`Admin WhatsApp OTP sent to ${fullPhone} for tenant ${tenantId}`);
     }
+    ──────────────────────────────────────────────────────────────────────────── */
 
     return { sent: true, message: 'Verification code sent to your WhatsApp number.' };
   }
