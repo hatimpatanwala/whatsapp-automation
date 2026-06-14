@@ -17,16 +17,16 @@ export class ShowCatalogNodeHandler implements NodeHandler {
     const maxProducts = node.config.maxProducts || 10;
     const sortBy = node.config.sortBy || 'newest';
 
-    const orderClause = sortBy === 'price_asc' ? 'p.price ASC'
-      : sortBy === 'price_desc' ? 'p.price DESC'
+    const orderClause = sortBy === 'price_asc' ? 'COALESCE(p.sale_price, p.base_price) ASC'
+      : sortBy === 'price_desc' ? 'COALESCE(p.sale_price, p.base_price) DESC'
       : 'p.created_at DESC';
 
-    const categoryId = node.config.categoryId || '';
+    const categoryId = node.config.categoryId || node.config.categoryFilter || '';
 
     const products = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
       if (categoryId) {
         return qr.query(
-          `SELECT p.id, p.name, p.price, c.name as category_name
+          `SELECT p.id, p.name, COALESCE(p.sale_price, p.base_price) AS price, c.name as category_name
            FROM products p
            LEFT JOIN categories c ON p.category_id = c.id
            WHERE p.is_active = true AND p.category_id = $1
@@ -36,7 +36,7 @@ export class ShowCatalogNodeHandler implements NodeHandler {
         );
       }
       return qr.query(
-        `SELECT p.id, p.name, p.price, c.name as category_name
+        `SELECT p.id, p.name, COALESCE(p.sale_price, p.base_price) AS price, c.name as category_name
          FROM products p
          LEFT JOIN categories c ON p.category_id = c.id
          WHERE p.is_active = true

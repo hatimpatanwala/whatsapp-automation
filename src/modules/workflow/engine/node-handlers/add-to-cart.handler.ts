@@ -40,7 +40,7 @@ export class AddToCartNodeHandler implements NodeHandler {
 
         // Get product details
         const product = await qr.query(
-          `SELECT id, name, price FROM products WHERE id = $1 AND is_active = true`,
+          `SELECT id, name, COALESCE(sale_price, base_price) AS price FROM products WHERE id = $1 AND is_active = true`,
           [productId],
         );
         if (product.length === 0) throw new Error('Product not found');

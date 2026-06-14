@@ -28,7 +28,7 @@ export class SearchProductsNodeHandler implements NodeHandler {
 
     const products = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
       return qr.query(
-        `SELECT id, name, price FROM products
+        `SELECT id, name, COALESCE(sale_price, base_price) AS price FROM products
          WHERE is_active = true AND (name ILIKE $1 OR description ILIKE $1)
          LIMIT $2`,
         [`%${query}%`, maxResults],

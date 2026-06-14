@@ -53,7 +53,7 @@ export class SendListNodeHandler implements NodeHandler {
   private async buildProductSections(schema: string): Promise<any[]> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const products = await qr.query(
-        `SELECT p.id, p.name, p.price FROM products p WHERE p.is_active = true ORDER BY p.created_at DESC LIMIT 10`,
+        `SELECT p.id, p.name, COALESCE(p.sale_price, p.base_price) AS price FROM products p WHERE p.is_active = true ORDER BY p.created_at DESC LIMIT 10`,
       );
       return [{
         title: 'Products',
