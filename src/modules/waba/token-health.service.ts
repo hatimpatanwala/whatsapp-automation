@@ -119,16 +119,8 @@ export class TokenHealthService {
       `Invalid token detected for WABA ${token.wabaAccountId}: ${reason}`,
     );
 
-    // Mark token with validation failure (don't deactivate — let admins investigate)
-    await this.tokenRepo.update(token.id, {
-      metadata: {
-        ...(token as any).metadata,
-        lastHealthCheckFailed: true,
-        healthCheckError: reason,
-        healthCheckAt: new Date().toISOString(),
-      },
-    } as any);
-
+    // Record the failure in the audit log (don't deactivate — let admins
+    // investigate). MetaToken has no metadata column, so we don't write to it.
     await this.auditService.log({
       tenantId: 'system',
       actorType: 'system',
