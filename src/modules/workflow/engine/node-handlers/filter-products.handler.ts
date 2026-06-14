@@ -30,7 +30,13 @@ export class FilterProductsNodeHandler implements NodeHandler {
             [`%${value}%`],
           );
         case 'price': {
-          const [min, max] = value.split('-').map(Number);
+          // value may be "100-500" (string) or [100, 500] (array).
+          let min: number, max: number;
+          if (Array.isArray(value)) {
+            [min, max] = [Number(value[0]), Number(value[1])];
+          } else {
+            [min, max] = String(value).split('-').map(Number);
+          }
           return qr.query(
             `SELECT id, name, price FROM products WHERE is_active = true AND price BETWEEN $1 AND $2`,
             [min || 0, max || 999999],

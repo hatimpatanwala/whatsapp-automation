@@ -10,7 +10,9 @@ export class TagCustomerNodeHandler implements NodeHandler {
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     const action = node.config.action || 'add';
-    const tag = node.config.tag?.trim();
+    // tag may be a string or (mis-typed) array; normalize to a trimmed string.
+    const rawTag = node.config.tag;
+    const tag = (Array.isArray(rawTag) ? rawTag[0] : rawTag) ? String(Array.isArray(rawTag) ? rawTag[0] : rawTag).trim() : '';
     if (!tag) return { action: 'error', message: 'tag_customer: no tag configured' };
 
     await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {

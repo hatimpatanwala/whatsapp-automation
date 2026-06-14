@@ -45,8 +45,11 @@ export class WorkflowTriggerMatcher {
         continue;
       }
 
-      const keywords = (triggerNode.config?.keywords || '')
-        .split(',')
+      // keywords may be a comma-separated string OR an array of strings.
+      const rawKeywords = triggerNode.config?.keywords;
+      const keywords = (Array.isArray(rawKeywords)
+        ? rawKeywords.map((k: any) => String(k))
+        : String(rawKeywords || '').split(','))
         .map((k: string) => k.trim().toLowerCase())
         .filter(Boolean);
 

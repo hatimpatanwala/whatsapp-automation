@@ -26,10 +26,12 @@ export class SwitchNodeHandler implements NodeHandler {
         matchValue = ctx.variables[variable] || '';
     }
 
-    // Find matching edge by label
+    // Find matching edge by label (coerce matchValue — a runtime variable may
+    // not be a string).
+    const matchStr = String(matchValue ?? '').toLowerCase();
     const outEdges = edges.filter((e) => e.from === node.id);
     const matchedEdge = outEdges.find(
-      (e) => e.label && e.label.toLowerCase() === matchValue.toLowerCase(),
+      (e) => e.label && e.label.toLowerCase() === matchStr,
     );
 
     // Fallback to default edge (no label)
