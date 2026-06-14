@@ -9,6 +9,7 @@ import { PhoneNumber } from '../../database/entities/public/phone-number.entity'
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { MetaToken } from '../../database/entities/public/meta-token.entity';
 import { MetaTokenService } from '../waba/meta-token.service';
+import { AuditLogService } from '../waba/audit-log.service';
 
 export interface RegisterNumberResult {
   status: 'already_business' | 'already_occupied' | 'registered' | 'needs_verification';
@@ -56,6 +57,7 @@ export class OnboardingService {
     private readonly wabaAccountRepository: Repository<WabaAccount>,
     private readonly metaTokenService: MetaTokenService,
     private readonly configService: ConfigService,
+    private readonly auditService: AuditLogService,
   ) {
     this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
   }
@@ -467,6 +469,23 @@ export class OnboardingService {
     // Hard-delete from our DB so the number is free on our platform too.
     await this.phoneNumberRepository.delete(phone.id);
     this.logger.log(`Phone ${phone.phoneNumber} released & deleted for tenant ${tenantId} (freed on Meta=${freed})`);
+
+    // Audit log so admins can see release history in the super-admin dashboard.
+    await this.auditService.log({
+      tenantId,
+      actorType: 'tenant_user',
+      actorId: tenantId,
+      action: 'phone.released',
+      resourceType: 'phone_number',
+      resourceId: phone.id,
+      details: {
+        phoneNumber: phone.phoneNumber,
+        phoneNumberId: phone.phoneNumberId || null,
+        wabaAccountId: phone.wabaAccountId || null,
+        freedOnMeta: freed,
+        ...(warning ? { warning } : {}),
+      },
+    }).catch((e) => this.logger.warn(`Audit log for phone.released failed: ${e.message}`));
 
     return {
       message: freed
