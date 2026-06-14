@@ -14,7 +14,7 @@ export class SendListNodeHandler implements NodeHandler {
   ) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
-    const body = resolveTemplate(node.config.body || 'Please select an option:', ctx);
+    const body = resolveTemplate(node.config.body || node.config.message || node.config.text || 'Please select an option:', ctx);
     const buttonText = node.config.buttonText || 'View Options';
     const source = node.config.source || 'custom';
 

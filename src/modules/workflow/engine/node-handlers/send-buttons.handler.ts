@@ -10,7 +10,8 @@ export class SendButtonsNodeHandler implements NodeHandler {
   constructor(private readonly messageService: WhatsAppMessageService) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
-    const body = resolveTemplate(node.config.body || '', ctx);
+    // Builder/templates use `message`; some configs use `body`/`text`.
+    const body = resolveTemplate(node.config.body || node.config.message || node.config.text || '', ctx);
 
     // `buttons` may be a newline-separated string OR an array (of strings or
     // objects like { title }/{ text }/{ label }). Normalize to string lines.
