@@ -145,7 +145,7 @@ export class EmbeddedSignupService {
 
       // Step 4: Sync the WABA
       const wabaInfo = await this.fetchGraphApi(`/${wabaId}`, userToken, {
-        fields: 'name,currency,timezone_id,messaging_limit_tier,account_review_status,owner_business_info,business',
+        fields: 'name,timezone_id,messaging_limit_tier,account_review_status,owner_business_info,business',
       });
       const waba = await this.wabaService.syncFromMeta(wabaId, wabaInfo);
       session.wabaAccountId = waba.id;
