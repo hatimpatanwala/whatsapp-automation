@@ -197,7 +197,7 @@ export class OnboardingService {
           needsVerification: true,
           message: code.sent
             ? 'Number added! A 6-digit code was sent via SMS — enter it below to activate.'
-            : `Number added, but WhatsApp could not send the code: ${code.error} You can tap "Resend SMS" to try again.`,
+            : (code.error || 'Number added, but the verification code could not be sent. Tap "Resend SMS" to try again.'),
         };
       }
 
@@ -220,8 +220,7 @@ export class OnboardingService {
       phone: fullPhone,
       phoneId: phoneRecord.id,
       message: lastError
-        ? `WhatsApp couldn't register this number yet: ${lastError} We'll keep retrying automatically — or tap Retry.`
-        : 'Number saved. Automatic activation could not be completed right now — it will be retried automatically.',
+        || 'Number saved. Automatic activation could not be completed right now — it will be retried automatically.',
     };
   }
 
@@ -268,7 +267,7 @@ export class OnboardingService {
       needsVerification: true,
       message: code.sent
         ? 'A 6-digit verification code was sent to this number. Enter it below to activate.'
-        : `This number needs verification, but WhatsApp could not send the code: ${code.error} Tap "Resend SMS" to try again.`,
+        : (code.error || 'This number needs verification. Tap "Resend SMS" to try again.'),
     };
   }
 
