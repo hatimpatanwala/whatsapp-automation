@@ -6,7 +6,6 @@ import { ProductService } from './product.service';
 import { CategoryService } from './category.service';
 import { MetaCatalogSyncService } from './meta-catalog-sync.service';
 import { BulkUploadService } from './bulk-upload.service';
-import { SeedProductsController } from './seed-products.controller';
 import { DatabaseModule } from '../../database/database.module';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
@@ -20,7 +19,7 @@ import { WabaModule } from '../waba/waba.module';
     TypeOrmModule.forFeature([WabaAccount, PhoneNumber, Tenant]),
     forwardRef(() => WabaModule),
   ],
-  controllers: [ProductController, CategoryController, SeedProductsController],
+  controllers: [ProductController, CategoryController],
   providers: [ProductService, CategoryService, MetaCatalogSyncService, BulkUploadService, CommerceSettingsHelper],
   exports: [ProductService, CategoryService, MetaCatalogSyncService, BulkUploadService],
 })
