@@ -163,6 +163,32 @@ export class WabaController {
     return this.phoneService.findAll(wabaAccountId);
   }
 
+  // Released numbers still sitting on a WABA that must be removed in WhatsApp
+  // Manager. Declared before phones/:id so the literal path matches first.
+  @Get('phones/pending-removal')
+  async listPendingRemoval() {
+    return this.onboardingService.listPendingRemoval();
+  }
+
+  @Post('phones/:id/deregister')
+  async deregisterPhone(@Param('id') id: string) {
+    const result = await this.onboardingService.deregisterNumber(id);
+    await this.auditService.log({
+      actorType: 'admin',
+      actorId: 'system',
+      action: 'phone.deregister',
+      resourceType: 'phone_number',
+      resourceId: id,
+      details: { deregistered: result.deregistered },
+    });
+    return result;
+  }
+
+  @Post('phones/:id/mark-removed')
+  async markPhoneRemoved(@Param('id') id: string) {
+    return this.onboardingService.markNumberRemoved(id);
+  }
+
   @Get('phones/:id')
   async getPhone(@Param('id') id: string) {
     return this.phoneService.findById(id);

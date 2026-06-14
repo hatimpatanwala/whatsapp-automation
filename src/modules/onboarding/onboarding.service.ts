@@ -468,13 +468,28 @@ export class OnboardingService {
       });
     }
 
-    // Hard-delete from our DB so the number is free on our platform.
-    await this.phoneNumberRepository.delete(phone.id);
-
     // It's truly "freed" only if it was never added to a WABA at Meta; otherwise
     // it remains on the WABA and needs manual removal in WhatsApp Manager.
     const freed = !wasOnMeta;
     const manualRemovalNeeded = wasOnMeta;
+
+    if (wasOnMeta) {
+      // Keep the record (unassigned) so super-admin can track that it still has
+      // to be removed from WhatsApp Manager. It no longer belongs to any tenant.
+      await this.phoneNumberRepository.update(phone.id, {
+        tenantId: null as any,
+        status: 'pending_removal',
+        metadata: {
+          ...(phone.metadata || {}),
+          releasedAt: new Date().toISOString(),
+          releasedByTenantId: tenantId,
+          deregistered,
+        } as any,
+      });
+    } else {
+      // Never on Meta → nothing on the WABA, safe to delete outright.
+      await this.phoneNumberRepository.delete(phone.id);
+    }
     this.logger.log(`Phone ${phone.phoneNumber} released for tenant ${tenantId} (deregistered=${deregistered}, wasOnMeta=${wasOnMeta})`);
 
     // Audit log so admins can see release history in the super-admin dashboard.
@@ -494,21 +509,77 @@ export class OnboardingService {
       },
     }).catch((e) => this.logger.warn(`Audit log for phone.released failed: ${e.message}`));
 
-    const managerSteps =
-      'To fully remove it from the WhatsApp Business Account and free it for use elsewhere, delete it in WhatsApp Manager ' +
-      '(business.facebook.com/wa/manage → select the number → Settings → Remove number). ' +
-      'Unverified numbers are also removed automatically by Meta once they expire.';
+    const reuseNote =
+      'If this number is unverified or has not yet been deregistered from Meta, you can reuse it again within 2 business days — ' +
+      'or contact our support team to have it freed sooner.';
 
     let message: string;
     if (!wasOnMeta) {
       message = 'Number removed from your account. It was never registered on WhatsApp, so nothing remains on the WABA.';
     } else if (deregistered) {
-      message = `Number removed from your account and deregistered from WhatsApp hosting. It is still listed on the WhatsApp Business Account. ${managerSteps}`;
+      message = `Number removed from your account and deregistered from WhatsApp. Our team will remove it from the WhatsApp Business Account. ${reuseNote}`;
     } else {
-      message = `Number removed from your account. It is still listed on the WhatsApp Business Account — Meta's API cannot remove it. ${managerSteps}`;
+      message = `Number removed from your account. Our team will remove it from the WhatsApp Business Account (Meta's API can't remove it automatically). ${reuseNote}`;
     }
 
     return { message, freed, manualRemovalNeeded };
+  }
+
+  /**
+   * Super-admin: list numbers that have been released by tenants but still sit
+   * on a WABA at Meta and must be removed manually in WhatsApp Manager.
+   */
+  async listPendingRemoval(): Promise<PhoneNumber[]> {
+    return this.phoneNumberRepository.find({
+      where: { status: 'pending_removal' },
+      relations: ['wabaAccount'],
+      order: { updatedAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Super-admin: deregister a released number from the Cloud API (best-effort).
+   * Note: this does NOT remove it from the WABA list — that's WhatsApp Manager.
+   */
+  async deregisterNumber(phoneId: string): Promise<{ deregistered: boolean; message: string }> {
+    const phone = await this.phoneNumberRepository.findOne({ where: { id: phoneId } });
+    if (!phone) throw new NotFoundException('Phone number not found');
+    if (!phone.phoneNumberId) {
+      return { deregistered: false, message: 'This number was never registered on Meta — nothing to deregister.' };
+    }
+    const waba = await this.getWabaForPhone(phone);
+    const token = await this.metaTokenService.getActiveToken(waba.id).catch(() => null);
+    if (!token) throw new BadRequestException('No active WABA token is available to deregister this number.');
+
+    const deregistered = await this.deregisterFromCloudApi(phone.phoneNumberId, token);
+    await this.phoneNumberRepository.update(phone.id, {
+      metadata: { ...(phone.metadata || {}), deregistered, deregisteredAt: new Date().toISOString() } as any,
+    });
+    return {
+      deregistered,
+      message: deregistered
+        ? 'Number deregistered from WhatsApp hosting. Now remove it from WhatsApp Manager to free it completely.'
+        : 'Deregister did not apply (number is unverified / not connected). Remove it directly from WhatsApp Manager.',
+    };
+  }
+
+  /**
+   * Super-admin: confirm a number has been removed from WhatsApp Manager and
+   * delete it from tracking.
+   */
+  async markNumberRemoved(phoneId: string): Promise<{ removed: boolean; message: string }> {
+    const phone = await this.phoneNumberRepository.findOne({ where: { id: phoneId } });
+    if (!phone) throw new NotFoundException('Phone number not found');
+    await this.phoneNumberRepository.delete(phone.id);
+    await this.auditService.log({
+      actorType: 'admin',
+      actorId: 'system',
+      action: 'phone.removed_from_waba',
+      resourceType: 'phone_number',
+      resourceId: phone.id,
+      details: { phoneNumber: phone.phoneNumber, phoneNumberId: phone.phoneNumberId || null },
+    }).catch((e) => this.logger.warn(`Audit log for phone.removed_from_waba failed: ${e.message}`));
+    return { removed: true, message: 'Number removed from tracking.' };
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────

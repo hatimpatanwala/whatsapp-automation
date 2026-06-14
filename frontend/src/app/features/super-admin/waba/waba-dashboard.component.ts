@@ -74,6 +74,12 @@ import {
           <p-tab value="2"><i class="pi pi-file mr-1.5" style="font-size:0.8rem"></i>Templates</p-tab>
           <p-tab value="3"><i class="pi pi-chart-bar mr-1.5" style="font-size:0.8rem"></i>Quality</p-tab>
           <p-tab value="4"><i class="pi pi-history mr-1.5" style="font-size:0.8rem"></i>Audit Logs</p-tab>
+          <p-tab value="5">
+            <i class="pi pi-trash mr-1.5" style="font-size:0.8rem"></i>Pending Removal
+            @if (pendingRemoval().length) {
+              <span class="ml-1.5 text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5">{{ pendingRemoval().length }}</span>
+            }
+          </p-tab>
         </p-tablist>
         <p-tabpanels>
 
@@ -288,6 +294,60 @@ import {
             </div>
           </p-tabpanel>
 
+          <!-- ═══ Pending Removal Tab ═══ -->
+          <p-tabpanel value="5">
+            <div class="pt-4 space-y-4">
+              <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p class="text-sm text-amber-800">
+                  <i class="pi pi-info-circle mr-1"></i>
+                  These numbers were released by tenants but <span class="font-semibold">cannot be removed from the WhatsApp Business Account via API</span>.
+                  Remove each one in <a href="https://business.facebook.com/wa/manage" target="_blank" class="underline font-medium">WhatsApp Manager</a>
+                  (select the number → Settings → Remove number), then click <span class="font-medium">Mark Removed</span>. Unverified numbers are also auto-removed by Meta after they expire.
+                </p>
+              </div>
+              <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <p-table [value]="pendingRemoval()" [loading]="loading()" [paginator]="true" [rows]="10" styleClass="text-sm">
+                  <ng-template pTemplate="header">
+                    <tr>
+                      <th class="text-xs text-gray-500 font-medium">PHONE</th>
+                      <th class="text-xs text-gray-500 font-medium">WABA</th>
+                      <th class="text-xs text-gray-500 font-medium">RELEASED</th>
+                      <th class="text-xs text-gray-500 font-medium">DEREGISTERED</th>
+                      <th class="text-xs text-gray-500 font-medium">ACTIONS</th>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="body" let-phone>
+                    <tr>
+                      <td class="font-semibold text-gray-900">{{ phone.phoneNumber }}</td>
+                      <td class="text-gray-600 text-xs">{{ phone.wabaAccount?.name || '—' }} <span class="font-mono text-gray-400">{{ phone.wabaAccount?.wabaId }}</span></td>
+                      <td class="text-xs text-gray-500">{{ phone.metadata?.releasedAt ? (phone.metadata.releasedAt | date:'short') : '—' }}</td>
+                      <td>
+                        <p-tag [value]="phone.metadata?.deregistered ? 'Yes' : 'No'" [severity]="phone.metadata?.deregistered ? 'success' : 'warn'" styleClass="text-xs" />
+                      </td>
+                      <td>
+                        <div class="flex gap-1 items-center">
+                          <button pButton label="Deregister" icon="pi pi-unlock" class="p-button-sm p-button-outlined" severity="warn"
+                            pTooltip="Deregister from Cloud API (does not remove from WABA)"
+                            [disabled]="phone.metadata?.deregistered"
+                            (click)="deregisterPhone(phone)"></button>
+                          <button pButton label="Mark Removed" icon="pi pi-check" class="p-button-sm" severity="success"
+                            pTooltip="I removed it from WhatsApp Manager"
+                            (click)="markPhoneRemoved(phone)"></button>
+                        </div>
+                      </td>
+                    </tr>
+                  </ng-template>
+                  <ng-template pTemplate="emptymessage">
+                    <tr><td colspan="5" class="text-center py-12 text-gray-500">
+                      <i class="pi pi-check-circle text-green-400" style="font-size:2rem"></i>
+                      <p class="mt-2">No numbers pending removal</p>
+                    </td></tr>
+                  </ng-template>
+                </p-table>
+              </div>
+            </div>
+          </p-tabpanel>
+
         </p-tabpanels>
       </p-tabs>
     </div>
@@ -436,6 +496,7 @@ export class WabaDashboardComponent implements OnInit {
 
   accounts = signal<WabaAccount[]>([]);
   phones = signal<WabaPhoneNumber[]>([]);
+  pendingRemoval = signal<WabaPhoneNumber[]>([]);
   templates = signal<WabaTemplate[]>([]);
   qualitySummary = signal<QualitySummary | null>(null);
   auditLogs = signal<any[]>([]);
@@ -469,6 +530,7 @@ export class WabaDashboardComponent implements OnInit {
     this.loading.set(true);
     this.wabaService.getAccounts().subscribe({ next: (a) => this.accounts.set(a), error: () => this.loading.set(false) });
     this.wabaService.getPhones().subscribe({ next: (p) => this.phones.set(p) });
+    this.wabaService.getPendingRemovalPhones().subscribe({ next: (p) => this.pendingRemoval.set(p) });
     this.wabaService.getTemplates().subscribe({ next: (t) => this.templates.set(t) });
     this.wabaService.getQualitySummary().subscribe({ next: (s) => this.qualitySummary.set(s) });
     this.wabaService.getAuditLogs({ limit: 50 }).subscribe({ next: (r) => { this.auditLogs.set(r.data); this.loading.set(false); }, error: () => this.loading.set(false) });
@@ -577,6 +639,19 @@ export class WabaDashboardComponent implements OnInit {
     else { this.toast('warn', 'Assign to tenant first'); }
   }
   deleteTemplate(t: WabaTemplate) { this.wabaService.deleteTemplate(t.id).subscribe({ next: () => { this.toast('success', 'Deleted'); this.loadAll(); } }); }
+
+  deregisterPhone(p: WabaPhoneNumber) {
+    this.wabaService.deregisterPhone(p.id).subscribe({
+      next: (r) => { this.toast(r.deregistered ? 'success' : 'warn', r.message); this.loadAll(); },
+      error: (e) => this.toast('error', e.error?.message || 'Deregister failed'),
+    });
+  }
+  markPhoneRemoved(p: WabaPhoneNumber) {
+    this.wabaService.markPhoneRemoved(p.id).subscribe({
+      next: (r) => { this.toast('success', r.message || 'Marked removed'); this.loadAll(); },
+      error: (e) => this.toast('error', e.error?.message || 'Failed'),
+    });
+  }
 
   private toast(severity: string, detail: string) { this.messageService.add({ severity, summary: severity === 'error' ? 'Error' : severity === 'success' ? 'Success' : severity === 'warn' ? 'Warning' : 'Info', detail, life: 3000 }); }
 }

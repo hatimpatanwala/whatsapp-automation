@@ -38,6 +38,7 @@ export interface WabaPhoneNumber {
   webhookSubscribed: boolean;
   tenant?: { id: string; name: string; slug: string };
   wabaAccount?: WabaAccount;
+  metadata?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }
@@ -158,6 +159,20 @@ export class WabaService {
 
   updatePhoneStatus(phoneId: string, status: 'active' | 'inactive'): Observable<WabaPhoneNumber> {
     return this.api.patch<WabaPhoneNumber>(`/admin/waba/phones/${phoneId}/status`, { status });
+  }
+
+  // ─── Released numbers pending WhatsApp Manager removal ───────────────────────
+
+  getPendingRemovalPhones(): Observable<WabaPhoneNumber[]> {
+    return this.api.get<WabaPhoneNumber[]>('/admin/waba/phones/pending-removal');
+  }
+
+  deregisterPhone(phoneId: string): Observable<{ deregistered: boolean; message: string }> {
+    return this.api.post(`/admin/waba/phones/${phoneId}/deregister`, {});
+  }
+
+  markPhoneRemoved(phoneId: string): Observable<{ removed: boolean; message: string }> {
+    return this.api.post(`/admin/waba/phones/${phoneId}/mark-removed`, {});
   }
 
   // ─── Phone Onboarding ──────────────────────────────────────────────────────
