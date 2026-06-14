@@ -28,10 +28,26 @@ export class MetaCloudApiClient {
   }
 
   async getPhoneNumbers(wabaId: string, accessToken: string): Promise<any[]> {
-    const response = await this.request('GET', `/${wabaId}/phone_numbers`, accessToken, null, {
-      fields: 'id,display_phone_number,verified_name,quality_rating,messaging_limit_tier,name_status,is_official_business_account',
-    });
-    return response.data || [];
+    try {
+      const response = await this.request('GET', `/${wabaId}/phone_numbers`, accessToken, null, {
+        fields: 'id,display_phone_number,verified_name,quality_rating,messaging_limit_tier,name_status,is_official_business_account',
+      });
+      return response.data || [];
+    } catch (error: any) {
+      // Meta returns "(#100) Tried accessing nonexisting field (phone_numbers)" when the
+      // supplied ID is NOT a WhatsApp Business Account (e.g. a Facebook App ID or Business
+      // Portfolio ID). Translate this into an actionable error instead of a cryptic 500.
+      if (/nonexisting field \(phone_numbers\)/i.test(error?.message || '')) {
+        throw new Error(
+          `The ID "${wabaId}" is not a WhatsApp Business Account (WABA) ID — Meta does not expose ` +
+          `phone numbers on it. You most likely entered a Facebook App ID or Business Portfolio ID. ` +
+          `Find your WABA ID in WhatsApp Manager (business.facebook.com/wa/manage) → Account tools → ` +
+          `Settings, or in Meta Business Settings → Accounts → WhatsApp accounts. It is a 15–16 digit ` +
+          `number labelled "WhatsApp Business Account ID".`,
+        );
+      }
+      throw error;
+    }
   }
 
   async registerPhoneNumber(phoneNumberId: string, pin: string): Promise<void> {
