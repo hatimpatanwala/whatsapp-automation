@@ -11,7 +11,20 @@ export class SendButtonsNodeHandler implements NodeHandler {
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     const body = resolveTemplate(node.config.body || '', ctx);
-    const buttonLines = (node.config.buttons || '').split('\n').filter((l: string) => l.trim());
+
+    // `buttons` may be a newline-separated string OR an array (of strings or
+    // objects like { title }/{ text }/{ label }). Normalize to string lines.
+    const rawButtons = node.config.buttons;
+    let buttonLines: string[];
+    if (Array.isArray(rawButtons)) {
+      buttonLines = rawButtons
+        .map((b: any) => (typeof b === 'string' ? b : (b?.title ?? b?.text ?? b?.label ?? b?.value ?? '')))
+        .filter((l: string) => l && l.trim());
+    } else if (typeof rawButtons === 'string') {
+      buttonLines = rawButtons.split('\n').filter((l: string) => l.trim());
+    } else {
+      buttonLines = [];
+    }
 
     if (!body || buttonLines.length === 0) {
       return { action: 'error', message: 'send_buttons: body or buttons not configured' };

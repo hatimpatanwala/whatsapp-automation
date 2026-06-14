@@ -42,11 +42,20 @@ export class FallbackNodeHandler implements NodeHandler {
       return { action: 'end' };
     }
 
-    // Default: buttons mode — show configurable fallback options
-    const buttonLabels = (node.config.buttons || 'Main Menu\nRepeat\nContinue')
-      .split('\n')
-      .filter((l: string) => l.trim())
-      .slice(0, 3);
+    // Default: buttons mode — show configurable fallback options.
+    // `buttons` may be a string OR an array (of strings / { title|text|label }).
+    const rawButtons = node.config.buttons;
+    let buttonLabels: string[];
+    if (Array.isArray(rawButtons)) {
+      buttonLabels = rawButtons
+        .map((b: any) => (typeof b === 'string' ? b : (b?.title ?? b?.text ?? b?.label ?? b?.value ?? '')))
+        .filter((l: string) => l && l.trim());
+    } else {
+      buttonLabels = (rawButtons || 'Main Menu\nRepeat\nContinue')
+        .split('\n')
+        .filter((l: string) => l.trim());
+    }
+    buttonLabels = buttonLabels.slice(0, 3);
 
     const buttons = buttonLabels.map((text: string, i: number) => ({
       id: `wf_fb_${node.id}_${i}`,
