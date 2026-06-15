@@ -21,7 +21,8 @@ export class RateLimitMiddleware implements NestMiddleware {
   async use(req: Request, res: Response, next: NextFunction) {
     try {
       // Per-IP throttle on sensitive auth/OTP endpoints.
-      if (this.authPathRe.test(req.path)) {
+      const reqPath = req.originalUrl || req.url || req.path || '';
+      if (this.authPathRe.test(reqPath)) {
         const ip = (req.ip || req.socket.remoteAddress || 'unknown').toString();
         const akey = `ratelimit:auth:${ip}:${Math.floor(Date.now() / this.authWindowMs)}`;
         const ac = await this.redis.incr(akey);
