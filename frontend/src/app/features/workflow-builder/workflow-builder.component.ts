@@ -246,8 +246,8 @@ import {
     }
 
     <!-- ========== NEW WORKFLOW DIALOG ========== -->
-    <p-dialog [(visible)]="newWorkflowDialog" header="Create New Workflow" [modal]="true" [style]="{width:'680px'}" [draggable]="false">
-      <div class="space-y-4 py-2">
+    <p-dialog [(visible)]="newWorkflowDialog" header="Create New Workflow" [modal]="true" [style]="{width:'680px'}" [contentStyle]="{maxHeight:'68vh', overflowY:'auto'}" [draggable]="false">
+      <div class="space-y-4 py-2 px-0.5">
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium text-gray-700">Workflow Name *</label>
           <input pInputText [(ngModel)]="newWfName" placeholder="e.g. Order Confirmation Flow" class="w-full" />
@@ -282,19 +282,20 @@ import {
           <div>
             <label class="text-sm font-medium text-gray-700 mb-1 block">Ready-made flows</label>
             <p class="text-xs text-gray-400 mb-2">Full, ready-to-edit flows — the same ones offered during onboarding.</p>
-            <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+            <div class="grid grid-cols-2 gap-2 items-stretch">
               @for (t of personalizationTemplates(); track t.key) {
                 <div
-                  class="p-2.5 border border-gray-200 rounded-lg cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
+                  class="p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors flex flex-col"
                   [class.border-primary-500]="selectedPersonalizationKey === t.key"
                   [class.bg-primary-50]="selectedPersonalizationKey === t.key"
+                  [class.shadow-sm]="selectedPersonalizationKey === t.key"
                   (click)="selectedPersonalizationKey = t.key; selectedTemplate = ''"
                 >
-                  <div class="flex items-center justify-between gap-2">
-                    <p class="text-xs font-semibold text-gray-800 truncate">{{ t.name }}</p>
-                    <span class="text-[10px] text-gray-400 whitespace-nowrap">{{ t.nodeCount }} steps</span>
+                  <div class="flex items-start justify-between gap-2">
+                    <p class="text-xs font-semibold text-gray-800 leading-tight">{{ t.name }}</p>
+                    <span class="text-[10px] text-gray-400 whitespace-nowrap shrink-0 mt-0.5">{{ t.nodeCount }} steps</span>
                   </div>
-                  <p class="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{{ t.description }}</p>
+                  <p class="text-[11px] text-gray-500 mt-1 wf-clamp-2">{{ t.description }}</p>
                 </div>
               }
             </div>
@@ -334,6 +335,14 @@ import {
       </ng-template>
     </p-dialog>
   `,
+  styles: [`
+    .wf-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  `],
 })
 export class WorkflowBuilderComponent implements OnInit {
   private readonly messageService = inject(MessageService);

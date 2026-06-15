@@ -170,12 +170,12 @@ interface EdgePath {
                 }
               </div>
 
-              <!-- Output connectors (bottom). Filled = connected. -->
+              <!-- Output connectors (bottom). Filled with the node colour = connected. -->
               @if ((getNodeDef(node.type)?.maxOutputs || 0) > 0) {
-                <div class="flex justify-center gap-3 pb-2 relative items-center">
+                <div class="flex justify-center gap-3 pb-2.5 relative items-center">
                   @for (i of getOutputPorts(node); track i) {
                     <div
-                      class="w-4 h-4 rounded-full border-2 cursor-pointer hover:scale-125 transition-transform flex items-center justify-center"
+                      class="w-5 h-5 rounded-full border-2 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center shadow-sm"
                       [style.border-color]="getNodeDef(node.type)?.color || '#94a3b8'"
                       [style.background-color]="i < outgoingCount(node.id) ? (getNodeDef(node.type)?.color || '#94a3b8') : (connectingFrom() === node.id ? '#bbf7d0' : 'white')"
                       (pointerdown)="$event.stopPropagation()"
@@ -184,7 +184,10 @@ interface EdgePath {
                       tooltipPosition="bottom"
                     >
                       @if (getNodeDef(node.type)!.maxOutputs > 1) {
-                        <span class="text-[8px] font-bold leading-none" [style.color]="i < outgoingCount(node.id) ? 'white' : '#94a3b8'">{{ i + 1 }}</span>
+                        <span
+                          class="text-[9px] font-bold leading-none"
+                          [style.color]="i < outgoingCount(node.id) ? 'white' : (getNodeDef(node.type)?.color || '#94a3b8')"
+                        >{{ i + 1 }}</span>
                       }
                     </div>
                   }
@@ -308,7 +311,7 @@ export class WorkflowCanvasComponent {
 
   // X offset (relative to node left edge) of output port `slot` of `count` ports.
   private portX(count: number, slot: number): number {
-    const portW = 16, gap = 12, nodeW = 192;
+    const portW = 20, gap = 12, nodeW = 192;
     const total = count * portW + (count - 1) * gap;
     const startX = nodeW / 2 - total / 2;
     return startX + slot * (portW + gap) + portW / 2;
