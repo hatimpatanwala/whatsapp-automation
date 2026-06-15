@@ -299,14 +299,28 @@ export class WorkflowCanvasComponent {
   }
 
   getConfigPreview(node: WorkflowNodeData): string {
-    const keys = Object.keys(node.config || {});
-    if (!keys.length) return '';
-    const preview = keys
-      .filter(k => node.config[k] !== undefined && node.config[k] !== '' && node.config[k] !== null)
-      .map(k => `${k}: ${String(node.config[k]).substring(0, 20)}`)
-      .slice(0, 2)
-      .join(' | ');
-    return preview;
+    const cfg = node.config || {};
+    const parts: string[] = [];
+    for (const k of Object.keys(cfg)) {
+      const v = (cfg as any)[k];
+      if (v === undefined || v === null || v === '') continue;
+      let str: string;
+      if (Array.isArray(v)) {
+        if (!v.length) continue;
+        // Arrays of strings or { title }/{ label } objects → show the labels.
+        const labels = v
+          .map((x: any) => (typeof x === 'string' ? x : (x?.title ?? x?.label ?? x?.name ?? '')))
+          .filter(Boolean);
+        str = labels.length ? labels.join(', ') : `${v.length} item${v.length > 1 ? 's' : ''}`;
+      } else if (typeof v === 'object') {
+        continue; // skip nested objects (sections, etc.)
+      } else {
+        str = String(v);
+      }
+      parts.push(`${k}: ${str.substring(0, 24)}`);
+      if (parts.length >= 2) break;
+    }
+    return parts.join(' | ');
   }
 
   // X offset (relative to node left edge) of output port `slot` of `count` ports.
