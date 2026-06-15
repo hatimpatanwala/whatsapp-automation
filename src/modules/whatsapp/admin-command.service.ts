@@ -30,6 +30,13 @@ export class AdminCommandService {
     { id: 'cancelled', title: '❌ Cancel' },
   ];
 
+  private readonly QUOTE_STATUSES: { id: string; title: string }[] = [
+    { id: 'sent', title: '📤 Mark Sent' },
+    { id: 'accepted', title: '✅ Accepted' },
+    { id: 'rejected', title: '❌ Rejected' },
+    { id: 'converted', title: '🛒 Converted' },
+  ];
+
   constructor(
     private readonly whatsappApi: WhatsAppApiService,
     private readonly connectionManager: TenantConnectionManager,
@@ -69,39 +76,81 @@ export class AdminCommandService {
     }
   }
 
-  // ─── Main menu ──────────────────────────────────────────────────────────────
+  // ─── Main menu (categories) ──────────────────────────────────────────────────
   private async showMainMenu(tenant: any, to: string): Promise<void> {
-    await this.sendList(tenant, to, '🛠️ *Admin Menu*\nManage your store from here.', 'Choose an action', [
+    await this.sendList(tenant, to, '🛠️ *Admin Control*\nManage your whole store from WhatsApp.', 'Open', [
       {
-        title: 'Orders',
+        title: 'Sales',
         rows: [
-          { id: 'menu_orders', title: '📦 View Orders', description: 'Recent orders & status' },
-          { id: 'menu_summary', title: '📊 Today’s Summary', description: 'Orders & revenue today' },
+          { id: 'cat_orders', title: '📦 Orders', description: 'View, confirm & update status' },
+          { id: 'cat_quotes', title: '📄 Quotes', description: 'View & update quotes' },
         ],
       },
       {
-        title: 'Products',
+        title: 'Catalog',
         rows: [
-          { id: 'prod_list', title: '🛍️ List Products', description: 'View your catalog' },
-          { id: 'prod_add', title: '➕ Add Product', description: 'Create a new product' },
-          { id: 'prod_update', title: '✏️ Update Product', description: 'Change price/stock/name' },
-          { id: 'prod_delete', title: '🗑️ Delete Product', description: 'Remove a product' },
+          { id: 'cat_products', title: '🛍️ Products', description: 'List / add / update / delete' },
+          { id: 'menu_lowstock', title: '📉 Low Stock', description: 'Items running low' },
         ],
       },
       {
-        title: 'Payments',
-        rows: [{ id: 'menu_payments', title: '💳 Payments', description: 'Recent payments' }],
+        title: 'Store',
+        rows: [
+          { id: 'menu_customers', title: '👥 Customers', description: 'Top customers' },
+          { id: 'menu_payments', title: '💳 Payments', description: 'Recent payments' },
+          { id: 'menu_summary', title: '📊 Summary', description: 'Today at a glance' },
+        ],
       },
     ]);
   }
 
+  private async showOrdersMenu(tenant: any, to: string): Promise<void> {
+    await this.sendList(tenant, to, '📦 *Orders*', 'Choose', [{
+      title: 'Orders', rows: [
+        { id: 'menu_orders', title: '📋 All Orders', description: 'Recent orders' },
+        { id: 'menu_pending', title: '⏳ Pending', description: 'Confirm new orders' },
+        { id: 'cancel', title: '⬅️ Back to menu' },
+      ],
+    }]);
+  }
+
+  private async showQuotesMenu(tenant: any, to: string): Promise<void> {
+    await this.sendList(tenant, to, '📄 *Quotes*', 'Choose', [{
+      title: 'Quotes', rows: [
+        { id: 'menu_quotes', title: '📋 All Quotes', description: 'Recent quotes' },
+        { id: 'menu_qpending', title: '⏳ Open Quotes', description: 'Draft/sent quotes' },
+        { id: 'cancel', title: '⬅️ Back to menu' },
+      ],
+    }]);
+  }
+
+  private async showProductsMenu(tenant: any, to: string): Promise<void> {
+    await this.sendList(tenant, to, '🛍️ *Products*', 'Choose', [{
+      title: 'Products', rows: [
+        { id: 'prod_list', title: '📋 List Products' },
+        { id: 'prod_add', title: '➕ Add Product' },
+        { id: 'prod_update', title: '✏️ Update Product' },
+        { id: 'prod_delete', title: '🗑️ Delete Product' },
+        { id: 'cancel', title: '⬅️ Back to menu' },
+      ],
+    }]);
+  }
+
   // ─── Command router (interactive taps) ──────────────────────────────────────
   private async handleCommand(tenant: any, to: string, id: string): Promise<void> {
-    const schema = tenant.schemaName;
+    // Category submenus
+    if (id === 'cat_orders') return this.showOrdersMenu(tenant, to);
+    if (id === 'cat_quotes') return this.showQuotesMenu(tenant, to);
+    if (id === 'cat_products') return this.showProductsMenu(tenant, to);
 
-    if (id === 'menu_orders') return this.listOrders(tenant, to);
+    if (id === 'menu_orders') return this.listOrders(tenant, to, false);
+    if (id === 'menu_pending') return this.listOrders(tenant, to, true);
+    if (id === 'menu_quotes') return this.listQuotes(tenant, to, false);
+    if (id === 'menu_qpending') return this.listQuotes(tenant, to, true);
     if (id === 'menu_summary') return this.showSummary(tenant, to);
     if (id === 'menu_payments') return this.listPayments(tenant, to);
+    if (id === 'menu_customers') return this.listCustomers(tenant, to);
+    if (id === 'menu_lowstock') return this.listLowStock(tenant, to);
     if (id === 'prod_list') return this.listProducts(tenant, to);
     if (id === 'prod_add') return this.startAddProduct(tenant, to);
     if (id === 'prod_update') return this.listProductsForAction(tenant, to, 'pupd', 'Select a product to update');
@@ -112,6 +161,12 @@ export class AdminCommandService {
       const rest = id.slice('ostatus_'.length);
       const sep = rest.lastIndexOf('_');
       return this.updateOrderStatus(tenant, to, rest.slice(0, sep), rest.slice(sep + 1));
+    }
+    if (id.startsWith('quote_')) return this.showQuote(tenant, to, id.slice('quote_'.length));
+    if (id.startsWith('qstatus_')) {
+      const rest = id.slice('qstatus_'.length);
+      const sep = rest.lastIndexOf('_');
+      return this.updateQuoteStatus(tenant, to, rest.slice(0, sep), rest.slice(sep + 1));
     }
     if (id.startsWith('pupd_')) return this.askUpdateField(tenant, to, id.slice('pupd_'.length));
     if (id.startsWith('pupdf_')) {
@@ -127,22 +182,112 @@ export class AdminCommandService {
   }
 
   // ─── Orders ─────────────────────────────────────────────────────────────────
-  private async listOrders(tenant: any, to: string): Promise<void> {
+  private async listOrders(tenant: any, to: string, pendingOnly: boolean): Promise<void> {
     const orders = await this.query(tenant.schemaName, async (qr) =>
       qr.query(
-        `SELECT id, order_number, status, total, currency FROM orders ORDER BY created_at DESC LIMIT 10`,
+        pendingOnly
+          ? `SELECT id, order_number, status, total, currency FROM orders
+             WHERE status IN ('pending','placed','confirmed','processing') ORDER BY created_at DESC LIMIT 10`
+          : `SELECT id, order_number, status, total, currency FROM orders ORDER BY created_at DESC LIMIT 10`,
       ),
     );
-    if (!orders.length) return this.send(tenant, to, '📦 No orders yet.\n\nSend *menu* to go back.');
+    if (!orders.length) {
+      return this.send(tenant, to, pendingOnly ? '✅ No pending orders.\n\nSend *menu* to go back.' : '📦 No orders yet.\n\nSend *menu* to go back.');
+    }
 
     const rows = orders.map((o: any) => ({
       id: `order_${o.id}`,
       title: `#${o.order_number} · ${this.titleCase(o.status)}`.substring(0, 24),
       description: `${o.currency || '₹'}${o.total}`,
     }));
-    await this.sendList(tenant, to, '📦 *Recent Orders*\nTap one to view & change its status.', 'View order', [
+    await this.sendList(tenant, to, `📦 *${pendingOnly ? 'Pending Orders' : 'Recent Orders'}*\nTap one to view & change status.`, 'View order', [
       { title: 'Orders', rows },
     ]);
+  }
+
+  // ─── Quotes ─────────────────────────────────────────────────────────────────
+  private async listQuotes(tenant: any, to: string, openOnly: boolean): Promise<void> {
+    const quotes = await this.query(tenant.schemaName, async (qr) =>
+      qr.query(
+        openOnly
+          ? `SELECT id, quote_number, status, total_amount FROM quotes
+             WHERE status IN ('draft','sent') ORDER BY created_at DESC LIMIT 10`
+          : `SELECT id, quote_number, status, total_amount FROM quotes ORDER BY created_at DESC LIMIT 10`,
+      ),
+    );
+    if (!quotes.length) return this.send(tenant, to, openOnly ? '✅ No open quotes.\n\nSend *menu* to go back.' : '📄 No quotes yet.\n\nSend *menu* to go back.');
+    const rows = quotes.map((q: any) => ({
+      id: `quote_${q.id}`,
+      title: `#${q.quote_number} · ${this.titleCase(q.status)}`.substring(0, 24),
+      description: `₹${q.total_amount}`,
+    }));
+    await this.sendList(tenant, to, `📄 *${openOnly ? 'Open Quotes' : 'Recent Quotes'}*\nTap one to view & update.`, 'View quote', [
+      { title: 'Quotes', rows },
+    ]);
+  }
+
+  private async showQuote(tenant: any, to: string, quoteId: string): Promise<void> {
+    const result = await this.query(tenant.schemaName, async (qr) => {
+      const q = (await qr.query(`SELECT * FROM quotes WHERE id = $1`, [quoteId]))[0];
+      if (!q) return null;
+      const items = await qr.query(
+        `SELECT description, quantity, line_total FROM quote_items WHERE quote_id = $1 ORDER BY sort_order`,
+        [quoteId],
+      );
+      return { q, items };
+    });
+    if (!result) return this.send(tenant, to, 'Quote not found. Send *menu*.');
+    const { q, items } = result;
+    const lines = items.map((i: any) => `• ${i.description} ×${i.quantity} — ₹${i.line_total}`).join('\n');
+    const body = `📄 *Quote #${q.quote_number}*\n${q.title ? q.title + '\n' : ''}Status: *${this.titleCase(q.status)}*\n\n${lines || 'No items'}\n\n*Total: ₹${q.total_amount}*`;
+    await this.sendList(tenant, to, body, 'Update status',
+      [{ title: 'Set status to', rows: this.QUOTE_STATUSES.map((s) => ({ id: `qstatus_${q.id}_${s.id}`, title: s.title })) }]);
+  }
+
+  private async updateQuoteStatus(tenant: any, to: string, quoteId: string, status: string): Promise<void> {
+    const valid = this.QUOTE_STATUSES.map((s) => s.id);
+    if (!valid.includes(status)) return this.send(tenant, to, 'Invalid status. Send *menu*.');
+    const updated = await this.query(tenant.schemaName, async (qr) => {
+      const extra = status === 'sent' ? ', sent_at = NOW()'
+        : status === 'accepted' ? ', accepted_at = NOW()'
+          : status === 'converted' ? ', converted_at = NOW()'
+            : '';
+      const rows = await qr.query(
+        `UPDATE quotes SET status = $1, updated_at = NOW()${extra} WHERE id = $2 RETURNING quote_number`,
+        [status, quoteId],
+      );
+      return rows[0];
+    });
+    if (!updated) return this.send(tenant, to, 'Quote not found. Send *menu*.');
+    await this.send(tenant, to, `✅ Quote #${updated.quote_number} is now *${this.titleCase(status)}*.\n\nSend *menu* for more.`);
+  }
+
+  // ─── Customers & low stock ──────────────────────────────────────────────────
+  private async listCustomers(tenant: any, to: string): Promise<void> {
+    const customers = await this.query(tenant.schemaName, async (qr) =>
+      qr.query(
+        `SELECT name, phone, total_orders, total_spent FROM customers ORDER BY total_spent DESC NULLS LAST LIMIT 10`,
+      ),
+    );
+    if (!customers.length) return this.send(tenant, to, '👥 No customers yet. Send *menu*.');
+    const lines = customers
+      .map((c: any) => `• *${c.name || c.phone}* — ${c.total_orders || 0} orders · ₹${c.total_spent || 0}`)
+      .join('\n');
+    await this.send(tenant, to, `👥 *Top Customers*\n\n${lines}\n\nSend *menu* to go back.`);
+  }
+
+  private async listLowStock(tenant: any, to: string): Promise<void> {
+    const items = await this.query(tenant.schemaName, async (qr) =>
+      qr.query(
+        `SELECT p.name, i.stock_quantity AS stock, i.low_stock_threshold AS threshold
+         FROM inventory i JOIN products p ON p.id = i.product_id
+         WHERE i.track_inventory = true AND i.stock_quantity <= i.low_stock_threshold
+         ORDER BY i.stock_quantity ASC LIMIT 15`,
+      ),
+    );
+    if (!items.length) return this.send(tenant, to, '✅ All items are well stocked.\n\nSend *menu* to go back.');
+    const lines = items.map((i: any) => `• *${i.name}* — ${i.stock} left (≤ ${i.threshold})`).join('\n');
+    await this.send(tenant, to, `📉 *Low Stock*\n\n${lines}\n\nUse *✏️ Update Product → Stock* to restock.\nSend *menu* to go back.`);
   }
 
   private async showOrder(tenant: any, to: string, orderId: string): Promise<void> {
