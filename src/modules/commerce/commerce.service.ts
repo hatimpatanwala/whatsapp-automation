@@ -64,6 +64,11 @@ export class CommerceService {
     if (existing && existing.status === 'active') {
       throw new ConflictException('Tenant already has an active catalog');
     }
+    if (existing) {
+      // A previously deprovisioned catalog row would violate the
+      // unique(tenant_id) constraint on insert — remove it before re-provisioning.
+      await this.catalogRepo.delete({ id: existing.id });
+    }
 
     // Resolve WABA and business ID
     const { waba, accessToken } = await this.resolveWabaAndToken(tenant);
@@ -290,7 +295,9 @@ export class CommerceService {
   // ─── Catalog Status & Diagnostics ──────────────────────────────────────
 
   async getCatalogStatus(tenantId: string): Promise<any> {
-    const catalog = await this.catalogRepo.findOne({ where: { tenantId } });
+    // Only an ACTIVE catalog counts as provisioned. A deprovisioned row must
+    // report as not_provisioned so the UI shows the "Provision" option again.
+    const catalog = await this.catalogRepo.findOne({ where: { tenantId, status: 'active' } });
     if (!catalog) {
       return {
         status: 'not_provisioned',
