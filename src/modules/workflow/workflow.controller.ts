@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { WorkflowService, CreateWorkflowDto, UpdateWorkflowDto, SaveDefinitionDto } from './workflow.service';
+import { getWorkflowTemplates } from '../onboarding/business-categories';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { SubscriptionGuard } from '../../common/guards/subscription.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -28,6 +29,23 @@ export class WorkflowController {
       status,
       search,
     });
+  }
+
+  // Ready-made workflow templates (same set used in onboarding personalization).
+  // Declared before :id so the literal path matches first.
+  @Get('templates')
+  @Roles('owner', 'seller')
+  async getTemplates(@Query('category') category?: string) {
+    const templates = getWorkflowTemplates(category || 'retail', 'your store');
+    return Object.values(templates).map((t) => ({
+      key: t.key,
+      name: t.name,
+      description: t.description,
+      nodeCount: Array.isArray(t.nodes) ? t.nodes.length : 0,
+      trigger: t.trigger,
+      nodes: t.nodes,
+      edges: t.edges,
+    }));
   }
 
   @Get(':id')

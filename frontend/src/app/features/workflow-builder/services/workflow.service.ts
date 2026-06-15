@@ -11,6 +11,16 @@ import {
   EntityType,
 } from '../models/workflow.models';
 
+export interface PersonalizationTemplate {
+  key: string;
+  name: string;
+  description: string;
+  nodeCount: number;
+  trigger: any;
+  nodes: any[];
+  edges: any[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class WorkflowService {
   private readonly api = inject(ApiService);
@@ -24,6 +34,11 @@ export class WorkflowService {
 
   getById(id: string): Observable<any> {
     return this.api.get(`/workflows/${id}`);
+  }
+
+  /** Ready-made templates from onboarding personalization (server-defined). */
+  getPersonalizationTemplates(): Observable<PersonalizationTemplate[]> {
+    return this.api.get<PersonalizationTemplate[]>('/workflows/templates');
   }
 
   create(data: { name: string; description?: string; trigger?: string }): Observable<any> {

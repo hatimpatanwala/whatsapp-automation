@@ -18,7 +18,7 @@ import { NodePaletteComponent } from './components/node-palette.component';
 import { WorkflowCanvasComponent } from './components/workflow-canvas.component';
 import { NodeConfigPanelComponent } from './components/node-config-panel.component';
 import { WorkflowPreviewComponent } from './components/workflow-preview.component';
-import { WorkflowService } from './services/workflow.service';
+import { WorkflowService, PersonalizationTemplate } from './services/workflow.service';
 import {
   WorkflowDefinition,
   WorkflowNodeData,
@@ -257,9 +257,9 @@ import {
           <input pInputText [(ngModel)]="newWfDescription" placeholder="Brief description of what this workflow does" class="w-full" />
         </div>
 
-        <!-- Templates -->
+        <!-- Quick-start templates -->
         <div>
-          <label class="text-sm font-medium text-gray-700 mb-2 block">Start from a template</label>
+          <label class="text-sm font-medium text-gray-700 mb-2 block">Quick starts</label>
           <div class="grid grid-cols-3 gap-3">
             @for (template of workflowTemplates; track template.name) {
               <div
@@ -267,7 +267,7 @@ import {
                 [class.border-primary-500]="selectedTemplate === template.name"
                 [class.bg-primary-50]="selectedTemplate === template.name"
                 [class.shadow-sm]="selectedTemplate === template.name"
-                (click)="selectedTemplate = template.name"
+                (click)="selectedTemplate = template.name; selectedPersonalizationKey = ''"
               >
                 <i [class]="'pi ' + template.icon + ' mb-1'" [style.color]="selectedTemplate === template.name ? '#128C7E' : '#6b7280'" style="font-size:1.25rem"></i>
                 <p class="text-xs font-semibold text-gray-800">{{ template.name }}</p>
@@ -276,6 +276,30 @@ import {
             }
           </div>
         </div>
+
+        <!-- Ready-made flows from business setup (personalization templates) -->
+        @if (personalizationTemplates().length) {
+          <div>
+            <label class="text-sm font-medium text-gray-700 mb-1 block">Ready-made flows</label>
+            <p class="text-xs text-gray-400 mb-2">Full, ready-to-edit flows — the same ones offered during onboarding.</p>
+            <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+              @for (t of personalizationTemplates(); track t.key) {
+                <div
+                  class="p-2.5 border border-gray-200 rounded-lg cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
+                  [class.border-primary-500]="selectedPersonalizationKey === t.key"
+                  [class.bg-primary-50]="selectedPersonalizationKey === t.key"
+                  (click)="selectedPersonalizationKey = t.key; selectedTemplate = ''"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-xs font-semibold text-gray-800 truncate">{{ t.name }}</p>
+                    <span class="text-[10px] text-gray-400 whitespace-nowrap">{{ t.nodeCount }} steps</span>
+                  </div>
+                  <p class="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{{ t.description }}</p>
+                </div>
+              }
+            </div>
+          </div>
+        }
       </div>
       <ng-template pTemplate="footer">
         <button pButton label="Cancel" class="p-button-outlined" (click)="newWorkflowDialog = false"></button>
@@ -354,6 +378,8 @@ export class WorkflowBuilderComponent implements OnInit {
   newWfName = '';
   newWfDescription = '';
   selectedTemplate = 'Blank Canvas';
+  selectedPersonalizationKey = '';
+  personalizationTemplates = signal<PersonalizationTemplate[]>([]);
 
   // Computed
   selectedNode = computed(() => {
@@ -379,6 +405,10 @@ export class WorkflowBuilderComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadWorkflows();
+    this.workflowService.getPersonalizationTemplates().subscribe({
+      next: (templates) => this.personalizationTemplates.set(templates || []),
+      error: () => {},
+    });
   }
 
   private loadWorkflows(): void {
@@ -616,11 +646,37 @@ export class WorkflowBuilderComponent implements OnInit {
       'Abandoned Cart': () => this.workflowService.buildAbandonedCartFlowTemplate(),
       'Order Tracking': () => this.workflowService.buildOrderTrackingFlowTemplate(),
     };
-    const builder = templateBuilders[this.selectedTemplate];
-    if (builder) {
-      const t = builder();
-      nodes = t.nodes;
-      edges = t.edges;
+    // A ready-made personalization template takes precedence if one is selected.
+    const personalization = this.selectedPersonalizationKey
+      ? this.personalizationTemplates().find((t) => t.key === this.selectedPersonalizationKey)
+      : undefined;
+
+    if (personalization) {
+      nodes = (personalization.nodes || []).map((n: any) => ({
+        id: n.id,
+        type: n.type,
+        label: n.label || n.type,
+        description: n.description || '',
+        x: n.x ?? 200,
+        y: n.y ?? 100,
+        config: n.config || {},
+        outputs: n.outputs || [],
+      }));
+      edges = (personalization.edges || []).map((e: any) => ({
+        id: e.id,
+        from: e.from,
+        to: e.to,
+        label: e.label,
+        condition: e.condition,
+      }));
+      if (!this.newWfName.trim()) this.newWfName = personalization.name;
+    } else {
+      const builder = templateBuilders[this.selectedTemplate];
+      if (builder) {
+        const t = builder();
+        nodes = t.nodes;
+        edges = t.edges;
+      }
     }
     // Auto-add fallback node to every new workflow
     const withFb = this.workflowService.ensureFallback(nodes, edges);
@@ -654,6 +710,7 @@ export class WorkflowBuilderComponent implements OnInit {
         this.newWfName = '';
         this.newWfDescription = '';
         this.selectedTemplate = 'Blank Canvas';
+        this.selectedPersonalizationKey = '';
         this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Workflow created successfully' });
         this.openWorkflow(wf);
       },
