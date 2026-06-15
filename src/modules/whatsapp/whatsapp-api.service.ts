@@ -175,6 +175,28 @@ export class WhatsAppApiService {
     });
   }
 
+  /** Interactive reply buttons with an image header (product card style). */
+  async sendInteractiveButtonsWithImage(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    body: string,
+    buttons: Array<{ id: string; title: string }>,
+    imageUrl: string,
+    footer?: string,
+  ): Promise<any> {
+    const interactive: any = {
+      type: 'button',
+      header: { type: 'image', image: { link: imageUrl } },
+      body: { text: body },
+      action: {
+        buttons: buttons.map((btn) => ({ type: 'reply', reply: { id: btn.id, title: btn.title } })),
+      },
+    };
+    if (footer) interactive.footer = { text: footer };
+    return this.sendDirectMessage(phoneNumberId, accessToken, to, { type: 'interactive', interactive });
+  }
+
   async sendInteractiveList(
     phoneNumberId: string,
     accessToken: string,

@@ -27,6 +27,7 @@ import { SendQuoteNodeHandler } from './send-quote.handler';
 import { UpdateQuoteNodeHandler } from './update-quote.handler';
 import { MyOrdersNodeHandler } from './my-orders.handler';
 import { TrackOrderNodeHandler } from './track-order.handler';
+import { ProductCardNodeHandler } from './product-card.handler';
 
 // Re-export all
 export {
@@ -59,6 +60,7 @@ export {
   UpdateQuoteNodeHandler,
   MyOrdersNodeHandler,
   TrackOrderNodeHandler,
+  ProductCardNodeHandler,
 };
 
 /** All node handler classes for DI registration */
@@ -92,4 +94,5 @@ export const ALL_NODE_HANDLERS = [
   UpdateQuoteNodeHandler,
   MyOrdersNodeHandler,
   TrackOrderNodeHandler,
+  ProductCardNodeHandler,
 ];

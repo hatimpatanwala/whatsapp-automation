@@ -46,6 +46,7 @@ import {
   UpdateQuoteNodeHandler,
   MyOrdersNodeHandler,
   TrackOrderNodeHandler,
+  ProductCardNodeHandler,
 } from './node-handlers';
 
 const MAX_STEPS = 50;
@@ -90,6 +91,7 @@ export class WorkflowExecutionEngine {
     updateQuote: UpdateQuoteNodeHandler,
     myOrders: MyOrdersNodeHandler,
     trackOrder: TrackOrderNodeHandler,
+    productCard: ProductCardNodeHandler,
   ) {
     const handlers: NodeHandler[] = [
       sendText, sendButtons, sendList, sendImage, sendTemplate,
@@ -97,7 +99,7 @@ export class WorkflowExecutionEngine {
       showCatalog, addToCart, viewCart, checkout, inventoryCheck,
       searchProducts, filterProducts, paymentQr,
       tagCustomer, updateOrder, assignAgent, httpRequest, setLanguage,
-      fallback, startWorkflow, sendQuote, updateQuote, myOrders, trackOrder,
+      fallback, startWorkflow, sendQuote, updateQuote, myOrders, trackOrder, productCard,
     ];
     this.handlerMap = new Map(handlers.map((h) => [h.nodeType, h]));
   }
@@ -494,13 +496,17 @@ export class WorkflowExecutionEngine {
       if (matchedEdge) return matchedEdge.to;
     }
 
-    // Extract product/category ID from list reply
+    // Extract product/category ID from list reply. A product/category pick is a
+    // VALID, handled selection — follow the node's normal next edge (e.g. into a
+    // product card) instead of dropping into the fallback / dead-ending.
     if (ctx.lastReply?.actionId) {
       const actionId = ctx.lastReply.actionId;
       if (actionId.startsWith('wf_prod_')) {
         ctx.variables.selected_product_id = actionId.replace('wf_prod_', '');
+        if (outEdges[0]) return outEdges[0].to;
       } else if (actionId.startsWith('wf_cat_')) {
         ctx.variables.selected_category_id = actionId.replace('wf_cat_', '');
+        if (outEdges[0]) return outEdges[0].to;
       }
     }
 
