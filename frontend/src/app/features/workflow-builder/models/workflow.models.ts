@@ -87,7 +87,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#f59e0b',
     maxOutputs: 1,
     configFields: [
-      { key: 'event', label: 'Event', type: 'select', options: [{ label: 'Order Created', value: 'created' }, { label: 'Order Confirmed', value: 'confirmed' }, { label: 'Order Delivered', value: 'delivered' }, { label: 'Order Cancelled', value: 'cancelled' }] },
+      { key: 'event', label: 'Event', type: 'select', options: [{ label: 'Order Created', value: 'created' }, { label: 'Order Confirmed', value: 'confirmed' }, { label: 'Being Prepared (Processing)', value: 'processing' }, { label: 'Ready for Delivery', value: 'ready_for_delivery' }, { label: 'Out for Delivery', value: 'out_for_delivery' }, { label: 'Order Delivered', value: 'delivered' }, { label: 'Order Cancelled', value: 'cancelled' }] },
     ],
   },
   {
@@ -552,7 +552,12 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { name: 'list_reply', description: 'The list item the customer last selected. Use as the Switch variable to branch.', example: 'Switch → variable: list_reply', group: 'Conversation' },
   { name: 'selected_product_id', description: 'The product the customer picked from a catalog/list.', example: 'Used by Add to Cart', group: 'Commerce' },
   { name: 'selected_category_id', description: 'The category the customer picked.', example: 'Used by Show Catalog', group: 'Commerce' },
-  { name: 'order_number', description: 'Order number — available in order-triggered flows.', example: 'Order #{{order_number}}', group: 'Commerce' },
+  { name: 'order_number', description: 'Order number — available in order- & payment-triggered flows.', example: 'Order #{{order_number}}', group: 'Commerce' },
+  { name: 'order_total', description: 'Order total amount — available in order-triggered flows.', example: '{{currency}}{{order_total}}', group: 'Commerce' },
+  { name: 'order_status', description: 'Current order status — available in order status-change flows.', example: 'Status: {{order_status}}', group: 'Commerce' },
+  { name: 'currency', description: 'Currency symbol for the order/payment (e.g. ₹).', example: '{{currency}}{{order_total}}', group: 'Commerce' },
+  { name: 'payment_amount', description: 'Amount paid — available in payment-triggered flows.', example: 'Paid {{currency}}{{payment_amount}}', group: 'Commerce' },
+  { name: 'transaction_id', description: 'Payment transaction reference — available in payment-triggered flows.', example: 'Txn: {{transaction_id}}', group: 'Commerce' },
   { name: 'http_status', description: 'HTTP status code returned by an HTTP Request node.', example: '{{http_status}}', group: 'Integration' },
   { name: 'http_response', description: 'Response body returned by an HTTP Request node.', example: '{{http_response}}', group: 'Integration' },
 ];

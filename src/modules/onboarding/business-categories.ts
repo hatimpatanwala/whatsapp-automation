@@ -1016,6 +1016,229 @@ export function getWorkflowTemplates(category: string, subcategory: string): Rec
     },
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // E-COMMERCE JOURNEY — full lifecycle, event-triggered, modern nodes
+    // Each step fires automatically on the matching order/payment event:
+    //   created → preparing(processing) → ready/out_for_delivery → delivered
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ecom_order_received: {
+      key: 'ecom_order_received',
+      name: '🧾 Order Received (Auto)',
+      description: 'Fires the moment an order is placed — sends a polished receipt with Track & Keep Shopping buttons and tags the buyer.',
+      trigger: { type: 'trigger_order', event: 'created' },
+      nodes: [
+        { id: 'n1', type: 'trigger_order', label: 'Order Placed', x: 340, y: 40, config: { event: 'created' }, outputs: ['n2'] },
+        {
+          id: 'n2', type: 'send_buttons', label: 'Receipt', x: 340, y: 200,
+          config: {
+            message: 'Thank you for your order, {{customer_name}}! 🎉\n\n🧾 *Order #{{order_number}}*\n💰 Total: {{currency}}{{order_total}}\n\nWe’ve received it and will start preparing it right away. You’ll get live updates here. 👇',
+            buttons: [
+              { id: 'track', title: '🚚 Track Order' },
+              { id: 'shop', title: '🛍️ Keep Shopping' },
+            ],
+          },
+          outputs: ['n3', 'n4', 'n5'],
+        },
+        { id: 'n3', type: 'switch', label: 'Route', x: 340, y: 400, config: { variable: 'button_reply' }, outputs: ['n4', 'n5'] },
+        { id: 'n4', type: 'send_text', label: 'How to Track', x: 160, y: 580, config: { message: '🚚 Just send *track {{order_number}}* anytime — or type *my orders* to see everything in one place.' }, outputs: [] },
+        { id: 'n5', type: 'send_text', label: 'Keep Shopping', x: 520, y: 580, config: { message: '🛍️ Type *menu* anytime to browse our catalog, manage your cart and checkout in one place!' }, outputs: [] },
+        { id: 'n6', type: 'tag_customer', label: 'Tag Buyer', x: 340, y: 580, config: { action: 'add', tag: 'buyer' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n6' },
+        { id: 'e3', from: 'n2', to: 'n3' },
+        { id: 'e4', from: 'n3', to: 'n4', label: 'Track', condition: 'track' },
+        { id: 'e5', from: 'n3', to: 'n5', label: 'Shop', condition: 'shop' },
+      ],
+    },
+
+    ecom_payment_success: {
+      key: 'ecom_payment_success',
+      name: '✅ Payment Success → Preparing (Auto)',
+      description: 'Fires when a payment is verified — confirms receipt and automatically moves the order into “preparing”.',
+      trigger: { type: 'trigger_payment', event: 'verified' },
+      nodes: [
+        { id: 'n1', type: 'trigger_payment', label: 'Payment Verified', x: 300, y: 40, config: { event: 'verified' }, outputs: ['n2'] },
+        {
+          id: 'n2', type: 'send_text', label: 'Payment Confirmed', x: 300, y: 200,
+          config: { message: '✅ *Payment received!* 🎉\n\n💰 Amount: {{currency}}{{payment_amount}}\n🧾 Order #{{order_number}}\n\nYour order is now being prepared. We’ll let you know the moment it’s on the way. 🚚' },
+          outputs: ['n3'],
+        },
+        { id: 'n3', type: 'update_order', label: 'Mark Preparing', x: 300, y: 380, config: { status: 'processing' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+      ],
+    },
+
+    ecom_being_prepared: {
+      key: 'ecom_being_prepared',
+      name: '👨‍🍳 Order Being Prepared (Auto)',
+      description: 'Fires when an order moves to “processing” — reassures the customer that their order is being packed.',
+      trigger: { type: 'trigger_order', event: 'processing' },
+      nodes: [
+        { id: 'n1', type: 'trigger_order', label: 'Status → Processing', x: 300, y: 40, config: { event: 'processing' }, outputs: ['n2'] },
+        {
+          id: 'n2', type: 'send_text', label: 'Being Prepared', x: 300, y: 200,
+          config: { message: '👨‍🍳 *Good news!* Order #{{order_number}} is now being prepared and packed with care. 📦\n\nWe’ll message you the moment it’s out for delivery.' },
+          outputs: [],
+        },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+      ],
+    },
+
+    ecom_out_for_delivery: {
+      key: 'ecom_out_for_delivery',
+      name: '🚚 Out for Delivery (Auto)',
+      description: 'Fires when an order is out for delivery — notifies the customer with a Track button.',
+      trigger: { type: 'trigger_order', event: 'out_for_delivery' },
+      nodes: [
+        { id: 'n1', type: 'trigger_order', label: 'Out for Delivery', x: 300, y: 40, config: { event: 'out_for_delivery' }, outputs: ['n2'] },
+        {
+          id: 'n2', type: 'send_buttons', label: 'On the Way', x: 300, y: 200,
+          config: {
+            message: '🚚 *Your order is on the way!*\n\n🧾 Order #{{order_number}} is out for delivery and will reach you shortly.\n\nPlease keep your phone handy. 📱',
+            buttons: [
+              { id: 'track', title: '📍 Track' },
+              { id: 'help', title: '💬 Need Help' },
+            ],
+          },
+          outputs: ['n3'],
+        },
+        { id: 'n3', type: 'switch', label: 'Route', x: 300, y: 400, config: { variable: 'button_reply' }, outputs: ['n4', 'n5'] },
+        { id: 'n4', type: 'send_text', label: 'Tracking Info', x: 140, y: 580, config: { message: '📍 Your order is out for delivery now and arriving soon. Sit tight! 🙌' }, outputs: [] },
+        { id: 'n5', type: 'send_text', label: 'Help', x: 460, y: 580, config: { message: '💬 No problem — reply here with your question and our team will assist you right away.' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4', label: 'Track', condition: 'track' },
+        { id: 'e4', from: 'n3', to: 'n5', label: 'Help', condition: 'help' },
+      ],
+    },
+
+    ecom_delivered_feedback: {
+      key: 'ecom_delivered_feedback',
+      name: '🎉 Delivered + Rating (Auto)',
+      description: 'Fires on delivery — thanks the customer, asks for a quick rating, then tags happy/unhappy and routes unhappy customers to support.',
+      trigger: { type: 'trigger_order', event: 'delivered' },
+      nodes: [
+        { id: 'n1', type: 'trigger_order', label: 'Order Delivered', x: 340, y: 40, config: { event: 'delivered' }, outputs: ['n2'] },
+        {
+          id: 'n2', type: 'send_buttons', label: 'Ask Rating', x: 340, y: 200,
+          config: {
+            message: '🎉 *Delivered!* Order #{{order_number}} has reached you.\n\nWe’d love your feedback — how was your experience? 🙏',
+            buttons: [
+              { id: 'rate_good', title: '😍 Loved it' },
+              { id: 'rate_ok', title: '🙂 It was ok' },
+              { id: 'rate_bad', title: '😞 Not great' },
+            ],
+          },
+          outputs: ['n3'],
+        },
+        { id: 'n3', type: 'switch', label: 'Route Rating', x: 340, y: 400, config: { variable: 'button_reply' }, outputs: ['n4', 'n5', 'n6'] },
+        { id: 'n4', type: 'send_text', label: 'Thank (Happy)', x: 120, y: 580, config: { message: '🌟 That makes our day! Thank you so much.\n\nIf you have a minute, a quick review really helps us. ❤️\n\nType *menu* to shop again!' }, outputs: ['n7'] },
+        { id: 'n7', type: 'tag_customer', label: 'Tag Happy', x: 120, y: 740, config: { action: 'add', tag: 'happy_customer' }, outputs: [] },
+        { id: 'n5', type: 'send_text', label: 'Thank (Neutral)', x: 340, y: 580, config: { message: '🙏 Thanks for the honest feedback! We’re always improving.\n\nType *menu* whenever you’d like to order again.' }, outputs: [] },
+        { id: 'n6', type: 'send_text', label: 'Apologise', x: 560, y: 580, config: { message: '😔 We’re sorry it wasn’t great. Please tell us what went wrong — our team will make it right.' }, outputs: ['n8', 'n9'] },
+        { id: 'n8', type: 'assign_agent', label: 'Route to Support', x: 560, y: 740, config: { assignTo: 'any', message: 'Connecting you with our team to resolve this…' }, outputs: [] },
+        { id: 'n9', type: 'tag_customer', label: 'Tag Needs Care', x: 760, y: 740, config: { action: 'add', tag: 'needs_followup' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4', label: 'Loved', condition: 'rate_good' },
+        { id: 'e4', from: 'n3', to: 'n5', label: 'Ok', condition: 'rate_ok' },
+        { id: 'e5', from: 'n3', to: 'n6', label: 'Not great', condition: 'rate_bad' },
+        { id: 'e6', from: 'n4', to: 'n7' },
+        { id: 'e7', from: 'n6', to: 'n8' },
+        { id: 'e8', from: 'n6', to: 'n9' },
+      ],
+    },
+
+    ecom_order_cancelled: {
+      key: 'ecom_order_cancelled',
+      name: '❌ Order Cancelled (Auto)',
+      description: 'Fires when an order is cancelled — sends an empathetic note and offers to shop again or talk to the team.',
+      trigger: { type: 'trigger_order', event: 'cancelled' },
+      nodes: [
+        { id: 'n1', type: 'trigger_order', label: 'Order Cancelled', x: 300, y: 40, config: { event: 'cancelled' }, outputs: ['n2'] },
+        {
+          id: 'n2', type: 'send_buttons', label: 'Cancellation Note', x: 300, y: 200,
+          config: {
+            message: 'Your order #{{order_number}} has been cancelled. ❌\n\nIf this wasn’t expected or you paid online, our team will help sort out any refund. We’re here for you. 🙏',
+            buttons: [
+              { id: 'shop', title: '🛍️ Shop Again' },
+              { id: 'support', title: '💬 Talk to Us' },
+            ],
+          },
+          outputs: ['n3'],
+        },
+        { id: 'n3', type: 'switch', label: 'Route', x: 300, y: 400, config: { variable: 'button_reply' }, outputs: ['n4', 'n5'] },
+        { id: 'n4', type: 'send_text', label: 'Shop Again', x: 140, y: 580, config: { message: '🛍️ Type *menu* to browse again — we’d love to have you back!' }, outputs: [] },
+        { id: 'n5', type: 'assign_agent', label: 'Support', x: 460, y: 580, config: { assignTo: 'any', message: 'Connecting you with our team about your cancelled order…' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4', label: 'Shop', condition: 'shop' },
+        { id: 'e4', from: 'n3', to: 'n5', label: 'Support', condition: 'support' },
+      ],
+    },
+
+    ecom_track_my_order: {
+      key: 'ecom_track_my_order',
+      name: '📍 Track My Order',
+      description: 'Customer types “track / where is my order” → asks for the order number → shows a live status progress bar.',
+      trigger: { type: 'trigger_message', keywords: 'track,tracking,where is my order,order status,status', matchType: 'contains' },
+      nodes: [
+        { id: 'n1', type: 'trigger_message', label: 'Track Request', x: 300, y: 40, config: { keywords: 'track,tracking,where is my order,order status,status', matchType: 'contains' }, outputs: ['n2'] },
+        { id: 'n2', type: 'send_text', label: 'Ask Order No.', x: 300, y: 200, config: { message: '📍 *Track your order*\n\nPlease send your *order number* (e.g. ORD-AB12CD).\n\nOr type *my orders* to pick from your recent orders.' }, outputs: ['n3'] },
+        { id: 'n3', type: 'wait_for_reply', label: 'Wait for Order No.', x: 300, y: 360, config: { timeoutMinutes: 10, timeoutMessage: 'No problem — type *track* anytime to check your order. 🙂' }, outputs: ['n4'] },
+        { id: 'n4', type: 'track_order', label: 'Show Status', x: 300, y: 520, config: {}, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4', label: 'Reply' },
+      ],
+    },
+
+    ecom_my_orders: {
+      key: 'ecom_my_orders',
+      name: '📦 My Orders',
+      description: 'Customer types “my orders / orders” → lists their recent orders with status, then offers to track or shop more.',
+      trigger: { type: 'trigger_message', keywords: 'my orders,orders,order history,my order', matchType: 'contains' },
+      nodes: [
+        { id: 'n1', type: 'trigger_message', label: 'My Orders Request', x: 300, y: 40, config: { keywords: 'my orders,orders,order history,my order', matchType: 'contains' }, outputs: ['n2'] },
+        { id: 'n2', type: 'my_orders', label: 'List Orders', x: 300, y: 200, config: { header: '📦 *Your Recent Orders*', maxOrders: 5, emptyMessage: 'You have no orders yet. 🛍️ Send *menu* to start shopping!' }, outputs: ['n3'] },
+        {
+          id: 'n3', type: 'send_buttons', label: 'Next Step', x: 300, y: 380,
+          config: {
+            message: 'What would you like to do next?',
+            buttons: [
+              { id: 'track', title: '📍 Track an Order' },
+              { id: 'shop', title: '🛍️ Shop More' },
+            ],
+          },
+          outputs: ['n4', 'n5'],
+        },
+        { id: 'n4', type: 'send_text', label: 'How to Track', x: 140, y: 560, config: { message: '📍 Send *track* followed by your order number to see its live status.' }, outputs: [] },
+        { id: 'n5', type: 'send_text', label: 'Shop More', x: 460, y: 560, config: { message: '🛍️ Type *menu* to open the full store — browse, add to cart and checkout!' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4', label: 'Track', condition: 'track' },
+        { id: 'e4', from: 'n3', to: 'n5', label: 'Shop', condition: 'shop' },
+      ],
+    },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // QUOTES & INVOICES
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

@@ -143,7 +143,13 @@
       "PowerShell(psql *)",
       "Bash(git commit *)",
       "Bash(gh run *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(echo \"BUILD_EXIT=$?\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"BACKEND_EXIT=$?\")",
+      "Bash(echo \"BACKEND=$?\")",
+      "Bash(grep -ivE \"//|import\")",
+      "PowerShell(npm run *)"
     ]
   }
 }

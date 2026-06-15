@@ -1,0 +1,404 @@
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e8]: 
+      - generic [ref=e9]:
+        - generic [ref=e10]: WA Commerce
+        - generic [ref=e11]: My Store
+    - navigation [ref=e12]:
+      - link " Dashboard" [ref=e13] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e14]: 
+        - generic [ref=e15]: Dashboard
+      - link " Products" [ref=e16] [cursor=pointer]:
+        - /url: /products
+        - generic [ref=e17]: 
+        - generic [ref=e18]: Products
+      - link " Orders" [ref=e19] [cursor=pointer]:
+        - /url: /orders
+        - generic [ref=e20]: 
+        - generic [ref=e21]: Orders
+      - link " Inventory" [ref=e22] [cursor=pointer]:
+        - /url: /inventory
+        - generic [ref=e23]: 
+        - generic [ref=e24]: Inventory
+      - link " Payments" [ref=e25] [cursor=pointer]:
+        - /url: /payments
+        - generic [ref=e26]: 
+        - generic [ref=e27]: Payments
+      - link " Deliveries" [ref=e28] [cursor=pointer]:
+        - /url: /deliveries
+        - generic [ref=e29]: 
+        - generic [ref=e30]: Deliveries
+      - link " Customers" [ref=e31] [cursor=pointer]:
+        - /url: /customers
+        - generic [ref=e32]: 
+        - generic [ref=e33]: Customers
+      - link " Campaigns" [ref=e34] [cursor=pointer]:
+        - /url: /campaigns
+        - generic [ref=e35]: 
+        - generic [ref=e36]: Campaigns
+      - link " Conversations 1" [ref=e112] [cursor=pointer]:
+        - /url: /conversations
+        - generic [ref=e38]: 
+        - generic [ref=e39]: Conversations
+        - generic [ref=e113]: "1"
+      - generic [ref=e40] [cursor=pointer]:
+        - generic [ref=e41]: 
+        - generic [ref=e42]: Quotes
+        - generic [ref=e43]: 
+      - link " WhatsApp Catalog" [ref=e44] [cursor=pointer]:
+        - /url: /catalog-management
+        - generic [ref=e45]: 
+        - generic [ref=e46]: WhatsApp Catalog
+      - link " Workflow Builder" [ref=e47] [cursor=pointer]:
+        - /url: /workflow-builder
+        - generic [ref=e48]: 
+        - generic [ref=e49]: Workflow Builder
+      - link " Settings" [ref=e50] [cursor=pointer]:
+        - /url: /settings
+        - generic [ref=e51]: 
+        - generic [ref=e52]: Settings
+    - generic [ref=e54]:
+      - generic [ref=e56]: HD
+      - generic [ref=e57]:
+        - generic [ref=e58]: Hatim Demo
+        - generic [ref=e59]: Owner
+      - button [ref=e60] [cursor=pointer]:
+        - generic [ref=e61]: 
+  - generic [ref=e62]:
+    - banner [ref=e63]:
+      - button [ref=e64] [cursor=pointer]:
+        - generic [ref=e65]: 
+      - heading "Workflow Builder" [level=1] [ref=e67]
+      - generic [ref=e68]:
+        - button "3" [ref=e69] [cursor=pointer]:
+          - generic [ref=e70]: 
+          - generic [ref=e71]: "3"
+        - button [ref=e72] [cursor=pointer]:
+          - generic [ref=e73]: 
+        - generic [ref=e75] [cursor=pointer]: HD
+    - main [ref=e76]:
+      - generic [ref=e77]:
+        - generic:
+          - alertdialog
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - button [ref=e116] [cursor=pointer]:
+              - generic [ref=e117]: 
+            - separator
+            - generic [ref=e118]:
+              - textbox [ref=e119]: Order Flow
+              - generic [ref=e120] [cursor=pointer]:
+                - combobox "Draft" [ref=e121]
+                - button "dropdown trigger" [ref=e122]:
+                  - img [ref=e123]
+            - generic [ref=e125]:
+              - generic [ref=e126]: 7 nodes | 5 connections
+              - separator
+              - button [disabled] [ref=e127] [cursor=pointer]:
+                - generic [ref=e128]: 
+              - button [disabled] [ref=e129] [cursor=pointer]:
+                - generic [ref=e130]: 
+              - separator
+              - button "Variables" [ref=e131] [cursor=pointer]:
+                - generic [ref=e132]: 
+                - generic [ref=e133]: Variables
+              - separator
+              - button "Preview" [ref=e134] [cursor=pointer]:
+                - generic [ref=e135]: 
+                - generic [ref=e136]: Preview
+              - button "Save" [ref=e137] [cursor=pointer]:
+                - generic [ref=e138]: 
+                - generic [ref=e139]: Save
+          - generic [ref=e140]:
+            - generic [ref=e143]:
+              - generic [ref=e144]:
+                - heading "Node Palette" [level=3] [ref=e145]
+                - generic [ref=e146]:
+                  - generic [ref=e147]: 
+                  - textbox "Search nodes..." [ref=e148]
+              - generic [ref=e149]:
+                - generic [ref=e150]:
+                  - button " Triggers 5 " [ref=e151]:
+                    - generic [ref=e152]: 
+                    - generic [ref=e153]: Triggers
+                    - generic [ref=e154]: "5"
+                    - generic [ref=e155]: 
+                  - generic [ref=e156]:
+                    - generic [ref=e157]:
+                      - generic [ref=e159]: 
+                      - generic [ref=e160]:
+                        - paragraph [ref=e161]: Message Received
+                        - paragraph [ref=e162]: Starts when customer sends a message
+                    - generic [ref=e163]:
+                      - generic [ref=e165]: 
+                      - generic [ref=e166]:
+                        - paragraph [ref=e167]: Order Event
+                        - paragraph [ref=e168]: Triggers on order status changes
+                    - generic [ref=e169]:
+                      - generic [ref=e171]: 
+                      - generic [ref=e172]:
+                        - paragraph [ref=e173]: Payment Event
+                        - paragraph [ref=e174]: Triggers on payment updates
+                    - generic [ref=e175]:
+                      - generic [ref=e177]: 
+                      - generic [ref=e178]:
+                        - paragraph [ref=e179]: Scheduled
+                        - paragraph [ref=e180]: Runs on a schedule
+                    - generic [ref=e181]:
+                      - generic [ref=e183]: 
+                      - generic [ref=e184]:
+                        - paragraph [ref=e185]: Quote Event
+                        - paragraph [ref=e186]: Triggers on quote status changes
+                - generic [ref=e187]:
+                  - button " Messages 5 " [ref=e188]:
+                    - generic [ref=e189]: 
+                    - generic [ref=e190]: Messages
+                    - generic [ref=e191]: "5"
+                    - generic [ref=e192]: 
+                  - generic [ref=e193]:
+                    - generic [ref=e194]:
+                      - generic [ref=e196]: 
+                      - generic [ref=e197]:
+                        - paragraph [ref=e198]: Send Text
+                        - paragraph [ref=e199]: Send a text message to customer
+                    - generic [ref=e200]:
+                      - generic [ref=e202]: 
+                      - generic [ref=e203]:
+                        - paragraph [ref=e204]: Send Buttons
+                        - paragraph [ref=e205]: Send interactive button message
+                    - generic [ref=e206]:
+                      - generic [ref=e208]: 
+                      - generic [ref=e209]:
+                        - paragraph [ref=e210]: Send List Menu
+                        - paragraph [ref=e211]: Send interactive list to customer
+                    - generic [ref=e212]:
+                      - generic [ref=e214]: 
+                      - generic [ref=e215]:
+                        - paragraph [ref=e216]: Send Image
+                        - paragraph [ref=e217]: Send image with caption
+                    - generic [ref=e218]:
+                      - generic [ref=e220]: 
+                      - generic [ref=e221]:
+                        - paragraph [ref=e222]: Send Template
+                        - paragraph [ref=e223]: Send approved WhatsApp template
+                - generic [ref=e224]:
+                  - button " Commerce 9 " [ref=e225]:
+                    - generic [ref=e226]: 
+                    - generic [ref=e227]: Commerce
+                    - generic [ref=e228]: "9"
+                    - generic [ref=e229]: 
+                  - generic [ref=e230]:
+                    - generic [ref=e231]:
+                      - generic [ref=e233]: 
+                      - generic [ref=e234]:
+                        - paragraph [ref=e235]: Show Catalog
+                        - paragraph [ref=e236]: Display product catalog to customer
+                    - generic [ref=e237]:
+                      - generic [ref=e239]: 
+                      - generic [ref=e240]:
+                        - paragraph [ref=e241]: Add to Cart
+                        - paragraph [ref=e242]: Add selected product to cart
+                    - generic [ref=e243]:
+                      - generic [ref=e245]: 
+                      - generic [ref=e246]:
+                        - paragraph [ref=e247]: View Cart
+                        - paragraph [ref=e248]: Show cart summary to customer
+                    - generic [ref=e249]:
+                      - generic [ref=e251]: 
+                      - generic [ref=e252]:
+                        - paragraph [ref=e253]: Checkout
+                        - paragraph [ref=e254]: Initiate checkout process
+                    - generic [ref=e255]:
+                      - generic [ref=e257]: 
+                      - generic [ref=e258]:
+                        - paragraph [ref=e259]: Check Inventory
+                        - paragraph [ref=e260]: Check if product is in stock
+                    - generic [ref=e261]:
+                      - generic [ref=e263]: 
+                      - generic [ref=e264]:
+                        - paragraph [ref=e265]: Search Products
+                        - paragraph [ref=e266]: Search catalog by customer query
+                    - generic [ref=e267]:
+                      - generic [ref=e269]: 
+                      - generic [ref=e270]:
+                        - paragraph [ref=e271]: Filter Products
+                        - paragraph [ref=e272]: Filter products by criteria
+                    - generic [ref=e273]:
+                      - generic [ref=e275]: 
+                      - generic [ref=e276]:
+                        - paragraph [ref=e277]: Send Payment QR
+                        - paragraph [ref=e278]: Generate and send UPI QR code
+                    - generic [ref=e279]:
+                      - generic [ref=e281]: 
+                      - generic [ref=e282]:
+                        - paragraph [ref=e283]: Send Quote
+                        - paragraph [ref=e284]: Send a quote to customer via WhatsApp
+                - generic [ref=e285]:
+                  - button " Logic 4 " [ref=e286]:
+                    - generic [ref=e287]: 
+                    - generic [ref=e288]: Logic
+                    - generic [ref=e289]: "4"
+                    - generic [ref=e290]: 
+                  - generic [ref=e291]:
+                    - generic [ref=e292]:
+                      - generic [ref=e294]: 
+                      - generic [ref=e295]:
+                        - paragraph [ref=e296]: Condition / If-Else
+                        - paragraph [ref=e297]: Branch based on a condition
+                    - generic [ref=e298]:
+                      - generic [ref=e300]: 
+                      - generic [ref=e301]:
+                        - paragraph [ref=e302]: Switch / Router
+                        - paragraph [ref=e303]: Route to different paths by value
+                    - generic [ref=e304]:
+                      - generic [ref=e306]: 
+                      - generic [ref=e307]:
+                        - paragraph [ref=e308]: Wait for Reply
+                        - paragraph [ref=e309]: Pause workflow until customer responds
+                    - generic [ref=e310]:
+                      - generic [ref=e312]: 
+                      - generic [ref=e313]:
+                        - paragraph [ref=e314]: Fallback Handler
+                        - paragraph [ref=e315]: Handle unexpected input during workflow
+                - generic [ref=e316]:
+                  - button " Actions 6 " [ref=e317]:
+                    - generic [ref=e318]: 
+                    - generic [ref=e319]: Actions
+                    - generic [ref=e320]: "6"
+                    - generic [ref=e321]: 
+                  - generic [ref=e322]:
+                    - generic [ref=e323]:
+                      - generic [ref=e325]: 
+                      - generic [ref=e326]:
+                        - paragraph [ref=e327]: Update Quote Status
+                        - paragraph [ref=e328]: Change quote status in the system
+                    - generic [ref=e329]:
+                      - generic [ref=e331]: 
+                      - generic [ref=e332]:
+                        - paragraph [ref=e333]: Tag Customer
+                        - paragraph [ref=e334]: Add/remove tags on customer
+                    - generic [ref=e335]:
+                      - generic [ref=e337]: 
+                      - generic [ref=e338]:
+                        - paragraph [ref=e339]: Update Order
+                        - paragraph [ref=e340]: Change order status
+                    - generic [ref=e341]:
+                      - generic [ref=e343]: 
+                      - generic [ref=e344]:
+                        - paragraph [ref=e345]: Assign to Agent
+                        - paragraph [ref=e346]: Hand off to human agent
+                    - generic [ref=e347]:
+                      - generic [ref=e349]: 
+                      - generic [ref=e350]:
+                        - paragraph [ref=e351]: HTTP Request
+                        - paragraph [ref=e352]: Call external API
+                    - generic [ref=e353]:
+                      - generic [ref=e355]: 
+                      - generic [ref=e356]:
+                        - paragraph [ref=e357]: Start Workflow
+                        - paragraph [ref=e358]: Start another workflow from this one
+                - generic [ref=e359]:
+                  - button " Utility 3 " [ref=e360]:
+                    - generic [ref=e361]: 
+                    - generic [ref=e362]: Utility
+                    - generic [ref=e363]: "3"
+                    - generic [ref=e364]: 
+                  - generic [ref=e365]:
+                    - generic [ref=e366]:
+                      - generic [ref=e368]: 
+                      - generic [ref=e369]:
+                        - paragraph [ref=e370]: Delay / Wait
+                        - paragraph [ref=e371]: Wait before next step
+                    - generic [ref=e372]:
+                      - generic [ref=e374]: 
+                      - generic [ref=e375]:
+                        - paragraph [ref=e376]: Set Language
+                        - paragraph [ref=e377]: Change conversation language
+                    - generic [ref=e378]:
+                      - generic [ref=e380]: 
+                      - generic [ref=e381]:
+                        - paragraph [ref=e382]: End Flow
+                        - paragraph [ref=e383]: End the workflow
+              - paragraph [ref=e385]:
+                - generic [ref=e386]: 
+                - text: Drag nodes onto the canvas
+            - generic [ref=e389]:
+              - generic [ref=e390]:
+                - img:
+                  - generic [ref=e396] [cursor=pointer]: 🛍️ Browse Products
+                  - generic [ref=e401] [cursor=pointer]: Browse
+                  - generic [ref=e406] [cursor=pointer]: Orders
+                  - generic [ref=e411] [cursor=pointer]: Support
+                - generic [ref=e413]:
+                  - generic [ref=e414]:
+                    - generic [ref=e416]: 
+                    - paragraph [ref=e418]: Customer Says Hi
+                  - generic [ref=e419]:
+                    - paragraph
+                    - paragraph [ref=e421]: "keywords: hi,hello,hey,start,m | matchType: contains"
+                - generic [ref=e425]:
+                  - generic [ref=e426]:
+                    - generic [ref=e429]: 
+                    - paragraph [ref=e431]: Welcome Menu
+                  - generic [ref=e432]:
+                    - paragraph
+                    - paragraph [ref=e434]: "buttons: [object Object],[obj | message: Welcome to *your sto"
+                  - generic [ref=e435]:
+                    - generic [ref=e437] [cursor=pointer]: "1"
+                    - generic [ref=e439] [cursor=pointer]: "2"
+                    - generic [ref=e441] [cursor=pointer]: "3"
+                - generic [ref=e443]:
+                  - generic [ref=e444]:
+                    - generic [ref=e447]: 
+                    - paragraph [ref=e449]: Route Choice
+                  - generic [ref=e450]:
+                    - paragraph
+                    - paragraph [ref=e452]: "variable: button_reply"
+                  - generic [ref=e453]:
+                    - generic [ref=e455] [cursor=pointer]: "1"
+                    - generic [ref=e457] [cursor=pointer]: "2"
+                    - generic [ref=e459] [cursor=pointer]: "3"
+                    - generic [ref=e461] [cursor=pointer]: "4"
+                    - generic [ref=e463] [cursor=pointer]: "5"
+                - generic [ref=e465]:
+                  - generic [ref=e466]:
+                    - generic [ref=e469]: 
+                    - paragraph [ref=e471]: Show Catalog
+                  - generic [ref=e472]:
+                    - paragraph
+                    - paragraph [ref=e474]: "sortBy: popular | maxProducts: 10"
+                - generic [ref=e478]:
+                  - generic [ref=e479]:
+                    - generic [ref=e482]: 
+                    - paragraph [ref=e484]: Order Status
+                  - generic [ref=e485]:
+                    - paragraph
+                    - paragraph [ref=e487]: "message: 📦 To check your ord"
+                - generic [ref=e491]:
+                  - generic [ref=e492]:
+                    - generic [ref=e495]: 
+                    - paragraph [ref=e497]: Support Menu
+                  - generic [ref=e498]:
+                    - paragraph
+                    - paragraph [ref=e500]: "message: 💬 How can we help? | sections: [object Object]"
+                - generic [ref=e504]:
+                  - generic [ref=e505]:
+                    - generic [ref=e508]: 
+                    - paragraph [ref=e510]: Fallback Handler
+                  - generic [ref=e511]:
+                    - paragraph [ref=e512]: Handle unexpected input during workflow
+                    - paragraph [ref=e514]: "mode: buttons | buttons: Main Menu Talk to Su"
+                  - generic [ref=e515]:
+                    - generic [ref=e517] [cursor=pointer]: "1"
+                    - generic [ref=e519] [cursor=pointer]: "2"
+                    - generic [ref=e521] [cursor=pointer]: "3"
+              - generic [ref=e522]:
+                - button "" [ref=e523]:
+                  - generic [ref=e524]: 
+                - generic [ref=e525]: 100%
+                - button "" [ref=e526]:
+                  - generic [ref=e527]: 
+                - button "" [ref=e529]:
+                  - generic [ref=e530]: 

@@ -229,7 +229,7 @@ export class WorkflowExecutionEngine {
          RETURNING id`,
         [
           workflowId, customerPhone, triggerEdge.to, conversationId, customerPhone,
-          JSON.stringify({}), JSON.stringify({ triggerData }),
+          JSON.stringify({ ...(triggerData || {}) }), JSON.stringify({ triggerData }),
         ],
       );
       // Increment workflow execution count
@@ -250,7 +250,7 @@ export class WorkflowExecutionEngine {
       customerPhone,
       customerId,
       customerName,
-      variables: {},
+      variables: { ...(triggerData || {}) },
       triggerData,
     };
 
