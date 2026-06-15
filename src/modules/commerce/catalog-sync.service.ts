@@ -1,5 +1,6 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetaTokenService } from '../waba/meta-token.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -44,6 +45,7 @@ export class CatalogSyncService {
     @InjectQueue(QUEUE_CATALOG_SYNC) private readonly syncQueue: Queue,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly eventBus: EventBusService,
+    @Optional() private readonly metaTokenService?: MetaTokenService,
   ) {
     this.apiUrl = this.configService.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com');
     this.apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v21.0');
@@ -398,7 +400,24 @@ export class CatalogSyncService {
     if (!tenant) return null;
 
     if (tenant.accessToken) return tenant.accessToken;
-    return this.configService.get<string>('META_SYSTEM_USER_TOKEN', '') || null;
+
+    // Use the same live system-user token that powers messaging (stored encrypted
+    // in meta_tokens) — tenant.accessToken is empty for multi-WABA tenants.
+    if (this.metaTokenService) {
+      // Prefer the tenant's own WABA, then fall back to the platform's active WABA.
+      let waba: WabaAccount | null = null;
+      if (tenant.wabaId) waba = await this.wabaRepo.findOne({ where: { wabaId: tenant.wabaId } });
+      if (!waba) waba = await this.wabaRepo.findOne({ where: { status: 'active' }, order: { createdAt: 'ASC' } });
+      if (waba?.id) {
+        const token = await this.metaTokenService.getActiveToken(waba.id).catch(() => '');
+        if (token) return token;
+      }
+    }
+
+    // Last resort: a real (non-placeholder) env token.
+    const envToken = this.configService.get<string>('META_SYSTEM_USER_TOKEN', '');
+    if (envToken && !/^your_/i.test(envToken)) return envToken;
+    return null;
   }
 
   private async metaApiCall(endpoint: string, method: string, accessToken: string, body?: any): Promise<any> {
