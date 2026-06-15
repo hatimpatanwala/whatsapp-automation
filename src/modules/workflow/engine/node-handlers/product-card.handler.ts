@@ -108,9 +108,17 @@ export class ProductCardNodeHandler implements NodeHandler {
         { id: 'pc_back', title: '🛍️ Keep Shopping' },
       ];
 
+    // Send the card in two parts: the product image with full details as the
+    // caption (a plain image message — reliably delivered), then the action
+    // buttons as a separate interactive message. Interactive messages with an
+    // *image header* are accepted by the Cloud API (HTTP 200) but are frequently
+    // never delivered, so we deliberately avoid them here.
     if (image) {
-      await this.whatsappApi.sendInteractiveButtonsWithImage(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, body, buttons, image)
-        .catch(() => this.whatsappApi.sendInteractiveButtons(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, body, buttons));
+      await this.whatsappApi
+        .sendImage(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, body)
+        .catch(() => this.text(ctx, body));
+      const prompt = qty > 0 ? 'Update quantity or view your cart 👇' : 'What would you like to do? 👇';
+      await this.whatsappApi.sendInteractiveButtons(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, prompt, buttons);
     } else {
       await this.whatsappApi.sendInteractiveButtons(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, body, buttons);
     }
