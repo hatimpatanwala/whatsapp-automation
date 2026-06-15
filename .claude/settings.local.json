@@ -160,7 +160,12 @@
       "Bash(grep -iE 'SECRET|TOKEN|PASSWORD|KEY' deploy/.env.example)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); m=d.get\\('metadata',{}\\).get\\('vulnerabilities',{}\\); print\\(m\\); print\\('--- crit/high pkgs ---'\\); [print\\(k, v['severity']\\) for k,v in d.get\\('vulnerabilities',{}\\).items\\(\\) if v['severity'] in \\('critical','high'\\)]\")",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); m=d.get\\('metadata',{}\\).get\\('vulnerabilities',{}\\); print\\(m\\); print\\('--- crit/high ---'\\); [print\\(k, v['severity'], [x.get\\('title'\\) for x in v.get\\('via',[]\\) if isinstance\\(x,dict\\)]\\) for k,v in d.get\\('vulnerabilities',{}\\).items\\(\\) if v['severity'] in \\('critical','high'\\)]\")",
-      "Bash(grep -iE '\\(^|/\\)\\(\\\\.env|.*\\\\.pem|.*\\\\.key\\)$')"
+      "Bash(grep -iE '\\(^|/\\)\\(\\\\.env|.*\\\\.pem|.*\\\\.key\\)$')",
+      "Bash(sed -i 's/      - \"5432:5432\"/      - \"127.0.0.1:5432:5432\"/' docker-compose.yml)",
+      "Bash(sed -i 's/      - \"6379:6379\"/      - \"127.0.0.1:6379:6379\"/' docker-compose.yml)",
+      "Bash(sed -i 's/      - \"3000:3000\"/      - \"127.0.0.1:3000:3000\"/' docker-compose.yml)",
+      "Bash(sed -i 's/\\\\${REDIS_PASSWORD:-redispass123}/${REDIS_PASSWORD:?REDIS_PASSWORD is required}/g' docker-compose.yml)",
+      "Bash(sed -i 's/\\\\${ADMIN_PASSWORD:-Admin@123456}/${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}/g' docker-compose.yml)"
     ]
   }
 }

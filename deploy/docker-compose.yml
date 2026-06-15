@@ -10,7 +10,7 @@ services:
     container_name: wa-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-whatsapp_commerce}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
@@ -49,18 +49,18 @@ services:
     container_name: wa-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: >
       redis-server
         --maxmemory 64mb
         --maxmemory-policy allkeys-lru
         --appendonly yes
         --save 60 1000
-        --requirepass ${REDIS_PASSWORD:-redispass123}
+        --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-redispass123}', 'ping']
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:?REDIS_PASSWORD is required}', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,7 +80,7 @@ services:
     container_name: wa-backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -98,19 +98,19 @@ services:
       # Redis — connects to redis container
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-redispass123}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
 
       # Queue Redis (same redis instance)
       QUEUE_REDIS_HOST: redis
       QUEUE_REDIS_PORT: 6379
-      QUEUE_REDIS_PASSWORD: ${REDIS_PASSWORD:-redispass123}
+      QUEUE_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
 
       # Session
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       SESSION_TTL: ${SESSION_TTL:-86400}
 
       # CORS — frontend serves via nginx on port 80
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
 
       # WhatsApp Cloud API
       WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v21.0}
@@ -148,7 +148,7 @@ services:
 
       # Admin Seed
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@wacommerce.in}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123456}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       ADMIN_NAME: ${ADMIN_NAME:-Platform Admin}
 
       # SMTP / Email

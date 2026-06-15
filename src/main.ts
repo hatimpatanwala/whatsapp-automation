@@ -148,7 +148,10 @@ async function bootstrap() {
         maxAge: configService.get<number>('SESSION_TTL', 86400) * 1000,
         httpOnly: true,
         secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
+        // 'lax' blocks cross-site credentialed requests (CSRF defense). The SPA is
+        // served same-origin with the API, so lax is sufficient. Override with
+        // SESSION_COOKIE_SAMESITE=none only if the frontend is on a different site.
+        sameSite: (configService.get<string>('SESSION_COOKIE_SAMESITE', isProduction ? 'lax' : 'lax') as 'lax' | 'strict' | 'none'),
       },
     }),
   );

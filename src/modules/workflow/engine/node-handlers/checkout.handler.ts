@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { TenantConnectionManager } from '../../../../database/tenant-connection.manager';
 import { WhatsAppMessageService } from '../../../whatsapp/whatsapp-message.service';
 import { EventBusService } from '../../../events/event-bus.service';
@@ -41,7 +42,7 @@ export class CheckoutNodeHandler implements NodeHandler {
         const subtotal = cartItems.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0);
 
         // Generate order number
-        const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+        const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
 
         // Create order
         const order = await qr.query(

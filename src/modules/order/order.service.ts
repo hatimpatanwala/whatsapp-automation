@@ -4,6 +4,7 @@ import { EventBusService } from '../events/event-bus.service';
 import { OrderCreatedEvent, OrderStatusChangedEvent } from '../events/domain-events';
 import { PaginationDto, PaginatedResponse } from '../../common/dto/pagination.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class OrderService {
@@ -152,7 +153,7 @@ export class OrderService {
         subtotal += item.quantity * parseFloat(item.unit_price);
       });
 
-      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
+      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
 
       // Create order
       const order = await qr.query(
