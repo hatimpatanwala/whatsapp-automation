@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { WhatsAppWebhookController } from './whatsapp-webhook.controller';
 import { WhatsAppApiService } from './whatsapp-api.service';
+import { AdminCommandService } from './admin-command.service';
 import { WhatsAppMessageService } from './whatsapp-message.service';
 import { WebhookProcessorService } from './webhook-processor.service';
 import { WhatsAppOutboundProcessor } from './whatsapp-outbound.processor';
@@ -32,6 +33,7 @@ import { WabaModule } from '../waba/waba.module';
     ConversationHelper,
     CommerceSettingsHelper,
     MessageOrchestratorService,
+    AdminCommandService,
   ],
   exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService],
 })

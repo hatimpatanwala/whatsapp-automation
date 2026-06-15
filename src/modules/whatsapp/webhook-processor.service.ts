@@ -21,6 +21,7 @@ import { MetaTokenService } from '../waba/meta-token.service';
 import { ComplianceMonitorService } from '../waba/compliance/compliance-monitor.service';
 import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
+import { AdminCommandService } from './admin-command.service';
 
 @Injectable()
 export class WebhookProcessorService {
@@ -48,6 +49,7 @@ export class WebhookProcessorService {
     private readonly orderHandler: OrderMessageHandler,
     private readonly commerceSettings: CommerceSettingsHelper,
     private readonly configService: ConfigService,
+    @Optional() private readonly adminCommandService: AdminCommandService,
   ) {
     this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
   }
@@ -201,7 +203,8 @@ export class WebhookProcessorService {
     const contactName = contacts?.find((c: any) => c.wa_id === from)?.profile?.name;
 
     // ─── METERING: Track conversation session + enforce quotas ────────
-    if (this.meteringService && tenant.id) {
+    // (Admin control messages don't count against customer conversation quota.)
+    if (!isAdmin && this.meteringService && tenant.id) {
       try {
         const meteringResult = await this.meteringService.meterConversation({
           tenantId: tenant.id,
@@ -334,25 +337,12 @@ export class WebhookProcessorService {
 
     if (handledByWorkflow) return;
 
-    // Admin sender with no matching admin workflow: don't run the customer
-    // auto-reply. Acknowledge so the admin knows no admin flow is set up.
+    // Admin sender with no matching custom admin workflow → run the built-in
+    // fixed admin command system (orders, products, payments, summary).
     if (isAdmin) {
-      this.logger.log(`[FLOW] Admin message from ${from} had no matching admin workflow — sending admin hint`);
-      try {
-        if (tenant.accessToken && tenant.phoneNumberId) {
-          await fetch(`https://graph.facebook.com/${this.graphApiVersion}/${tenant.phoneNumberId}/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenant.accessToken}` },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: from,
-              type: 'text',
-              text: { body: 'No admin workflow is set up for that yet. In the Workflow Builder, create a workflow and set its audience to "Admin" to control your store from here.' },
-            }),
-          });
-        }
-      } catch (e: any) {
-        this.logger.warn(`Admin hint send failed: ${e.message}`);
+      this.logger.log(`[FLOW] Admin message from ${from} → built-in admin commands`);
+      if (this.adminCommandService) {
+        await this.adminCommandService.handle(tenant, message);
       }
       return;
     }
