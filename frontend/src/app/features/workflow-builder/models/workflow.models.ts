@@ -495,3 +495,62 @@ export const NODE_CATEGORIES: { key: NodeCategory; label: string; icon: string }
   { key: 'action', label: 'Actions', icon: 'pi-cog' },
   { key: 'utility', label: 'Utility', icon: 'pi-wrench' },
 ];
+
+// Variables available inside message templates ({{name}}) and Switch/Condition
+// nodes. Surfaced in the builder header so users know what they can reference.
+export interface WorkflowVariable {
+  name: string;
+  description: string;
+  example: string;
+  group: 'Customer' | 'Conversation' | 'Commerce' | 'Integration';
+}
+
+export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
+  { name: 'customer_name', description: "The customer's name (or 'Customer' if unknown).", example: 'Hi {{customer_name}}!', group: 'Customer' },
+  { name: 'customer_phone', description: "The customer's WhatsApp number.", example: '{{customer_phone}}', group: 'Customer' },
+  { name: 'last_input', description: "The customer's most recent typed message.", example: 'You said: {{last_input}}', group: 'Conversation' },
+  { name: 'button_reply', description: 'The button the customer last tapped. Use as the Switch variable to branch.', example: 'Switch → variable: button_reply', group: 'Conversation' },
+  { name: 'list_reply', description: 'The list item the customer last selected. Use as the Switch variable to branch.', example: 'Switch → variable: list_reply', group: 'Conversation' },
+  { name: 'selected_product_id', description: 'The product the customer picked from a catalog/list.', example: 'Used by Add to Cart', group: 'Commerce' },
+  { name: 'selected_category_id', description: 'The category the customer picked.', example: 'Used by Show Catalog', group: 'Commerce' },
+  { name: 'order_number', description: 'Order number — available in order-triggered flows.', example: 'Order #{{order_number}}', group: 'Commerce' },
+  { name: 'http_status', description: 'HTTP status code returned by an HTTP Request node.', example: '{{http_status}}', group: 'Integration' },
+  { name: 'http_response', description: 'Response body returned by an HTTP Request node.', example: '{{http_response}}', group: 'Integration' },
+];
+
+// Plain-language "what this node does / what happens next" help, shown in the
+// config panel so every node is self-explanatory.
+export const NODE_HELP: Record<string, string> = {
+  trigger_message: 'Starts the flow when a customer sends a message matching your keywords. Connect its single output to the first step.',
+  trigger_order: 'Starts the flow automatically when an order reaches the selected status.',
+  trigger_payment: 'Starts the flow when a payment reaches the selected status.',
+  trigger_schedule: 'Runs the flow automatically on the schedule you set.',
+  trigger_quote: 'Starts the flow when a quote reaches the selected status.',
+  send_text: 'Sends a plain text message. Use {{variables}} to personalize it.',
+  send_buttons: 'Sends up to 3 tappable buttons. Connect one arrow per button (top→bottom matches button order), or send to a Switch node to branch on the choice.',
+  send_list: 'Sends a tappable list menu (categories, products, or custom items).',
+  send_image: 'Sends an image with an optional caption.',
+  send_template: 'Sends a pre-approved WhatsApp template — works even outside the 24-hour window.',
+  show_catalog: 'Shows products from your catalog as a list the customer can browse and pick.',
+  add_to_cart: 'Adds the selected product to the customer’s cart. Has Success and Failure outputs.',
+  view_cart: 'Shows the current cart with optional Checkout / Clear buttons.',
+  checkout: 'Starts checkout (address + payment). Has Success and Failure outputs.',
+  inventory_check: 'Checks stock for the selected product. Branches In-Stock / Out-of-Stock.',
+  search_products: 'Searches products by the customer’s text. Branches Found / Not-Found.',
+  filter_products: 'Filters products (category, price, in-stock, on-sale) for the next step.',
+  payment_qr: 'Generates a UPI payment QR/link. Branches on payment result.',
+  send_quote: 'Sends a quote/estimate to the customer.',
+  update_quote: 'Updates a quote’s status.',
+  condition: 'Checks a variable against a value. Connect a "Yes" arrow and a "No" arrow to branch.',
+  switch: 'Routes to different steps based on a variable (usually button_reply). Label each outgoing arrow with the button id/value to match.',
+  wait_for_reply: 'Pauses the flow until the customer replies (or a timeout). Branches Reply / Timeout.',
+  fallback: 'Handles unexpected input — re-prompt with buttons, send text, or restart.',
+  tag_customer: 'Adds or removes a tag on the customer for segmentation.',
+  update_order: 'Updates the current order’s status.',
+  assign_agent: 'Hands the conversation to a human agent and notifies them.',
+  http_request: 'Calls an external API. Sets {{http_status}} and {{http_response}}. Branches Success / Failure.',
+  start_workflow: 'Jumps into another workflow, optionally passing variables along.',
+  delay: 'Waits for a set time before continuing.',
+  set_language: 'Sets the conversation language for following messages.',
+  end: 'Ends the workflow. Nothing runs after this node.',
+};

@@ -24,6 +24,8 @@ import {
   WorkflowNodeData,
   WorkflowEdgeData,
   NODE_TYPE_DEFINITIONS,
+  WORKFLOW_VARIABLES,
+  WorkflowVariable,
 } from './models/workflow.models';
 
 @Component({
@@ -176,6 +178,8 @@ import {
             <button pButton icon="pi pi-undo" class="p-button-text p-button-sm p-button-rounded" pTooltip="Undo" [disabled]="!canUndo()" (click)="undo()"></button>
             <button pButton icon="pi pi-refresh" class="p-button-text p-button-sm p-button-rounded" pTooltip="Redo" [disabled]="!canRedo()" (click)="redo()"></button>
             <p-divider layout="vertical" styleClass="h-6 mx-0" />
+            <button pButton label="Variables" icon="pi pi-hashtag" class="p-button-text p-button-sm" pTooltip="See the variables you can use in messages" (click)="showVariablesDialog = true"></button>
+            <p-divider layout="vertical" styleClass="h-6 mx-0" />
             @if (!hasFallbackNode()) {
               <button pButton label="+ Fallback" icon="pi pi-shield" class="p-button-sm p-button-outlined" severity="warn" pTooltip="Add a fallback handler for invalid inputs" (click)="addFallbackNode()"></button>
             }
@@ -278,6 +282,33 @@ import {
         <button pButton label="Create Workflow" icon="pi pi-plus" severity="success" [disabled]="!newWfName.trim()" (click)="createWorkflow()"></button>
       </ng-template>
     </p-dialog>
+
+    <!-- ========== VARIABLES REFERENCE DIALOG ========== -->
+    <p-dialog [(visible)]="showVariablesDialog" header="Available Variables" [modal]="true" [style]="{width:'620px'}" [draggable]="false">
+      <p class="text-sm text-gray-500 mb-3">
+        Use these inside any message with double braces, e.g. <code class="bg-gray-100 px-1 rounded text-xs">Hi {{ '{{customer_name}}' }}!</code>.
+        For branching, set a Switch node's variable to <code class="bg-gray-100 px-1 rounded text-xs">button_reply</code> or <code class="bg-gray-100 px-1 rounded text-xs">list_reply</code>.
+      </p>
+      @for (group of variableGroups; track group) {
+        <div class="mb-3">
+          <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{{ group }}</p>
+          <div class="space-y-1.5">
+            @for (v of variablesByGroup(group); track v.name) {
+              <div class="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
+                <code class="bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded text-xs font-mono whitespace-nowrap">{{ '{{' + v.name + '}}' }}</code>
+                <div class="min-w-0">
+                  <p class="text-xs text-gray-700">{{ v.description }}</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">{{ v.example }}</p>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+      <ng-template pTemplate="footer">
+        <button pButton label="Got it" icon="pi pi-check" (click)="showVariablesDialog = false"></button>
+      </ng-template>
+    </p-dialog>
   `,
 })
 export class WorkflowBuilderComponent implements OnInit {
@@ -296,6 +327,13 @@ export class WorkflowBuilderComponent implements OnInit {
 
   // Preview
   showPreview = signal(false);
+
+  // Variables reference
+  showVariablesDialog = false;
+  variableGroups: WorkflowVariable['group'][] = ['Customer', 'Conversation', 'Commerce', 'Integration'];
+  variablesByGroup(group: WorkflowVariable['group']): WorkflowVariable[] {
+    return WORKFLOW_VARIABLES.filter((v) => v.group === group);
+  }
 
   // State
   editingWorkflow = signal<WorkflowDefinition | null>(null);

@@ -14,6 +14,7 @@ import {
   NodeTypeDefinition,
   ConfigField,
   NODE_TYPE_DEFINITIONS,
+  NODE_HELP,
   EntityType,
 } from '../models/workflow.models';
 import { WorkflowService } from '../services/workflow.service';
@@ -59,6 +60,18 @@ import { WorkflowService } from '../services/workflow.service';
 
         <!-- Form -->
         <div class="flex-1 overflow-y-auto p-4 space-y-4">
+          <!-- What this node does -->
+          <div class="bg-blue-50 border border-blue-100 rounded-lg p-3">
+            <p class="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
+              <i class="pi pi-info-circle"></i> {{ nodeDef()?.label }}
+            </p>
+            <p class="text-xs text-blue-700 mt-1 leading-snug">{{ nodeHelp() }}</p>
+            <p class="text-[11px] text-blue-500 mt-1.5">
+              <i class="pi pi-sitemap mr-1" style="font-size:0.65rem"></i>
+              {{ outputsHint() }}
+            </p>
+          </div>
+
           <!-- Label & Description -->
           <div class="space-y-3">
             <div class="flex flex-col gap-1">
@@ -283,6 +296,19 @@ export class NodeConfigPanelComponent {
   nodeDef = computed(() => {
     const n = this.node();
     return n ? this.nodeDefCache.get(n.type) : undefined;
+  });
+
+  nodeHelp = computed(() => {
+    const n = this.node();
+    if (!n) return '';
+    return NODE_HELP[n.type] || this.nodeDef()?.description || '';
+  });
+
+  outputsHint = computed(() => {
+    const max = this.nodeDef()?.maxOutputs ?? 1;
+    if (max === 0) return 'This node ends the flow — it has no outgoing connections.';
+    if (max === 1) return 'Connect 1 arrow to the next step.';
+    return `Connect up to ${max} arrows to branch the flow.`;
   });
 
   isFieldVisible(field: ConfigField, node: WorkflowNodeData): boolean {

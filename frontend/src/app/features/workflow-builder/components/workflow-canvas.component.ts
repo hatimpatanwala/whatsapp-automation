@@ -26,6 +26,7 @@ interface EdgePath {
   labelY: number;
   fromId: string;
   toId: string;
+  highlighted: boolean;
 }
 
 @Component({
@@ -55,37 +56,45 @@ interface EdgePath {
 
         <!-- SVG Edge layer -->
         <svg class="absolute" style="top:0;left:0;width:10000px;height:10000px;overflow:visible;pointer-events:none;">
+          <defs>
+            <marker id="wf-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8" />
+            </marker>
+            <marker id="wf-arrow-hl" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#128C7E" />
+            </marker>
+          </defs>
           <!-- Edge paths -->
           @for (edge of edgePaths(); track edge.id) {
             <g class="cursor-pointer" style="pointer-events:auto" (click)="onEdgeClick(edge)">
               <path
                 [attr.d]="edge.d"
                 fill="none"
-                stroke="#94a3b8"
-                stroke-width="2"
+                [attr.stroke]="selectedEdgeId() === edge.id ? '#ef4444' : edge.highlighted ? '#128C7E' : '#94a3b8'"
+                [attr.stroke-width]="selectedEdgeId() === edge.id || edge.highlighted ? 3 : 2"
                 stroke-linecap="round"
-                [class]="selectedEdgeId() === edge.id ? 'edge-selected' : 'edge-normal'"
+                [attr.marker-end]="edge.highlighted ? 'url(#wf-arrow-hl)' : 'url(#wf-arrow)'"
               />
               <!-- Invisible wider path for easier clicking -->
-              <path [attr.d]="edge.d" fill="none" stroke="transparent" stroke-width="12" />
+              <path [attr.d]="edge.d" fill="none" stroke="transparent" stroke-width="14" />
               @if (edge.label) {
                 <rect
-                  [attr.x]="edge.labelX - 24"
+                  [attr.x]="edge.labelX - (edge.label.length * 3.2 + 8)"
                   [attr.y]="edge.labelY - 10"
-                  width="48"
+                  [attr.width]="edge.label.length * 6.4 + 16"
                   height="20"
-                  rx="4"
-                  fill="white"
-                  stroke="#e2e8f0"
+                  rx="6"
+                  [attr.fill]="edge.highlighted ? '#ecfdf5' : 'white'"
+                  [attr.stroke]="edge.highlighted ? '#6ee7b7' : '#e2e8f0'"
                   stroke-width="1"
                 />
                 <text
                   [attr.x]="edge.labelX"
                   [attr.y]="edge.labelY + 4"
                   text-anchor="middle"
-                  fill="#64748b"
+                  [attr.fill]="edge.highlighted ? '#047857' : '#64748b'"
                   font-size="10"
-                  font-weight="500"
+                  font-weight="600"
                 >{{ edge.label }}</text>
               }
             </g>
@@ -161,18 +170,23 @@ interface EdgePath {
                 }
               </div>
 
-              <!-- Output connectors (bottom) -->
+              <!-- Output connectors (bottom). Filled = connected. -->
               @if ((getNodeDef(node.type)?.maxOutputs || 0) > 0) {
-                <div class="flex justify-center gap-3 pb-2 relative">
+                <div class="flex justify-center gap-3 pb-2 relative items-center">
                   @for (i of getOutputPorts(node); track i) {
                     <div
-                      class="w-4 h-4 rounded-full border-2 bg-white cursor-pointer hover:scale-125 transition-transform"
+                      class="w-4 h-4 rounded-full border-2 cursor-pointer hover:scale-125 transition-transform flex items-center justify-center"
                       [style.border-color]="getNodeDef(node.type)?.color || '#94a3b8'"
+                      [style.background-color]="i < outgoingCount(node.id) ? (getNodeDef(node.type)?.color || '#94a3b8') : (connectingFrom() === node.id ? '#bbf7d0' : 'white')"
                       (pointerdown)="$event.stopPropagation()"
                       (click)="onOutputPortClick($event, node, i)"
-                      [pTooltip]="connectingFrom() ? 'Click input port to connect' : 'Click to connect'"
+                      [pTooltip]="(getNodeDef(node.type)!.maxOutputs > 1 ? ('Output ' + (i + 1) + ' — ') : '') + (connectingFrom() === node.id ? 'now click a node to connect' : 'click, then click the target node')"
                       tooltipPosition="bottom"
-                    ></div>
+                    >
+                      @if (getNodeDef(node.type)!.maxOutputs > 1) {
+                        <span class="text-[8px] font-bold leading-none" [style.color]="i < outgoingCount(node.id) ? 'white' : '#94a3b8'">{{ i + 1 }}</span>
+                      }
+                    </div>
                   }
                 </div>
               }
@@ -292,34 +306,74 @@ export class WorkflowCanvasComponent {
     return preview;
   }
 
+  // X offset (relative to node left edge) of output port `slot` of `count` ports.
+  private portX(count: number, slot: number): number {
+    const portW = 16, gap = 12, nodeW = 192;
+    const total = count * portW + (count - 1) * gap;
+    const startX = nodeW / 2 - total / 2;
+    return startX + slot * (portW + gap) + portW / 2;
+  }
+
+  private buttonTitles(val: any): string[] {
+    if (Array.isArray(val)) {
+      return val.map((b: any) => (typeof b === 'string' ? b : (b?.title ?? b?.text ?? b?.label ?? '')));
+    }
+    if (typeof val === 'string') return val.split('\n').map(s => s.trim()).filter(Boolean);
+    return [];
+  }
+
+  outgoingCount(nodeId: string): number {
+    return this.edges().filter(e => e.from === nodeId).length;
+  }
+
   // --- Computed edge paths ---
   edgePaths = computed<EdgePath[]>(() => {
     const nodes = this.nodes();
     const edges = this.edges();
+    const selId = this.selectedNodeId();
     const nodeMap = new Map<string, WorkflowNodeData>();
     nodes.forEach(n => nodeMap.set(n.id, n));
+
+    // Assign each outgoing edge a port slot in creation order.
+    const slotBySource = new Map<string, string[]>();
+    edges.forEach(e => {
+      const arr = slotBySource.get(e.from) || [];
+      arr.push(e.id);
+      slotBySource.set(e.from, arr);
+    });
 
     return edges.map(edge => {
       const from = nodeMap.get(edge.from);
       const to = nodeMap.get(edge.to);
       if (!from || !to) return null;
 
-      const fromX = from.x + 96; // half of 192px width
-      const fromY = from.y + 140; // bottom of node (nodes are ~140-150px tall)
+      const portCount = this.getNodeDef(from.type)?.maxOutputs || 1;
+      const slot = Math.min((slotBySource.get(edge.from) || []).indexOf(edge.id), portCount - 1);
+
+      const fromX = from.x + this.portX(portCount, slot < 0 ? 0 : slot);
+      const fromY = from.y + 140; // bottom of node
       const toX = to.x + 96;
       const toY = to.y - 8; // input port sits 8px above node top
 
       const midY = (fromY + toY) / 2;
       const d = `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
 
+      // Auto-label: explicit edge label wins; otherwise a Send-Buttons edge is
+      // labelled with the button it represents so the wiring is self-evident.
+      let label = edge.label;
+      if (!label && from.type === 'send_buttons') {
+        label = this.buttonTitles(from.config?.['buttons'])[slot];
+      }
+
       return {
         id: edge.id,
         d,
-        label: edge.label,
+        label,
         labelX: (fromX + toX) / 2,
         labelY: (fromY + toY) / 2,
         fromId: edge.from,
         toId: edge.to,
+        highlighted: !!selId && (edge.from === selId || edge.to === selId),
       } as EdgePath;
     }).filter(Boolean) as EdgePath[];
   });
