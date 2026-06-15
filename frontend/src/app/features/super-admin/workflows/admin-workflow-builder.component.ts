@@ -234,7 +234,8 @@ export class AdminWorkflowBuilderComponent implements OnInit {
       next: (full) => {
         const def: WorkflowDefinition = {
           id: full.id, name: full.name, description: full.description || '',
-          status: full.status || 'draft', trigger: full.trigger || 'message_received',
+          status: full.status || 'draft', audience: full.audience || 'customer',
+          trigger: full.trigger || 'message_received',
           nodes: full.nodes || [], edges: full.edges || [],
           createdAt: full.created_at || '', updatedAt: full.updated_at || '',
           executionCount: full.execution_count || 0,

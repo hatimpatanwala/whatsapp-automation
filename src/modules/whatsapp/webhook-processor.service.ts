@@ -167,6 +167,17 @@ export class WebhookProcessorService {
     const from = message.from;
     const type = message.type;
 
+    // Is this message from the tenant's verified admin number? If so, route to
+    // ADMIN workflows instead of customer workflows.
+    const digits = (s: string) => (s || '').replace(/\D/g, '');
+    const isAdmin = !!tenant.adminWhatsappVerified
+      && !!tenant.adminWhatsappNumber
+      && digits(tenant.adminWhatsappNumber) === digits(from);
+    const audience: 'customer' | 'admin' = isAdmin ? 'admin' : 'customer';
+    if (isAdmin) {
+      this.logger.log(`[FLOW] Message from ADMIN number ${from} for ${schema} — using admin workflows`);
+    }
+
     // Idempotency check
     const dedupKey = `webhook:dedup:${schema}:${messageId}`;
     const exists = await this.redis.set(dedupKey, '1', 'EX', 86400, 'NX');
@@ -245,8 +256,8 @@ export class WebhookProcessorService {
         const matchText = text || interactiveText;
 
         if (matchText) {
-          this.logger.log(`[FLOW] Trigger matching "${matchText}" for ${from} in ${schema}`);
-          const triggerMatch = await this.triggerMatcher.findMatchingWorkflow(schema, matchText, 'text');
+          this.logger.log(`[FLOW] Trigger matching "${matchText}" for ${from} in ${schema} (audience=${audience})`);
+          const triggerMatch = await this.triggerMatcher.findMatchingWorkflow(schema, matchText, 'text', audience);
           if (triggerMatch) {
             this.logger.log(`[FLOW] Trigger matched workflow ${triggerMatch.workflowId} for "${matchText}"`);
             const canStart = await this.conversationHelper.canStartConversation(schema);
@@ -322,6 +333,29 @@ export class WebhookProcessorService {
     }
 
     if (handledByWorkflow) return;
+
+    // Admin sender with no matching admin workflow: don't run the customer
+    // auto-reply. Acknowledge so the admin knows no admin flow is set up.
+    if (isAdmin) {
+      this.logger.log(`[FLOW] Admin message from ${from} had no matching admin workflow — sending admin hint`);
+      try {
+        if (tenant.accessToken && tenant.phoneNumberId) {
+          await fetch(`https://graph.facebook.com/${this.graphApiVersion}/${tenant.phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenant.accessToken}` },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: from,
+              type: 'text',
+              text: { body: 'No admin workflow is set up for that yet. In the Workflow Builder, create a workflow and set its audience to "Admin" to control your store from here.' },
+            }),
+          });
+        }
+      } catch (e: any) {
+        this.logger.warn(`Admin hint send failed: ${e.message}`);
+      }
+      return;
+    }
 
     // ─── FALLBACK: Hardcoded handlers — guaranteed response ──────────────
     this.logger.log(`[FLOW] No workflow handled message from ${from} (type=${type}), using hardcoded handler`);

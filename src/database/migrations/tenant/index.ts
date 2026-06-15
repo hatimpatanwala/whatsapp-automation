@@ -856,6 +856,22 @@ const migration030Quotes: TenantMigration = {
   },
 };
 
+const migration031WorkflowAudience: TenantMigration = {
+  name: '031_workflow_audience',
+  async up(qr, schema) {
+    await qr.query(`
+      ALTER TABLE "${schema}".workflows
+        ADD COLUMN IF NOT EXISTS audience VARCHAR(20) DEFAULT 'customer'
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`
+      ALTER TABLE "${schema}".workflows
+        DROP COLUMN IF EXISTS audience
+    `);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -887,4 +903,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration028CommerceSettings,
   migration029CatalogCommerceExtension,
   migration030Quotes,
+  migration031WorkflowAudience,
 ];

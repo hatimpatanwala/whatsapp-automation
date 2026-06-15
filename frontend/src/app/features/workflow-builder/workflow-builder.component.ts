@@ -103,7 +103,12 @@ import {
               >
                 <div class="flex items-start justify-between mb-3">
                   <div class="flex-1 min-w-0">
-                    <h3 class="font-semibold text-gray-900 truncate">{{ wf.name }}</h3>
+                    <div class="flex items-center gap-1.5">
+                      <h3 class="font-semibold text-gray-900 truncate">{{ wf.name }}</h3>
+                      @if (wf.audience === 'admin') {
+                        <span class="text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 whitespace-nowrap">🛠️ Admin</span>
+                      }
+                    </div>
                     <p class="text-xs text-gray-400 mt-0.5">{{ wf.description || 'No description' }}</p>
                   </div>
                   <p-tag [value]="wf.status" [severity]="getWfSeverity(wf.status)" styleClass="text-xs capitalize" />
@@ -170,6 +175,14 @@ import {
               optionLabel="label" optionValue="value"
               styleClass="w-28"
               pTooltip="Change workflow status"
+            />
+            <p-select
+              [ngModel]="editingWorkflow()!.audience || 'customer'"
+              (ngModelChange)="updateWorkflowAudience($event)"
+              [options]="audienceOptions"
+              optionLabel="label" optionValue="value"
+              styleClass="w-32"
+              pTooltip="Who triggers this flow — customers, or your admin WhatsApp number"
             />
           </div>
           <div class="flex items-center gap-2">
@@ -358,6 +371,11 @@ export class WorkflowBuilderComponent implements OnInit {
     { label: 'Archived', value: 'archived' },
   ];
 
+  audienceOptions = [
+    { label: '👤 Customers', value: 'customer' },
+    { label: '🛠️ Admin', value: 'admin' },
+  ];
+
   // Preview
   showPreview = signal(false);
 
@@ -430,6 +448,7 @@ export class WorkflowBuilderComponent implements OnInit {
           name: w.name,
           description: w.description || '',
           status: w.status || 'draft',
+          audience: w.audience || 'customer',
           trigger: w.trigger || 'message_received',
           nodes: w.nodes || [],
           edges: w.edges || [],
@@ -703,6 +722,7 @@ export class WorkflowBuilderComponent implements OnInit {
           name: created.name,
           description: created.description || '',
           status: created.status || 'draft',
+          audience: created.audience || 'customer',
           trigger: created.trigger || 'message_received',
           nodes,
           edges,
@@ -747,7 +767,7 @@ export class WorkflowBuilderComponent implements OnInit {
       return;
     }
 
-    this.workflowService.saveDefinition(wf.id, { nodes, edges, status: wf.status } as any).subscribe({
+    this.workflowService.saveDefinition(wf.id, { nodes, edges, status: wf.status, audience: wf.audience } as any).subscribe({
       next: () => {
         wf.nodes = nodes;
         wf.edges = edges;
@@ -851,6 +871,19 @@ export class WorkflowBuilderComponent implements OnInit {
     if (wf) {
       wf.status = status as any;
       this.editingWorkflow.set({ ...wf });
+    }
+  }
+
+  updateWorkflowAudience(audience: string) {
+    const wf = this.editingWorkflow();
+    if (wf) {
+      wf.audience = audience as any;
+      this.editingWorkflow.set({ ...wf });
+      // Persist immediately so routing takes effect without a full save.
+      this.workflowService.saveDefinition(wf.id, { nodes: wf.nodes, edges: wf.edges, audience: wf.audience } as any).subscribe({
+        next: () => this.messageService.add({ severity: 'info', summary: 'Audience updated', detail: audience === 'admin' ? 'This flow now triggers from your admin WhatsApp number.' : 'This flow now triggers for customers.' }),
+        error: () => {},
+      });
     }
   }
 

@@ -12,6 +12,7 @@ interface TriggerMatch {
 interface CachedWorkflow {
   id: string;
   nodes: WorkflowNode[];
+  audience: string;
 }
 
 const CACHE_TTL = 60; // seconds
@@ -29,12 +30,16 @@ export class WorkflowTriggerMatcher {
     schema: string,
     messageText: string,
     messageType: string,
+    audience: 'customer' | 'admin' = 'customer',
   ): Promise<TriggerMatch | null> {
     // Only match trigger_message for now (text + interactive)
     if (messageType !== 'text' && messageType !== 'interactive') return null;
 
-    const workflows = await this.getActiveWorkflows(schema);
-    this.logger.log(`[TRIGGER] ${workflows.length} active workflows in ${schema}, checking "${messageText}"`);
+    const all = await this.getActiveWorkflows(schema);
+    // Only consider workflows for the sender's audience (admin number → admin
+    // workflows, everyone else → customer workflows).
+    const workflows = all.filter((w) => (w.audience || 'customer') === audience);
+    this.logger.log(`[TRIGGER] ${workflows.length}/${all.length} active ${audience} workflows in ${schema}, checking "${messageText}"`);
 
     for (const wf of workflows) {
       const triggerNode = (wf.nodes || []).find(
@@ -121,13 +126,14 @@ export class WorkflowTriggerMatcher {
     // Load from DB
     const workflows = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(
-        `SELECT id, nodes FROM workflows WHERE status = 'active'`,
+        `SELECT id, nodes, COALESCE(audience, 'customer') AS audience FROM workflows WHERE status = 'active'`,
       );
     });
 
     const result: CachedWorkflow[] = workflows.map((w: any) => ({
       id: w.id,
       nodes: w.nodes || [],
+      audience: w.audience || 'customer',
     }));
 
     // Cache for 60s

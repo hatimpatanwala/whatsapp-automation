@@ -8,6 +8,7 @@ export interface CreateWorkflowDto {
   trigger?: Record<string, any>;
   nodes?: any[];
   edges?: any[];
+  audience?: 'customer' | 'admin';
 }
 
 export interface UpdateWorkflowDto {
@@ -24,6 +25,7 @@ export interface SaveDefinitionDto {
   name?: string;
   description?: string;
   trigger?: Record<string, any>;
+  audience?: 'customer' | 'admin';
 }
 
 @Injectable()
@@ -85,8 +87,8 @@ export class WorkflowService {
   async create(schema: string, dto: CreateWorkflowDto, userId?: string) {
     return this.tenantConn.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
-        `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [
           dto.name,
@@ -95,6 +97,7 @@ export class WorkflowService {
           JSON.stringify(dto.nodes || []),
           JSON.stringify(dto.edges || []),
           userId || null,
+          dto.audience || 'customer',
         ],
       );
       return rows[0];
@@ -141,6 +144,7 @@ export class WorkflowService {
       if (dto.description) { sets.push(`description = $${idx++}`); params.push(dto.description); }
       if (dto.trigger) { sets.push(`trigger = $${idx++}`); params.push(JSON.stringify(dto.trigger)); }
       if ((dto as any).status) { sets.push(`status = $${idx++}`); params.push((dto as any).status); }
+      if (dto.audience) { sets.push(`audience = $${idx++}`); params.push(dto.audience); }
 
       params.push(id);
       const rows = await qr.query(
