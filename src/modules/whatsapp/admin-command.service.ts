@@ -52,6 +52,12 @@ export class AdminCommandService {
     const text = (reply.text || '').trim();
 
     try {
+      // "help" → command guide.
+      if (!id && /^(help|\?|commands|guide)$/i.test(text)) {
+        await this.clearState(schema, to);
+        return this.showHelp(tenant, to);
+      }
+
       // "menu" / greeting resets to the main menu.
       if (!id && /^(menu|hi|hello|hey|start|admin|home|back)$/i.test(text)) {
         await this.clearState(schema, to);
@@ -99,9 +105,41 @@ export class AdminCommandService {
           { id: 'menu_customers', title: '👥 Customers', description: 'Top customers' },
           { id: 'menu_payments', title: '💳 Payments', description: 'Recent payments' },
           { id: 'menu_summary', title: '📊 Summary', description: 'Today at a glance' },
+          { id: 'menu_help', title: '❓ Help', description: 'All commands & guide' },
         ],
       },
     ]);
+  }
+
+  // ─── Help / command guide ─────────────────────────────────────────────────────
+  private async showHelp(tenant: any, to: string): Promise<void> {
+    const guide =
+      '❓ *Admin Help — All Commands*\n\n' +
+      'Type a word, or just send *menu* and tap options.\n\n' +
+      '*Quick words*\n' +
+      '• *menu* — open the main menu\n' +
+      '• *help* — show this guide\n' +
+      '• *back* — return to the menu\n\n' +
+      '📦 *Orders*\n' +
+      '• *Orders → All Orders* — see recent orders\n' +
+      '• *Orders → Pending* — orders waiting to confirm\n' +
+      '• Tap an order → *Confirm*, *Processing*, *Ready/Shipped*, *Delivered* or *Cancel*\n\n' +
+      '📄 *Quotes*\n' +
+      '• *Quotes → All / Open* — see quotes\n' +
+      '• Tap a quote → mark *Sent*, *Accepted*, *Rejected* or *Converted*\n\n' +
+      '🛍️ *Products*\n' +
+      '• *Products → List* — view your catalog\n' +
+      '• *Products → Add* — I’ll ask name → price → stock\n' +
+      '• *Products → Update* — pick a product → change price / stock / name\n' +
+      '• *Products → Delete* — pick a product → confirm\n\n' +
+      '📊 *Store*\n' +
+      '• *Low Stock* — items running low (restock via Update → Stock)\n' +
+      '• *Customers* — your top customers\n' +
+      '• *Payments* — recent payments\n' +
+      '• *Summary* — today’s orders, revenue & alerts\n\n' +
+      'You’ll also get *automatic alerts* for new orders, payments and low stock.\n\n' +
+      'Send *menu* to begin.';
+    await this.send(tenant, to, guide);
   }
 
   private async showOrdersMenu(tenant: any, to: string): Promise<void> {
@@ -151,6 +189,7 @@ export class AdminCommandService {
     if (id === 'menu_payments') return this.listPayments(tenant, to);
     if (id === 'menu_customers') return this.listCustomers(tenant, to);
     if (id === 'menu_lowstock') return this.listLowStock(tenant, to);
+    if (id === 'menu_help') return this.showHelp(tenant, to);
     if (id === 'prod_list') return this.listProducts(tenant, to);
     if (id === 'prod_add') return this.startAddProduct(tenant, to);
     if (id === 'prod_update') return this.listProductsForAction(tenant, to, 'pupd', 'Select a product to update');
