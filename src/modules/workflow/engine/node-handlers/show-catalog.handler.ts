@@ -46,11 +46,13 @@ export class ShowCatalogNodeHandler implements NodeHandler {
       );
     });
 
+    const cfg = node.config || {};
+    const cur = cfg.currencySymbol || '₹';
     if (products.length === 0) {
       await this.messageService.logAndSendText(
         ctx.schema, ctx.tenant.phoneNumberId, ctx.tenant.accessToken,
         ctx.customerPhone, ctx.conversationId,
-        'Our catalog is currently empty. Please check back later!',
+        cfg.emptyMessage || 'Our catalog is currently empty. Please check back later!',
       );
       // Follow failure/empty edge
       const emptyEdge = edges.find((e) => e.from === node.id && e.label?.toLowerCase() === 'empty');
@@ -61,19 +63,19 @@ export class ShowCatalogNodeHandler implements NodeHandler {
 
     // Build list sections grouped by category
     const sections = [{
-      title: 'Products',
+      title: (cfg.sectionTitle || 'Products').substring(0, 24),
       rows: products.map((p: any) => ({
         id: `wf_prod_${p.id}`,
         title: p.name.substring(0, 24),
-        description: `₹${p.price}${p.category_name ? ' • ' + p.category_name : ''}`,
+        description: `${cur}${p.price}${p.category_name ? ' • ' + p.category_name : ''}`.substring(0, 72),
       })),
     }];
 
     await this.messageService.logAndSendInteractiveList(
       ctx.schema, ctx.tenant.phoneNumberId, ctx.tenant.accessToken,
       ctx.customerPhone, ctx.conversationId,
-      'Browse our products:',
-      'View Products',
+      cfg.header || 'Browse our products:',
+      (cfg.buttonText || 'View Products').substring(0, 20),
       sections,
     );
 

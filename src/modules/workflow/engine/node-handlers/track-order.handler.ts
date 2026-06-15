@@ -19,13 +19,19 @@ export class TrackOrderNodeHandler implements NodeHandler {
   ) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
+    const cfg = node.config || {};
+    // Allow stores to override the tracked stages (comma-separated) and labels.
+    const steps = typeof cfg.steps === 'string' && cfg.steps.trim()
+      ? cfg.steps.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : this.STEPS;
+    const cur = cfg.currencySymbol || '';
     const orderNumber = String(
       ctx.lastReply?.text || ctx.variables.last_input || ctx.variables.order_number || '',
     ).trim();
 
     let body: string;
     if (!orderNumber) {
-      body = 'Please send your *order number* (e.g. ORD-ABC123), then try again.';
+      body = cfg.askMessage || 'Please send your *order number* (e.g. ORD-ABC123), then try again.';
     } else {
       const o = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) =>
         (await qr.query(
@@ -34,15 +40,21 @@ export class TrackOrderNodeHandler implements NodeHandler {
         ))[0]);
 
       if (!o) {
-        body = `❓ No order found for *${orderNumber}*. Please double-check the number.`;
+        body = (cfg.notFoundMessage || '❓ No order found for *{order}*. Please double-check the number.').replace('{order}', orderNumber);
       } else if (o.status === 'cancelled') {
-        body = `❌ Order *${o.order_number}* was cancelled.`;
+        body = (cfg.cancelledMessage || '❌ Order *{order}* was cancelled.').replace('{order}', o.order_number);
       } else {
-        const idx = this.STEPS.indexOf(o.status);
-        const progress = this.STEPS
-          .map((s, i) => `${idx >= 0 && i <= idx ? '✅' : '⬜'} ${this.titleCase(s)}`)
+        const idx = steps.indexOf(o.status);
+        const progress = steps
+          .map((s: string, i: number) => `${idx >= 0 && i <= idx ? '✅' : '⬜'} ${this.titleCase(s)}`)
           .join('\n');
-        body = `🚚 *Order ${o.order_number}*\nStatus: *${this.titleCase(o.status)}*\nTotal: ${o.currency || '₹'}${o.total}\n\n${progress}`;
+        body = (cfg.statusTemplate
+          || '🚚 *Order {order}*\nStatus: *{status}*\nTotal: {currency}{total}\n\n{progress}')
+          .replace('{order}', o.order_number)
+          .replace('{status}', this.titleCase(o.status))
+          .replace('{currency}', cur || o.currency || '₹')
+          .replace('{total}', String(o.total))
+          .replace('{progress}', progress);
       }
     }
 

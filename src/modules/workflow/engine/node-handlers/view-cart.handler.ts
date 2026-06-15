@@ -33,11 +33,13 @@ export class ViewCartNodeHandler implements NodeHandler {
       );
     });
 
+    const cfg = node.config || {};
+    const cur = cfg.currencySymbol || '₹';
     if (cartItems.length === 0) {
       await this.messageService.logAndSendText(
         ctx.schema, ctx.tenant.phoneNumberId, ctx.tenant.accessToken,
         ctx.customerPhone, ctx.conversationId,
-        'Your cart is empty. Browse our catalog to add items!',
+        cfg.emptyMessage || 'Your cart is empty. Browse our catalog to add items!',
       );
       const emptyEdge = edges.find((e) => e.from === node.id && e.label?.toLowerCase() === 'empty');
       const defaultEdge = edges.find((e) => e.from === node.id);
@@ -46,27 +48,35 @@ export class ViewCartNodeHandler implements NodeHandler {
     }
 
     let total = 0;
+    const lineFmt = cfg.lineFormat || '• {name} × {qty} — {currency}{subtotal}';
     const lines = cartItems.map((item: any) => {
       const subtotal = item.price * item.quantity;
       total += subtotal;
-      return `• ${item.product_name} × ${item.quantity} — ₹${subtotal}`;
+      return lineFmt
+        .replace('{name}', item.product_name)
+        .replace('{qty}', String(item.quantity))
+        .replace('{currency}', cur)
+        .replace('{subtotal}', String(subtotal))
+        .replace('{price}', String(item.price));
     });
 
-    const body = `🛒 Your Cart:\n${lines.join('\n')}\n\n*Total: ₹${total}*`;
+    const header = cfg.header || '🛒 Your Cart:';
+    const totalLabel = cfg.totalLabel || 'Total';
+    const body = `${header}\n${lines.join('\n')}\n\n*${totalLabel}: ${cur}${total}*`;
     ctx.variables.cart_total = total;
 
     const buttons: Array<{ id: string; title: string }> = [];
-    if (node.config.showCheckout !== false) {
-      buttons.push({ id: 'wf_checkout', title: 'Checkout' });
+    if (cfg.showCheckout !== false) {
+      buttons.push({ id: 'wf_checkout', title: cfg.checkoutLabel || 'Checkout' });
     }
-    if (node.config.showClear !== false) {
-      buttons.push({ id: 'wf_clear_cart', title: 'Clear Cart' });
+    if (cfg.showClear !== false) {
+      buttons.push({ id: 'wf_clear_cart', title: cfg.clearLabel || 'Clear Cart' });
     }
-    buttons.push({ id: 'wf_continue_shop', title: 'Continue Shopping' });
+    buttons.push({ id: 'wf_continue_shop', title: cfg.continueLabel || 'Continue Shopping' });
 
     await this.messageService.logAndSendInteractiveButtons(
       ctx.schema, ctx.tenant.phoneNumberId, ctx.tenant.accessToken,
-      ctx.customerPhone, ctx.conversationId, body, buttons.slice(0, 3),
+      ctx.customerPhone, ctx.conversationId, body, buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })),
     );
 
     // Store button mapping for resume

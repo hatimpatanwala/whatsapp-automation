@@ -70,18 +70,27 @@ export class ProductCardNodeHandler implements NodeHandler {
       return { p, qty };
     });
 
+    const cfg = node.config || {};
     if (!data) {
-      await this.text(ctx, 'Sorry, that product is no longer available. Send *menu* to browse.');
+      await this.text(ctx, cfg.unavailableMessage || 'Sorry, that product is no longer available. Send *menu* to browse.');
       const next = findNextEdge(edges, node.id);
       return next ? { action: 'continue', nextNodeId: next.to } : { action: 'end' };
     }
 
     const { p, qty } = data;
-    const image = p.thumbnail || (Array.isArray(p.images) && p.images.length ? p.images[0] : null);
-    const cur = p.currency || '₹';
-    let body = `*${p.name}*\n${cur}${p.price}`;
-    if (p.description) body += `\n\n${String(p.description).substring(0, 350)}`;
-    if (cartEnabled && qty > 0) body += `\n\n🛒 In your cart: *${qty}*`;
+    const showImage = cfg.showImage !== false;
+    const showPrice = cfg.showPrice !== false;
+    const showDescription = cfg.showDescription !== false;
+    const descLimit = Number(cfg.descriptionLimit) > 0 ? Number(cfg.descriptionLimit) : 350;
+    const image = showImage ? (p.thumbnail || (Array.isArray(p.images) && p.images.length ? p.images[0] : null)) : null;
+    const cur = cfg.currencySymbol || p.currency || '₹';
+    let body = `*${p.name}*`;
+    if (showPrice) body += `\n${cur}${p.price}`;
+    if (showDescription && p.description) body += `\n\n${String(p.description).substring(0, descLimit)}`;
+    if (cartEnabled && qty > 0) {
+      const inCart = (cfg.inCartText || '🛒 In your cart: *{qty}*').replace('{qty}', String(qty));
+      body += `\n\n${inCart}`;
+    }
 
     // Cart disabled → just show the product (no Add-to-Cart buttons) and let the
     // customer keep browsing. We deliberately do NOT fall through to a View Cart
@@ -92,20 +101,20 @@ export class ProductCardNodeHandler implements NodeHandler {
       else await this.text(ctx, body);
       const backEdge = edges.find((e) => e.from === node.id && /back|catalog|browse|shop/i.test(`${e.label || ''}${(e as any).condition || ''}`));
       if (backEdge) return { action: 'continue', nextNodeId: backEdge.to };
-      await this.text(ctx, '🛍️ Send *menu* to see more products.');
+      await this.text(ctx, cfg.keepShoppingHint || '🛍️ Send *menu* to see more products.');
       return { action: 'end' };
     }
 
     const buttons = qty > 0
       ? [
-        { id: `pc_dec_${productId}`, title: '➖ Remove one' },
-        { id: `pc_inc_${productId}`, title: '➕ Add one' },
-        { id: 'pc_view', title: '🛒 View Cart' },
+        { id: `pc_dec_${productId}`, title: cfg.decLabel || '➖ Remove one' },
+        { id: `pc_inc_${productId}`, title: cfg.incLabel || '➕ Add one' },
+        { id: 'pc_view', title: cfg.viewCartLabel || '🛒 View Cart' },
       ]
       : [
-        { id: `pc_add_${productId}`, title: '🛒 Add to Cart' },
-        { id: 'pc_view', title: '🛒 View Cart' },
-        { id: 'pc_back', title: '🛍️ Keep Shopping' },
+        { id: `pc_add_${productId}`, title: cfg.addToCartLabel || '🛒 Add to Cart' },
+        { id: 'pc_view', title: cfg.viewCartLabel || '🛒 View Cart' },
+        { id: 'pc_back', title: cfg.keepShoppingLabel || '🛍️ Keep Shopping' },
       ];
 
     // Send the product image as a best-effort extra (link-based images are
@@ -118,7 +127,7 @@ export class ProductCardNodeHandler implements NodeHandler {
         .sendImageSmart(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, `*${p.name}*`)
         .catch(() => { /* image is optional — details follow in the buttons message */ });
     }
-    await this.whatsappApi.sendInteractiveButtons(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, body, buttons);
+    await this.whatsappApi.sendInteractiveButtons(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, body, buttons.map((b) => ({ ...b, title: b.title.slice(0, 20) })));
 
     // add/inc/dec loop back to this card; view/back follow this node's edges.
     const viewEdge = edges.find((e) => e.from === node.id && /view|cart/i.test(`${e.label || ''}${(e as any).condition || ''}`));
