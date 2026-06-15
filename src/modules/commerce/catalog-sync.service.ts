@@ -128,7 +128,7 @@ export class CatalogSyncService {
     const products = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(`
         SELECT p.*,
-               COALESCE(i.stock_quantity, 0) - COALESCE(i.reserved_quantity, 0) as available_stock,
+               (i.stock_quantity - COALESCE(i.reserved_quantity, 0)) as available_stock,
                ps.content_hash as existing_hash,
                ps.sync_status as current_sync_status
         FROM products p
@@ -161,29 +161,49 @@ export class CatalogSyncService {
           continue;
         }
 
+        // Meta rejects retailer_id inside `data` ("Invalid keys ... in param data") —
+        // it must only appear at the request level.
+        const { retailer_id, ...itemData } = metaProduct;
         requests.push({
           method: 'UPDATE',
-          retailer_id: metaProduct.retailer_id,
-          data: metaProduct,
+          retailer_id,
+          data: itemData,
         });
-        batchProducts.push({ product: p, contentHash, retailerId: metaProduct.retailer_id });
+        batchProducts.push({ product: p, contentHash, retailerId: retailer_id });
       }
 
       if (requests.length === 0) continue;
 
       try {
-        await this.metaApiCall(
+        const resp = await this.metaApiCall(
           `${metaCatalogId}/batch`,
           'POST',
           accessToken,
           { item_type: 'PRODUCT_ITEM', requests },
         );
 
-        // Update sync status for each product in the batch
-        for (const { product, contentHash, retailerId } of batchProducts) {
-          await this.upsertProductSyncStatus(schema, product.id, retailerId, 'synced', contentHash);
+        // Meta's batch endpoint returns HTTP 200 even when individual items fail
+        // validation — the real per-item result is in validation_status. Honour it
+        // so we don't report rejected items as "synced".
+        const itemErrors = new Map<string, string>();
+        for (const v of (resp?.validation_status || [])) {
+          if (Array.isArray(v.errors) && v.errors.length) {
+            itemErrors.set(v.retailer_id, v.errors.map((e: any) => e.message).join('; '));
+          }
         }
-        synced += batchProducts.length;
+
+        for (const { product, contentHash, retailerId } of batchProducts) {
+          const itemError = itemErrors.get(retailerId);
+          if (itemError) {
+            await this.upsertProductSyncStatus(schema, product.id, retailerId, 'failed', null, itemError);
+            this.eventBus.emit(new ProductSyncFailedEvent(schema, product.id, itemError, 0));
+            failed++;
+            errors.push({ retailer_id: retailerId, error: itemError });
+          } else {
+            await this.upsertProductSyncStatus(schema, product.id, retailerId, 'synced', contentHash);
+            synced++;
+          }
+        }
       } catch (err: any) {
         this.logger.error(`Batch sync error: ${err.message}`);
         for (const { product } of batchProducts) {
@@ -242,7 +262,7 @@ export class CatalogSyncService {
     const products = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(`
         SELECT p.*,
-               COALESCE(i.stock_quantity, 0) - COALESCE(i.reserved_quantity, 0) as available_stock
+               (i.stock_quantity - COALESCE(i.reserved_quantity, 0)) as available_stock
         FROM products p
         LEFT JOIN inventory i ON i.product_id = p.id AND i.variant_id IS NULL
         WHERE p.id IN (${placeholders})
@@ -254,11 +274,11 @@ export class CatalogSyncService {
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize);
       const requests = batch.map((p: any) => {
-        const metaProduct = this.mapProductToMeta(p);
+        const { retailer_id, ...itemData } = this.mapProductToMeta(p);
         return {
           method: p.is_active ? 'UPDATE' : 'DELETE',
-          retailer_id: metaProduct.retailer_id,
-          data: p.is_active ? metaProduct : undefined,
+          retailer_id,
+          data: p.is_active ? itemData : undefined,
         };
       });
 
@@ -334,7 +354,10 @@ export class CatalogSyncService {
     const price = parseFloat(product.sale_price || product.base_price);
     const priceCents = Math.round(price * 100);
     const currency = product.currency || 'INR';
-    const available = (product.available_stock ?? 0) > 0;
+    // available_stock is NULL when the product has no inventory row (inventory is
+    // not tracked) → treat as in stock; only mark out of stock when tracked and depleted.
+    const stock = product.available_stock;
+    const available = stock === null || stock === undefined || Number(stock) > 0;
     const images = product.images || [];
 
     return {
