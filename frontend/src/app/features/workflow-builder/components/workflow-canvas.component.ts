@@ -175,7 +175,7 @@ interface EdgePath {
               <!-- Output connectors — straddle the card's bottom edge so they
                    visually attach to the card, and edges start from here. -->
               @if ((getNodeDef(node.type)?.maxOutputs || 0) > 0) {
-                <div class="absolute left-0 right-0 flex justify-center gap-3 items-center" style="bottom:-10px">
+                <div class="absolute left-0 w-full flex justify-center gap-3 items-center" style="bottom:-10px">
                   @for (i of getOutputPorts(node); track i) {
                     <div
                       class="w-5 h-5 rounded-full border-2 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center shadow-sm"
