@@ -58,8 +58,8 @@ export class AddToCartNodeHandler implements NodeHandler {
           );
         } else {
           await qr.query(
-            `INSERT INTO cart_items (cart_id, product_id, product_name, price, quantity) VALUES ($1, $2, $3, $4, 1)`,
-            [cartId, productId, product[0].name, product[0].price],
+            `INSERT INTO cart_items (cart_id, product_id, quantity, unit_price) VALUES ($1, $2, 1, $3)`,
+            [cartId, productId, product[0].price],
           );
         }
 

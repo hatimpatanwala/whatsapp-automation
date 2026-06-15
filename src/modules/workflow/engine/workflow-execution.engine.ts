@@ -42,6 +42,10 @@ import {
   SetLanguageNodeHandler,
   FallbackNodeHandler,
   StartWorkflowNodeHandler,
+  SendQuoteNodeHandler,
+  UpdateQuoteNodeHandler,
+  MyOrdersNodeHandler,
+  TrackOrderNodeHandler,
 } from './node-handlers';
 
 const MAX_STEPS = 50;
@@ -82,6 +86,10 @@ export class WorkflowExecutionEngine {
     setLanguage: SetLanguageNodeHandler,
     fallback: FallbackNodeHandler,
     startWorkflow: StartWorkflowNodeHandler,
+    sendQuote: SendQuoteNodeHandler,
+    updateQuote: UpdateQuoteNodeHandler,
+    myOrders: MyOrdersNodeHandler,
+    trackOrder: TrackOrderNodeHandler,
   ) {
     const handlers: NodeHandler[] = [
       sendText, sendButtons, sendList, sendImage, sendTemplate,
@@ -89,7 +97,7 @@ export class WorkflowExecutionEngine {
       showCatalog, addToCart, viewCart, checkout, inventoryCheck,
       searchProducts, filterProducts, paymentQr,
       tagCustomer, updateOrder, assignAgent, httpRequest, setLanguage,
-      fallback, startWorkflow,
+      fallback, startWorkflow, sendQuote, updateQuote, myOrders, trackOrder,
     ];
     this.handlerMap = new Map(handlers.map((h) => [h.nodeType, h]));
   }

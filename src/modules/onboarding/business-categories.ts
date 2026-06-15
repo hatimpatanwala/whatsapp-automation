@@ -519,6 +519,59 @@ export function getWorkflowTemplates(category: string, subcategory: string): Rec
       ],
     },
 
+    customer_storefront: {
+      key: 'customer_storefront',
+      name: 'Customer Storefront Menu',
+      description: `Full shopping menu for ${subLabel}: browse, cart, checkout, my orders & order tracking`,
+      trigger: { type: 'trigger_message', keywords: 'hi,hello,hey,menu,start,shop,hii,helo', matchType: 'contains' },
+      nodes: [
+        {
+          id: 'n1', type: 'trigger_message', label: 'Customer Says Hi', x: 340, y: 40,
+          config: { keywords: 'hi,hello,hey,menu,start,shop,hii,helo', matchType: 'contains' }, outputs: ['n2'],
+        },
+        {
+          id: 'n2', type: 'send_list', label: 'Main Menu', x: 340, y: 200,
+          config: {
+            message: `👋 Welcome to *${subLabel}*!\nHow can we help you today?`,
+            buttonText: 'Open Menu',
+            source: 'custom',
+            sections: [
+              { title: 'Shop', rows: [
+                { id: 'browse', title: '🛍️ Browse Products', description: 'See our catalog' },
+                { id: 'cart', title: '🛒 View Cart', description: 'Your selected items' },
+              ]},
+              { title: 'Orders', rows: [
+                { id: 'myorders', title: '📦 My Orders', description: 'Your recent orders' },
+                { id: 'track', title: '🚚 Track Order', description: 'Check an order’s status' },
+              ]},
+              { title: 'Help', rows: [
+                { id: 'support', title: '💬 Talk to us', description: 'Get help' },
+              ]},
+            ],
+          }, outputs: ['n3'],
+        },
+        { id: 'n3', type: 'switch', label: 'Route Choice', x: 340, y: 380, config: { variable: 'list_reply' }, outputs: ['n4', 'n5', 'n6', 'n7', 'n10'] },
+        { id: 'n4', type: 'show_catalog', label: 'Browse Products', x: 40, y: 560, config: { maxProducts: 10, sortBy: 'newest' }, outputs: [] },
+        { id: 'n5', type: 'view_cart', label: 'View Cart', x: 230, y: 560, config: { showCheckout: true, showClear: true }, outputs: [] },
+        { id: 'n6', type: 'my_orders', label: 'My Orders', x: 420, y: 560, config: { header: '📦 Your Orders', maxOrders: 5, emptyMessage: 'You have no orders yet. Send *menu* to browse!' }, outputs: [] },
+        { id: 'n7', type: 'send_text', label: 'Ask Order No.', x: 610, y: 560, config: { message: '🚚 Please send your *order number* (e.g. ORD-ABC123).' }, outputs: ['n8'] },
+        { id: 'n8', type: 'wait_for_reply', label: 'Wait for Order No.', x: 610, y: 720, config: { timeoutMinutes: 10, timeoutMessage: 'No problem — send *menu* whenever you’re ready.' }, outputs: ['n9'] },
+        { id: 'n9', type: 'track_order', label: 'Track Order', x: 610, y: 880, config: {}, outputs: [] },
+        { id: 'n10', type: 'send_text', label: 'Support', x: 800, y: 560, config: { message: '💬 We’re here to help! Reply with your question and our team will get back to you shortly.' }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4', label: 'Browse', condition: 'browse' },
+        { id: 'e4', from: 'n3', to: 'n5', label: 'Cart', condition: 'cart' },
+        { id: 'e5', from: 'n3', to: 'n6', label: 'My Orders', condition: 'myorders' },
+        { id: 'e6', from: 'n3', to: 'n7', label: 'Track', condition: 'track' },
+        { id: 'e7', from: 'n3', to: 'n10', label: 'Support', condition: 'support' },
+        { id: 'e8', from: 'n7', to: 'n8' },
+        { id: 'e9', from: 'n8', to: 'n9', label: 'Reply' },
+      ],
+    },
+
     order_placement: {
       key: 'order_placement',
       name: 'Order Placement Flow',

@@ -15,9 +15,10 @@ export class ViewCartNodeHandler implements NodeHandler {
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     const cartItems = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
       return qr.query(
-        `SELECT ci.product_name, ci.price, ci.quantity
+        `SELECT p.name AS product_name, ci.unit_price AS price, ci.quantity
          FROM cart_items ci
          JOIN carts c ON ci.cart_id = c.id
+         JOIN products p ON p.id = ci.product_id
          WHERE c.customer_id = $1 AND c.status = 'active'`,
         [ctx.customerId],
       );

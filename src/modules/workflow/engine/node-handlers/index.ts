@@ -25,6 +25,8 @@ import { FallbackNodeHandler } from './fallback.handler';
 import { StartWorkflowNodeHandler } from './start-workflow.handler';
 import { SendQuoteNodeHandler } from './send-quote.handler';
 import { UpdateQuoteNodeHandler } from './update-quote.handler';
+import { MyOrdersNodeHandler } from './my-orders.handler';
+import { TrackOrderNodeHandler } from './track-order.handler';
 
 // Re-export all
 export {
@@ -55,6 +57,8 @@ export {
   StartWorkflowNodeHandler,
   SendQuoteNodeHandler,
   UpdateQuoteNodeHandler,
+  MyOrdersNodeHandler,
+  TrackOrderNodeHandler,
 };
 
 /** All node handler classes for DI registration */
@@ -86,4 +90,6 @@ export const ALL_NODE_HANDLERS = [
   StartWorkflowNodeHandler,
   SendQuoteNodeHandler,
   UpdateQuoteNodeHandler,
+  MyOrdersNodeHandler,
+  TrackOrderNodeHandler,
 ];

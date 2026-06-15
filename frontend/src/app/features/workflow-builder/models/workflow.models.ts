@@ -332,6 +332,30 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
       { key: 'status', label: 'New Status', type: 'select', options: [{ label: 'Sent', value: 'sent' }, { label: 'Accepted', value: 'accepted' }, { label: 'Rejected', value: 'rejected' }, { label: 'Converted', value: 'converted' }] },
     ],
   },
+  {
+    type: 'my_orders',
+    label: 'My Orders',
+    description: "Show the customer's recent orders & status",
+    category: 'commerce',
+    icon: 'pi-list-check',
+    color: '#8b5cf6',
+    maxOutputs: 1,
+    configFields: [
+      { key: 'header', label: 'Header', type: 'text', defaultValue: '📦 Your Orders', variables: true, help: 'Shown above the list of orders.' },
+      { key: 'maxOrders', label: 'Max Orders', type: 'number', defaultValue: 5 },
+      { key: 'emptyMessage', label: 'If no orders', type: 'text', defaultValue: 'You have no orders yet. Send menu to browse!', variables: true, help: 'Sent when the customer has no orders.' },
+    ],
+  },
+  {
+    type: 'track_order',
+    label: 'Track Order',
+    description: 'Look up an order by number and show its status',
+    category: 'commerce',
+    icon: 'pi-map-marker',
+    color: '#8b5cf6',
+    maxOutputs: 1,
+    configFields: [],
+  },
 
   // Logic nodes
   {
@@ -546,6 +570,8 @@ export const NODE_HELP: Record<string, string> = {
   payment_qr: 'Generates a UPI payment QR/link. Branches on payment result.',
   send_quote: 'Sends a quote/estimate to the customer.',
   update_quote: 'Updates a quote’s status.',
+  my_orders: 'Lists the customer’s recent orders with their status. No input needed.',
+  track_order: 'Looks up an order by number and shows a status progress bar. Put a "Wait for Reply" node before it so the customer can type their order number.',
   condition: 'Checks a variable against a value. Connect a "Yes" arrow and a "No" arrow to branch.',
   switch: 'Routes to different steps based on a variable (usually button_reply). Label each outgoing arrow with the button id/value to match.',
   wait_for_reply: 'Pauses the flow until the customer replies (or a timeout). Branches Reply / Timeout.',

@@ -26,7 +26,8 @@ export class CheckoutNodeHandler implements NodeHandler {
         if (cart.length === 0) throw new Error('No active cart');
 
         const cartItems = await qr.query(
-          `SELECT product_id, product_name, price, quantity FROM cart_items WHERE cart_id = $1`,
+          `SELECT ci.product_id, p.name AS product_name, ci.unit_price AS price, ci.quantity
+           FROM cart_items ci JOIN products p ON p.id = ci.product_id WHERE ci.cart_id = $1`,
           [cart[0].id],
         );
         if (cartItems.length === 0) throw new Error('Cart is empty');
@@ -47,9 +48,9 @@ export class CheckoutNodeHandler implements NodeHandler {
         // Create order items
         for (const item of cartItems) {
           await qr.query(
-            `INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal)
+            `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, total_price)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [order[0].id, item.product_id, item.product_name, item.price, item.quantity, item.price * item.quantity],
+            [order[0].id, item.product_id, item.product_name, item.quantity, item.price, item.price * item.quantity],
           );
         }
 
