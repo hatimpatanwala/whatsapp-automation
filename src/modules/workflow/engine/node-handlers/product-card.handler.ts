@@ -83,12 +83,17 @@ export class ProductCardNodeHandler implements NodeHandler {
     if (p.description) body += `\n\n${String(p.description).substring(0, 350)}`;
     if (cartEnabled && qty > 0) body += `\n\n🛒 In your cart: *${qty}*`;
 
-    // Cart disabled → just show the product and continue.
+    // Cart disabled → just show the product (no Add-to-Cart buttons) and let the
+    // customer keep browsing. We deliberately do NOT fall through to a View Cart
+    // edge here — that would dead-end on an empty cart. Prefer a back/catalog
+    // edge; otherwise nudge to the menu and end.
     if (!cartEnabled) {
       if (image) await this.whatsappApi.sendImage(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, body).catch(() => this.text(ctx, body));
       else await this.text(ctx, body);
-      const next = findNextEdge(edges, node.id);
-      return next ? { action: 'continue', nextNodeId: next.to } : { action: 'end' };
+      const backEdge = edges.find((e) => e.from === node.id && /back|catalog|browse|shop/i.test(`${e.label || ''}${(e as any).condition || ''}`));
+      if (backEdge) return { action: 'continue', nextNodeId: backEdge.to };
+      await this.text(ctx, '🛍️ Send *menu* to see more products.');
+      return { action: 'end' };
     }
 
     const buttons = qty > 0
