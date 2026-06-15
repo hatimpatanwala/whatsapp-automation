@@ -88,7 +88,7 @@ export class ProductCardNodeHandler implements NodeHandler {
     // edge here — that would dead-end on an empty cart. Prefer a back/catalog
     // edge; otherwise nudge to the menu and end.
     if (!cartEnabled) {
-      if (image) await this.whatsappApi.sendImage(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, body).catch(() => this.text(ctx, body));
+      if (image) await this.whatsappApi.sendImageSmart(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, body).catch(() => this.text(ctx, body));
       else await this.text(ctx, body);
       const backEdge = edges.find((e) => e.from === node.id && /back|catalog|browse|shop/i.test(`${e.label || ''}${(e as any).condition || ''}`));
       if (backEdge) return { action: 'continue', nextNodeId: backEdge.to };
@@ -115,7 +115,7 @@ export class ProductCardNodeHandler implements NodeHandler {
     // plus the actions even if the image never arrives.
     if (image) {
       await this.whatsappApi
-        .sendImage(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, `*${p.name}*`)
+        .sendImageSmart(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, image, `*${p.name}*`)
         .catch(() => { /* image is optional — details follow in the buttons message */ });
     }
     await this.whatsappApi.sendInteractiveButtons(ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, body, buttons);

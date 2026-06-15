@@ -19,7 +19,7 @@ export class SendImageNodeHandler implements NodeHandler {
 
     if (!imageUrl) return { action: 'error', message: 'send_image: no imageUrl configured' };
 
-    const result = await this.whatsappApi.sendImage(
+    const result = await this.whatsappApi.sendImageSmart(
       ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, imageUrl, caption,
     );
 
