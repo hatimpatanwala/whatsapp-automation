@@ -1,7 +1,9 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../../config/redis.module';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
@@ -36,8 +38,25 @@ export class AdminWhatsAppService {
     private readonly metaTokenService: MetaTokenService,
     private readonly whatsappApiService: WhatsAppApiService,
     private readonly configService: ConfigService,
+    @Inject(REDIS_CLIENT)
+    private readonly redis: Redis,
   ) {
     this.isDev = this.configService.get<string>('NODE_ENV', 'development') !== 'production';
+  }
+
+  /**
+   * The webhook router caches the tenant by phone_number_id. After changing the
+   * admin number we must clear that cache or routing keeps using the old number.
+   */
+  private async invalidateTenantCache(tenantId: string): Promise<void> {
+    try {
+      const tenant = await this.tenantRepo.findOne({ where: { id: tenantId }, select: ['id', 'phoneNumberId'] });
+      if (tenant?.phoneNumberId) {
+        await this.redis.del(`tenant:phone:${tenant.phoneNumberId}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to invalidate tenant cache: ${err.message}`);
+    }
   }
 
   async getStatus(tenantId: string) {
@@ -129,6 +148,7 @@ export class AdminWhatsAppService {
       adminWhatsappNumber: fullPhone,
       adminWhatsappVerified: true,
     });
+    await this.invalidateTenantCache(tenantId);
 
     this.logger.log(`Admin WhatsApp verified: ${fullPhone} for tenant ${tenantId}`);
     return { verified: true, message: 'WhatsApp number verified successfully!' };
@@ -152,6 +172,7 @@ export class AdminWhatsAppService {
       adminWhatsappNumber: fullPhone,
       adminWhatsappVerified: false,
     });
+    await this.invalidateTenantCache(tenantId);
 
     this.logger.log(`Admin WhatsApp saved (static): ${fullPhone} for tenant ${tenantId}`);
     return { saved: true, phone: fullPhone, message: 'Admin WhatsApp number saved successfully.' };
@@ -170,6 +191,7 @@ export class AdminWhatsAppService {
       adminWhatsappNumber: null as any,
       adminWhatsappVerified: false,
     });
+    await this.invalidateTenantCache(tenantId);
     this.logger.log(`Admin WhatsApp removed for tenant ${tenantId}`);
     return { removed: true, message: 'Admin WhatsApp number removed.' };
   }
