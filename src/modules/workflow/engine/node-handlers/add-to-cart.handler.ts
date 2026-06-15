@@ -25,6 +25,11 @@ export class AddToCartNodeHandler implements NodeHandler {
 
     try {
       await this.connectionManager.executeInTransaction(ctx.schema, async (qr) => {
+        // Resolve customer id from phone if it wasn't carried into the context.
+        if (!ctx.customerId) {
+          const c = (await qr.query(`SELECT id FROM customers WHERE phone = $1 OR phone = $2 LIMIT 1`, [ctx.customerPhone, `+${ctx.customerPhone}`]))[0];
+          if (c?.id) ctx.customerId = c.id;
+        }
         // Get or create active cart
         let cart = await qr.query(
           `SELECT id FROM carts WHERE customer_id = $1 AND status = 'active'`,

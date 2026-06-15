@@ -14,13 +14,22 @@ export class ViewCartNodeHandler implements NodeHandler {
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     const cartItems = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      // Resolve the customer id from the phone if it wasn't carried into the
+      // context — an empty string would crash the uuid comparison below.
+      let customerId = ctx.customerId;
+      if (!customerId) {
+        const c = (await qr.query(`SELECT id FROM customers WHERE phone = $1 OR phone = $2 LIMIT 1`, [ctx.customerPhone, `+${ctx.customerPhone}`]))[0];
+        customerId = c?.id;
+      }
+      if (!customerId) return [];
+      ctx.customerId = customerId;
       return qr.query(
         `SELECT p.name AS product_name, ci.unit_price AS price, ci.quantity
          FROM cart_items ci
          JOIN carts c ON ci.cart_id = c.id
          JOIN products p ON p.id = ci.product_id
          WHERE c.customer_id = $1 AND c.status = 'active'`,
-        [ctx.customerId],
+        [customerId],
       );
     });
 

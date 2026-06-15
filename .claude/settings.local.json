@@ -149,7 +149,10 @@
       "Bash(echo \"BACKEND_EXIT=$?\")",
       "Bash(echo \"BACKEND=$?\")",
       "Bash(grep -ivE \"//|import\")",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "Read(//c/Users/Hp/.ssh/**)",
+      "Bash(nslookup whatsappdemo.duckdns.org)",
+      "Bash(chmod 600 wa-commece.pem)"
     ]
   }
 }

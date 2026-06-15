@@ -18,6 +18,11 @@ export class CheckoutNodeHandler implements NodeHandler {
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     try {
       const result = await this.connectionManager.executeInTransaction(ctx.schema, async (qr) => {
+        // Resolve customer id from phone if it wasn't carried into the context.
+        if (!ctx.customerId) {
+          const c = (await qr.query(`SELECT id FROM customers WHERE phone = $1 OR phone = $2 LIMIT 1`, [ctx.customerPhone, `+${ctx.customerPhone}`]))[0];
+          if (c?.id) ctx.customerId = c.id;
+        }
         // Get active cart with items
         const cart = await qr.query(
           `SELECT c.id FROM carts c WHERE c.customer_id = $1 AND c.status = 'active'`,

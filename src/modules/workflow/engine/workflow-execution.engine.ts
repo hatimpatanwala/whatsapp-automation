@@ -229,7 +229,8 @@ export class WorkflowExecutionEngine {
          RETURNING id`,
         [
           workflowId, customerPhone, triggerEdge.to, conversationId, customerPhone,
-          JSON.stringify({ ...(triggerData || {}) }), JSON.stringify({ triggerData }),
+          JSON.stringify({ ...(triggerData || {}), customer_id: customerId || '', customer_name: customerName || '', customer_phone: customerPhone }),
+          JSON.stringify({ triggerData }),
         ],
       );
       // Increment workflow execution count
@@ -250,7 +251,7 @@ export class WorkflowExecutionEngine {
       customerPhone,
       customerId,
       customerName,
-      variables: { ...(triggerData || {}) },
+      variables: { ...(triggerData || {}), customer_id: customerId || '', customer_name: customerName || '', customer_phone: customerPhone },
       triggerData,
     };
 
@@ -323,6 +324,25 @@ export class WorkflowExecutionEngine {
         });
       }
 
+      // Recover the customer id if it wasn't persisted (older in-flight
+      // executions, or flows started before we stored it). Cart / order nodes
+      // need a real UUID — an empty string crashes their queries.
+      let resolvedCustomerId = variables.customer_id || '';
+      if (!resolvedCustomerId && execution.customer_phone) {
+        const phone = execution.customer_phone;
+        const cust = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+          const rows = await qr.query(
+            `SELECT id FROM customers WHERE phone = $1 OR phone = $2 LIMIT 1`,
+            [phone, phone.startsWith('+') ? phone.slice(1) : `+${phone}`],
+          );
+          return rows[0];
+        });
+        if (cust?.id) {
+          resolvedCustomerId = cust.id;
+          variables.customer_id = cust.id;
+        }
+      }
+
       // Build execution context
       const ctx: ExecutionContext = {
         executionId,
@@ -336,7 +356,7 @@ export class WorkflowExecutionEngine {
         },
         conversationId: execution.conversation_id,
         customerPhone: execution.customer_phone,
-        customerId: variables.customer_id || '',
+        customerId: resolvedCustomerId,
         customerName: variables.customer_name,
         variables,
         lastReply: reply,
