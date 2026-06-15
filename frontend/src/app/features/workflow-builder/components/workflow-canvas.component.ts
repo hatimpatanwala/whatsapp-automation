@@ -7,6 +7,7 @@ import {
   ElementRef,
   viewChild,
   effect,
+  AfterViewChecked,
   HostListener,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -123,7 +124,8 @@ interface EdgePath {
           >
             <div
               data-workflow-node
-              class="w-48 rounded-xl shadow-md border-2 bg-white transition-shadow hover:shadow-lg"
+              [attr.data-node-id]="node.id"
+              class="w-48 rounded-xl shadow-md border-2 bg-white transition-shadow hover:shadow-lg relative"
               [style.border-color]="getNodeDef(node.type)?.color || '#94a3b8'"
               [class.ring-2]="selectedNodeId() === node.id"
               [class.ring-offset-1]="selectedNodeId() === node.id"
@@ -139,8 +141,8 @@ interface EdgePath {
                 <!-- Input connector (top) -->
                 @if (getNodeDef(node.type)?.category !== 'trigger') {
                   <div
-                    class="absolute left-1/2 w-4 h-4 rounded-full border-2 bg-white cursor-pointer z-10 hover:scale-125 transition-transform"
-                    style="top:-8px;transform:translateX(-50%)"
+                    class="absolute left-1/2 w-5 h-5 rounded-full border-2 bg-white cursor-pointer z-10 hover:scale-110 transition-transform shadow-sm"
+                    style="top:-10px;transform:translateX(-50%)"
                     [style.border-color]="getNodeDef(node.type)?.color || '#94a3b8'"
                     [class.bg-green-400]="connectingFrom()"
                     (pointerdown)="$event.stopPropagation()"
@@ -160,7 +162,7 @@ interface EdgePath {
               </div>
 
               <!-- Node body -->
-              <div class="px-3 py-2" (click)="onNodeClick($event, node)">
+              <div class="px-3 pt-2 pb-3" (click)="onNodeClick($event, node)">
                 <p class="text-xs text-gray-500 leading-relaxed wa-line-clamp-2">{{ node.description }}</p>
                 <!-- Config preview -->
                 @if (getConfigPreview(node)) {
@@ -170,9 +172,10 @@ interface EdgePath {
                 }
               </div>
 
-              <!-- Output connectors (bottom). Filled with the node colour = connected. -->
+              <!-- Output connectors — straddle the card's bottom edge so they
+                   visually attach to the card, and edges start from here. -->
               @if ((getNodeDef(node.type)?.maxOutputs || 0) > 0) {
-                <div class="flex justify-center gap-3 pb-2.5 relative items-center">
+                <div class="absolute left-0 right-0 flex justify-center gap-3 items-center" style="bottom:-10px">
                   @for (i of getOutputPorts(node); track i) {
                     <div
                       class="w-5 h-5 rounded-full border-2 cursor-pointer hover:scale-110 transition-transform flex items-center justify-center shadow-sm"
@@ -242,7 +245,7 @@ interface EdgePath {
     .wa-line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   `],
 })
-export class WorkflowCanvasComponent {
+export class WorkflowCanvasComponent implements AfterViewChecked {
   nodes = input.required<WorkflowNodeData[]>();
   edges = input.required<WorkflowEdgeData[]>();
   selectedNodeId = input<string | null>(null);
@@ -254,6 +257,11 @@ export class WorkflowCanvasComponent {
   nodeDrop = output<{ type: string; x: number; y: number }>();
 
   canvasContainer = viewChild<ElementRef>('canvasContainer');
+  canvasWorld = viewChild<ElementRef>('canvasWorld');
+
+  // Measured node card heights (layout px) so edges/ports anchor to the real
+  // bottom of each card instead of a hardcoded guess.
+  nodeHeights = signal<Record<string, number>>({});
 
   zoom = signal(1);
   panX = signal(0);
@@ -286,6 +294,37 @@ export class WorkflowCanvasComponent {
 
   constructor() {
     NODE_TYPE_DEFINITIONS.forEach(d => this.nodeDefCache.set(d.type, d));
+  }
+
+  // Measure node card heights after each view check; only updates the signal
+  // when a height actually changes, so it settles after the first paint.
+  ngAfterViewChecked(): void {
+    this.measureNodes();
+  }
+
+  /** Actual rendered height of a node card (fallback before first measure). */
+  nodeHeight(id: string): number {
+    return this.nodeHeights()[id] || 120;
+  }
+
+  private measureNodes(): void {
+    const world = this.canvasWorld()?.nativeElement as HTMLElement | undefined;
+    if (!world) return;
+    const els = world.querySelectorAll<HTMLElement>('[data-node-id]');
+    const next: Record<string, number> = {};
+    els.forEach((el) => {
+      const id = el.getAttribute('data-node-id');
+      if (id) next[id] = el.offsetHeight;
+    });
+    const cur = this.nodeHeights();
+    const keys = Object.keys(next);
+    let changed = keys.length !== Object.keys(cur).length;
+    if (!changed) {
+      for (const k of keys) {
+        if (cur[k] !== next[k]) { changed = true; break; }
+      }
+    }
+    if (changed) this.nodeHeights.set(next);
   }
 
   getNodeDef(type: string): NodeTypeDefinition | undefined {
@@ -368,9 +407,9 @@ export class WorkflowCanvasComponent {
       const slot = Math.min((slotBySource.get(edge.from) || []).indexOf(edge.id), portCount - 1);
 
       const fromX = from.x + this.portX(portCount, slot < 0 ? 0 : slot);
-      const fromY = from.y + 140; // bottom of node
+      const fromY = from.y + this.nodeHeight(from.id); // bottom edge (where the port straddles)
       const toX = to.x + 96;
-      const toY = to.y - 8; // input port sits 8px above node top
+      const toY = to.y; // input port straddles the top edge
 
       const midY = (fromY + toY) / 2;
       const d = `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
@@ -400,7 +439,7 @@ export class WorkflowCanvasComponent {
     const from = this.nodes().find(n => n.id === this.connectingFrom());
     if (!from) return null;
     const fromX = from.x + 96;
-    const fromY = from.y + 140;
+    const fromY = from.y + this.nodeHeight(from.id);
     const toX = this.tempMouseX();
     const toY = this.tempMouseY();
     const midY = (fromY + toY) / 2;
