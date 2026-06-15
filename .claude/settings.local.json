@@ -152,7 +152,15 @@
       "PowerShell(npm run *)",
       "Read(//c/Users/Hp/.ssh/**)",
       "Bash(nslookup whatsappdemo.duckdns.org)",
-      "Bash(chmod 600 wa-commece.pem)"
+      "Bash(chmod 600 wa-commece.pem)",
+      "Bash(grep -E '^\\\\.env$|\\\\.env\\\\.gcp|deploy/\\\\.env')",
+      "Bash(npm audit *)",
+      "Bash(cd /d/whatsapp-automation)",
+      "Bash(sed -n '1,80p' deploy/docker-compose.yml)",
+      "Bash(grep -iE 'SECRET|TOKEN|PASSWORD|KEY' deploy/.env.example)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); m=d.get\\('metadata',{}\\).get\\('vulnerabilities',{}\\); print\\(m\\); print\\('--- crit/high pkgs ---'\\); [print\\(k, v['severity']\\) for k,v in d.get\\('vulnerabilities',{}\\).items\\(\\) if v['severity'] in \\('critical','high'\\)]\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); m=d.get\\('metadata',{}\\).get\\('vulnerabilities',{}\\); print\\(m\\); print\\('--- crit/high ---'\\); [print\\(k, v['severity'], [x.get\\('title'\\) for x in v.get\\('via',[]\\) if isinstance\\(x,dict\\)]\\) for k,v in d.get\\('vulnerabilities',{}\\).items\\(\\) if v['severity'] in \\('critical','high'\\)]\")",
+      "Bash(grep -iE '\\(^|/\\)\\(\\\\.env|.*\\\\.pem|.*\\\\.key\\)$')"
     ]
   }
 }

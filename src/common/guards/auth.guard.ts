@@ -28,7 +28,9 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const session = request.session;
 
-    if (!session || !session.userId) {
+    // Authenticated if either a tenant-user session (userId) or a super-admin
+    // session (adminId) is present.
+    if (!session || (!session.userId && !session.adminId)) {
       throw new UnauthorizedException('Authentication required');
     }
 

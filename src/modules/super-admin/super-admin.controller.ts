@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Put, Param, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Query, Req, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { SuperAdminService } from './super-admin.service';
 import { TemplateProvisioningService } from '../onboarding/template-provisioning.service';
 import { QuoteService } from '../quote/quote.service';
 import { Public } from '../../common/decorators/public.decorator';
+import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 
 @Controller('admin')
+@UseGuards(SuperAdminGuard)
 export class SuperAdminController {
   constructor(
     private readonly superAdminService: SuperAdminService,

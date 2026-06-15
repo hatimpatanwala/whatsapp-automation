@@ -6,8 +6,10 @@ import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../config/redis.module';
 import { QUEUE_WHATSAPP_OUTBOUND, QUEUE_WEBHOOK_INGEST } from '../queue/queue.module';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(
     @InjectDataSource()

@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../config/redis.module';
 import { Tenant } from '../../database/entities/public/tenant.entity';
@@ -26,7 +27,6 @@ export class AdminWhatsAppService {
   private readonly MAX_SENDS_PER_INTERVAL = 3;
   private readonly sendTracker = new Map<string, number[]>();
   private readonly isDev: boolean;
-  private readonly STATIC_OTP = '123456';
 
   constructor(
     @InjectRepository(Tenant)
@@ -84,11 +84,8 @@ export class AdminWhatsAppService {
     // Rate limit: max 3 sends per 15 minutes
     this.enforceRateLimit(tenantId);
 
-    // ─── STATIC OTP MODE (temporary) ────────────────────────────────────────
-    // OTP generation and WhatsApp delivery are intentionally disabled for now.
-    // The OTP is hard-coded to 123456 (this.STATIC_OTP). To restore dynamic
-    // OTP generation + WhatsApp sending, re-enable the commented block below.
-    const code = this.STATIC_OTP;
+    // Generate a cryptographically random 6-digit code and deliver it over WhatsApp.
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
 
     // Store OTP
     this.otpStore.set(tenantId, {
@@ -98,17 +95,14 @@ export class AdminWhatsAppService {
       attempts: 0,
     });
 
-    this.logger.log(`[STATIC OTP] Admin WhatsApp OTP for tenant ${tenantId}: ${code} (generation & WhatsApp sending disabled)`);
-
-    /* ── OTP generation + WhatsApp delivery disabled while static OTP is active ──
     if (this.isDev) {
-      this.logger.log(`[DEV] Admin WhatsApp OTP for tenant ${tenantId}: ${code} (static, not sent via WhatsApp)`);
+      this.logger.log(`[DEV] Admin WhatsApp OTP for tenant ${tenantId}: ${code}`);
     } else {
-      // Send OTP via WhatsApp using the platform's shared WABA
+      // Send OTP via WhatsApp using the platform's shared WABA. Fail closed if
+      // delivery is not possible — never silently accept an unsent code.
       await this.sendWhatsAppOtp(fullPhone, code);
       this.logger.log(`Admin WhatsApp OTP sent to ${fullPhone} for tenant ${tenantId}`);
     }
-    ──────────────────────────────────────────────────────────────────────────── */
 
     return { sent: true, message: 'Verification code sent to your WhatsApp number.' };
   }

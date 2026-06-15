@@ -38,9 +38,10 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  // Raw body parsing for webhook signature verification
+  // Raw body parsing for webhook signature verification (bounded to limit DoS).
   app.use(
     json({
+      limit: configService.get<string>('JSON_BODY_LIMIT', '1mb'),
       verify: (req: any, _res, buf) => {
         req.rawBody = buf;
       },
@@ -49,12 +50,25 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
-  const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
-  console.log(corsOrigin)
-  app.enableCors({
-    origin: corsOrigin.includes(',') ? corsOrigin.split(',').map((s) => s.trim()) : corsOrigin,
-    credentials: true,
-  });
+
+  // CORS: never combine a wildcard origin with credentials (cookie auth). Require
+  // an explicit allowlist in production; reflect origin only in development.
+  const isProductionEnv = configService.get<string>('NODE_ENV') === 'production';
+  const corsList = configService.get<string>('CORS_ORIGIN', '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const wildcard = corsList.length === 0 || corsList.includes('*');
+  let corsOrigin: any;
+  if (wildcard) {
+    if (isProductionEnv) {
+      logger.warn('CORS_ORIGIN is wildcard/empty in production — restricting to same-origin only. Set CORS_ORIGIN to your frontend domain(s) to allow cross-origin.');
+      corsOrigin = false; // disables CORS headers → same-origin requests still work
+    } else {
+      corsOrigin = true; // dev convenience: reflect the requesting origin
+    }
+  } else {
+    corsOrigin = corsList.length === 1 ? corsList[0] : corsList;
+  }
+  app.enableCors({ origin: corsOrigin, credentials: true });
 
   // Global prefix
   const apiPrefix = configService.get<string>('API_PREFIX', 'api');
@@ -83,8 +97,10 @@ async function bootstrap() {
   const redisPort = configService.get<number>('REDIS_PORT', 6379);
 
   try {
+    // TLS cert validation on by default; opt out only via REDIS_TLS_INSECURE=true.
+    const redisTlsInsecure = configService.get<string>('REDIS_TLS_INSECURE', 'false') === 'true';
     const redisClient = redisUrl
-      ? new Redis(redisUrl, { tls: { rejectUnauthorized: false }, maxRetriesPerRequest: null, enableReadyCheck: false, connectTimeout: 3000 })
+      ? new Redis(redisUrl, { tls: { rejectUnauthorized: !redisTlsInsecure }, maxRetriesPerRequest: null, enableReadyCheck: false, connectTimeout: 3000 })
       : new Redis({ host: redisHost, port: redisPort, password: configService.get<string>('REDIS_PASSWORD', undefined), connectTimeout: 3000, lazyConnect: true });
 
     if (!redisUrl) await redisClient.connect();
@@ -114,10 +130,17 @@ async function bootstrap() {
 
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
+  // Session signing secret must be strong in production — never the placeholder.
+  let sessionSecret = configService.get<string>('SESSION_SECRET', '');
+  if (isProduction && (!sessionSecret || sessionSecret.length < 16 || sessionSecret === 'change-me')) {
+    throw new Error('SESSION_SECRET must be set to a strong (16+ char) value in production');
+  }
+  if (!sessionSecret) sessionSecret = 'dev-insecure-session-secret';
+
   app.use(
     session({
       ...(sessionStore ? { store: sessionStore } : {}),
-      secret: configService.get<string>('SESSION_SECRET', 'change-me'),
+      secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
       proxy: isProduction,

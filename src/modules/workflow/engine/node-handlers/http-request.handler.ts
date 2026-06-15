@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NodeHandler, WorkflowNode, WorkflowEdge, ExecutionContext, NodeExecutionResult, findEdgeByLabel } from '../workflow-engine.types';
 import { resolveTemplate } from '../template-resolver';
+import { safeFetch } from '../../../../common/utils/safe-fetch';
 
 @Injectable()
 export class HttpRequestNodeHandler implements NodeHandler {
@@ -14,7 +15,8 @@ export class HttpRequestNodeHandler implements NodeHandler {
     if (!url) return { action: 'error', message: 'http_request: no URL configured' };
 
     try {
-      const response = await fetch(url, {
+      // SSRF-hardened: blocks internal/private hosts and re-validates redirects.
+      const response = await safeFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
       });

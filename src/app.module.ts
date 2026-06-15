@@ -1,6 +1,9 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AuthGuard } from './common/guards/auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './config/redis.module';
 import { QueueModule } from './queue/queue.module';
@@ -64,6 +67,11 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     CommerceModule,
     SubscriptionPlanModule,
     QuoteModule,
+  ],
+  providers: [
+    // Global authentication then role enforcement. Routes opt out with @Public().
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule implements NestModule {

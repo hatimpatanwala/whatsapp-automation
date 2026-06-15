@@ -39,11 +39,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         errors = (exceptionResponse as any).errors;
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
+      // Do NOT expose internal error details (DB/SQL fragments, host names,
+      // SSRF probe results) to clients. Log full detail server-side; return a
+      // generic message with the requestId for support correlation.
       this.logger.error(
         `[${request['requestId']}] Unhandled exception: ${exception.message}`,
         exception.stack,
       );
+      message = 'Internal server error';
     }
 
     // Send 5xx errors to Sentry for aggregation and alerting

@@ -260,8 +260,8 @@ export class LoginComponent {
   errorMessage = signal<string | null>(null);
 
   loginForm = this.fb.group({
-    email: ['admin@whatsapp-commerce.com', [Validators.required, Validators.email]],
-    password: ['admin123456', Validators.required],
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', Validators.required],
   });
 
   onLogin() {

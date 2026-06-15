@@ -5,6 +5,7 @@ import { Queue } from 'bullmq';
 import { createHash } from 'crypto';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../config/redis.module';
+import { safeFetch } from '../../common/utils/safe-fetch';
 import { QUEUE_WHATSAPP_OUTBOUND } from '../../queue/queue.module';
 import { CircuitBreaker, CircuitBreakerOpenError } from '../../common/resilience/circuit-breaker';
 
@@ -340,7 +341,8 @@ export class WhatsAppApiService {
     accessToken: string,
     imageUrl: string,
   ): Promise<string | null> {
-    const imgRes = await fetch(imageUrl);
+    // SSRF-hardened fetch: tenant-supplied image URLs must not reach internal hosts.
+    const imgRes = await safeFetch(imageUrl, { timeoutMs: 15000 });
     if (!imgRes.ok) throw new Error(`fetch image ${imgRes.status}`);
     let contentType = (imgRes.headers.get('content-type') || 'image/jpeg').split(';')[0].trim().toLowerCase();
     // WhatsApp image media must be jpeg or png.

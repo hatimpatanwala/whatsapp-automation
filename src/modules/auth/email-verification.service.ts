@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { randomInt } from 'crypto';
 
 interface OtpEntry {
   code: string;
@@ -24,7 +25,6 @@ export class EmailVerificationService {
   private readonly MAX_SENDS_PER_INTERVAL = 3;
   private readonly sendTracker = new Map<string, number[]>();
   private readonly isDev: boolean;
-  private readonly STATIC_OTP = '123456';
   private transporter: nodemailer.Transporter | null = null;
   private readonly fromEmail: string;
 
@@ -47,7 +47,10 @@ export class EmailVerificationService {
 
       if (smtpUser && smtpPass) {
         transportOpts.auth = { user: smtpUser, pass: smtpPass };
-      } else {
+      }
+      // TLS certificate validation stays on by default; only relax it if a
+      // deployment explicitly opts in for an internal relay with a self-signed cert.
+      if (configService.get<string>('SMTP_TLS_INSECURE', 'false') === 'true') {
         transportOpts.tls = { rejectUnauthorized: false };
       }
 
@@ -63,9 +66,8 @@ export class EmailVerificationService {
 
     this.enforceRateLimit(email);
 
-    const code = this.transporter
-      ? Math.floor(100000 + Math.random() * 900000).toString()
-      : this.STATIC_OTP;
+    // Always a cryptographically random 6-digit code (never a static value).
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
 
     this.otpStore.set(email, {
       code,

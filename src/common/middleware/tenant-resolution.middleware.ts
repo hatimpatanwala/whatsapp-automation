@@ -29,23 +29,26 @@ export class TenantResolutionMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction) {
     let tenant: Tenant | null = null;
+    const session = req.session as any;
+    const isAdmin = !!session?.isAdmin && !!session?.adminId;
 
-    // 1. Try to resolve from session
-    if (req.session && (req.session as any).tenantId) {
+    // 1. A tenant user is bound to their own tenant via the session. This is the
+    //    only trusted source for non-admins — the X-Tenant-* headers are NOT
+    //    honoured for them (they are client-controlled and would allow pivoting
+    //    into other tenants).
+    if (session?.tenantId) {
       tenant = await this.tenantRepository.findOne({
-        where: { id: (req.session as any).tenantId, status: 'active' },
+        where: { id: session.tenantId, status: 'active' },
       });
     }
 
-    // 2. Try from X-Tenant-ID header
-    if (!tenant && req.headers['x-tenant-id']) {
+    // 2. Super-admins may act on a specific tenant via header (impersonation).
+    if (!tenant && isAdmin && req.headers['x-tenant-id']) {
       tenant = await this.tenantRepository.findOne({
         where: { id: req.headers['x-tenant-id'] as string, status: 'active' },
       });
     }
-
-    // 3. Try from X-Tenant-Slug header
-    if (!tenant && req.headers['x-tenant-slug']) {
+    if (!tenant && isAdmin && req.headers['x-tenant-slug']) {
       tenant = await this.tenantRepository.findOne({
         where: { slug: req.headers['x-tenant-slug'] as string, status: 'active' },
       });
