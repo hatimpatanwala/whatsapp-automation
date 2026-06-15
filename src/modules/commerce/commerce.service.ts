@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException, ConflictException, Inject } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException, Inject, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetaTokenService } from '../waba/meta-token.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Redis from 'ioredis';
@@ -46,6 +47,7 @@ export class CommerceService {
     private readonly phoneNumberRepo: Repository<PhoneNumber>,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly eventBus: EventBusService,
+    @Optional() private readonly metaTokenService?: MetaTokenService,
   ) {
     this.apiUrl = this.configService.get<string>('WHATSAPP_API_URL', 'https://graph.facebook.com');
     this.apiVersion = this.configService.get<string>('WHATSAPP_API_VERSION', 'v21.0');
@@ -415,13 +417,24 @@ export class CommerceService {
       throw new NotFoundException('No active WABA found');
     }
 
-    // Token resolution: tenant token → system user token → env variable
-    let accessToken = tenant.accessToken;
+    // Token resolution: same source as message send/receive — the live system
+    // user token stored (encrypted) in meta_tokens for this WABA. Fall back to
+    // the tenant's own token, then the platform env token if neither exists.
+    let accessToken = '';
+    if (this.metaTokenService && waba.id) {
+      accessToken = await this.metaTokenService.getActiveToken(waba.id).catch(() => '');
+    }
+    if (!accessToken) accessToken = tenant.accessToken || '';
     if (!accessToken) {
-      accessToken = this.configService.get<string>('META_SYSTEM_USER_TOKEN', '');
+      const envToken = this.configService.get<string>('META_SYSTEM_USER_TOKEN', '');
+      // Ignore the .env placeholder so we fail with a clear message instead of
+      // sending an unparseable token to Meta.
+      if (envToken && !/^your_/i.test(envToken)) accessToken = envToken;
     }
     if (!accessToken) {
-      throw new NotFoundException('No access token available');
+      throw new NotFoundException(
+        'No WhatsApp access token available for this WABA. Ensure the number is connected (the same token used for messaging is reused for the catalog).',
+      );
     }
 
     return { waba, accessToken };
