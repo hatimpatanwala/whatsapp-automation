@@ -160,6 +160,33 @@ import { WorkflowService } from '../services/workflow.service';
                       <span class="text-xs text-gray-500">{{ n.config[field.key] ? 'Enabled' : 'Disabled' }}</span>
                     </div>
                   }
+                  @case ('buttons') {
+                    <div class="space-y-2">
+                      @for (btn of asButtons(n.config[field.key]); track $index) {
+                        <div class="flex items-center gap-2">
+                          <span class="text-[10px] text-gray-400 w-4 text-center">{{ $index + 1 }}</span>
+                          <input
+                            pInputText
+                            [ngModel]="btn.title"
+                            (ngModelChange)="updateButton(field.key, $index, $event)"
+                            placeholder="Button label"
+                            maxlength="20"
+                            class="flex-1 text-sm"
+                          />
+                          <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger"
+                            (click)="removeButton(field.key, $index)" pTooltip="Remove"></button>
+                        </div>
+                      }
+                      @if (asButtons(n.config[field.key]).length < 3) {
+                        <button pButton label="Add Button" icon="pi pi-plus" class="p-button-text p-button-sm"
+                          (click)="addButton(field.key)"></button>
+                      }
+                      <p class="text-[11px] text-gray-400 leading-snug">
+                        Up to 3 buttons, max 20 chars each. Connect an arrow from this node for each button (top→bottom = button order),
+                        or route them with a Switch node.
+                      </p>
+                    </div>
+                  }
                   @default {
                     <input
                       pInputText
@@ -273,6 +300,54 @@ export class NodeConfigPanelComponent {
     const n = this.node();
     if (!n) return;
     this.nodeUpdated.emit({ ...n, config: { ...n.config, [key]: value } });
+  }
+
+  // ─── Structured buttons editor ─────────────────────────────────────────────
+  asButtons(val: any): { id: string; title: string }[] {
+    if (Array.isArray(val)) {
+      return val.map((b: any) =>
+        typeof b === 'string'
+          ? { id: this.slug(b), title: b }
+          : { id: b?.id || this.slug(b?.title || b?.text || b?.label || ''), title: b?.title ?? b?.text ?? b?.label ?? b?.value ?? '' },
+      );
+    }
+    if (typeof val === 'string' && val.trim()) {
+      return val.split('\n').filter((l) => l.trim()).map((t) => ({ id: this.slug(t), title: t.trim() }));
+    }
+    return [];
+  }
+
+  private slug(s: string): string {
+    return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').substring(0, 30) || 'btn';
+  }
+
+  private commitButtons(key: string, buttons: { id: string; title: string }[]) {
+    const withIds = buttons.map((b, i) => ({ id: b.id || this.slug(b.title) || `btn_${i + 1}`, title: b.title }));
+    this.updateConfig(key, withIds);
+  }
+
+  addButton(key: string) {
+    const n = this.node();
+    if (!n) return;
+    const buttons = this.asButtons(n.config[key]);
+    if (buttons.length >= 3) return;
+    buttons.push({ id: '', title: '' });
+    this.commitButtons(key, buttons);
+  }
+
+  updateButton(key: string, idx: number, title: string) {
+    const n = this.node();
+    if (!n) return;
+    const buttons = this.asButtons(n.config[key]);
+    buttons[idx] = { id: this.slug(title), title };
+    this.commitButtons(key, buttons);
+  }
+
+  removeButton(key: string, idx: number) {
+    const n = this.node();
+    if (!n) return;
+    const buttons = this.asButtons(n.config[key]).filter((_, i) => i !== idx);
+    this.commitButtons(key, buttons);
   }
 
   private loadEntityOptions(entityType: EntityType) {

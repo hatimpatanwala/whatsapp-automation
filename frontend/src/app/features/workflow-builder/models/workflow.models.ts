@@ -146,8 +146,8 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#25D366',
     maxOutputs: 3,
     configFields: [
-      { key: 'body', label: 'Message Body', type: 'textarea', placeholder: 'What would you like to do?' },
-      { key: 'buttons', label: 'Buttons (one per line)', type: 'textarea', placeholder: 'Browse Catalog\nView Cart\nTrack Order' },
+      { key: 'message', label: 'Message Body', type: 'textarea', placeholder: 'What would you like to do?', required: true },
+      { key: 'buttons', label: 'Buttons', type: 'buttons', required: true },
     ],
   },
   {
@@ -459,7 +459,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     configFields: [
       { key: 'message', label: 'Fallback Message', type: 'textarea', placeholder: "Sorry, I didn't understand that. What would you like to do?", defaultValue: "Sorry, I didn't understand that. What would you like to do?" },
       { key: 'mode', label: 'Fallback Mode', type: 'select', options: [{ label: 'Show Buttons', value: 'buttons' }, { label: 'Send Text & Continue', value: 'text' }, { label: 'Restart Workflow', value: 'restart' }], defaultValue: 'buttons' },
-      { key: 'buttons', label: 'Button Options (one per line)', type: 'textarea', placeholder: 'Main Menu\nRepeat\nContinue', defaultValue: 'Main Menu\nRepeat\nContinue' },
+      { key: 'buttons', label: 'Button Options', type: 'buttons', showWhen: { field: 'mode', value: 'buttons' } },
     ],
   },
   {

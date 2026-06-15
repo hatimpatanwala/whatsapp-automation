@@ -632,18 +632,101 @@ export class WorkflowBuilderComponent implements OnInit {
     const nodes = this.currentNodes();
     const edges = this.currentEdges();
 
+    const { errors, warnings } = this.validateWorkflow(nodes, edges);
+    if (errors.length) {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Cannot save yet',
+        detail: errors[0] + (errors.length > 1 ? ` (and ${errors.length - 1} more issue${errors.length > 2 ? 's' : ''})` : ''),
+        life: 7000,
+      });
+      return;
+    }
+
     this.workflowService.saveDefinition(wf.id, { nodes, edges, status: wf.status } as any).subscribe({
       next: () => {
         wf.nodes = nodes;
         wf.edges = edges;
         wf.updatedAt = 'Just now';
         this.workflows.update(list => [...list]);
-        this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Workflow saved successfully' });
+        if (warnings.length) {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Saved with warnings',
+            detail: warnings[0] + (warnings.length > 1 ? ` (and ${warnings.length - 1} more)` : ''),
+            life: 7000,
+          });
+        } else {
+          this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Workflow saved successfully' });
+        }
       },
       error: () => {
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save workflow' });
       },
     });
+  }
+
+  /**
+   * Validate the workflow before saving. Hard errors block the save; warnings
+   * allow it but surface likely problems (dead ends, unconnected nodes).
+   */
+  private validateWorkflow(
+    nodes: WorkflowNodeData[],
+    edges: WorkflowEdgeData[],
+  ): { errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!nodes.length) {
+      errors.push('Add at least one node to the canvas.');
+      return { errors, warnings };
+    }
+
+    const triggers = nodes.filter((n) => n.type.startsWith('trigger_'));
+    if (triggers.length === 0) {
+      errors.push('Add a trigger node — every workflow needs a starting point.');
+    }
+
+    const defMap = new Map(NODE_TYPE_DEFINITIONS.map((d) => [d.type, d]));
+    const incoming = new Set(edges.map((e) => e.to));
+    const outCount = new Map<string, number>();
+    edges.forEach((e) => outCount.set(e.from, (outCount.get(e.from) || 0) + 1));
+
+    for (const n of nodes) {
+      const def = defMap.get(n.type);
+      const name = n.label || n.type;
+
+      // Required config fields
+      if (def) {
+        for (const f of def.configFields) {
+          if (!f.required) continue;
+          if (f.showWhen && n.config?.[f.showWhen.field] !== f.showWhen.value) continue;
+          const v = n.config?.[f.key];
+          const empty = v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+          if (empty) errors.push(`"${name}": ${f.label} is required.`);
+        }
+      }
+
+      // send_buttons must have at least one button
+      if (n.type === 'send_buttons') {
+        const btns = n.config?.['buttons'];
+        const count = Array.isArray(btns) ? btns.length : 0;
+        if (count === 0) errors.push(`"${name}": add at least one button.`);
+      }
+
+      // Unconnected non-trigger node
+      if (!n.type.startsWith('trigger_') && !incoming.has(n.id)) {
+        warnings.push(`"${name}" isn't connected to anything — it will never run.`);
+      }
+
+      // Branching/menu nodes with no outgoing connection = dead end
+      const branching = ['switch', 'send_buttons', 'send_list', 'condition'];
+      if (branching.includes(n.type) && !(outCount.get(n.id)! > 0)) {
+        warnings.push(`"${name}" has no outgoing connection — the customer will hit a dead end.`);
+      }
+    }
+
+    return { errors, warnings };
   }
 
   hasFallbackNode = computed(() => this.currentNodes().some(n => n.type === 'fallback'));
