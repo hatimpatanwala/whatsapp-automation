@@ -16,13 +16,16 @@ export type EntityType = 'workflows' | 'templates' | 'categories';
 export interface ConfigField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'select' | 'number' | 'boolean' | 'buttons' | 'products' | 'template' | 'entity-select';
+  type: 'text' | 'textarea' | 'select' | 'number' | 'boolean' | 'buttons' | 'list-items' | 'keywords' | 'products' | 'template' | 'entity-select';
   options?: { label: string; value: string }[];
   placeholder?: string;
   required?: boolean;
   defaultValue?: any;
   entityType?: EntityType;
   showWhen?: { field: string; value: string };
+  help?: string;
+  /** Show quick variable-insert chips under a text/textarea field. */
+  variables?: boolean;
 }
 
 export interface WorkflowNodeData {
@@ -70,8 +73,8 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#f59e0b',
     maxOutputs: 1,
     configFields: [
-      { key: 'keywords', label: 'Keyword Match (comma separated)', type: 'text', placeholder: 'hi, hello, menu' },
-      { key: 'matchType', label: 'Match Type', type: 'select', options: [{ label: 'Contains', value: 'contains' }, { label: 'Exact', value: 'exact' }, { label: 'Starts With', value: 'starts_with' }] },
+      { key: 'keywords', label: 'Trigger Keywords', type: 'keywords', placeholder: 'Type a word and press Enter', help: 'The flow starts when the customer message matches any of these.' },
+      { key: 'matchType', label: 'Match Type', type: 'select', options: [{ label: 'Contains', value: 'contains' }, { label: 'Exact', value: 'exact' }, { label: 'Starts With', value: 'starts_with' }], help: 'Contains = keyword anywhere in the message. Exact = whole message equals the keyword.' },
     ],
   },
   {
@@ -134,7 +137,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#25D366',
     maxOutputs: 1,
     configFields: [
-      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello {{customer_name}}! ...' },
+      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello {{customer_name}}! ...', required: true, variables: true, help: 'Plain text sent to the customer. Tap a chip below to insert a variable.' },
     ],
   },
   {
@@ -146,8 +149,8 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#25D366',
     maxOutputs: 3,
     configFields: [
-      { key: 'message', label: 'Message Body', type: 'textarea', placeholder: 'What would you like to do?', required: true },
-      { key: 'buttons', label: 'Buttons', type: 'buttons', required: true },
+      { key: 'message', label: 'Message Body', type: 'textarea', placeholder: 'What would you like to do?', required: true, variables: true, help: 'The question shown above the buttons.' },
+      { key: 'buttons', label: 'Buttons', type: 'buttons', required: true, help: 'Up to 3. Connect one arrow per button (or route with a Switch node).' },
     ],
   },
   {
@@ -159,9 +162,10 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#25D366',
     maxOutputs: 1,
     configFields: [
-      { key: 'body', label: 'Message', type: 'textarea' },
-      { key: 'buttonText', label: 'Button Text', type: 'text', placeholder: 'View Options', defaultValue: 'View Options' },
-      { key: 'source', label: 'List Source', type: 'select', options: [{ label: 'Categories', value: 'categories' }, { label: 'Products', value: 'products' }, { label: 'Custom Items', value: 'custom' }] },
+      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Please select an option:', variables: true, help: 'Text shown above the list.' },
+      { key: 'buttonText', label: 'List Button Text', type: 'text', placeholder: 'View Options', defaultValue: 'View Options', help: 'The label on the button that opens the list.' },
+      { key: 'source', label: 'List Source', type: 'select', options: [{ label: 'Custom Items', value: 'custom' }, { label: 'Product Categories', value: 'categories' }, { label: 'Products', value: 'products' }], help: 'Custom = the items you define below. Categories/Products = pulled from your catalog automatically.' },
+      { key: 'items', label: 'List Items', type: 'list-items', showWhen: { field: 'source', value: 'custom' }, help: 'Up to 10 rows. Route each choice with a Switch node using the item id.' },
     ],
   },
   {
@@ -173,8 +177,8 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#25D366',
     maxOutputs: 1,
     configFields: [
-      { key: 'imageUrl', label: 'Image URL', type: 'text', placeholder: 'https://...' },
-      { key: 'caption', label: 'Caption', type: 'text' },
+      { key: 'imageUrl', label: 'Image URL', type: 'text', placeholder: 'https://...', required: true, help: 'A public URL to the image (jpg/png).' },
+      { key: 'caption', label: 'Caption', type: 'text', variables: true, help: 'Optional text shown under the image.' },
     ],
   },
   {
@@ -338,9 +342,9 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#ec4899',
     maxOutputs: 2,
     configFields: [
-      { key: 'variable', label: 'Check Variable', type: 'select', options: [{ label: 'Cart Items Count', value: 'cart_items' }, { label: 'Order Status', value: 'order_status' }, { label: 'Payment Status', value: 'payment_status' }, { label: 'Quote Status', value: 'quote_status' }, { label: 'Customer Tag', value: 'customer_tag' }, { label: 'Message Contains', value: 'message_contains' }, { label: 'Time of Day', value: 'time_of_day' }] },
+      { key: 'variable', label: 'Check Variable', type: 'select', options: [{ label: 'Cart Items Count', value: 'cart_items' }, { label: 'Order Status', value: 'order_status' }, { label: 'Payment Status', value: 'payment_status' }, { label: 'Quote Status', value: 'quote_status' }, { label: 'Customer Tag', value: 'customer_tag' }, { label: 'Message Contains', value: 'message_contains' }, { label: 'Time of Day', value: 'time_of_day' }], help: 'The value to test.' },
       { key: 'operator', label: 'Operator', type: 'select', options: [{ label: 'Equals', value: 'eq' }, { label: 'Not Equals', value: 'neq' }, { label: 'Greater Than', value: 'gt' }, { label: 'Less Than', value: 'lt' }, { label: 'Contains', value: 'contains' }] },
-      { key: 'value', label: 'Value', type: 'text' },
+      { key: 'value', label: 'Value', type: 'text', help: 'Connect a "Yes" arrow (condition true) and a "No" arrow (false).' },
     ],
   },
   {
@@ -352,7 +356,7 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
     color: '#ec4899',
     maxOutputs: 5,
     configFields: [
-      { key: 'variable', label: 'Route By', type: 'select', options: [{ label: 'Button Reply ID', value: 'button_reply' }, { label: 'List Reply ID', value: 'list_reply' }, { label: 'Message Text', value: 'message_text' }, { label: 'Customer Language', value: 'language' }, { label: 'Quote Status', value: 'quote_status' }] },
+      { key: 'variable', label: 'Route By', type: 'select', options: [{ label: 'Button Reply', value: 'button_reply' }, { label: 'List Reply', value: 'list_reply' }, { label: 'Message Text', value: 'message_text' }, { label: 'Customer Language', value: 'language' }, { label: 'Quote Status', value: 'quote_status' }], help: 'Label each outgoing arrow with the button/list item id it should match (e.g. "browse").' },
     ],
   },
   {

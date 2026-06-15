@@ -200,6 +200,44 @@ import { WorkflowService } from '../services/workflow.service';
                       </p>
                     </div>
                   }
+                  @case ('keywords') {
+                    <div class="space-y-1.5">
+                      @if (asKeywords(n.config[field.key]).length) {
+                        <div class="flex flex-wrap gap-1.5">
+                          @for (kw of asKeywords(n.config[field.key]); track $index) {
+                            <span class="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs px-2 py-0.5 rounded-full">
+                              {{ kw }}
+                              <i class="pi pi-times cursor-pointer text-[10px]" (click)="removeKeyword(field.key, $index)"></i>
+                            </span>
+                          }
+                        </div>
+                      }
+                      <input
+                        pInputText
+                        [(ngModel)]="keywordDraft"
+                        (keydown.enter)="addKeyword(field.key); $event.preventDefault()"
+                        [placeholder]="field.placeholder || 'Type a word and press Enter'"
+                        class="w-full text-sm"
+                      />
+                    </div>
+                  }
+                  @case ('list-items') {
+                    <div class="space-y-2">
+                      @for (item of asListItems(n.config[field.key]); track $index) {
+                        <div class="border border-gray-200 rounded-lg p-2 space-y-1">
+                          <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-gray-400 w-4 text-center">{{ $index + 1 }}</span>
+                            <input pInputText [ngModel]="item.title" (ngModelChange)="updateListItem(field.key, $index, 'title', $event)" placeholder="Item title" maxlength="24" class="flex-1 text-sm" />
+                            <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger" (click)="removeListItem(field.key, $index)"></button>
+                          </div>
+                          <input pInputText [ngModel]="item.description" (ngModelChange)="updateListItem(field.key, $index, 'description', $event)" placeholder="Description (optional)" maxlength="72" class="w-full text-xs" />
+                        </div>
+                      }
+                      @if (asListItems(n.config[field.key]).length < 10) {
+                        <button pButton label="Add Item" icon="pi pi-plus" class="p-button-text p-button-sm" (click)="addListItem(field.key)"></button>
+                      }
+                    </div>
+                  }
                   @default {
                     <input
                       pInputText
@@ -209,6 +247,23 @@ import { WorkflowService } from '../services/workflow.service';
                       class="w-full text-sm"
                     />
                   }
+                }
+
+                <!-- Quick variable-insert chips -->
+                @if (field.variables) {
+                  <div class="flex flex-wrap gap-1 mt-0.5">
+                    @for (v of quickVars; track v) {
+                      <button type="button"
+                        class="text-[10px] bg-gray-100 hover:bg-primary-50 text-gray-500 hover:text-primary-700 px-1.5 py-0.5 rounded border border-gray-200 transition-colors"
+                        (click)="insertVariable(field.key, v)"
+                      >+ {{ '{{' + v + '}}' }}</button>
+                    }
+                  </div>
+                }
+
+                <!-- Field help -->
+                @if (field.help) {
+                  <p class="text-[11px] text-gray-400 leading-snug">{{ field.help }}</p>
                 }
               </div>
               }
@@ -374,6 +429,96 @@ export class NodeConfigPanelComponent {
     if (!n) return;
     const buttons = this.asButtons(n.config[key]).filter((_, i) => i !== idx);
     this.commitButtons(key, buttons);
+  }
+
+  // ─── Keywords (chips) editor ───────────────────────────────────────────────
+  keywordDraft = '';
+
+  asKeywords(val: any): string[] {
+    if (Array.isArray(val)) return val.map((k) => String(k)).filter((k) => k.trim());
+    if (typeof val === 'string' && val.trim()) return val.split(',').map((k) => k.trim()).filter(Boolean);
+    return [];
+  }
+
+  addKeyword(key: string) {
+    const kw = this.keywordDraft.trim().replace(/,/g, '');
+    if (!kw) return;
+    const n = this.node();
+    if (!n) return;
+    const list = this.asKeywords(n.config[key]);
+    if (!list.includes(kw)) list.push(kw);
+    this.keywordDraft = '';
+    this.updateConfig(key, list);
+  }
+
+  removeKeyword(key: string, idx: number) {
+    const n = this.node();
+    if (!n) return;
+    const list = this.asKeywords(n.config[key]).filter((_, i) => i !== idx);
+    this.updateConfig(key, list);
+  }
+
+  // ─── List items editor ─────────────────────────────────────────────────────
+  asListItems(val: any): { id: string; title: string; description: string }[] {
+    if (Array.isArray(val)) {
+      // Sections format: [{ title, rows: [...] }] → flatten the rows.
+      if (val.length && val[0]?.rows) {
+        return val.flatMap((s: any) =>
+          (s.rows || []).map((r: any) => ({ id: r.id || this.slug(r.title || ''), title: r.title || '', description: r.description || '' })),
+        );
+      }
+      return val.map((r: any) =>
+        typeof r === 'string'
+          ? { id: this.slug(r), title: r, description: '' }
+          : { id: r?.id || this.slug(r?.title || r?.label || ''), title: r?.title ?? r?.label ?? '', description: r?.description ?? '' },
+      );
+    }
+    return [];
+  }
+
+  private commitListItems(key: string, items: { id: string; title: string; description: string }[]) {
+    const withIds = items.map((it, i) => ({
+      id: it.id || this.slug(it.title) || `item_${i + 1}`,
+      title: it.title,
+      description: it.description || '',
+    }));
+    this.updateConfig(key, withIds);
+  }
+
+  addListItem(key: string) {
+    const n = this.node();
+    if (!n) return;
+    const items = this.asListItems(n.config[key]);
+    if (items.length >= 10) return;
+    items.push({ id: '', title: '', description: '' });
+    this.commitListItems(key, items);
+  }
+
+  updateListItem(key: string, idx: number, prop: 'title' | 'description', value: string) {
+    const n = this.node();
+    if (!n) return;
+    const items = this.asListItems(n.config[key]);
+    items[idx] = { ...items[idx], [prop]: value };
+    if (prop === 'title') items[idx].id = this.slug(value);
+    this.commitListItems(key, items);
+  }
+
+  removeListItem(key: string, idx: number) {
+    const n = this.node();
+    if (!n) return;
+    const items = this.asListItems(n.config[key]).filter((_, i) => i !== idx);
+    this.commitListItems(key, items);
+  }
+
+  // ─── Variable insertion ────────────────────────────────────────────────────
+  quickVars = ['customer_name', 'customer_phone', 'last_input', 'order_number'];
+
+  insertVariable(key: string, varName: string) {
+    const n = this.node();
+    if (!n) return;
+    const cur = n.config[key] != null ? String(n.config[key]) : '';
+    const sep = cur && !cur.endsWith(' ') && !cur.endsWith('\n') ? ' ' : '';
+    this.updateConfig(key, `${cur}${sep}{{${varName}}}`);
   }
 
   private loadEntityOptions(entityType: EntityType) {

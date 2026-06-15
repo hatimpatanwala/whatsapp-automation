@@ -25,8 +25,24 @@ export class SendListNodeHandler implements NodeHandler {
     } else if (source === 'products') {
       sections = await this.buildProductSections(ctx.schema);
     } else {
-      // Custom items — not yet supported in the builder, just send a basic list
-      sections = [{ title: 'Options', rows: [{ id: 'wf_list_0', title: 'Option 1' }] }];
+      // Custom items — accept `sections` (array of { title, rows }) OR a flat
+      // `items`/`rows` array of { id, title, description } from the builder.
+      const cfgSections = node.config.sections;
+      const cfgItems = node.config.items || node.config.rows;
+      if (Array.isArray(cfgSections) && cfgSections.length) {
+        sections = cfgSections;
+      } else if (Array.isArray(cfgItems) && cfgItems.length) {
+        sections = [{
+          title: node.config.sectionTitle || 'Options',
+          rows: cfgItems.slice(0, 10).map((it: any, i: number) => {
+            const title = String(typeof it === 'string' ? it : (it?.title ?? it?.label ?? `Option ${i + 1}`)).substring(0, 24);
+            const desc = typeof it === 'object' && it?.description ? String(it.description).substring(0, 72) : undefined;
+            return { id: (typeof it === 'object' && it?.id) ? it.id : `wf_list_${i}`, title, ...(desc ? { description: desc } : {}) };
+          }),
+        }];
+      } else {
+        sections = [{ title: 'Options', rows: [{ id: 'wf_list_0', title: 'Option 1' }] }];
+      }
     }
 
     await this.messageService.logAndSendInteractiveList(
