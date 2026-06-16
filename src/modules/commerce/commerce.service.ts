@@ -189,6 +189,23 @@ export class CommerceService {
     }
 
     try {
+      // Connect the catalog to the WhatsApp Business Account. This is REQUIRED for
+      // the catalog to appear in WhatsApp — the commerce_settings call below only
+      // toggles cart/visibility for the phone number, it does not bind the catalog.
+      if (catalog.wabaId) {
+        try {
+          await this.metaApiCall(
+            `${catalog.wabaId}/product_catalogs`,
+            'POST',
+            accessToken,
+            { catalog_id: catalog.metaCatalogId },
+          );
+          this.logger.log(`Connected catalog ${catalog.metaCatalogId} to WABA ${catalog.wabaId}`);
+        } catch (err: any) {
+          this.logger.warn(`Could not connect catalog to WABA ${catalog.wabaId}: ${err.message}`);
+        }
+      }
+
       await this.metaApiCall(
         `${phoneNumberId}/whatsapp_commerce_settings`,
         'POST',
