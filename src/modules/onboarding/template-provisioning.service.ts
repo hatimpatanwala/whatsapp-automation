@@ -106,6 +106,14 @@ export class TemplateProvisioningService {
     if (!['AUTHENTICATION', 'UTILITY', 'MARKETING'].includes(input.category)) {
       throw new BadRequestException('Category must be AUTHENTICATION, UTILITY or MARKETING.');
     }
+    // Meta rejects templates whose body ends with (or starts with) a variable.
+    const trimmed = input.body.trim();
+    if (/\{\{\s*\d+\s*\}\}\s*$/.test(trimmed)) {
+      throw new BadRequestException('Body cannot end with a variable — add some text after the last {{n}}.');
+    }
+    if (/^\s*\{\{\s*\d+\s*\}\}/.test(trimmed)) {
+      throw new BadRequestException('Body cannot start with a variable — add some text before the first {{n}}.');
+    }
 
     const components: any[] = [];
     if (input.header && input.header.trim()) {
@@ -224,15 +232,14 @@ export class TemplateProvisioningService {
     return [
       // ─── AUTHENTICATION ─────────────────────────────────────────────
       {
+        // AUTHENTICATION templates use Meta's fixed OTP format (body is auto-generated).
         name: 'admin_otp_verification',
         category: 'AUTHENTICATION',
         language: 'en',
         components: [
-          {
-            type: 'BODY',
-            text: 'Your WA Commerce admin verification code is {{1}}. It expires in 5 minutes. Do not share this code.',
-            example: { body_text: [['123456']] },
-          },
+          { type: 'BODY', add_security_recommendation: true },
+          { type: 'FOOTER', code_expiration_minutes: 5 },
+          { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE' }] },
         ],
       },
 
@@ -370,7 +377,7 @@ export class TemplateProvisioningService {
         components: [
           {
             type: 'BODY',
-            text: 'Hi {{1}}, delivery update for order #{{2}}: {{3}}. {{4}}',
+            text: 'Hi {{1}}, delivery update for order #{{2}}: {{3}}. {{4}} — reply here if you need any help.',
             example: { body_text: [['Rahul', 'ORD-0042', 'Out for delivery', 'Expected by 6 PM today']] },
           },
           { type: 'FOOTER', text: 'Powered by WA Commerce' },
@@ -463,7 +470,7 @@ export class TemplateProvisioningService {
         components: [
           {
             type: 'BODY',
-            text: 'New customer! {{1}} ({{2}}) just opted in to your store. Total customers: {{3}}.',
+            text: 'New customer! {{1}} ({{2}}) just opted in to your store. You now have {{3}} customers in total. Reply VIEW for details.',
             example: { body_text: [['Rahul', '+919876543210', '156']] },
           },
         ],
@@ -493,7 +500,7 @@ export class TemplateProvisioningService {
         components: [
           {
             type: 'BODY',
-            text: 'Hi {{1}}, {{2}}',
+            text: 'Hi {{1}}, {{2}} Reply SHOP to browse or STOP to unsubscribe.',
             example: { body_text: [['Rahul', 'Check out our latest summer collection! Up to 50% off on all items this weekend.']] },
           },
           { type: 'FOOTER', text: 'Reply STOP to unsubscribe' },
