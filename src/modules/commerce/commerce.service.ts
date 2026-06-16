@@ -247,6 +247,7 @@ export class CommerceService {
     const { accessToken } = await this.resolveWabaAndToken(tenant);
 
     try {
+      // Turn off cart/visibility for the phone number.
       await this.metaApiCall(
         `${catalog.phoneNumberId}/whatsapp_commerce_settings`,
         'POST',
@@ -256,6 +257,22 @@ export class CommerceService {
           is_cart_enabled: false,
         },
       );
+
+      // Disconnect the catalog from the WhatsApp Business Account (mirrors the
+      // connect step in linkCatalogToPhone). Best-effort — a deprovision will
+      // also delete the catalog entirely, which removes the binding anyway.
+      if (catalog.wabaId && catalog.metaCatalogId) {
+        try {
+          await this.metaApiCall(
+            `${catalog.wabaId}/product_catalogs?catalog_id=${catalog.metaCatalogId}`,
+            'DELETE',
+            accessToken,
+          );
+          this.logger.log(`Disconnected catalog ${catalog.metaCatalogId} from WABA ${catalog.wabaId}`);
+        } catch (err: any) {
+          this.logger.warn(`Could not disconnect catalog from WABA ${catalog.wabaId}: ${err.message}`);
+        }
+      }
 
       await this.catalogRepo.update(catalog.id, {
         isLinkedToPhone: false,
@@ -280,6 +297,21 @@ export class CommerceService {
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     const { accessToken } = await this.resolveWabaAndToken(tenant);
+
+    // Enabling the catalog must (re)connect it to the WABA; fully disabling it
+    // (both flags off) should disconnect it. Keeps the WABA binding in sync with
+    // the visibility setting.
+    if (catalog.wabaId && catalog.metaCatalogId) {
+      try {
+        if (catalogVisible) {
+          await this.metaApiCall(`${catalog.wabaId}/product_catalogs`, 'POST', accessToken, { catalog_id: catalog.metaCatalogId });
+        } else if (!cartEnabled) {
+          await this.metaApiCall(`${catalog.wabaId}/product_catalogs?catalog_id=${catalog.metaCatalogId}`, 'DELETE', accessToken);
+        }
+      } catch (err: any) {
+        this.logger.warn(`WABA catalog connection update failed: ${err.message}`);
+      }
+    }
 
     await this.metaApiCall(
       `${catalog.phoneNumberId}/whatsapp_commerce_settings`,
