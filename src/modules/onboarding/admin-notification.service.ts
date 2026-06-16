@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tenant } from '../../database/entities/public/tenant.entity';
@@ -6,6 +6,7 @@ import { PhoneNumber } from '../../database/entities/public/phone-number.entity'
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { MetaTokenService } from '../waba/meta-token.service';
 import { MessageOrchestratorService } from '../whatsapp/message-orchestrator.service';
+import { SmartNotificationService } from '../whatsapp/smart-notification.service';
 import { WhatsAppApiService } from '../whatsapp/whatsapp-api.service';
 
 export interface AdminNotificationResult {
@@ -39,6 +40,7 @@ export class AdminNotificationService {
     private readonly metaTokenService: MetaTokenService,
     private readonly orchestrator: MessageOrchestratorService,
     private readonly whatsappApi: WhatsAppApiService,
+    @Optional() private readonly smartNotification: SmartNotificationService,
   ) {}
 
   /**
@@ -239,6 +241,18 @@ export class AdminNotificationService {
       return { sent: false, usedTemplate: false, reason: 'Admin WhatsApp not configured or not verified' };
     }
 
+    // Smart path: free-form if the admin's window is open, otherwise batch with a
+    // single teaser template (default 1h) instead of a per-event template.
+    if (this.smartNotification) {
+      const summary = freeFormText.split('\n')[0].replace(/[*_~`]/g, '').trim().slice(0, 120);
+      await this.smartNotification.notify({
+        tenantId, schema: ctx.schema, phoneNumberId: ctx.phoneNumberId, accessToken: ctx.accessToken,
+        recipientPhone: ctx.adminPhone, audience: 'admin', channel: 'utility',
+        summary, detail: freeFormText,
+      });
+      return { sent: true, usedTemplate: false };
+    }
+
     // Check if admin has an active service window (messaged within 24h)
     const hasWindow = await this.orchestrator.hasActiveServiceWindow(tenantId, ctx.adminPhone);
 
@@ -277,10 +291,11 @@ export class AdminNotificationService {
     adminPhone: string;
     phoneNumberId: string;
     accessToken: string;
+    schema: string;
   } | null> {
     const tenant = await this.tenantRepo.findOne({
       where: { id: tenantId },
-      select: ['id', 'adminWhatsappNumber', 'adminWhatsappVerified'],
+      select: ['id', 'adminWhatsappNumber', 'adminWhatsappVerified', 'schemaName'],
     });
 
     if (!tenant?.adminWhatsappNumber || !tenant.adminWhatsappVerified) {
@@ -310,6 +325,7 @@ export class AdminNotificationService {
       adminPhone,
       phoneNumberId: senderPhone.phoneNumberId,
       accessToken,
+      schema: tenant.schemaName,
     };
   }
 }

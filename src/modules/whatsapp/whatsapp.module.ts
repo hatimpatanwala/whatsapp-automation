@@ -1,4 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Tenant } from '../../database/entities/public/tenant.entity';
+import { WabaAccount } from '../../database/entities/public/waba-account.entity';
+import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { WhatsAppWebhookController } from './whatsapp-webhook.controller';
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { AdminCommandService } from './admin-command.service';
@@ -13,12 +17,14 @@ import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { ConversationHelper } from './helpers/conversation.helper';
 import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { MessageOrchestratorService } from './message-orchestrator.service';
+import { SmartNotificationService } from './smart-notification.service';
+import { SmartNotificationProcessor } from './smart-notification.processor';
 import { TenantModule } from '../tenant/tenant.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WabaModule } from '../waba/waba.module';
 
 @Module({
-  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule)],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
   controllers: [WhatsAppWebhookController],
   providers: [
     WhatsAppApiService,
@@ -33,8 +39,10 @@ import { WabaModule } from '../waba/waba.module';
     ConversationHelper,
     CommerceSettingsHelper,
     MessageOrchestratorService,
+    SmartNotificationService,
+    SmartNotificationProcessor,
     AdminCommandService,
   ],
-  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService],
+  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService],
 })
 export class WhatsAppModule {}

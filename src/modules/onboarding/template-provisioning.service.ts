@@ -627,6 +627,51 @@ export class TemplateProvisioningService {
           },
         ],
       },
+
+      // ─── SMART TEASERS ──────────────────────────────────────────────
+      // Sent (batched) when the recipient is OUTSIDE their 24h service window.
+      // A single tap opens the window so the real, detailed updates can be
+      // delivered free-form for free.
+      {
+        name: 'customer_updates_teaser',
+        category: 'UTILITY',
+        language: 'en',
+        components: [
+          {
+            type: 'BODY',
+            text: 'Hi {{1}}, you have {{2}} new update(s) waiting on your orders. Tap below to view them now.',
+            example: { body_text: [['Rahul', '3']] },
+          },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'View Updates' }] },
+        ],
+      },
+      {
+        name: 'customer_offers_teaser',
+        category: 'MARKETING',
+        language: 'en',
+        components: [
+          {
+            type: 'BODY',
+            text: 'Hi {{1}}, we have {{2}} exciting offer(s) just for you! 🎁 Tap below to see what\'s waiting.',
+            example: { body_text: [['Rahul', '2']] },
+          },
+          { type: 'FOOTER', text: 'Reply STOP to unsubscribe' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Show Offers' }] },
+        ],
+      },
+      {
+        name: 'admin_updates_teaser',
+        category: 'UTILITY',
+        language: 'en',
+        components: [
+          {
+            type: 'BODY',
+            text: 'You have {{1}} new store update(s) — orders, payments and alerts. Tap below to view them now.',
+            example: { body_text: [['5']] },
+          },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'View Updates' }] },
+        ],
+      },
     ];
   }
 }

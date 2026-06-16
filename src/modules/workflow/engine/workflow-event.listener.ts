@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
+import { SmartNotificationService } from '../../whatsapp/smart-notification.service';
 import {
   OrderCreatedEvent,
   OrderStatusChangedEvent,
@@ -22,7 +23,40 @@ export class WorkflowEventListener {
     private readonly engine: WorkflowExecutionEngine,
     private readonly connectionManager: TenantConnectionManager,
     private readonly conversationHelper: ConversationHelper,
+    @Optional() private readonly smartNotification: SmartNotificationService,
   ) {}
+
+  /** Build a concise customer-facing message for an order/payment event. */
+  private buildCustomerEventMessage(
+    triggerType: string,
+    eventValue: string,
+    v: Record<string, any>,
+  ): { summary: string; detail: string } | null {
+    const cur = v.currency || '₹';
+    const on = v.order_number ? ` #${v.order_number}` : '';
+    if (triggerType === 'trigger_order') {
+      const map: Record<string, string> = {
+        created: `🧾 Order${on} received${v.order_total ? ` — total ${cur}${v.order_total}` : ''}. We'll keep you posted!`,
+        confirmed: `✅ Order${on} is confirmed and being prepared.`,
+        processing: `👨‍🍳 Order${on} is being prepared.`,
+        ready_for_delivery: `📦 Order${on} is ready and will be on its way soon.`,
+        out_for_delivery: `🚚 Order${on} is out for delivery — arriving soon!`,
+        delivered: `🎉 Order${on} has been delivered. We hope you love it!`,
+        cancelled: `❌ Order${on} has been cancelled. Reply here if you need help.`,
+      };
+      const detail = map[eventValue];
+      return detail ? { summary: `Order${on}: ${eventValue.replace(/_/g, ' ')}`, detail } : null;
+    }
+    if (triggerType === 'trigger_payment') {
+      if (eventValue === 'verified') {
+        return { summary: `Payment received${on}`, detail: `✅ Payment${v.payment_amount ? ` of ${cur}${v.payment_amount}` : ''} received${on ? ` for order${on}` : ''}. Thank you!` };
+      }
+      if (eventValue === 'expired') {
+        return { summary: `Payment pending${on}`, detail: `⏰ Your payment${on ? ` for order${on}` : ''} is still pending. Reply here to complete it.` };
+      }
+    }
+    return null;
+  }
 
   @OnEvent('order.created')
   async onOrderCreated(event: OrderCreatedEvent): Promise<void> {
@@ -84,7 +118,6 @@ export class WorkflowEventListener {
   ): Promise<void> {
     try {
       const match = await this.triggerMatcher.findMatchingEventWorkflow(schema, triggerType, eventValue);
-      if (!match) return;
 
       // Get customer details
       const customer = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
@@ -92,6 +125,26 @@ export class WorkflowEventListener {
         return rows[0];
       });
       if (!customer) return;
+
+      // No tenant-built workflow for this event → deliver a smart, window-aware,
+      // batched notification to the customer (free-form if their window is open,
+      // otherwise batched into a teaser template).
+      if (!match) {
+        if (this.smartNotification) {
+          const t = await this.connectionManager.executeInTenantContext('public', async (qr) =>
+            (await qr.query(`SELECT id FROM tenants WHERE schema_name = $1`, [schema]))[0]);
+          const enriched = await this.enrichEventVariables(schema, triggerType, variables);
+          const msg = this.buildCustomerEventMessage(triggerType, eventValue, enriched);
+          if (t?.id && msg) {
+            await this.smartNotification.notify({
+              tenantId: t.id, schema, recipientPhone: customer.phone,
+              audience: 'customer', channel: 'utility', recipientName: customer.name,
+              summary: msg.summary, detail: msg.detail,
+            }).catch(() => undefined);
+          }
+        }
+        return;
+      }
 
       // Enrich variables with full order/payment/quote details so message
       // templates can render {{order_number}}, {{order_total}}, {{currency}},

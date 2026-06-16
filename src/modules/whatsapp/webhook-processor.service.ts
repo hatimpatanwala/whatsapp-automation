@@ -22,6 +22,7 @@ import { ComplianceMonitorService } from '../waba/compliance/compliance-monitor.
 import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { AdminCommandService } from './admin-command.service';
+import { SmartNotificationService } from './smart-notification.service';
 
 @Injectable()
 export class WebhookProcessorService {
@@ -50,6 +51,7 @@ export class WebhookProcessorService {
     private readonly commerceSettings: CommerceSettingsHelper,
     private readonly configService: ConfigService,
     @Optional() private readonly adminCommandService: AdminCommandService,
+    @Optional() private readonly smartNotification: SmartNotificationService,
   ) {
     this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
   }
@@ -225,6 +227,12 @@ export class WebhookProcessorService {
         this.logger.error(`Metering error (non-blocking): ${err.message}`);
         // Metering failures should not block message processing
       }
+    }
+
+    // The inbound message opened (or refreshed) the service window — flush any
+    // notifications that were waiting for it, delivered free-form (no template cost).
+    if (this.smartNotification && tenant.id) {
+      this.smartNotification.onInbound(schema, from).catch(() => undefined);
     }
 
     // ─── WORKFLOW ENGINE: Check for active execution first ─────────────

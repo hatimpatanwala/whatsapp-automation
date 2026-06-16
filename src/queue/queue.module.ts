@@ -18,6 +18,7 @@ export const QUEUE_TOKEN_HEALTH = 'token-health';
 export const QUEUE_COMPLIANCE = 'compliance';
 export const QUEUE_CATALOG_SYNC = 'catalog-sync';
 export const QUEUE_CATALOG_WEBHOOK = 'catalog-webhook';
+export const QUEUE_NOTIFICATION_FLUSH = 'notification-flush';
 
 const defaultJobOpts = (roc = 100, rof = 500, att = 3, bo?: any) => ({
   removeOnComplete: roc, removeOnFail: rof, attempts: att, ...(bo ? { backoff: bo } : {}),
@@ -73,6 +74,7 @@ const defaultJobOpts = (roc = 100, rof = 500, att = 3, bo?: any) => ({
       { name: QUEUE_COMPLIANCE, defaultJobOptions: defaultJobOpts(100, 500, 2, { type: 'exponential', delay: 600000 }) },
       { name: QUEUE_CATALOG_SYNC, defaultJobOptions: defaultJobOpts(500, 2000, 3, { type: 'exponential', delay: 5000 }) },
       { name: QUEUE_CATALOG_WEBHOOK, defaultJobOptions: defaultJobOpts(500, 2000, 3, { type: 'exponential', delay: 2000 }) },
+      { name: QUEUE_NOTIFICATION_FLUSH, defaultJobOptions: defaultJobOpts(500, 2000, 2) },
     ),
   ],
   exports: [BullModule],
