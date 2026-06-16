@@ -55,6 +55,10 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./waba/waba-dashboard.component').then(m => m.WabaDashboardComponent),
   },
   {
+    path: 'templates',
+    loadComponent: () => import('./templates/template-list.component').then(m => m.TemplateListComponent),
+  },
+  {
     path: 'billing',
     loadComponent: () => import('./billing/admin-billing.component').then(m => m.AdminBillingComponent),
   },

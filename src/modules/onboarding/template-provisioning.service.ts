@@ -19,6 +19,33 @@ export interface ProvisionResult {
   error?: string;
 }
 
+export interface TemplateButtonInput {
+  type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
+  text: string;
+  url?: string;
+  phone_number?: string;
+}
+
+export interface CreateTemplateInput {
+  name: string;
+  category: 'AUTHENTICATION' | 'UTILITY' | 'MARKETING';
+  language?: string;
+  body: string;
+  examples?: string[];
+  footer?: string;
+  header?: string;
+  buttons?: TemplateButtonInput[];
+}
+
+export interface TemplateSummary {
+  name: string;
+  status: string; // APPROVED | PENDING | REJECTED | ...
+  category: string;
+  language: string;
+  body: string;
+  rejectedReason?: string;
+}
+
 @Injectable()
 export class TemplateProvisioningService {
   private readonly logger = new Logger(TemplateProvisioningService.name);
@@ -36,7 +63,8 @@ export class TemplateProvisioningService {
   /**
    * Provision all platform message templates on the WABA.
    */
-  async provisionAll(): Promise<{ results: ProvisionResult[]; summary: { created: number; existing: number; failed: number } }> {
+  /** Resolve the active platform WABA and its live access token. */
+  private async resolveWabaToken(): Promise<{ wabaId: string; accessToken: string }> {
     const waba = await this.wabaAccountRepo.findOne({
       where: { status: 'active' },
       order: { createdAt: 'ASC' },
@@ -44,17 +72,99 @@ export class TemplateProvisioningService {
     if (!waba) {
       throw new BadRequestException('No active WABA found. Please configure a WhatsApp Business Account first.');
     }
-
     const accessToken = await this.metaTokenService.getActiveToken(waba.id);
     if (!accessToken) {
       throw new BadRequestException('No active access token for the WABA.');
     }
+    return { wabaId: waba.wabaId, accessToken };
+  }
+
+  /** List all message templates on the WABA with their Meta approval status. */
+  async listTemplates(): Promise<TemplateSummary[]> {
+    const { wabaId, accessToken } = await this.resolveWabaToken();
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/message_templates?fields=name,status,category,language,components,quality_score&limit=250`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const data = await res.json() as any;
+    if (!res.ok) throw new BadRequestException(data.error?.message || 'Failed to list templates');
+    return (data.data || []).map((t: any) => ({
+      name: t.name,
+      status: t.status,
+      category: t.category,
+      language: t.language,
+      body: (t.components || []).find((c: any) => c.type === 'BODY')?.text || '',
+      rejectedReason: t.status === 'REJECTED' ? (t.rejected_reason || 'Rejected by Meta — see WhatsApp Manager') : undefined,
+    }));
+  }
+
+  /** Create a single custom template from super-admin input. */
+  async createCustomTemplate(input: CreateTemplateInput): Promise<ProvisionResult> {
+    const name = (input.name || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 512);
+    if (!name) throw new BadRequestException('Template name is required.');
+    if (!input.body || !input.body.trim()) throw new BadRequestException('Template body is required.');
+    if (!['AUTHENTICATION', 'UTILITY', 'MARKETING'].includes(input.category)) {
+      throw new BadRequestException('Category must be AUTHENTICATION, UTILITY or MARKETING.');
+    }
+
+    const components: any[] = [];
+    if (input.header && input.header.trim()) {
+      components.push({ type: 'HEADER', format: 'TEXT', text: input.header.trim() });
+    }
+
+    const varCount = (input.body.match(/\{\{\s*\d+\s*\}\}/g) || []).length;
+    const body: any = { type: 'BODY', text: input.body };
+    if (varCount > 0) {
+      const ex = (input.examples || []).map((e) => String(e || '')).slice(0, varCount);
+      while (ex.length < varCount) ex.push('sample');
+      body.example = { body_text: [ex] };
+    }
+    components.push(body);
+
+    if (input.footer && input.footer.trim()) {
+      components.push({ type: 'FOOTER', text: input.footer.trim() });
+    }
+
+    if (input.buttons && input.buttons.length) {
+      components.push({
+        type: 'BUTTONS',
+        buttons: input.buttons.slice(0, 10).map((b) => {
+          if (b.type === 'URL') return { type: 'URL', text: b.text, url: b.url };
+          if (b.type === 'PHONE_NUMBER') return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
+          return { type: 'QUICK_REPLY', text: b.text };
+        }),
+      });
+    }
+
+    const { wabaId, accessToken } = await this.resolveWabaToken();
+    return this.createTemplate(wabaId, accessToken, {
+      name,
+      category: input.category,
+      language: input.language || 'en',
+      components,
+    });
+  }
+
+  /** Delete a template by name. */
+  async deleteTemplate(name: string): Promise<{ success: boolean }> {
+    const { wabaId, accessToken } = await this.resolveWabaToken();
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const data = await res.json() as any;
+    if (!res.ok) throw new BadRequestException(data.error?.message || 'Failed to delete template');
+    return { success: true };
+  }
+
+  async provisionAll(): Promise<{ results: ProvisionResult[]; summary: { created: number; existing: number; failed: number } }> {
+    const { wabaId, accessToken } = await this.resolveWabaToken();
 
     const templates = this.getAllTemplates();
     const results: ProvisionResult[] = [];
 
     for (const template of templates) {
-      const result = await this.createTemplate(waba.wabaId, accessToken, template);
+      const result = await this.createTemplate(wabaId, accessToken, template);
       results.push(result);
       // Small delay between API calls to avoid rate limits
       await new Promise(r => setTimeout(r, 500));

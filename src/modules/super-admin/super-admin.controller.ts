@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Put, Param, Body, Query, Req, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { SuperAdminService } from './super-admin.service';
-import { TemplateProvisioningService } from '../onboarding/template-provisioning.service';
+import { TemplateProvisioningService, CreateTemplateInput } from '../onboarding/template-provisioning.service';
 import { QuoteService } from '../quote/quote.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
@@ -59,6 +59,25 @@ export class SuperAdminController {
   @HttpCode(HttpStatus.OK)
   async provisionTemplates() {
     return this.templateProvisioningService.provisionAll();
+  }
+
+  /** List all WhatsApp message templates with their Meta approval status. */
+  @Get('templates')
+  async listTemplates() {
+    return this.templateProvisioningService.listTemplates();
+  }
+
+  /** Create a new custom message template (submitted to Meta for approval). */
+  @Post('templates')
+  @HttpCode(HttpStatus.OK)
+  async createTemplate(@Body() dto: CreateTemplateInput) {
+    return this.templateProvisioningService.createCustomTemplate(dto);
+  }
+
+  /** Delete a message template by name. */
+  @Delete('templates/:name')
+  async deleteTemplate(@Param('name') name: string) {
+    return this.templateProvisioningService.deleteTemplate(name);
   }
 
   // ─── Quote Management (Admin) ─────────────────────────────────────

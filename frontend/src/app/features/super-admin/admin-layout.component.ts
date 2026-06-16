@@ -119,6 +119,7 @@ export class AdminLayoutComponent implements OnInit {
       title: 'WhatsApp',
       items: [
         { label: 'WABA Accounts', icon: 'pi-whatsapp', route: '/admin/waba' },
+        { label: 'Message Templates', icon: 'pi-comments', route: '/admin/templates' },
       ],
     },
     {
