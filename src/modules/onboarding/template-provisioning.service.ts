@@ -168,10 +168,26 @@ export class TemplateProvisioningService {
   async provisionAll(): Promise<{ results: ProvisionResult[]; summary: { created: number; existing: number; failed: number } }> {
     const { wabaId, accessToken } = await this.resolveWabaToken();
 
+    // Fetch existing template names up front so re-syncing reliably reports
+    // "already_exists" instead of Meta's generic re-create error.
+    const existingNames = new Set<string>();
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/message_templates?fields=name&limit=250`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const data = await res.json() as any;
+      (data.data || []).forEach((t: any) => existingNames.add(t.name));
+    } catch { /* fall back to create-and-detect */ }
+
     const templates = this.getAllTemplates();
     const results: ProvisionResult[] = [];
 
     for (const template of templates) {
+      if (existingNames.has(template.name)) {
+        results.push({ name: template.name, status: 'already_exists' });
+        continue;
+      }
       const result = await this.createTemplate(wabaId, accessToken, template);
       results.push(result);
       // Small delay between API calls to avoid rate limits
