@@ -52,6 +52,12 @@ export interface NotifyInput {
    * the customer can continue. Marketing notifications omit this and use a teaser.
    */
   template?: { name: string; params?: string[]; language?: string };
+  /**
+   * The real MARKETING template to send when the window is closed AND the tenant
+   * has chosen "full marketing template" mode (marketing_template_mode=template).
+   * Otherwise the cost-efficient utility door-opener is used.
+   */
+  marketingTemplate?: { name: string; params?: string[]; language?: string };
 }
 
 interface PendingItem {
@@ -123,6 +129,27 @@ export class SmartNotificationService {
     return ms;
   }
 
+  private readonly mktModeCache = new Map<string, { mode: string; exp: number }>();
+
+  /** 'efficient' (door-opener, default) or 'template' (full marketing template). */
+  private async getMarketingMode(schema: string): Promise<string> {
+    const cached = this.mktModeCache.get(schema);
+    if (cached && cached.exp > Date.now()) return cached.mode;
+    let mode = 'efficient';
+    if (this.connectionManager) {
+      try {
+        const rows = await this.connectionManager.executeInTenantContext(schema, (qr) =>
+          qr.query(`SELECT value FROM settings WHERE key = 'marketing_template_mode'`));
+        if (rows[0]?.value !== undefined) {
+          const v = typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value;
+          if (v === 'template' || v === 'efficient') mode = v;
+        }
+      } catch { /* default */ }
+    }
+    this.mktModeCache.set(schema, { mode, exp: Date.now() + 5 * 60 * 1000 });
+    return mode;
+  }
+
   /** Resolve the tenant's sender phone-number-id + a live access token. */
   private async resolveCreds(tenantId: string): Promise<{ phoneNumberId: string; accessToken: string } | null> {
     if (!this.tenantRepo || !this.wabaRepo) return null;
@@ -187,9 +214,27 @@ export class SmartNotificationService {
         return;
       }
 
-      // ── Window CLOSED — buffer the real content; it is delivered free-form
-      //    only once the recipient opens the window (taps the door-opener or
-      //    messages). Free-form is therefore NEVER sent to a closed window.
+      // ── Window CLOSED ──
+      // Marketing in "full template" mode (tenant opted in): send the real
+      // marketing template (full reach, marketing rate). Default is the
+      // cost-efficient door-opener below. Abandoned-cart (windowOnly) is never
+      // forced to a template.
+      if (input.channel === 'marketing' && !input.windowOnly && input.marketingTemplate) {
+        const mode = await this.getMarketingMode(input.schema);
+        if (mode === 'template') {
+          const comps = input.marketingTemplate.params && input.marketingTemplate.params.length
+            ? [{ type: 'body', parameters: input.marketingTemplate.params.map((p) => ({ type: 'text', text: String(p ?? '') })) }]
+            : undefined;
+          await this.orchestrator.sendTemplate(
+            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
+            input.marketingTemplate.name, input.marketingTemplate.language || 'en', comps, 'marketing', true,
+          );
+          return;
+        }
+      }
+
+      // Buffer the real content; it is delivered free-form only once the recipient
+      // opens the window (taps the door-opener or messages).
       const awaitK = this.awaitKey(input.schema, input.recipientPhone);
       await this.redis.rpush(awaitK, JSON.stringify(item));
       await this.redis.expire(awaitK, AWAIT_TTL_SEC);

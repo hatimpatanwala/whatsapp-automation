@@ -728,6 +728,17 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                     <p-inputnumber [(ngModel)]="commerce.batchMinutes" [min]="1" [max]="1440" [showButtons]="true" suffix=" min" inputStyleClass="w-24" />
                   </div>
 
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div class="pr-4">
+                      <p class="text-sm font-medium text-gray-900">Force Full Marketing Templates</p>
+                      <p class="text-xs text-gray-500">
+                        <b>Off (recommended):</b> for offline customers we send one low-cost <i>utility</i> "you have updates" message; the offer is delivered free once they tap — minimum cost.
+                        <b>On:</b> always send the full marketing template directly (full reach, but charged at the marketing rate). Either way, customers already chatting get the offer free.
+                      </p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.forceMarketingTemplate" />
+                  </div>
+
                   <!-- Advanced: Meta Catalog (collapsible) -->
                   <div class="pt-3">
                     <button class="text-xs text-primary-500 hover:underline bg-transparent border-0 cursor-pointer p-0 flex items-center gap-1"
@@ -969,6 +980,7 @@ export class SettingsComponent implements OnInit {
     orderNotification: true,
     abandonedCartHours: 3,
     batchMinutes: 60,
+    forceMarketingTemplate: false,
   };
 
   wa = {
@@ -1165,6 +1177,7 @@ export class SettingsComponent implements OnInit {
         if (settings.commerceOrderNotification !== undefined) this.commerce.orderNotification = this.parseBool(settings.commerceOrderNotification);
         if (settings.commerceAbandonedCartHours !== undefined && settings.commerceAbandonedCartHours !== null) this.commerce.abandonedCartHours = Number(settings.commerceAbandonedCartHours);
         if (settings.notificationBatchMinutes !== undefined && settings.notificationBatchMinutes !== null) this.commerce.batchMinutes = Number(settings.notificationBatchMinutes);
+        if (settings.marketingTemplateMode) this.commerce.forceMarketingTemplate = settings.marketingTemplateMode === 'template';
 
         // WhatsApp config
         if (settings.waPhone) this.wa.phone = settings.waPhone;
@@ -1296,6 +1309,7 @@ export class SettingsComponent implements OnInit {
       commerce_order_notification: this.commerce.orderNotification,
       commerce_abandoned_cart_hours: Number(this.commerce.abandonedCartHours),
       notification_batch_minutes: Number(this.commerce.batchMinutes),
+      marketing_template_mode: this.commerce.forceMarketingTemplate ? 'template' : 'efficient',
       // WhatsApp config
       wa_phone: this.wa.phone,
       wa_account_id: this.wa.accountId,
