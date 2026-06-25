@@ -249,6 +249,7 @@ export class AdminNotificationService {
         tenantId, schema: ctx.schema, phoneNumberId: ctx.phoneNumberId, accessToken: ctx.accessToken,
         recipientPhone: ctx.adminPhone, audience: 'admin', channel: 'utility',
         summary, detail: freeFormText,
+        buttons: buttons && buttons.length ? buttons : undefined,
       });
       return { sent: true, usedTemplate: false };
     }

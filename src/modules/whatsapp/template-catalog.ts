@@ -37,6 +37,8 @@ export const TEMPLATE_TEXT: Record<string, TemplateText> = {
   back_in_stock: { body: "Hi {{1}}, great news! {{2}} is back in stock. Only {{3}} units available — grab yours before it's gone! Reply \"ORDER\" to buy now.", footer: 'Reply STOP to unsubscribe' },
   welcome_message: { body: 'Welcome to {{1}}! We\'re happy to have you here. Browse our catalog by replying "MENU" or ask us anything. We\'re here to help!' },
   order_feedback: { body: "Hi {{1}}, we hope you're enjoying your order #{{2}}! How would you rate your experience? Reply with a number 1-5 (5 being excellent)." },
+  order_status_update: { body: 'Hi {{1}}, update on your order #{{2}}: {{3}}. Tap below to track your order anytime.' },
+  payment_update: { body: 'Hi {{1}}, payment update for your order #{{2}}: {{3}}. Tap below to view your orders.' },
   customer_updates_teaser: { body: 'Hi {{1}}, you have {{2}} new update(s) waiting on your orders. Reply here to view them now.' },
   customer_offers_teaser: { body: "Hi {{1}}, we have {{2}} exciting offer(s) just for you! 🎁 Reply here to see what's waiting.", footer: 'Reply STOP to unsubscribe' },
   admin_updates_teaser: { body: 'You have {{1}} new store update(s) — orders, payments and alerts. Reply here to view them now.' },

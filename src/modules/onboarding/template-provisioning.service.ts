@@ -628,6 +628,34 @@ export class TemplateProvisioningService {
         ],
       },
 
+      // ─── GENERIC STATUS UPDATES (sent out-of-window, interactive) ───
+      {
+        name: 'order_status_update',
+        category: 'UTILITY',
+        language: 'en',
+        components: [
+          {
+            type: 'BODY',
+            text: 'Hi {{1}}, update on your order #{{2}}: {{3}}. Tap below to track your order anytime.',
+            example: { body_text: [['Rahul', 'ORD-0042', 'Out for delivery']] },
+          },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Track Order' }] },
+        ],
+      },
+      {
+        name: 'payment_update',
+        category: 'UTILITY',
+        language: 'en',
+        components: [
+          {
+            type: 'BODY',
+            text: 'Hi {{1}}, payment update for your order #{{2}}: {{3}}. Tap below to view your orders.',
+            example: { body_text: [['Rahul', 'ORD-0042', 'Payment received']] },
+          },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'My Orders' }] },
+        ],
+      },
+
       // ─── SMART TEASERS ──────────────────────────────────────────────
       // Sent (batched) when the recipient is OUTSIDE their 24h service window.
       // A single tap opens the window so the real, detailed updates can be

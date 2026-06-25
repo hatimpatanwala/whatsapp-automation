@@ -26,33 +26,40 @@ export class WorkflowEventListener {
     @Optional() private readonly smartNotification: SmartNotificationService,
   ) {}
 
-  /** Build a concise customer-facing message for an order/payment event. */
+  /**
+   * Build a customer-facing message for an order/payment event, with interactive
+   * buttons (trigger workflows on tap) and the out-of-window UTILITY template to
+   * use (a relevant order/payment status update — not a marketing teaser).
+   */
   private buildCustomerEventMessage(
     triggerType: string,
     eventValue: string,
     v: Record<string, any>,
-  ): { summary: string; detail: string } | null {
+  ): { summary: string; detail: string; buttons: { id: string; title: string }[]; templateName?: string; statusText?: string } | null {
     const cur = v.currency || '₹';
     const on = v.order_number ? ` #${v.order_number}` : '';
+    const orderBtns = [{ id: 'track', title: '🚚 Track Order' }, { id: 'menu', title: '🛍️ Menu' }];
+    const payBtns = [{ id: 'orders', title: '📦 My Orders' }, { id: 'menu', title: '🛍️ Menu' }];
+
     if (triggerType === 'trigger_order') {
-      const map: Record<string, string> = {
-        created: `🧾 Order${on} received${v.order_total ? ` — total ${cur}${v.order_total}` : ''}. We'll keep you posted!`,
-        confirmed: `✅ Order${on} is confirmed and being prepared.`,
-        processing: `👨‍🍳 Order${on} is being prepared.`,
-        ready_for_delivery: `📦 Order${on} is ready and will be on its way soon.`,
-        out_for_delivery: `🚚 Order${on} is out for delivery — arriving soon!`,
-        delivered: `🎉 Order${on} has been delivered. We hope you love it!`,
-        cancelled: `❌ Order${on} has been cancelled. Reply here if you need help.`,
+      const map: Record<string, { detail: string; status: string }> = {
+        created: { detail: `🧾 Order${on} received${v.order_total ? ` — total ${cur}${v.order_total}` : ''}. We'll keep you posted!`, status: 'Received' },
+        confirmed: { detail: `✅ Order${on} is confirmed and being prepared.`, status: 'Confirmed' },
+        processing: { detail: `👨‍🍳 Order${on} is being prepared.`, status: 'Being prepared' },
+        ready_for_delivery: { detail: `📦 Order${on} is ready and will be on its way soon.`, status: 'Ready for delivery' },
+        out_for_delivery: { detail: `🚚 Order${on} is out for delivery — arriving soon!`, status: 'Out for delivery' },
+        delivered: { detail: `🎉 Order${on} has been delivered. We hope you love it!`, status: 'Delivered' },
+        cancelled: { detail: `❌ Order${on} has been cancelled. Reply here if you need help.`, status: 'Cancelled' },
       };
-      const detail = map[eventValue];
-      return detail ? { summary: `Order${on}: ${eventValue.replace(/_/g, ' ')}`, detail } : null;
+      const m = map[eventValue];
+      return m ? { summary: `Order${on}: ${m.status}`, detail: m.detail, buttons: orderBtns, templateName: 'order_status_update', statusText: m.status } : null;
     }
     if (triggerType === 'trigger_payment') {
       if (eventValue === 'verified') {
-        return { summary: `Payment received${on}`, detail: `✅ Payment${v.payment_amount ? ` of ${cur}${v.payment_amount}` : ''} received${on ? ` for order${on}` : ''}. Thank you!` };
+        return { summary: `Payment received${on}`, detail: `✅ Payment${v.payment_amount ? ` of ${cur}${v.payment_amount}` : ''} received${on ? ` for order${on}` : ''}. Thank you!`, buttons: payBtns, templateName: 'payment_update', statusText: 'Payment received' };
       }
       if (eventValue === 'expired') {
-        return { summary: `Payment pending${on}`, detail: `⏰ Your payment${on ? ` for order${on}` : ''} is still pending. Reply here to complete it.` };
+        return { summary: `Payment pending${on}`, detail: `⏰ Your payment${on ? ` for order${on}` : ''} is still pending. Reply here to complete it.`, buttons: payBtns, templateName: 'payment_update', statusText: 'Payment pending' };
       }
     }
     return null;
@@ -136,10 +143,13 @@ export class WorkflowEventListener {
           const enriched = await this.enrichEventVariables(schema, triggerType, variables);
           const msg = this.buildCustomerEventMessage(triggerType, eventValue, enriched);
           if (t?.id && msg) {
+            const template = msg.templateName
+              ? { name: msg.templateName, params: [customer.name || 'there', String(enriched.order_number || ''), msg.statusText || ''] }
+              : undefined;
             await this.smartNotification.notify({
               tenantId: t.id, schema, recipientPhone: customer.phone,
               audience: 'customer', channel: 'utility', recipientName: customer.name,
-              summary: msg.summary, detail: msg.detail,
+              summary: msg.summary, detail: msg.detail, buttons: msg.buttons, template,
             }).catch(() => undefined);
           }
         }

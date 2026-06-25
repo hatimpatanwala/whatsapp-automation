@@ -40,6 +40,18 @@ export interface NotifyInput {
    * — never send a template. Used for non-urgent nudges like abandoned carts.
    */
   windowOnly?: boolean;
+  /**
+   * Interactive quick-reply buttons. When the window is open these are sent as
+   * an interactive message; tapping a button (its title) triggers the matching
+   * workflow. Titles should align with workflow keywords (e.g. "Track Order").
+   */
+  buttons?: { id: string; title: string }[];
+  /**
+   * The specific UTILITY template to send when the window is CLOSED (e.g. an
+   * order/payment status update). Its own quick-reply button opens the window so
+   * the customer can continue. Marketing notifications omit this and use a teaser.
+   */
+  template?: { name: string; params?: string[]; language?: string };
 }
 
 interface PendingItem {
@@ -52,6 +64,7 @@ interface PendingItem {
   summary: string;
   detail: string;
   recipientName?: string;
+  buttons?: { id: string; title: string }[];
   createdAt: number;
 }
 
@@ -155,13 +168,22 @@ export class SmartNotificationService {
     const item: PendingItem = {
       tenantId: input.tenantId, schema: input.schema, phoneNumberId,
       accessToken, audience: input.audience, channel: input.channel,
-      summary: input.summary, detail, recipientName: input.recipientName, createdAt: Date.now(),
+      summary: input.summary, detail, recipientName: input.recipientName,
+      buttons: input.buttons, createdAt: Date.now(),
     };
 
     try {
       const windowOpen = await this.orchestrator.hasActiveServiceWindow(input.tenantId, input.recipientPhone);
       if (windowOpen) {
-        await this.orchestrator.sendText(input.tenantId, phoneNumberId, accessToken, input.recipientPhone, detail, 'service');
+        // Inside the window: interactive (buttons trigger the next workflow) or text.
+        if (input.buttons && input.buttons.length) {
+          await this.orchestrator.sendButtons(
+            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
+            detail, input.buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })), undefined, undefined, 'service',
+          );
+        } else {
+          await this.orchestrator.sendText(input.tenantId, phoneNumberId, accessToken, input.recipientPhone, detail, 'service');
+        }
         return;
       }
 
@@ -171,6 +193,20 @@ export class SmartNotificationService {
         const awaitKey = this.awaitKey(input.schema, input.recipientPhone);
         await this.redis.rpush(awaitKey, JSON.stringify(item));
         await this.redis.expire(awaitKey, AWAIT_TTL_SEC);
+        return;
+      }
+
+      // Out of window + a specific UTILITY template (order/payment status update):
+      // send it now — it's an expected transactional message and opens a utility
+      // conversation; its own quick-reply button lets the customer continue.
+      if (input.channel === 'utility' && input.template) {
+        const components = input.template.params && input.template.params.length
+          ? [{ type: 'body', parameters: input.template.params.map((p) => ({ type: 'text', text: String(p ?? '') })) }]
+          : undefined;
+        await this.orchestrator.sendTemplate(
+          input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
+          input.template.name, input.template.language || 'en', components, 'utility', true,
+        );
         return;
       }
 
@@ -185,7 +221,7 @@ export class SmartNotificationService {
         return;
       }
 
-      // Out of window, non-urgent → buffer + schedule a single batch flush.
+      // Out of window, non-urgent marketing → buffer + schedule a single batch flush.
       const key = this.pendKey(input.schema, input.recipientPhone, input.channel);
       await this.redis.rpush(key, JSON.stringify(item));
       await this.redis.expire(key, PEND_TTL_SEC);
@@ -208,7 +244,7 @@ export class SmartNotificationService {
 
     const windowOpen = await this.orchestrator.hasActiveServiceWindow(first.tenantId, phone);
     if (windowOpen) {
-      await this.orchestrator.sendText(first.tenantId, first.phoneNumberId, first.accessToken, phone, this.consolidate(items), 'service');
+      await this.sendConsolidated(items, phone);
       return;
     }
 
@@ -230,11 +266,26 @@ export class SmartNotificationService {
         ...(await this.drain(this.pendKey(schema, phone, 'marketing'))),
       ];
       if (!items.length) return;
-      const first = items[0];
-      await this.orchestrator.sendText(first.tenantId, first.phoneNumberId, first.accessToken, phone, this.consolidate(items), 'service');
+      await this.sendConsolidated(items, phone);
     } catch (err: any) {
       this.logger.warn(`onInbound flush failed for ${phone}: ${err.message}`);
     }
+  }
+
+  /** Send the consolidated updates as an interactive message (buttons trigger workflows). */
+  private async sendConsolidated(items: PendingItem[], phone: string): Promise<void> {
+    const first = items[0];
+    const body = this.consolidate(items);
+    // Single update → reuse its buttons; multiple → a generic navigation set.
+    const buttons = (items.length === 1 && first.buttons?.length)
+      ? first.buttons
+      : (first.audience === 'admin'
+        ? [{ id: 'orders', title: '📦 Orders' }, { id: 'menu', title: '🛍️ Menu' }]
+        : [{ id: 'track', title: '🚚 Track Order' }, { id: 'orders', title: '📦 My Orders' }, { id: 'menu', title: '🛍️ Menu' }]);
+    await this.orchestrator.sendButtons(
+      first.tenantId, first.phoneNumberId, first.accessToken, phone,
+      body, buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })), undefined, undefined, 'service',
+    );
   }
 
   private async drain(key: string): Promise<PendingItem[]> {
