@@ -131,7 +131,7 @@ export class WorkflowEventListener {
       // otherwise batched into a teaser template).
       if (!match) {
         if (this.smartNotification) {
-          const t = await this.connectionManager.executeInTenantContext('public', async (qr) =>
+          const t = await this.connectionManager.executeGlobal(async (qr) =>
             (await qr.query(`SELECT id FROM tenants WHERE schema_name = $1`, [schema]))[0]);
           const enriched = await this.enrichEventVariables(schema, triggerType, variables);
           const msg = this.buildCustomerEventMessage(triggerType, eventValue, enriched);
@@ -155,7 +155,7 @@ export class WorkflowEventListener {
       const conversation = await this.conversationHelper.getOrCreateConversation(schema, customerId, customer.phone);
 
       // Get tenant details
-      const tenant = await this.connectionManager.executeInTenantContext('public', async (qr) => {
+      const tenant = await this.connectionManager.executeGlobal(async (qr) => {
         const rows = await qr.query(`SELECT * FROM tenants WHERE schema_name = $1`, [schema]);
         return rows[0];
       });

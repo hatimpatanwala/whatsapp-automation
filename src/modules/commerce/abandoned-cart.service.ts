@@ -32,7 +32,7 @@ export class AbandonedCartService {
     if (!this.smartNotification) return;
     let tenants: any[] = [];
     try {
-      tenants = await this.connectionManager.executeInTenantContext('public', (qr) =>
+      tenants = await this.connectionManager.executeGlobal((qr) =>
         qr.query(`SELECT id, schema_name FROM tenants WHERE status = 'active'`));
     } catch (err: any) {
       this.logger.warn(`abandoned-cart scan: tenant list failed: ${err.message}`);

@@ -315,7 +315,7 @@ export class WorkflowExecutionEngine {
       // Resolve tenant if not passed (for queue-based resumes)
       let tenant = params.tenant;
       if (!tenant) {
-        tenant = await this.connectionManager.executeInTenantContext('public', async (qr) => {
+        tenant = await this.connectionManager.executeGlobal(async (qr) => {
           const rows = await qr.query(
             `SELECT * FROM tenants WHERE schema_name = $1`,
             [schema],

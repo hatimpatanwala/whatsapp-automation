@@ -36,7 +36,7 @@ export class BroadcastProcessor extends WorkerHost {
 
     // Resolve the tenant id so the orchestrator can do per-recipient window checks
     // (recipients with an open window get the free-form equivalent, not a template).
-    const tenantId = await this.connectionManager.executeInTenantContext('public', async (qr) =>
+    const tenantId = await this.connectionManager.executeGlobal(async (qr) =>
       (await qr.query(`SELECT id FROM tenants WHERE schema_name = $1`, [schema]))[0]?.id);
 
     const components = template.components

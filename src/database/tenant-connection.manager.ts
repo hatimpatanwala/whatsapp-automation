@@ -41,6 +41,22 @@ export class TenantConnectionManager {
     }
   }
 
+  /**
+   * Run a query against the shared public schema (platform tables like
+   * tenants / waba_accounts). Use this instead of executeInTenantContext('public'),
+   * which the tenant-schema validator rejects.
+   */
+  async executeGlobal<T>(callback: (queryRunner: QueryRunner) => Promise<T>): Promise<T> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.query(`SET search_path TO public`);
+    try {
+      return await callback(queryRunner);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async executeInTransaction<T>(
     schemaName: string,
     callback: (queryRunner: QueryRunner) => Promise<T>,
