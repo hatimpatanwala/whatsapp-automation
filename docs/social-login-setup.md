@@ -14,17 +14,25 @@ Meta can continue into Embedded Signup without logging into Facebook again.
 
 | Placeholder | What it is | Example |
 |---|---|---|
-| `<BACKEND_URL>` | Public URL of the API (where providers redirect back). No trailing slash. | `https://api.yourdomain.com` |
-| `<FRONTEND_URL>` | Public URL of the web app (where users land after login). | `https://app.yourdomain.com` |
+| `<BACKEND_URL>` | Public base URL of the API **including the `/api` prefix** this app serves under. No trailing slash. | `https://whatsappdemo.duckdns.org/api` |
+| `<FRONTEND_URL>` | Public URL of the web app (where users land after login). | `https://whatsappdemo.duckdns.org` |
 
-The OAuth **redirect URIs** are built as `<BACKEND_URL>` + a fixed path:
+> ⚠️ **This app serves the API under `/api`** (nginx + a global `api` prefix), so
+> `<BACKEND_URL>` **must include `/api`**. This is exactly the value of
+> `OAUTH_CALLBACK_BASE_URL`. Real values:
+> - prod: `https://whatsappdemo.duckdns.org/api`
+> - staging: `https://staging.whatsappdemo.duckdns.org/api`
+
+The OAuth **redirect URIs** are `<BACKEND_URL>` + a fixed path:
 
 - Google: `<BACKEND_URL>/auth/oauth/google/callback`
-- Meta:   `<BACKEND_URL>/auth/oauth/meta/callback`
+  → e.g. `https://whatsappdemo.duckdns.org/api/auth/oauth/google/callback`
+- Meta: `<BACKEND_URL>/auth/oauth/meta/callback`
+  → e.g. `https://whatsappdemo.duckdns.org/api/auth/oauth/meta/callback`
 
 > ⚠️ These must match **character-for-character** in the provider console
-> (http vs https, trailing slash, exact domain). A mismatch is the #1 cause of
-> `redirect_uri_mismatch` errors.
+> (https, the `/api` segment, exact domain, no trailing slash). A mismatch is the
+> #1 cause of `redirect_uri_mismatch` errors.
 
 ---
 
@@ -53,24 +61,58 @@ The OAuth **redirect URIs** are built as `<BACKEND_URL>` + a fixed path:
 ## 2. Meta — App ID + App Secret (reuse the existing WhatsApp app)
 
 You already use `META_APP_ID` / `META_APP_SECRET` for WhatsApp Embedded Signup.
-For social login, enable **Facebook Login** on that **same app** — don't create a new one.
+Add **Facebook Login** to that **same app** — don't create a new one.
 
-1. **Meta for Developers** → https://developers.facebook.com/apps/ → open your app.
-2. **Add Product → Facebook Login → Web**.
-3. **Facebook Login → Settings → Valid OAuth Redirect URIs** → add exactly:
+> Meta changed the dashboard: the old **"Add Product"** button is often gone, replaced
+> by a **"Use cases"** view. Use whichever of these matches what you see.
+
+### a) Find / add Facebook Login
+
+**If you see a "Use cases" tab (newer dashboard):**
+1. App dashboard → **Use cases** → **Add use case** (or **Customize** an existing one).
+2. Pick **"Authenticate and request data from users with Facebook Login"**.
+3. Open it → **Customize** → it exposes the Facebook Login **Settings** (next step).
+
+**If you see a "Products" list in the left sidebar (classic dashboard):**
+1. Left sidebar → **+ Add product** → **Facebook Login** → **Set up**.
+2. If it's already added, there's nothing to add — it's already listed under **Products**.
+
+**If the dashboard already shows "Facebook Login" in the left nav:** it's installed —
+skip straight to (b).
+
+### b) Set the redirect URI
+
+1. Left nav → **Facebook Login → Settings** (under the use case / product).
+2. Turn ON **Client OAuth Login** and **Web OAuth Login**.
+3. **Valid OAuth Redirect URIs** → add exactly (note the `/api`):
    ```
    <BACKEND_URL>/auth/oauth/meta/callback
    ```
-4. **App settings → Basic** → copy **App ID** and **App Secret**.
-5. Email caveat: Facebook only returns the user's **email** if the app has the
-   `email` permission. `public_profile` + `email` are standard, but for users
-   outside your dev roles in **Live mode**, Meta may require **App Review /
-   Advanced Access** for `email`. While developing, add people under
-   **App Roles → Roles** so they can log in without review.
+   e.g. `https://whatsappdemo.duckdns.org/api/auth/oauth/meta/callback`
+4. **Save changes.**
 
-> The WhatsApp Embedded Signup config (`META_EMBEDDED_SIGNUP_CONFIG_ID`) is separate
-> from Facebook Login and must have **Coexistence** enabled. That's covered in the
-> Meta/WhatsApp setup, not here.
+### c) Get the credentials
+
+**App settings → Basic** → copy **App ID** and **App Secret**.
+
+### Notes / gotchas
+
+- **Email permission:** Facebook only returns the user's **email** if the app has the
+  `email` permission. `public_profile` + `email` are standard, but for users outside
+  your dev roles in **Live mode**, Meta may require **App Review / Advanced Access**
+  for `email`. While developing, add testers under **App roles → Roles** so they can
+  log in without review.
+- **"Facebook Login **for Business**" only?** Business-type apps (WhatsApp apps are
+  Business apps) sometimes expose only *Facebook Login for Business*, which uses a
+  **configuration** and business-asset permissions instead of the simple
+  `email`/`public_profile` consumer flow this app's social login uses. If your app
+  shows only the "for Business" variant and the Meta button then returns no email or
+  errors, tell us — the backend can be pointed at a Facebook-Login-for-Business
+  **configuration ID**, or you can use a separate consumer app just for login. Many
+  Business apps still expose the plain **Facebook Login** product, which works as-is.
+- The WhatsApp Embedded Signup config (`META_EMBEDDED_SIGNUP_CONFIG_ID`) is **separate**
+  from Facebook Login and must have **Coexistence** enabled — that's the WhatsApp setup,
+  not this.
 
 ---
 
@@ -99,9 +141,9 @@ GOOGLE_CLIENT_SECRET=
 META_APP_ID=...
 META_APP_SECRET=...
 
-# Public URLs (no trailing slash)
-OAUTH_CALLBACK_BASE_URL=https://api.yourdomain.com   # = <BACKEND_URL>
-FRONTEND_URL=https://app.yourdomain.com              # = <FRONTEND_URL>
+# Public URLs (no trailing slash). OAUTH_CALLBACK_BASE_URL MUST include /api.
+OAUTH_CALLBACK_BASE_URL=https://whatsappdemo.duckdns.org/api   # = <BACKEND_URL>
+FRONTEND_URL=https://whatsappdemo.duckdns.org                  # = <FRONTEND_URL>
 ```
 Restart the backend after editing `.env`.
 
@@ -119,7 +161,7 @@ Restart the backend after editing `.env`.
 | `META_APP_ID` | for Meta | admin UI or env | same app as WhatsApp |
 | `META_APP_SECRET` | for Meta | admin UI or env | keep secret |
 | `META_EMBEDDED_SIGNUP_CONFIG_ID` | for WhatsApp connect | admin UI or env | Coexistence-enabled config |
-| `OAUTH_CALLBACK_BASE_URL` | yes | env only | backend public URL, no trailing slash |
+| `OAUTH_CALLBACK_BASE_URL` | yes | env only | backend public URL **including `/api`**, no trailing slash |
 | `FRONTEND_URL` | yes | env only | frontend public URL, no trailing slash |
 
 ---
