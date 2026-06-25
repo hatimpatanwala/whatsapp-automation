@@ -8,6 +8,7 @@ import { AdminWhatsAppService } from './admin-whatsapp.service';
 import { PersonalizationService, PersonalizeDto } from './personalization.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 
 @Controller('onboarding')
 @UseGuards(TenantGuard)
@@ -17,6 +18,7 @@ export class OnboardingController {
     private readonly onboardingEngine: OnboardingEngineService,
     private readonly adminWhatsAppService: AdminWhatsAppService,
     private readonly personalizationService: PersonalizationService,
+    private readonly platformConfig: PlatformConfigService,
   ) {}
 
   @Get('status')
@@ -24,6 +26,19 @@ export class OnboardingController {
   async getStatus(@Req() req: Request) {
     const tenantId = (req.session as any).tenantId;
     return this.onboardingService.getStatus(tenantId);
+  }
+
+  /**
+   * Which ways the tenant may connect a number. Embedded Signup is always
+   * available; direct (no-Facebook) registration is a super-admin toggle.
+   */
+  @Get('registration-options')
+  @Roles('owner', 'seller')
+  async getRegistrationOptions() {
+    return {
+      embeddedSignup: true,
+      directRegistration: await this.platformConfig.isDirectRegistrationEnabled(),
+    };
   }
 
   /**

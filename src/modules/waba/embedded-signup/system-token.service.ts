@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PlatformConfigService } from '../../platform-config/platform-config.service';
 
 /**
  * Generates System User Tokens from user-provided access tokens.
@@ -22,11 +23,20 @@ export class SystemTokenService {
   private readonly graphApiVersion: string;
   private readonly systemUserId: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly platformConfig: PlatformConfigService,
+  ) {
     this.appId = this.config.get<string>('META_APP_ID', '');
     this.appSecret = this.config.get<string>('META_APP_SECRET', '');
     this.graphApiVersion = this.config.get<string>('META_GRAPH_API_VERSION', 'v21.0');
     this.systemUserId = this.config.get<string>('META_SYSTEM_USER_ID', '');
+  }
+
+  /** Live Meta app creds (super-admin managed, env fallback) — one source of truth. */
+  private async getApp(): Promise<{ appId: string; appSecret: string }> {
+    const { appId, appSecret } = await this.platformConfig.getMetaCreds();
+    return { appId: appId || this.appId, appSecret: appSecret || this.appSecret };
   }
 
   /**
@@ -38,10 +48,11 @@ export class SystemTokenService {
     expires_in: number;
   }> {
     const url = `https://graph.facebook.com/${this.graphApiVersion}/oauth/access_token`;
+    const { appId, appSecret } = await this.getApp();
     const params = new URLSearchParams({
       grant_type: 'fb_exchange_token',
-      client_id: this.appId,
-      client_secret: this.appSecret,
+      client_id: appId,
+      client_secret: appSecret,
       fb_exchange_token: shortLivedToken,
     });
 
@@ -157,7 +168,7 @@ export class SystemTokenService {
         Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({
-        business_app: this.appId,
+        business_app: (await this.getApp()).appId,
         scope: 'whatsapp_business_management,whatsapp_business_messaging,catalog_management',
         appsecret_proof: await this.computeAppSecretProof(adminToken),
       }),
@@ -176,6 +187,7 @@ export class SystemTokenService {
    */
   private async computeAppSecretProof(token: string): Promise<string> {
     const { createHmac } = await import('crypto');
-    return createHmac('sha256', this.appSecret).update(token).digest('hex');
+    const { appSecret } = await this.getApp();
+    return createHmac('sha256', appSecret).update(token).digest('hex');
   }
 }

@@ -7,6 +7,7 @@ import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 import { AuthService } from '../../core/services/auth.service';
+import { SocialLoginButtonsComponent } from './social-login-buttons.component';
 
 @Component({
   selector: 'wa-register',
@@ -20,6 +21,7 @@ import { AuthService } from '../../core/services/auth.service';
     PasswordModule,
     ButtonModule,
     MessageModule,
+    SocialLoginButtonsComponent,
   ],
   template: `
     <div class="wa-login-wrapper">
@@ -101,6 +103,8 @@ import { AuthService } from '../../core/services/auth.service';
                 severity="success"
               ></button>
             </form>
+
+            <wa-social-login-buttons [busy]="loading()" />
           } @else {
             <!-- Step 2: Email OTP Verification -->
             <div class="text-center mb-4">

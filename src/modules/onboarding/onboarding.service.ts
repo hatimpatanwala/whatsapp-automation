@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Optional, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +10,8 @@ import { WabaAccount } from '../../database/entities/public/waba-account.entity'
 import { MetaToken } from '../../database/entities/public/meta-token.entity';
 import { MetaTokenService } from '../waba/meta-token.service';
 import { AuditLogService } from '../waba/audit-log.service';
+import { MetaCloudApiClient } from '../waba/meta-cloud-api.client';
+import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 
 export interface RegisterNumberResult {
   status: 'already_business' | 'already_occupied' | 'registered' | 'needs_verification';
@@ -26,6 +28,14 @@ export interface BusinessProfileDto {
   businessDescription?: string;
   businessAddress?: string;
   logoUrl?: string;
+  // Invoicing / GST (optional — collected in onboarding so invoices work out of the box)
+  legalName?: string;       // Registered/legal name printed on invoices (may differ from the brand/display name)
+  gstin?: string;           // GST registration number
+  gstState?: string;        // Place of supply (state name)
+  gstStateCode?: string;    // GST state code (e.g. "27" for Maharashtra)
+  invoicePrefix?: string;   // Invoice series prefix (e.g. "INV")
+  invoiceEmail?: string;    // Business email for the WhatsApp profile
+  invoiceWebsite?: string;  // Business website for the WhatsApp profile
 }
 
 /**
@@ -58,6 +68,9 @@ export class OnboardingService {
     private readonly metaTokenService: MetaTokenService,
     private readonly configService: ConfigService,
     private readonly auditService: AuditLogService,
+    private readonly connectionManager: TenantConnectionManager,
+    @Optional() @Inject(forwardRef(() => MetaCloudApiClient))
+    private readonly metaCloudApi?: MetaCloudApiClient,
   ) {
     this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
   }
@@ -386,18 +399,126 @@ export class OnboardingService {
       throw new BadRequestException('Business name is required');
     }
 
+    const tenant = await this.tenantRepository.findOne({
+      where: { id: tenantId },
+      select: ['id', 'schemaName', 'phoneNumberId', 'wabaId', 'businessName'],
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const displayName = dto.businessName.trim();
+    const previousName = (tenant.businessName || '').trim();
+
     await this.tenantRepository.update(tenantId, {
-      businessName: dto.businessName,
+      businessName: displayName,
       businessCategory: dto.businessCategory,
       businessDescription: dto.businessDescription || null,
       businessAddress: dto.businessAddress || null,
       logoUrl: dto.logoUrl || null,
-      name: dto.businessName,
+      name: displayName,
       onboardingStatus: 'profile_complete',
     });
 
+    // Persist invoicing / GST settings so invoices work out of the box.
+    await this.saveInvoiceSettings(tenant.schemaName, dto).catch((e) =>
+      this.logger.warn(`Failed to save invoice settings for tenant ${tenantId}: ${e?.message || e}`),
+    );
+
+    // Push the brand name + business details to WhatsApp so they show on the number.
+    // The display name (verified_name) is what WhatsApp shows at the top of the chat;
+    // the business profile (description/address/email/website) shows on the profile card.
+    const display = await this.applyWhatsappDisplayName(tenant, dto, previousName !== displayName)
+      .catch((e) => {
+        this.logger.warn(`WhatsApp profile update failed for tenant ${tenantId}: ${e?.message || e}`);
+        return { profileUpdated: false, displayNameRequested: false, displayNameReview: false };
+      });
+
     this.logger.log(`Business profile saved for tenant ${tenantId}`);
-    return { saved: true };
+    return { saved: true, ...display };
+  }
+
+  /**
+   * Write the invoice/GST onboarding fields into the tenant's `settings` table
+   * (the same keys the invoice service + Settings page read).
+   */
+  private async saveInvoiceSettings(schema: string, dto: BusinessProfileDto): Promise<void> {
+    const entries: Array<[string, string | null]> = [
+      ['invoice_legal_name', (dto.legalName || dto.businessName)?.trim() || null],
+      ['invoice_gstin', dto.gstin?.trim() || null],
+      ['invoice_address', dto.businessAddress?.trim() || null],
+      ['invoice_state', dto.gstState?.trim() || null],
+      ['invoice_state_code', dto.gstStateCode?.trim() || null],
+      ['invoice_prefix', dto.invoicePrefix?.trim() || null],
+    ];
+    // A GSTIN present implies the business is GST-registered → enable tax invoices.
+    if (dto.gstin?.trim()) {
+      entries.push(['invoice_enabled', 'true']);
+      entries.push(['invoice_default_doc_type', 'tax_invoice']);
+    }
+
+    await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      for (const [key, value] of entries) {
+        if (value === null) continue; // don't blank out a value the user already set elsewhere
+        await qr.query(
+          `INSERT INTO settings (key, value, updated_at)
+             VALUES ($1, $2, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [key, JSON.stringify(value)],
+        );
+      }
+    });
+  }
+
+  /**
+   * Make WhatsApp show the proper business name on the number.
+   *  - verified_name (the name at the top of the chat) is set at registration from
+   *    businessName; if it changed here and the number is already live, request an
+   *    update via Meta (subject to Meta review).
+   *  - The business profile card (description/address/email/website) is updated
+   *    immediately (no review needed).
+   */
+  private async applyWhatsappDisplayName(
+    tenant: { id: string; phoneNumberId: string | null; wabaId: string | null; schemaName: string },
+    dto: BusinessProfileDto,
+    nameChanged: boolean,
+  ): Promise<{ profileUpdated: boolean; displayNameRequested: boolean; displayNameReview: boolean }> {
+    const result = { profileUpdated: false, displayNameRequested: false, displayNameReview: false };
+    if (!tenant.phoneNumberId || !tenant.wabaId || !this.metaCloudApi) return result;
+
+    const waba = await this.wabaAccountRepository.findOne({ where: { wabaId: tenant.wabaId } });
+    if (!waba) return result;
+    const token = await this.metaTokenService.getActiveToken(waba.id).catch(() => null);
+    if (!token) return result;
+
+    // 1) Update the business profile card (settable without review).
+    const profile: Record<string, any> = {};
+    if (dto.businessDescription?.trim()) {
+      profile.description = dto.businessDescription.trim().slice(0, 512);
+      profile.about = dto.businessDescription.trim().slice(0, 139);
+    }
+    if (dto.businessAddress?.trim()) profile.address = dto.businessAddress.trim().slice(0, 256);
+    if (dto.invoiceEmail?.trim()) profile.email = dto.invoiceEmail.trim().slice(0, 128);
+    if (dto.invoiceWebsite?.trim()) profile.websites = [dto.invoiceWebsite.trim()];
+    if (Object.keys(profile).length) {
+      try {
+        await this.metaCloudApi.updateBusinessProfile(tenant.phoneNumberId, token, profile);
+        result.profileUpdated = true;
+      } catch (e: any) {
+        this.logger.warn(`updateBusinessProfile failed: ${e?.message || e}`);
+      }
+    }
+
+    // 2) Request the display name (verified_name) on the number if it changed.
+    if (nameChanged) {
+      try {
+        await this.metaCloudApi.requestDisplayName(tenant.phoneNumberId, token, dto.businessName.trim());
+        result.displayNameRequested = true;
+        result.displayNameReview = true; // Meta reviews display-name changes on live numbers.
+      } catch (e: any) {
+        this.logger.warn(`requestDisplayName failed (will apply on next registration): ${e?.message || e}`);
+      }
+    }
+
+    return result;
   }
 
   /**

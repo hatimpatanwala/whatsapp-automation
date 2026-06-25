@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Body, Req, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Post, Get, Body, Req, Res, Query, Param, HttpCode, HttpStatus, UseGuards, BadRequestException } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthService } from './auth.service';
+import { OAuthService, OAuthProvider } from './oauth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -20,6 +21,7 @@ import { TenantProvisioningService } from '../tenant/tenant-provisioning.service
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly oauthService: OAuthService,
     private readonly emailVerification: EmailVerificationService,
     private readonly tenantProvisioning: TenantProvisioningService,
     @InjectRepository(Tenant)
@@ -117,6 +119,83 @@ export class AuthController {
       tenantId: loginResult.tenantId,
       tenant: { id: tenant.id, name: tenant.name },
     };
+  }
+
+  // ─── Social login / signup (Google + Meta) ────────────────────────────────
+
+  /**
+   * Step 1: redirect the browser to the provider's consent screen.
+   * GET /auth/oauth/google  or  /auth/oauth/meta
+   */
+  /** Which social providers the super-admin has enabled — used to show/hide buttons. */
+  @Get('oauth/providers')
+  @Public()
+  async oauthProviders() {
+    return this.oauthService.getAvailableProviders();
+  }
+
+  @Get('oauth/:provider')
+  @Public()
+  async oauthStart(@Param('provider') provider: string, @Req() req: Request, @Res() res: Response) {
+    const p = this.normalizeProvider(provider);
+    if (!(await this.oauthService.isAvailable(p))) {
+      return res.redirect(`${this.oauthService.frontendUrl()}/auth/login?error=oauth_unconfigured`);
+    }
+    const state = this.oauthService.generateState();
+    (req.session as any).oauthState = state;
+    (req.session as any).oauthProvider = p;
+    return res.redirect(await this.oauthService.getAuthorizeUrl(p, state));
+  }
+
+  /**
+   * Step 2: provider redirects back here with ?code & ?state.
+   * Verifies state, resolves the identity to a session, redirects into the app.
+   * GET /auth/oauth/google/callback
+   */
+  @Get('oauth/:provider/callback')
+  @Public()
+  async oauthCallback(
+    @Param('provider') provider: string,
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const frontend = this.oauthService.frontendUrl();
+    const p = this.normalizeProvider(provider);
+
+    try {
+      if (error) throw new BadRequestException(error);
+      const sessionState = (req.session as any).oauthState;
+      if (!code || !state || !sessionState || state !== sessionState) {
+        throw new BadRequestException('Invalid or expired OAuth state');
+      }
+      delete (req.session as any).oauthState;
+      delete (req.session as any).oauthProvider;
+
+      const profile = await this.oauthService.fetchProfile(p, code);
+      const { result, isNew } = await this.oauthService.loginOrSignup(profile);
+
+      req.session.userId = result.user.id;
+      req.session.userRole = result.user.role;
+      req.session.tenantId = result.tenantId;
+      req.session.tenantSchema = result.tenantSchema;
+
+      // New accounts go to onboarding; returning users to the dashboard.
+      const dest = isNew ? '/onboarding' : '/dashboard';
+      return res.redirect(`${frontend}${dest}`);
+    } catch (err: any) {
+      const msg = encodeURIComponent(err?.message || 'Social login failed');
+      return res.redirect(`${frontend}/auth/login?error=oauth&message=${msg}`);
+    }
+  }
+
+  private normalizeProvider(provider: string): OAuthProvider {
+    const p = (provider || '').toLowerCase();
+    if (p === 'google') return 'google';
+    if (p === 'meta' || p === 'facebook') return 'meta';
+    throw new BadRequestException(`Unsupported provider: ${provider}`);
   }
 
   /**

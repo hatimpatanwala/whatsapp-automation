@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AuthGuard } from './common/guards/auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { DatabaseModule } from './database/database.module';
+import { PlatformConfigModule } from './modules/platform-config/platform-config.module';
 import { RedisModule } from './config/redis.module';
 import { QueueModule } from './queue/queue.module';
 import { EventsModule } from './modules/events/events.module';
@@ -43,6 +44,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     }),
     ScheduleModule.forRoot(),
     DatabaseModule,
+    PlatformConfigModule,
     RedisModule,
     QueueModule,
     EventsModule,

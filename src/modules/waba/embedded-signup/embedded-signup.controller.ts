@@ -88,6 +88,21 @@ export class EmbeddedSignupController {
   }
 
   /**
+   * Enable coexistence: record consent + register Cloud API alongside the
+   * existing WhatsApp Business App (moves the session to "active").
+   */
+  @Post('coexistence/:sessionId/enable')
+  async enableCoexistence(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { pin?: string },
+  ) {
+    const tenantId = (req.session as any).tenantId;
+    if (!tenantId) throw new UnauthorizedException('Not authenticated');
+    return this.coexistenceService.enableCoexistence(sessionId, tenantId, body?.pin);
+  }
+
+  /**
    * Start full migration from coexistence to exclusive Cloud API.
    */
   @Post('coexistence/:sessionId/migrate')

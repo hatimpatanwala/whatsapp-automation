@@ -128,6 +128,12 @@ export class AdminLayoutComponent implements OnInit {
         { label: 'Billing', icon: 'pi-credit-card', route: '/admin/billing' },
       ],
     },
+    {
+      title: 'Platform',
+      items: [
+        { label: 'Auth & Social Login', icon: 'pi-cog', route: '/admin/settings' },
+      ],
+    },
   ];
 
   ngOnInit() {}

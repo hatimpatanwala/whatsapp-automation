@@ -18,6 +18,8 @@ import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
 import { OnboardingService, RegisterNumberResult } from '../../core/services/onboarding.service';
+import { EmbeddedSignupButtonComponent } from '../../shared/embedded-signup-button.component';
+import { DirectNumberRegistrationComponent } from '../../shared/direct-number-registration.component';
 
 @Component({
   selector: 'wa-settings',
@@ -39,6 +41,8 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
     TooltipModule,
     MessageModule,
     DialogModule,
+    EmbeddedSignupButtonComponent,
+    DirectNumberRegistrationComponent,
   ],
   providers: [MessageService],
   template: `
@@ -176,37 +180,29 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                     </div>
                   </div>
 
-                  <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                     <div class="flex gap-3">
                       <i class="pi pi-whatsapp text-green-600 mt-0.5" style="font-size:1rem"></i>
                       <div>
-                        <p class="text-sm font-semibold text-green-900">Register Your Number</p>
-                        <p class="text-xs text-green-700 mt-1 leading-relaxed">
-                          Enter your phone number and we'll register it for WhatsApp Business on our platform.
-                          No Facebook or Meta account needed.
+                        <p class="text-sm font-semibold text-blue-900">Connect with Meta</p>
+                        <p class="text-xs text-blue-700 mt-1 leading-relaxed">
+                          Authorize through Meta's secure popup, then pick or create your WhatsApp
+                          Business Account and number. Coexistence keeps your WhatsApp Business App working.
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div class="flex gap-2 mb-3">
-                    <input pInputText [(ngModel)]="settingsRegisterPhone" placeholder="+91XXXXXXXXXX" class="flex-1" />
-                    <button
-                      pButton
-                      label="Register Number"
-                      icon="pi pi-check"
-                      severity="success"
-                      [loading]="waConnecting()"
-                      [disabled]="!settingsRegisterPhone.trim()"
-                      (click)="registerNumberFromSettings()"
-                    ></button>
-                  </div>
+                  <wa-embedded-signup-button (connected)="onWhatsappConnected()" />
 
-                  @if (waConnectError()) {
-                    <p-message severity="error" [text]="waConnectError()!" styleClass="w-full" />
-                  }
-                  @if (waConnectSuccess()) {
-                    <p-message severity="success" [text]="waConnectSuccess()!" styleClass="w-full" />
+                  @if (directRegistrationEnabled()) {
+                    <div class="flex items-center gap-3 my-3">
+                      <div class="flex-1 h-px bg-gray-200"></div>
+                      <span class="text-xs text-gray-400 font-medium">OR</span>
+                      <div class="flex-1 h-px bg-gray-200"></div>
+                    </div>
+                    <p class="text-sm font-semibold text-gray-900 mb-2">Register without a Facebook account</p>
+                    <wa-direct-number-registration (connected)="onWhatsappConnected()" />
                   }
                 </div>
               }
@@ -218,7 +214,10 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                     <h3 class="text-base font-semibold text-gray-900">Phone Numbers</h3>
                     <p class="text-sm text-gray-500">Manage your WhatsApp phone numbers</p>
                   </div>
-                  <button pButton label="Add Number" icon="pi pi-plus" class="p-button-sm p-button-outlined" (click)="showAddPhone.set(true)" [disabled]="showAddPhone()"></button>
+                  <button pButton label="Add Number" icon="pi pi-plus" class="p-button-sm p-button-outlined"
+                    (click)="showAddPhone.set(true)"
+                    [disabled]="showAddPhone() || tenantPhones().length > 0"
+                    [pTooltip]="tenantPhones().length > 0 ? 'Only one WhatsApp number is supported for now' : ''"></button>
                 </div>
 
                 <!-- Add Phone Number Form -->
@@ -229,13 +228,20 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                       <button pButton icon="pi pi-times" class="p-button-sm p-button-text p-button-secondary" (click)="closeAddPhone()"></button>
                     </div>
 
-                    <!-- Phase: Input -->
+                    <!-- Connect via Embedded Signup (Coexistence) -->
                     @if (addPhonePhase() === 'input') {
-                      <p class="text-xs text-gray-500">Enter the phone number you want to register for WhatsApp Business. We'll check its status and register it on our platform.</p>
-                      <div class="flex gap-2">
-                        <input pInputText [(ngModel)]="newPhoneNumber" placeholder="+91XXXXXXXXXX" class="flex-1" />
-                        <button pButton label="Register Number" icon="pi pi-check" severity="success" class="p-button-sm" [loading]="phoneChecking()" [disabled]="!newPhoneNumber.trim()" (click)="addPhoneNumber()"></button>
-                      </div>
+                      <p class="text-xs text-gray-500">Connect through Meta's secure popup. Pick or create your WhatsApp Business Account and number — coexistence keeps your WhatsApp Business App working.</p>
+                      <wa-embedded-signup-button label="Connect WhatsApp Number" (connected)="onWhatsappConnected()" />
+
+                      @if (directRegistrationEnabled()) {
+                        <div class="flex items-center gap-3 my-3">
+                          <div class="flex-1 h-px bg-gray-200"></div>
+                          <span class="text-xs text-gray-400 font-medium">OR</span>
+                          <div class="flex-1 h-px bg-gray-200"></div>
+                        </div>
+                        <p class="text-xs font-semibold text-gray-700 mb-1">Register without a Facebook account</p>
+                        <wa-direct-number-registration (connected)="onWhatsappConnected()" />
+                      }
                     }
 
                     <!-- Status results -->
@@ -401,7 +407,7 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                   <div class="text-center py-6 text-gray-400">
                     <i class="pi pi-phone mb-2" style="font-size:2rem"></i>
                     <p class="text-sm">No phone numbers assigned yet.</p>
-                    <p class="text-xs mt-1">Click "Add Number" to get started, or register a number above.</p>
+                    <p class="text-xs mt-1">Click "Add Number" to connect with Meta via Embedded Signup.</p>
                   </div>
                 }
               </div>
@@ -988,6 +994,7 @@ export class SettingsComponent implements OnInit {
   adminWaError = signal<string | null>(null);
 
   // Phone number management
+  directRegistrationEnabled = signal(false);
   showAddPhone = signal(false);
   newPhoneNumber = '';
   phoneChecking = signal(false);
@@ -1174,6 +1181,11 @@ export class SettingsComponent implements OnInit {
 
   ngOnInit() {
     this.loadTenantData();
+
+    this.onboardingService.getRegistrationOptions().subscribe({
+      next: (o) => this.directRegistrationEnabled.set(!!o?.directRegistration),
+      error: () => this.directRegistrationEnabled.set(false),
+    });
 
     // Initialize allowExceed from subscription
     const sub = this.authService.subscriptionInfo();
@@ -1468,6 +1480,15 @@ export class SettingsComponent implements OnInit {
     this.apiService.get<any[]>('/settings/phones').subscribe({
       next: (phones) => this.tenantPhones.set(phones || []),
       error: () => {},
+    });
+  }
+
+  /** Called when Embedded Signup connects a number — refresh status + phone list. */
+  onWhatsappConnected() {
+    this.showAddPhone.set(false);
+    this.authService.rehydrateSession().subscribe({
+      next: () => this.loadPhoneNumbers(),
+      error: () => this.loadPhoneNumbers(),
     });
   }
 

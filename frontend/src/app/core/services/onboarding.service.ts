@@ -32,6 +32,14 @@ export interface BusinessProfilePayload {
   businessDescription?: string;
   businessAddress?: string;
   logoUrl?: string;
+  // Invoicing / GST (optional)
+  legalName?: string;
+  gstin?: string;
+  gstState?: string;
+  gstStateCode?: string;
+  invoicePrefix?: string;
+  invoiceEmail?: string;
+  invoiceWebsite?: string;
 }
 
 // ─── Session-based onboarding types ──────────────────────────────────────────
@@ -122,6 +130,14 @@ export class OnboardingService {
 
   getStatus(): Observable<OnboardingStatus> {
     return this.api.get<OnboardingStatus>('/onboarding/status');
+  }
+
+  /**
+   * Which ways the tenant may connect a number (Embedded Signup is always on;
+   * direct registration is a super-admin toggle).
+   */
+  getRegistrationOptions(): Observable<{ embeddedSignup: boolean; directRegistration: boolean }> {
+    return this.api.get<{ embeddedSignup: boolean; directRegistration: boolean }>('/onboarding/registration-options');
   }
 
   /**

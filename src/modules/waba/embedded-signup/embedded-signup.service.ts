@@ -14,6 +14,7 @@ import { SystemTokenService } from './system-token.service';
 import { WebhookSubscriptionService } from './webhook-subscription.service';
 import { CoexistenceService } from './coexistence.service';
 import { OnboardingRollbackService } from './onboarding-rollback.service';
+import { PlatformConfigService } from '../../platform-config/platform-config.service';
 
 /**
  * Handles Meta's Embedded Signup flow for WhatsApp Business.
@@ -51,7 +52,10 @@ export class EmbeddedSignupService {
     private readonly coexistenceService: CoexistenceService,
     private readonly rollbackService: OnboardingRollbackService,
     private readonly configService: ConfigService,
+    private readonly platformConfig: PlatformConfigService,
   ) {
+    // Env values are fallbacks; the live values come from PlatformConfig (super-admin
+    // managed) at call time so they can be changed without a redeploy.
     this.appId = this.configService.get<string>('META_APP_ID', '');
     this.appSecret = this.configService.get<string>('META_APP_SECRET', '');
     this.configId = this.configService.get<string>('META_EMBEDDED_SIGNUP_CONFIG_ID', '');
@@ -60,15 +64,22 @@ export class EmbeddedSignupService {
 
   /**
    * Get the config needed by the frontend to initialize Facebook Login SDK.
+   * Reads the Meta app id + embedded-signup config id from PlatformConfig
+   * (super-admin managed, env fallback).
    */
-  getEmbeddedSignupConfig() {
+  async getEmbeddedSignupConfig() {
+    const { appId, configId } = await this.platformConfig.getMetaCreds();
     return {
-      appId: this.appId,
-      configId: this.configId,
+      appId: appId || this.appId,
+      configId: configId || this.configId,
       version: this.graphApiVersion,
       loginParams: {
         scope: 'whatsapp_business_management,whatsapp_business_messaging,catalog_management',
         extras: {
+          // Coexistence onboarding for ALL numbers (new or existing). Using this
+          // feature type keeps the number compatible with the WhatsApp Business
+          // App, so a user can install the Business App later without conflicts —
+          // rather than locking the number to Cloud-API-only.
           featureType: 'whatsapp_business_app_onboarding',
           sessionInfoVersion: 3,
         },
@@ -380,12 +391,15 @@ export class EmbeddedSignupService {
   private async exchangeCodeForToken(code: string, _redirectUri?: string): Promise<any> {
     const url = `https://graph.facebook.com/${this.graphApiVersion}/oauth/access_token`;
 
+    // Resolve the live app creds (super-admin managed, env fallback).
+    const { appId, appSecret } = await this.platformConfig.getMetaCreds();
+
     // Use POST with form body for the token exchange.
     // For FB JS SDK codes (response_type:'code' via FB.login()), Meta requires
     // grant_type=authorization_code and no redirect_uri (or empty string).
     const body = new URLSearchParams({
-      client_id: this.appId,
-      client_secret: this.appSecret,
+      client_id: appId || this.appId,
+      client_secret: appSecret || this.appSecret,
       code,
       grant_type: 'authorization_code',
     });

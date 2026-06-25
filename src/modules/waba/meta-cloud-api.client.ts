@@ -107,6 +107,17 @@ export class MetaCloudApiClient {
     });
   }
 
+  /**
+   * Request a new display name (verified_name) for a registered number.
+   * Meta reviews display-name changes on live numbers before they take effect.
+   * Throws if the change can't be requested (caller treats this as best-effort).
+   */
+  async requestDisplayName(phoneNumberId: string, accessToken: string, newDisplayName: string): Promise<void> {
+    await this.request('POST', `/${phoneNumberId}`, accessToken, {
+      new_display_name: newDisplayName,
+    });
+  }
+
   private async getSystemToken(): Promise<string> {
     // For platform-level operations, use the first active WABA's token
     // In production, this should resolve to the correct WABA based on context

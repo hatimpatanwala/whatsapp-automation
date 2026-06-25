@@ -5,6 +5,7 @@ import { TemplateProvisioningService, CreateTemplateInput } from '../onboarding/
 import { QuoteService } from '../quote/quote.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
+import { PlatformConfigService, UpdatePlatformConfigDto } from '../platform-config/platform-config.service';
 
 @Controller('admin')
 @UseGuards(SuperAdminGuard)
@@ -13,7 +14,19 @@ export class SuperAdminController {
     private readonly superAdminService: SuperAdminService,
     private readonly templateProvisioningService: TemplateProvisioningService,
     private readonly quoteService: QuoteService,
+    private readonly platformConfig: PlatformConfigService,
   ) {}
+
+  /** Platform-wide auth/social-login config (Google + Meta). Secrets are masked. */
+  @Get('platform-config')
+  async getPlatformConfig() {
+    return this.platformConfig.getAdminView();
+  }
+
+  @Put('platform-config')
+  async updatePlatformConfig(@Body() dto: UpdatePlatformConfigDto) {
+    return this.platformConfig.update(dto);
+  }
 
   @Post('auth/login')
   @Public()

@@ -1,5 +1,5 @@
-import { Component, OnInit, inject, signal, computed, PLATFORM_ID } from '@angular/core';
-import { CommonModule, isPlatformBrowser } from '@angular/common';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -22,11 +22,9 @@ import {
   FeatureInfo,
   PersonalizeResult,
 } from '../../core/services/onboarding.service';
-import {
-  EmbeddedSignupService,
-  EmbeddedSignupConfig,
-  EmbeddedSignupResult,
-} from '../../core/services/embedded-signup.service';
+import { EmbeddedSignupResult } from '../../core/services/embedded-signup.service';
+import { EmbeddedSignupButtonComponent } from '../../shared/embedded-signup-button.component';
+import { DirectNumberRegistrationComponent } from '../../shared/direct-number-registration.component';
 
 @Component({
   selector: 'wa-onboarding',
@@ -44,6 +42,8 @@ import {
     ProgressSpinnerModule,
     StepperModule,
     DividerModule,
+    EmbeddedSignupButtonComponent,
+    DirectNumberRegistrationComponent,
   ],
   providers: [MessageService],
   template: `
@@ -109,104 +109,57 @@ import {
               </div>
 
               <div class="space-y-4">
-                <!-- Embedded Signup option (recommended) -->
-                @if (!sessionId() || sessionState() === 'failed' || sessionState() === 'expired') {
-                  @if (!showManualRegistration()) {
-                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
-                      <div class="flex items-start gap-3 mb-4">
-                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <i class="pi pi-facebook text-white" style="font-size:1rem"></i>
-                        </div>
-                        <div>
-                          <p class="text-sm font-bold text-blue-900">Quick Setup with Meta (Recommended)</p>
-                          <p class="text-xs text-blue-700 mt-1">
-                            Connect your WhatsApp number instantly through Meta's secure Embedded Signup.
-                            No manual configuration needed.
-                          </p>
-                        </div>
+                <!-- WhatsApp connection via Meta Embedded Signup + Coexistence (only path) -->
+                @if (!embeddedSignupResult()?.success) {
+                  <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+                    <div class="flex items-start gap-3 mb-4">
+                      <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i class="pi pi-whatsapp text-white" style="font-size:1rem"></i>
                       </div>
-
-                      <button
-                        pButton
-                        [label]="embeddedSignupLoading() ? 'Connecting...' : 'Connect with Facebook'"
-                        icon="pi pi-facebook"
-                        severity="info"
-                        class="w-full"
-                        [loading]="embeddedSignupLoading()"
-                        (click)="startEmbeddedSignup()"
-                      ></button>
-
-                      @if (embeddedSignupError()) {
-                        <p class="text-xs text-red-600 mt-2">
-                          <i class="pi pi-exclamation-circle mr-1"></i>{{ embeddedSignupError() }}
+                      <div>
+                        <p class="text-sm font-bold text-blue-900">Connect WhatsApp with Meta</p>
+                        <p class="text-xs text-blue-700 mt-1">
+                          Authorize through Meta's secure popup, then pick or create your WhatsApp
+                          Business Account and number. Works for new and existing numbers.
                         </p>
-                      }
-
-                      @if (embeddedSignupResult()) {
-                        <p-message severity="success" styleClass="w-full mt-3">
-                          <div>
-                            <p class="font-semibold">{{ embeddedSignupResult()!.message }}</p>
-                            @if (embeddedSignupResult()!.phoneNumber) {
-                              <p class="text-sm mt-1">Phone: {{ embeddedSignupResult()!.phoneNumber }}</p>
-                            }
-                            @if (embeddedSignupResult()!.isCoexistence) {
-                              <p class="text-xs mt-1 text-green-700">
-                                <i class="pi pi-info-circle mr-1"></i>
-                                Coexistence mode: Your WA Business App continues working alongside our platform.
-                              </p>
-                            }
-                          </div>
-                        </p-message>
-                      }
-
-                      <div class="flex items-center gap-2 mt-3 text-xs text-blue-600">
-                        <i class="pi pi-shield" style="font-size:0.7rem"></i>
-                        <span>Secure OAuth — we never see your Facebook password</span>
                       </div>
                     </div>
 
-                    <div class="flex items-center gap-3 my-2">
+                    <wa-embedded-signup-button (connected)="onEmbeddedConnected($event)" />
+                  </div>
+
+                  @if (directRegistrationEnabled()) {
+                    <div class="flex items-center gap-3 my-3">
                       <div class="flex-1 h-px bg-gray-200"></div>
                       <span class="text-xs text-gray-400 font-medium">OR</span>
                       <div class="flex-1 h-px bg-gray-200"></div>
                     </div>
-
-                    <button
-                      pButton
-                      label="Register number manually instead"
-                      class="p-button-text p-button-secondary w-full"
-                      icon="pi pi-pencil"
-                      (click)="showManualRegistration.set(true)"
-                    ></button>
+                    <div class="bg-white border border-gray-200 rounded-xl p-5">
+                      <p class="text-sm font-bold text-gray-900 mb-1">Register without a Facebook account</p>
+                      <p class="text-xs text-gray-500 mb-3">
+                        We'll register your number on our platform and verify it by SMS. Note: this doesn't
+                        support coexistence — the number runs on the Cloud API only.
+                      </p>
+                      <wa-direct-number-registration (connected)="onDirectConnected()" />
+                    </div>
                   }
                 }
 
-                <!-- Phone input (manual registration - only when toggled or has active session) -->
-                @if (showManualRegistration() && (!sessionId() || sessionState() === 'failed' || sessionState() === 'expired')) {
-                  <div class="flex flex-col gap-1.5">
-                    <label class="text-sm font-semibold text-gray-700">Mobile Number</label>
-                    <div class="flex gap-2">
-                      <p-select
-                        [(ngModel)]="countryCode"
-                        [options]="countryCodes"
-                        optionLabel="label"
-                        optionValue="value"
-                        styleClass="w-36"
-                        placeholder="Code"
-                      />
-                      <input
-                        pInputText
-                        [(ngModel)]="phoneNumber"
-                        placeholder="9876543210"
-                        class="flex-1"
-                        style="font-size:1.1rem;letter-spacing:0.05em"
-                      />
+                @if (embeddedSignupResult()?.success) {
+                  <p-message severity="success" styleClass="w-full mt-3">
+                    <div>
+                      <p class="font-semibold">{{ embeddedSignupResult()!.message }}</p>
+                      @if (embeddedSignupResult()!.phoneNumber) {
+                        <p class="text-sm mt-1">Phone: {{ embeddedSignupResult()!.phoneNumber }}</p>
+                      }
+                      @if (embeddedSignupResult()!.isCoexistence) {
+                        <p class="text-xs mt-1 text-green-700">
+                          <i class="pi pi-info-circle mr-1"></i>
+                          Coexistence mode active: your WhatsApp Business App keeps working alongside our platform.
+                        </p>
+                      }
                     </div>
-                    <p class="text-xs text-gray-400">
-                      <i class="pi pi-info-circle mr-1"></i>
-                      Enter your number without the country code.
-                    </p>
-                  </div>
+                  </p-message>
                 }
 
                 <!-- Session state: Detecting -->
@@ -357,39 +310,25 @@ import {
                   <p-message severity="error" [text]="phoneError()!" styleClass="w-full" />
                 }
 
-                <!-- Info box (only when manual mode and no session active) -->
-                @if (showManualRegistration() && (!sessionId() || sessionState() === 'failed' || sessionState() === 'expired')) {
-                  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <div class="flex gap-3">
-                      <i class="pi pi-info-circle text-blue-500 mt-0.5" style="font-size:1rem"></i>
-                      <div>
-                        <p class="text-sm font-semibold text-blue-900">How it works</p>
-                        <ul class="text-xs text-blue-700 mt-1 leading-relaxed list-disc ml-4 space-y-1">
-                          <li>We'll detect your number's current WhatsApp status automatically</li>
-                          <li>If it's a fresh number, we'll register it and send you a verification code</li>
-                          <li>If it's on another platform, we'll guide you through migration</li>
-                          <li>No Facebook or Meta account needed from your side</li>
-                        </ul>
-                      </div>
+                <!-- What to expect -->
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div class="flex gap-3">
+                    <i class="pi pi-info-circle text-blue-500 mt-0.5" style="font-size:1rem"></i>
+                    <div>
+                      <p class="text-sm font-semibold text-blue-900">How it works</p>
+                      <ul class="text-xs text-blue-700 mt-1 leading-relaxed list-disc ml-4 space-y-1">
+                        <li>You grant permission once through Meta's secure popup</li>
+                        <li>Pick an existing WhatsApp number or add a new one</li>
+                        <li>Coexistence keeps your WhatsApp Business App working on the same number</li>
+                        <li>Billing runs through our platform — no separate Meta billing setup for you</li>
+                      </ul>
                     </div>
                   </div>
-                }
+                </div>
               </div>
 
               <div class="flex justify-between mt-8">
                 <button pButton label="Skip for Now" class="p-button-text p-button-secondary" icon="pi pi-forward" (click)="skipToPersonalize()"></button>
-                @if (showManualRegistration() && (!sessionId() || sessionState() === 'failed' || sessionState() === 'expired')) {
-                  <button
-                    pButton
-                    label="Register Number"
-                    icon="pi pi-arrow-right"
-                    iconPos="right"
-                    severity="success"
-                    [loading]="loading()"
-                    [disabled]="!phoneNumber.trim()"
-                    (click)="startOnboarding()"
-                  ></button>
-                }
                 @if (embeddedSignupResult()?.success) {
                   <button
                     pButton
@@ -586,6 +525,10 @@ import {
                 <div class="flex flex-col gap-1.5">
                   <label class="text-sm font-semibold text-gray-700">Business Name <span class="text-red-400">*</span></label>
                   <input pInputText [(ngModel)]="bizName" placeholder="e.g. Fresh Mart, Style Hub" class="w-full" />
+                  <p class="text-xs text-gray-400">
+                    <i class="pi pi-whatsapp text-green-500"></i>
+                    This is the name WhatsApp displays on your number at the top of every chat.
+                  </p>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
@@ -614,6 +557,71 @@ import {
                   <label class="text-sm font-semibold text-gray-700">Logo URL</label>
                   <input pInputText [(ngModel)]="bizLogoUrl" placeholder="https://yourdomain.com/logo.png" class="w-full text-sm" />
                   <p class="text-xs text-gray-400">Direct link to your business logo image</p>
+                </div>
+
+                <!-- ===== Invoicing & GST (optional) ===== -->
+                <div class="border border-gray-200 rounded-xl overflow-hidden">
+                  <button type="button"
+                    class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition"
+                    (click)="showInvoiceFields = !showInvoiceFields">
+                    <span class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                      <i class="pi pi-receipt text-indigo-500"></i>
+                      Invoicing &amp; GST <span class="text-xs font-normal text-gray-400">(optional — set up automated invoices)</span>
+                    </span>
+                    <i class="pi" [class.pi-chevron-down]="!showInvoiceFields" [class.pi-chevron-up]="showInvoiceFields"></i>
+                  </button>
+
+                  @if (showInvoiceFields) {
+                    <div class="p-4 space-y-4">
+                      <p class="text-xs text-gray-500">
+                        Add these so invoices are generated automatically when you confirm an order. You can change them later in Settings → Commerce.
+                      </p>
+
+                      <div class="flex flex-col gap-1.5">
+                        <label class="text-sm font-semibold text-gray-700">Legal / Registered Name</label>
+                        <input pInputText [(ngModel)]="bizLegalName" placeholder="Name as registered for GST (if different from brand name)" class="w-full text-sm" />
+                        <p class="text-xs text-gray-400">Printed on the invoice. Leave blank to use your business name.</p>
+                      </div>
+
+                      <div class="flex flex-col gap-1.5">
+                        <label class="text-sm font-semibold text-gray-700">GSTIN</label>
+                        <input pInputText [(ngModel)]="bizGstin" placeholder="e.g. 27ABCDE1234F1Z5" class="w-full text-sm" maxlength="15" />
+                        <p class="text-xs text-gray-400">Adding a GSTIN enables GST tax invoices automatically.</p>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        <div class="flex flex-col gap-1.5">
+                          <label class="text-sm font-semibold text-gray-700">State (Place of Supply)</label>
+                          <input pInputText [(ngModel)]="bizState" placeholder="e.g. Maharashtra" class="w-full text-sm" />
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                          <label class="text-sm font-semibold text-gray-700">State Code</label>
+                          <input pInputText [(ngModel)]="bizStateCode" placeholder="e.g. 27" class="w-full text-sm" maxlength="2" />
+                        </div>
+                      </div>
+
+                      <div class="flex flex-col gap-1.5">
+                        <label class="text-sm font-semibold text-gray-700">Invoice Number Prefix</label>
+                        <input pInputText [(ngModel)]="bizInvoicePrefix" placeholder="INV" class="w-full text-sm" />
+                        <p class="text-xs text-gray-400">Your invoice series prefix, e.g. INV/2026/0001.</p>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        <div class="flex flex-col gap-1.5">
+                          <label class="text-sm font-semibold text-gray-700">Business Email</label>
+                          <input pInputText [(ngModel)]="bizEmail" placeholder="hello@yourbiz.com" class="w-full text-sm" />
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                          <label class="text-sm font-semibold text-gray-700">Website</label>
+                          <input pInputText [(ngModel)]="bizWebsite" placeholder="https://yourbiz.com" class="w-full text-sm" />
+                        </div>
+                      </div>
+                      <p class="text-xs text-gray-400">
+                        <i class="pi pi-whatsapp text-green-500"></i>
+                        Email &amp; website also show on your WhatsApp business profile card.
+                      </p>
+                    </div>
+                  }
                 </div>
 
                 @if (profileError()) {
@@ -823,10 +831,8 @@ import {
 })
 export class OnboardingComponent implements OnInit {
   private readonly onboardingService = inject(OnboardingService);
-  private readonly embeddedSignupSvc = inject(EmbeddedSignupService);
   private readonly messageService = inject(MessageService);
   private readonly router = inject(Router);
-  private readonly platformId = inject(PLATFORM_ID);
 
   // Steps: 0 = Phone Registration, 1 = Business Profile, 2 = Complete
   activeStep = signal(0);
@@ -840,13 +846,10 @@ export class OnboardingComponent implements OnInit {
     { key: 'complete', label: 'Complete' },
   ];
 
-  // Embedded Signup
-  showManualRegistration = signal(false);
-  embeddedSignupLoading = signal(false);
-  embeddedSignupError = signal<string | null>(null);
+  // Embedded Signup result (the connect UI lives in the shared component)
   embeddedSignupResult = signal<EmbeddedSignupResult | null>(null);
-  private fbSdkLoaded = false;
-  private embeddedSignupConfig: EmbeddedSignupConfig | null = null;
+  // Super-admin toggle: also offer direct (no-Facebook) registration.
+  directRegistrationEnabled = signal(false);
 
   // Step 1: Phone registration (session-based)
   countryCode = '+91';
@@ -897,6 +900,15 @@ export class OnboardingComponent implements OnInit {
   bizDescription = '';
   bizAddress = '';
   bizLogoUrl = '';
+  // Invoicing / GST (optional)
+  showInvoiceFields = false;
+  bizLegalName = '';
+  bizGstin = '';
+  bizState = '';
+  bizStateCode = '';
+  bizInvoicePrefix = 'INV';
+  bizEmail = '';
+  bizWebsite = '';
   profileError = signal<string | null>(null);
 
   businessCategories = [
@@ -928,6 +940,10 @@ export class OnboardingComponent implements OnInit {
   personalizeResult = signal<PersonalizeResult | null>(null);
 
   ngOnInit() {
+    this.onboardingService.getRegistrationOptions().subscribe({
+      next: (o) => this.directRegistrationEnabled.set(!!o?.directRegistration),
+      error: () => this.directRegistrationEnabled.set(false),
+    });
     this.onboardingService.getStatus().subscribe({
       next: (status) => {
         switch (status.currentStep) {
@@ -1162,6 +1178,13 @@ export class OnboardingComponent implements OnInit {
       businessDescription: this.bizDescription.trim() || undefined,
       businessAddress: this.bizAddress.trim() || undefined,
       logoUrl: this.bizLogoUrl.trim() || undefined,
+      legalName: this.bizLegalName.trim() || undefined,
+      gstin: this.bizGstin.trim() || undefined,
+      gstState: this.bizState.trim() || undefined,
+      gstStateCode: this.bizStateCode.trim() || undefined,
+      invoicePrefix: this.bizInvoicePrefix.trim() || undefined,
+      invoiceEmail: this.bizEmail.trim() || undefined,
+      invoiceWebsite: this.bizWebsite.trim() || undefined,
     }).subscribe({
       next: () => {
         this.loading.set(false);
@@ -1312,153 +1335,14 @@ export class OnboardingComponent implements OnInit {
 
   // ─── Embedded Signup ──────────────────────────────────────────────
 
-  startEmbeddedSignup() {
-    this.embeddedSignupError.set(null);
-    this.embeddedSignupLoading.set(true);
-
-    // Step 1: Fetch config from backend
-    this.embeddedSignupSvc.getConfig().subscribe({
-      next: (config) => {
-        this.embeddedSignupConfig = config;
-        this.loadFacebookSdk(config);
-      },
-      error: (err) => {
-        this.embeddedSignupLoading.set(false);
-        this.embeddedSignupError.set(err?.error?.message || 'Failed to load signup configuration');
-      },
-    });
+  /** The shared <wa-embedded-signup-button> emits this once a number connects. */
+  onEmbeddedConnected(result: EmbeddedSignupResult) {
+    this.embeddedSignupResult.set(result);
   }
 
-  private loadFacebookSdk(config: EmbeddedSignupConfig) {
-    if (!isPlatformBrowser(this.platformId)) return;
-
-    if (this.fbSdkLoaded) {
-      this.launchFbLogin(config);
-      return;
-    }
-
-    // Load Facebook SDK
-    const w = window as any;
-    w.fbAsyncInit = () => {
-      w.FB.init({
-        appId: config.appId,
-        cookie: true,
-        xfbml: true,
-        version: config.version,
-      });
-      this.fbSdkLoaded = true;
-      this.launchFbLogin(config);
-    };
-
-    if (document.getElementById('facebook-jssdk')) {
-      // SDK script already in DOM, just re-init
-      if (w.FB) {
-        this.fbSdkLoaded = true;
-        this.launchFbLogin(config);
-      }
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.src = 'https://connect.facebook.net/en_US/sdk.js';
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-  }
-
-  private launchFbLogin(config: EmbeddedSignupConfig) {
-    const w = window as any;
-    if (!w.FB) {
-      this.embeddedSignupLoading.set(false);
-      this.embeddedSignupError.set('Facebook SDK not loaded. Please refresh and try again.');
-      return;
-    }
-
-    w.FB.login(
-      (response: any) => {
-        if (response.authResponse) {
-          const code = response.authResponse.code;
-
-          // Extract session info from the response (sessionInfoVersion:3)
-          const sessionInfo: Record<string, any> = {};
-          if (response.authResponse.signedRequest) {
-            // Decode the signed request to get session info
-            try {
-              const payload = response.authResponse.signedRequest.split('.')[1];
-              const decoded = JSON.parse(atob(payload));
-              Object.assign(sessionInfo, decoded);
-            } catch {
-              // Non-fatal: session info extraction failed
-            }
-          }
-
-          // Listen for the onSignupSuccess message event
-          // Meta posts this after the signup flow completes
-          this.processEmbeddedSignupCallback(code, sessionInfo);
-        } else {
-          this.embeddedSignupLoading.set(false);
-          this.embeddedSignupError.set('Facebook login was cancelled or failed.');
-        }
-      },
-      {
-        config_id: config.configId,
-        response_type: 'code',
-        override_default_response_type: true,
-        extras: config.loginParams.extras,
-      },
-    );
-
-    // Also listen for the sessionInfoListener event from Meta
-    const messageHandler = (event: MessageEvent) => {
-      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
-      try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data.type === 'WA_EMBEDDED_SIGNUP' && data.data) {
-          // Store session info for the callback
-          if (this.embeddedSignupConfig) {
-            (this.embeddedSignupConfig as any)._sessionInfo = data.data;
-          }
-        }
-      } catch {
-        // Ignore non-JSON messages
-      }
-    };
-    window.addEventListener('message', messageHandler);
-
-    // Cleanup listener after 5 minutes
-    setTimeout(() => window.removeEventListener('message', messageHandler), 300000);
-  }
-
-  private processEmbeddedSignupCallback(code: string, sessionInfo: Record<string, any>) {
-    // Merge any session info received via postMessage
-    const extraInfo = (this.embeddedSignupConfig as any)?._sessionInfo;
-    if (extraInfo) {
-      Object.assign(sessionInfo, extraInfo);
-    }
-
-    this.embeddedSignupSvc.processCallback({
-      code,
-      phoneNumberId: sessionInfo['phone_number_id'],
-      wabaId: sessionInfo['waba_id'],
-      sessionInfo,
-    }).subscribe({
-      next: (result) => {
-        this.embeddedSignupLoading.set(false);
-        this.embeddedSignupResult.set(result);
-        if (result.success) {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Connected!',
-            detail: result.message,
-          });
-        }
-      },
-      error: (err) => {
-        this.embeddedSignupLoading.set(false);
-        this.embeddedSignupError.set(err?.error?.message || 'Embedded signup failed. Try manual registration.');
-      },
-    });
+  /** Direct (no-Facebook) registration finished — show the same success + Continue. */
+  onDirectConnected() {
+    this.embeddedSignupResult.set({ success: true, message: 'Number registered and verified.' } as EmbeddedSignupResult);
   }
 
   private handleSessionResult(result: StartOnboardingResult) {

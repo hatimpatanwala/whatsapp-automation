@@ -938,6 +938,38 @@ const migration032Invoices: TenantMigration = {
   },
 };
 
+// Social login/signup (Google + Meta): users may have no password and originate
+// from an OAuth provider. Make password_hash optional and track the provider.
+const migration033SocialAuth: TenantMigration = {
+  name: '033_social_auth',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".users ALTER COLUMN password_hash DROP NOT NULL`);
+    await qr.query(`
+      ALTER TABLE "${schema}".users
+        ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) NOT NULL DEFAULT 'password',
+        ADD COLUMN IF NOT EXISTS provider_user_id VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512),
+        ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false
+    `);
+    // One identity per (provider, provider_user_id).
+    await qr.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS users_provider_uid_uniq
+        ON "${schema}".users (auth_provider, provider_user_id)
+        WHERE provider_user_id IS NOT NULL
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".users_provider_uid_uniq`);
+    await qr.query(`
+      ALTER TABLE "${schema}".users
+        DROP COLUMN IF EXISTS auth_provider,
+        DROP COLUMN IF EXISTS provider_user_id,
+        DROP COLUMN IF EXISTS avatar_url,
+        DROP COLUMN IF EXISTS email_verified
+    `);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -971,4 +1003,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration030Quotes,
   migration031WorkflowAudience,
   migration032Invoices,
+  migration033SocialAuth,
 ];

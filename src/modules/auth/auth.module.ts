@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { OAuthService } from './oauth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { LocalStrategy } from './strategies/local.strategy';
 import { Tenant } from '../../database/entities/public/tenant.entity';
@@ -18,7 +19,7 @@ import { TenantModule } from '../tenant/tenant.module';
     TenantModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, EmailVerificationService, LocalStrategy],
+  providers: [AuthService, OAuthService, EmailVerificationService, LocalStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

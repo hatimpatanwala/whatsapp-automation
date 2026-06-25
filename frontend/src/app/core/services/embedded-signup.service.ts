@@ -117,6 +117,17 @@ export class EmbeddedSignupService {
   }
 
   /**
+   * Enable coexistence: consent + register Cloud API alongside the WhatsApp
+   * Business App. `pin` is the number's two-step verification PIN (if set).
+   */
+  enableCoexistence(sessionId: string, pin?: string): Observable<CoexistenceSession> {
+    return this.api.post<CoexistenceSession>(
+      `/onboarding/embedded-signup/coexistence/${sessionId}/enable`,
+      pin ? { pin } : {},
+    );
+  }
+
+  /**
    * Start full migration from coexistence to Cloud API.
    */
   migrateFromCoexistence(sessionId: string): Observable<CoexistenceSession> {

@@ -7,6 +7,7 @@ import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 import { AuthService } from '../../core/services/auth.service';
+import { SocialLoginButtonsComponent } from './social-login-buttons.component';
 
 @Component({
   selector: 'wa-login',
@@ -19,6 +20,7 @@ import { AuthService } from '../../core/services/auth.service';
     ButtonModule,
     MessageModule,
     RouterLink,
+    SocialLoginButtonsComponent,
   ],
   template: `
     <div class="wa-login-wrapper">
@@ -89,6 +91,8 @@ import { AuthService } from '../../core/services/auth.service';
               severity="success"
             ></button>
           </form>
+
+          <wa-social-login-buttons [busy]="loading()" />
 
           <p class="wa-signup-link">
             Don't have an account? <a routerLink="/auth/register">Create one</a>
@@ -258,6 +262,19 @@ export class LoginComponent {
   readonly year = new Date().getFullYear();
   loading = signal(false);
   errorMessage = signal<string | null>(null);
+
+  constructor() {
+    // Surface OAuth callback errors (?error=oauth&message=...)
+    const qp = this.route.snapshot.queryParams;
+    if (qp['error']) {
+      const msg = qp['message']
+        ? decodeURIComponent(qp['message'])
+        : qp['error'] === 'oauth_unconfigured'
+          ? 'Social login is not configured yet.'
+          : 'Social login failed. Please try again.';
+      this.errorMessage.set(msg);
+    }
+  }
 
   loginForm = this.fb.group({
     email: ['', [Validators.required, Validators.email]],

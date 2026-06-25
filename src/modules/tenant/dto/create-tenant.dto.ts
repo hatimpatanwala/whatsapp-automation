@@ -48,4 +48,21 @@ export class CreateTenantDto {
   @IsOptional()
   @IsString()
   ownerPassword?: string;
+
+  // OAuth / social signup: the owner originates from a social provider and may
+  // have no password. authProvider defaults to 'password'.
+  @IsOptional()
+  @IsString()
+  authProvider?: 'password' | 'google' | 'meta';
+
+  @IsOptional()
+  @IsString()
+  providerUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+
+  @IsOptional()
+  ownerEmailVerified?: boolean;
 }

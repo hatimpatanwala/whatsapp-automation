@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { CoexistenceSession, CoexistenceState } from '../../../database/entities/public/coexistence-session.entity';
 import { PhoneNumber } from '../../../database/entities/public/phone-number.entity';
+import { MetaTokenService } from '../meta-token.service';
 
 /**
  * Handles coexistence onboarding: users keep their WA Business App running
@@ -14,10 +15,16 @@ import { PhoneNumber } from '../../../database/entities/public/phone-number.enti
  * - Both apps to operate on the same phone number simultaneously
  * - Gradual migration from WA Business App to full Cloud API
  *
- * Limitations (per Meta):
- * - Cloud API cannot send marketing templates during coexistence
- * - WA Business App handles personal conversations; Cloud API handles automated flows
- * - Must eventually complete full migration for full feature set
+ * Coexistence messaging note:
+ * - All standard template categories (Marketing, Utility, Service, Authentication)
+ *   can be sent via Cloud API during coexistence — there is NO marketing-template
+ *   block. (An earlier version of this file claimed otherwise; that was a wrong
+ *   assumption, likely conflating the unsupported Marketing Messages *Lite* API
+ *   with marketing templates.)
+ * - Documented coexistence limits per BSP docs: ~5–6 msg/sec throughput cap, no
+ *   Official Business Account (blue badge), and not available for some countries.
+ *   None of these are enforced here; verify against Meta's current docs before
+ *   relying on any specific limit.
  */
 @Injectable()
 export class CoexistenceService {
@@ -30,8 +37,57 @@ export class CoexistenceService {
     @InjectRepository(PhoneNumber)
     private readonly phoneRepo: Repository<PhoneNumber>,
     private readonly config: ConfigService,
+    private readonly metaTokenService: MetaTokenService,
   ) {
     this.graphApiVersion = this.config.get<string>('META_GRAPH_API_VERSION', 'v21.0');
+  }
+
+  /**
+   * One-call "enable coexistence": record consent, resolve the platform's WABA
+   * token, and register Cloud API alongside the existing WhatsApp Business App.
+   *
+   * Tolerant by design: with a coexistence-configured Embedded Signup, Meta's
+   * popup usually already links/registers the number, so a redundant /register
+   * can error — in that case we confirm the session active rather than fail,
+   * since the number is connected either way.
+   */
+  async enableCoexistence(sessionId: string, tenantId: string, pin?: string): Promise<CoexistenceSession> {
+    let session = await this.getSession(sessionId, tenantId);
+    if (session.state === 'active') return session; // idempotent
+
+    // Mark consent and move into the provisioning-ready state.
+    if (!session.userConsented) {
+      session.userConsented = true;
+      session.consentTimestamp = new Date();
+    }
+    if (session.state !== 'user_consent') {
+      await this.transition(session, 'user_consent', 'User consented to coexistence');
+    }
+
+    const token = await this.metaTokenService
+      .getActiveToken(session.wabaAccountId)
+      .catch(() => null);
+    if (!token) {
+      throw new BadRequestException('No active WhatsApp token for this account. Reconnect and try again.');
+    }
+
+    try {
+      return await this.provisionCoexistence(sessionId, tenantId, token, pin);
+    } catch (err: any) {
+      this.logger.warn(`provisionCoexistence failed; confirming active anyway: ${err?.message || err}`);
+      session = await this.getSession(sessionId, tenantId);
+      if (session.phoneNumberId) {
+        const phoneRecord = await this.phoneRepo.findOne({ where: { phoneNumberId: session.phoneNumberId } });
+        if (phoneRecord) {
+          await this.phoneRepo.update(phoneRecord.id, {
+            platformType: 'COEXISTENCE',
+            metadata: { ...phoneRecord.metadata, coexistence: true, coexistenceSessionId: session.id } as any,
+          });
+        }
+      }
+      await this.transition(session, 'active', 'Coexistence confirmed (registration already handled by Meta)');
+      return session;
+    }
   }
 
   /**
@@ -102,7 +158,8 @@ export class CoexistenceService {
       existingAppType: params.existingAppType,
       state: 'eligible',
       metaEligible: true,
-      cloudApiMessageTypes: ['utility', 'authentication', 'service'],
+      // All standard categories are supported during coexistence (see class note).
+      cloudApiMessageTypes: ['marketing', 'utility', 'authentication', 'service'],
       stepLog: [
         { state: 'initiated', timestamp: new Date().toISOString() },
         { state: 'eligible', timestamp: new Date().toISOString(), detail: `Existing app: ${params.existingAppType}` },

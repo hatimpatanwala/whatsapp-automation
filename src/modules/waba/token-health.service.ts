@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { MetaToken } from '../../database/entities/public/meta-token.entity';
 import { MetaTokenService } from './meta-token.service';
 import { AuditLogService } from './audit-log.service';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 
 /**
  * Periodic token health validation.
@@ -27,6 +28,7 @@ export class TokenHealthService {
     private readonly metaTokenService: MetaTokenService,
     private readonly auditService: AuditLogService,
     private readonly config: ConfigService,
+    private readonly platformConfig: PlatformConfigService,
   ) {
     this.appId = this.config.get<string>('META_APP_ID', '');
     this.appSecret = this.config.get<string>('META_APP_SECRET', '');
@@ -102,8 +104,11 @@ export class TokenHealthService {
 
   private async debugToken(token: string): Promise<any> {
     try {
+      const { appId, appSecret } = await this.platformConfig.getMetaCreds();
+      const aId = appId || this.appId;
+      const aSecret = appSecret || this.appSecret;
       const response = await fetch(
-        `https://graph.facebook.com/${this.graphApiVersion}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${this.appId}|${this.appSecret}`,
+        `https://graph.facebook.com/${this.graphApiVersion}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${aId}|${aSecret}`,
       );
       const data = await response.json() as any;
       return data.data;
