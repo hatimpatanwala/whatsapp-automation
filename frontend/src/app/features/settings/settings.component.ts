@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { TextareaModule } from 'primeng/textarea';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
@@ -22,6 +23,7 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
   selector: 'wa-settings',
   standalone: true,
   imports: [
+    InputNumberModule,
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
@@ -710,6 +712,22 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                     <p-toggleswitch [(ngModel)]="commerce.orderNotification" />
                   </div>
 
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div class="pr-4">
+                      <p class="text-sm font-medium text-gray-900">Abandoned Cart Reminder</p>
+                      <p class="text-xs text-gray-500">Remind customers about items left in their cart after this many hours of inactivity. Sent free-form inside an open chat window (never a paid template). Set 0 to disable.</p>
+                    </div>
+                    <p-inputnumber [(ngModel)]="commerce.abandonedCartHours" [min]="0" [max]="72" [showButtons]="true" suffix=" h" inputStyleClass="w-20" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div class="pr-4">
+                      <p class="text-sm font-medium text-gray-900">Notification Batch Window</p>
+                      <p class="text-xs text-gray-500">When a customer is outside the 24h chat window, multiple notifications are grouped and sent as one teaser after this many minutes.</p>
+                    </div>
+                    <p-inputnumber [(ngModel)]="commerce.batchMinutes" [min]="1" [max]="1440" [showButtons]="true" suffix=" min" inputStyleClass="w-24" />
+                  </div>
+
                   <!-- Advanced: Meta Catalog (collapsible) -->
                   <div class="pt-3">
                     <button class="text-xs text-primary-500 hover:underline bg-transparent border-0 cursor-pointer p-0 flex items-center gap-1"
@@ -949,6 +967,8 @@ export class SettingsComponent implements OnInit {
     catalogId: '',
     autoCheckout: false,
     orderNotification: true,
+    abandonedCartHours: 3,
+    batchMinutes: 60,
   };
 
   wa = {
@@ -1143,6 +1163,8 @@ export class SettingsComponent implements OnInit {
         if (settings.commerceCatalogId) this.commerce.catalogId = settings.commerceCatalogId;
         if (settings.commerceAutoCheckout !== undefined) this.commerce.autoCheckout = this.parseBool(settings.commerceAutoCheckout);
         if (settings.commerceOrderNotification !== undefined) this.commerce.orderNotification = this.parseBool(settings.commerceOrderNotification);
+        if (settings.commerceAbandonedCartHours !== undefined && settings.commerceAbandonedCartHours !== null) this.commerce.abandonedCartHours = Number(settings.commerceAbandonedCartHours);
+        if (settings.notificationBatchMinutes !== undefined && settings.notificationBatchMinutes !== null) this.commerce.batchMinutes = Number(settings.notificationBatchMinutes);
 
         // WhatsApp config
         if (settings.waPhone) this.wa.phone = settings.waPhone;
@@ -1272,6 +1294,8 @@ export class SettingsComponent implements OnInit {
       commerce_catalog_id: this.commerce.catalogId,
       commerce_auto_checkout: this.commerce.autoCheckout,
       commerce_order_notification: this.commerce.orderNotification,
+      commerce_abandoned_cart_hours: Number(this.commerce.abandonedCartHours),
+      notification_batch_minutes: Number(this.commerce.batchMinutes),
       // WhatsApp config
       wa_phone: this.wa.phone,
       wa_account_id: this.wa.accountId,

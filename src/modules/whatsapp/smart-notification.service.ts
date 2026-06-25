@@ -9,6 +9,7 @@ import { REDIS_CLIENT } from '../../config/redis.module';
 import { QUEUE_NOTIFICATION_FLUSH } from '../../queue/queue.module';
 import { MessageOrchestratorService } from './message-orchestrator.service';
 import { MetaTokenService } from '../waba/meta-token.service';
+import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
@@ -83,8 +84,30 @@ export class SmartNotificationService {
     @Optional() @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
     @Optional() @InjectRepository(WabaAccount) private readonly wabaRepo: Repository<WabaAccount>,
     @Optional() @InjectRepository(PhoneNumber) private readonly phoneRepo: Repository<PhoneNumber>,
+    @Optional() private readonly connectionManager: TenantConnectionManager,
   ) {
     this.batchMs = Math.max(1, this.config.get<number>('NOTIFICATION_BATCH_MINUTES', 60)) * 60 * 1000;
+  }
+
+  private readonly batchCache = new Map<string, { ms: number; exp: number }>();
+
+  /** Per-tenant batch window (minutes), from the notification_batch_minutes setting. */
+  private async getBatchMs(schema: string): Promise<number> {
+    const cached = this.batchCache.get(schema);
+    if (cached && cached.exp > Date.now()) return cached.ms;
+    let ms = this.batchMs;
+    if (this.connectionManager) {
+      try {
+        const rows = await this.connectionManager.executeInTenantContext(schema, (qr) =>
+          qr.query(`SELECT value FROM settings WHERE key = 'notification_batch_minutes'`));
+        if (rows[0]?.value !== undefined) {
+          const n = parseInt(typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value, 10);
+          if (!Number.isNaN(n) && n > 0) ms = n * 60 * 1000;
+        }
+      } catch { /* use default */ }
+    }
+    this.batchCache.set(schema, { ms, exp: Date.now() + 5 * 60 * 1000 });
+    return ms;
   }
 
   /** Resolve the tenant's sender phone-number-id + a live access token. */
@@ -166,10 +189,11 @@ export class SmartNotificationService {
       const key = this.pendKey(input.schema, input.recipientPhone, input.channel);
       await this.redis.rpush(key, JSON.stringify(item));
       await this.redis.expire(key, PEND_TTL_SEC);
+      const delay = await this.getBatchMs(input.schema);
       await this.flushQueue.add(
         'flush',
         { schema: input.schema, phone: input.recipientPhone, channel: input.channel },
-        { jobId: `nflush:${input.schema}:${input.recipientPhone}:${input.channel}`, delay: this.batchMs, removeOnComplete: true, removeOnFail: true },
+        { jobId: `nflush:${input.schema}:${input.recipientPhone}:${input.channel}`, delay, removeOnComplete: true, removeOnFail: true },
       );
     } catch (err: any) {
       this.logger.warn(`notify failed for ${input.recipientPhone}: ${err.message}`);
