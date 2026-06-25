@@ -19,6 +19,7 @@ import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { MessageOrchestratorService } from './message-orchestrator.service';
 import { SmartNotificationService } from './smart-notification.service';
 import { SmartNotificationProcessor } from './smart-notification.processor';
+import { InvoiceService } from './invoice.service';
 import { TenantModule } from '../tenant/tenant.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WabaModule } from '../waba/waba.module';
@@ -41,8 +42,9 @@ import { WabaModule } from '../waba/waba.module';
     MessageOrchestratorService,
     SmartNotificationService,
     SmartNotificationProcessor,
+    InvoiceService,
     AdminCommandService,
   ],
-  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService],
+  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService, InvoiceService],
 })
 export class WhatsAppModule {}

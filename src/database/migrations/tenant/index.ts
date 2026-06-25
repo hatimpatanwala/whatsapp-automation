@@ -872,6 +872,72 @@ const migration031WorkflowAudience: TenantMigration = {
   },
 };
 
+const migration032Invoices: TenantMigration = {
+  name: '032_invoices_and_gst',
+  async up(qr, schema) {
+    // Per-product GST + billable/non-billable stock classification.
+    await qr.query(`
+      ALTER TABLE "${schema}".products
+        ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(15),
+        ADD COLUMN IF NOT EXISTS gst_rate DECIMAL(5,2) DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS is_billable BOOLEAN DEFAULT true
+    `);
+
+    // Invoices / bills of supply / delivery challans.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".invoices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_id UUID REFERENCES "${schema}".orders(id) ON DELETE SET NULL,
+        invoice_number VARCHAR(40) UNIQUE NOT NULL,
+        doc_type VARCHAR(20) NOT NULL DEFAULT 'tax_invoice',
+        customer_id UUID,
+        customer_name VARCHAR(255),
+        customer_phone VARCHAR(20),
+        seller_gstin VARCHAR(20),
+        buyer_gstin VARCHAR(20),
+        place_of_supply VARCHAR(80),
+        is_interstate BOOLEAN DEFAULT false,
+        subtotal DECIMAL(12,2) DEFAULT 0,
+        discount DECIMAL(12,2) DEFAULT 0,
+        taxable_value DECIMAL(12,2) DEFAULT 0,
+        cgst DECIMAL(12,2) DEFAULT 0,
+        sgst DECIMAL(12,2) DEFAULT 0,
+        igst DECIMAL(12,2) DEFAULT 0,
+        total_tax DECIMAL(12,2) DEFAULT 0,
+        round_off DECIMAL(6,2) DEFAULT 0,
+        total DECIMAL(12,2) DEFAULT 0,
+        currency VARCHAR(3) DEFAULT 'INR',
+        items JSONB DEFAULT '[]',
+        notes TEXT,
+        pdf_url VARCHAR(500),
+        status VARCHAR(20) DEFAULT 'issued',
+        issued_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_invoices_order ON "${schema}".invoices(order_id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_invoices_issued ON "${schema}".invoices(issued_at DESC)`);
+
+    // Invoice / GST settings defaults.
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('invoice_enabled', 'true'),
+        ('invoice_legal_name', '""'),
+        ('invoice_gstin', '""'),
+        ('invoice_address', '""'),
+        ('invoice_state', '""'),
+        ('invoice_state_code', '""'),
+        ('invoice_prefix', '"INV"'),
+        ('invoice_default_doc_type', '"tax_invoice"')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".invoices CASCADE`);
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS hsn_code, DROP COLUMN IF EXISTS gst_rate, DROP COLUMN IF EXISTS is_billable`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -904,4 +970,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration029CatalogCommerceExtension,
   migration030Quotes,
   migration031WorkflowAudience,
+  migration032Invoices,
 ];

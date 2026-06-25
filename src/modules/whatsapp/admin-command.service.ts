@@ -1,8 +1,9 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../config/redis.module';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { WhatsAppApiService } from './whatsapp-api.service';
+import { InvoiceService, DocType } from './invoice.service';
 
 interface AdminState {
   flow: string;
@@ -41,6 +42,7 @@ export class AdminCommandService {
     private readonly whatsappApi: WhatsAppApiService,
     private readonly connectionManager: TenantConnectionManager,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Optional() private readonly invoiceService: InvoiceService,
   ) {}
 
   // ─── Entry point ────────────────────────────────────────────────────────────
@@ -215,6 +217,13 @@ export class AdminCommandService {
     }
     if (id.startsWith('pdel_')) return this.confirmDeleteProduct(tenant, to, id.slice('pdel_'.length));
     if (id.startsWith('pdely_')) return this.doDeleteProduct(tenant, to, id.slice('pdely_'.length));
+    if (id.startsWith('inv_')) {
+      const rest = id.slice('inv_'.length);
+      for (const dt of ['tax_invoice', 'bill_of_supply', 'delivery_challan'] as DocType[]) {
+        if (rest.endsWith(`_${dt}`)) return this.issueInvoice(tenant, to, rest.slice(0, -(dt.length + 1)), dt);
+      }
+    }
+    if (id === 'invskip') return this.send(tenant, to, '👍 No document issued.\n\nSend *menu* for more.');
     if (id === 'pdeln' || id === 'cancel') return this.showMainMenu(tenant, to);
 
     return this.showMainMenu(tenant, to);
@@ -365,7 +374,26 @@ export class AdminCommandService {
       return rows[0];
     });
     if (!updated) return this.send(tenant, to, 'Order not found. Send *menu*.');
+
+    // On confirmation, offer to generate a billing document for the order.
+    if (status === 'confirmed' && this.invoiceService) {
+      await this.send(tenant, to, `✅ Order #${updated.order_number} is now *Confirmed*.`);
+      await this.sendButtons(tenant, to, '🧾 Generate a document for this order?', [
+        { id: `inv_${orderId}_tax_invoice`, title: '🧾 GST Invoice' },
+        { id: `inv_${orderId}_bill_of_supply`, title: '📄 Bill of Supply' },
+        { id: `inv_${orderId}_delivery_challan`, title: '🚚 Delivery Memo' },
+      ]);
+      return;
+    }
     await this.send(tenant, to, `✅ Order #${updated.order_number} is now *${this.titleCase(status)}*.\n\nSend *menu* for more.`);
+  }
+
+  /** Generate the chosen billing document, send it to the customer, and show the admin a copy. */
+  private async issueInvoice(tenant: any, to: string, orderId: string, docType: DocType): Promise<void> {
+    if (!this.invoiceService) return this.send(tenant, to, 'Invoicing is not available right now.');
+    const res = await this.invoiceService.generateAndSend(tenant.schemaName, tenant.id, orderId, docType);
+    if (!res.ok) return this.send(tenant, to, `⚠️ ${res.reason || 'Could not generate the document.'}\n\nSend *menu* for more.`);
+    await this.send(tenant, to, `✅ Generated *${res.invoiceNumber}* and sent it to the customer.\n\n${res.text}\n\nSend *menu* for more.`);
   }
 
   // ─── Products ───────────────────────────────────────────────────────────────

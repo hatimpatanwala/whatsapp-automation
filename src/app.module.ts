@@ -30,6 +30,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
 import { SubscriptionPlanModule } from './modules/subscription-plan/subscription-plan.module';
 import { QuoteModule } from './modules/quote/quote.module';
+import { InvoiceModule } from './modules/invoice/invoice.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
@@ -67,6 +68,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     CommerceModule,
     SubscriptionPlanModule,
     QuoteModule,
+    InvoiceModule,
   ],
   providers: [
     // Global authentication then role enforcement. Routes opt out with @Public().

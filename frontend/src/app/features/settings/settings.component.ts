@@ -739,6 +739,39 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                     <p-toggleswitch [(ngModel)]="commerce.forceMarketingTemplate" />
                   </div>
 
+                  <!-- Invoicing & GST -->
+                  <div class="pt-4 mt-2">
+                    <p class="text-sm font-semibold text-gray-800 mb-1">🧾 Invoicing & GST</p>
+                    <p class="text-xs text-gray-500 mb-3">Used on Tax Invoices, Bills of Supply and Delivery Memos. When an admin confirms an order on WhatsApp, they can issue any of these documents and it's sent to the customer.</p>
+                    <div class="bg-gray-50 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div class="flex flex-col gap-1 sm:col-span-2">
+                        <label class="text-xs font-medium text-gray-600">Legal / Business Name</label>
+                        <input pInputText [(ngModel)]="invoice.legalName" placeholder="As registered (e.g. Acme Traders)" class="w-full" />
+                      </div>
+                      <div class="flex flex-col gap-1">
+                        <label class="text-xs font-medium text-gray-600">GSTIN</label>
+                        <input pInputText [(ngModel)]="invoice.gstin" placeholder="e.g. 27ABCDE1234F1Z5" class="w-full" />
+                      </div>
+                      <div class="flex flex-col gap-1">
+                        <label class="text-xs font-medium text-gray-600">State Code</label>
+                        <input pInputText [(ngModel)]="invoice.stateCode" placeholder="e.g. 27" class="w-full" />
+                      </div>
+                      <div class="flex flex-col gap-1 sm:col-span-2">
+                        <label class="text-xs font-medium text-gray-600">Business Address</label>
+                        <input pInputText [(ngModel)]="invoice.address" placeholder="Registered place of business" class="w-full" />
+                      </div>
+                      <div class="flex flex-col gap-1">
+                        <label class="text-xs font-medium text-gray-600">State (Place of Supply)</label>
+                        <input pInputText [(ngModel)]="invoice.state" placeholder="e.g. Maharashtra" class="w-full" />
+                      </div>
+                      <div class="flex flex-col gap-1">
+                        <label class="text-xs font-medium text-gray-600">Invoice Prefix</label>
+                        <input pInputText [(ngModel)]="invoice.prefix" placeholder="INV" class="w-full" />
+                      </div>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-2">GSTIN is required to issue a GST (Tax) Invoice. Bills of Supply and Delivery Memos don't need it.</p>
+                  </div>
+
                   <!-- Advanced: Meta Catalog (collapsible) -->
                   <div class="pt-3">
                     <button class="text-xs text-primary-500 hover:underline bg-transparent border-0 cursor-pointer p-0 flex items-center gap-1"
@@ -983,6 +1016,15 @@ export class SettingsComponent implements OnInit {
     forceMarketingTemplate: false,
   };
 
+  invoice = {
+    legalName: '',
+    gstin: '',
+    stateCode: '',
+    address: '',
+    state: '',
+    prefix: 'INV',
+  };
+
   wa = {
     phone: '',
     accountId: '',
@@ -1178,6 +1220,12 @@ export class SettingsComponent implements OnInit {
         if (settings.commerceAbandonedCartHours !== undefined && settings.commerceAbandonedCartHours !== null) this.commerce.abandonedCartHours = Number(settings.commerceAbandonedCartHours);
         if (settings.notificationBatchMinutes !== undefined && settings.notificationBatchMinutes !== null) this.commerce.batchMinutes = Number(settings.notificationBatchMinutes);
         if (settings.marketingTemplateMode) this.commerce.forceMarketingTemplate = settings.marketingTemplateMode === 'template';
+        if (settings.invoiceLegalName !== undefined) this.invoice.legalName = settings.invoiceLegalName || '';
+        if (settings.invoiceGstin !== undefined) this.invoice.gstin = settings.invoiceGstin || '';
+        if (settings.invoiceStateCode !== undefined) this.invoice.stateCode = String(settings.invoiceStateCode || '');
+        if (settings.invoiceAddress !== undefined) this.invoice.address = settings.invoiceAddress || '';
+        if (settings.invoiceState !== undefined) this.invoice.state = settings.invoiceState || '';
+        if (settings.invoicePrefix) this.invoice.prefix = settings.invoicePrefix;
 
         // WhatsApp config
         if (settings.waPhone) this.wa.phone = settings.waPhone;
@@ -1310,6 +1358,12 @@ export class SettingsComponent implements OnInit {
       commerce_abandoned_cart_hours: Number(this.commerce.abandonedCartHours),
       notification_batch_minutes: Number(this.commerce.batchMinutes),
       marketing_template_mode: this.commerce.forceMarketingTemplate ? 'template' : 'efficient',
+      invoice_legal_name: this.invoice.legalName,
+      invoice_gstin: this.invoice.gstin,
+      invoice_state_code: this.invoice.stateCode,
+      invoice_address: this.invoice.address,
+      invoice_state: this.invoice.state,
+      invoice_prefix: this.invoice.prefix || 'INV',
       // WhatsApp config
       wa_phone: this.wa.phone,
       wa_account_id: this.wa.accountId,

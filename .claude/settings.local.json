@@ -166,7 +166,8 @@
       "Bash(sed -i 's/      - \"3000:3000\"/      - \"127.0.0.1:3000:3000\"/' docker-compose.yml)",
       "Bash(sed -i 's/\\\\${REDIS_PASSWORD:-redispass123}/${REDIS_PASSWORD:?REDIS_PASSWORD is required}/g' docker-compose.yml)",
       "Bash(sed -i 's/\\\\${ADMIN_PASSWORD:-Admin@123456}/${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}/g' docker-compose.yml)",
-      "Bash(grep -viE \"template-provisioning|getAllTemplates|//|message_templates\\\\?|/message_templates\\\\`\")"
+      "Bash(grep -viE \"template-provisioning|getAllTemplates|//|message_templates\\\\?|/message_templates\\\\`\")",
+      "Bash(grep -nA3 \"async uploadBuffer\" src/modules/media/media.service.ts)"
     ]
   }
 }
