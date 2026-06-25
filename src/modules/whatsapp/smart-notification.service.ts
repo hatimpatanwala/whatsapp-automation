@@ -33,6 +33,12 @@ export interface NotifyInput {
   /** Bypass batching — send immediately (uses urgentTemplate when window closed). */
   urgent?: boolean;
   urgentTemplate?: { name: string; language?: string; components?: any[] };
+  /**
+   * Deliver ONLY inside an open service window (free-form). If the window is
+   * closed, hold the message and deliver it the next time the recipient messages
+   * — never send a template. Used for non-urgent nudges like abandoned carts.
+   */
+  windowOnly?: boolean;
 }
 
 interface PendingItem {
@@ -133,6 +139,15 @@ export class SmartNotificationService {
       const windowOpen = await this.orchestrator.hasActiveServiceWindow(input.tenantId, input.recipientPhone);
       if (windowOpen) {
         await this.orchestrator.sendText(input.tenantId, phoneNumberId, accessToken, input.recipientPhone, detail, 'service');
+        return;
+      }
+
+      if (input.windowOnly) {
+        // Out of window + window-only → never send a template. Hold it and let
+        // the webhook onInbound() flush it free-form when the recipient returns.
+        const awaitKey = this.awaitKey(input.schema, input.recipientPhone);
+        await this.redis.rpush(awaitKey, JSON.stringify(item));
+        await this.redis.expire(awaitKey, AWAIT_TTL_SEC);
         return;
       }
 

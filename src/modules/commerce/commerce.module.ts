@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DatabaseModule } from '../../database/database.module';
 import { WabaModule } from '../waba/waba.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { AbandonedCartService } from './abandoned-cart.service';
 import { TenantCatalog } from '../../database/entities/public/tenant-catalog.entity';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
@@ -21,6 +23,7 @@ import { CatalogSyncCron } from './catalog-sync.cron';
     TypeOrmModule.forFeature([TenantCatalog, Tenant, WabaAccount, PhoneNumber]),
     EventsModule,
     forwardRef(() => WabaModule),
+    forwardRef(() => WhatsAppModule),
   ],
   controllers: [CommerceController],
   providers: [
@@ -30,6 +33,7 @@ import { CatalogSyncCron } from './catalog-sync.cron';
     CollectionService,
     ProductMessageService,
     CatalogSyncCron,
+    AbandonedCartService,
   ],
   exports: [CommerceService, CatalogSyncService, ProductMessageService, CollectionService],
 })
