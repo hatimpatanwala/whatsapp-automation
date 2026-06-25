@@ -145,11 +145,11 @@ export class SmartNotificationService {
     return { phoneNumberId, accessToken };
   }
 
-  private pendKey(schema: string, phone: string, channel: NotifyChannel) {
-    return `notif:pend:${schema}:${phone}:${channel}`;
-  }
   private awaitKey(schema: string, phone: string) {
     return `notif:await:${schema}:${phone}`;
+  }
+  private doorKey(schema: string, phone: string) {
+    return `notif:door:${schema}:${phone}`;
   }
 
   /** Entry point: route a notification through the smart pipeline. */
@@ -187,84 +187,64 @@ export class SmartNotificationService {
         return;
       }
 
-      if (input.windowOnly) {
-        // Out of window + window-only → never send a template. Hold it and let
-        // the webhook onInbound() flush it free-form when the recipient returns.
-        const awaitKey = this.awaitKey(input.schema, input.recipientPhone);
-        await this.redis.rpush(awaitKey, JSON.stringify(item));
-        await this.redis.expire(awaitKey, AWAIT_TTL_SEC);
-        return;
-      }
+      // ── Window CLOSED — buffer the real content; it is delivered free-form
+      //    only once the recipient opens the window (taps the door-opener or
+      //    messages). Free-form is therefore NEVER sent to a closed window.
+      const awaitK = this.awaitKey(input.schema, input.recipientPhone);
+      await this.redis.rpush(awaitK, JSON.stringify(item));
+      await this.redis.expire(awaitK, AWAIT_TTL_SEC);
 
-      // Out of window + a specific UTILITY template (order/payment status update):
-      // send it now — it's an expected transactional message and opens a utility
-      // conversation; its own quick-reply button lets the customer continue.
-      if (input.channel === 'utility' && input.template) {
-        const components = input.template.params && input.template.params.length
-          ? [{ type: 'body', parameters: input.template.params.map((p) => ({ type: 'text', text: String(p ?? '') })) }]
-          : undefined;
-        await this.orchestrator.sendTemplate(
-          input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
-          input.template.name, input.template.language || 'en', components, 'utility', true,
+      // windowOnly (abandoned cart): never send any template — just wait for the
+      // recipient to message, then deliver it free-form.
+      if (input.windowOnly) return;
+
+      // Otherwise ensure exactly ONE utility "door-opener" template is sent (after
+      // a short debounce so multiple events collapse into one). A single tap on it
+      // opens the 24h window, and onInbound() then flushes the whole buffer
+      // free-form — so at most ONE utility template is ever charged per episode.
+      const doorK = this.doorKey(input.schema, input.recipientPhone);
+      if (!(await this.redis.exists(doorK))) {
+        const delay = await this.getBatchMs(input.schema);
+        await this.flushQueue.add(
+          'flush',
+          { schema: input.schema, phone: input.recipientPhone },
+          { jobId: `nflush:${input.schema}:${input.recipientPhone}`, delay, removeOnComplete: true, removeOnFail: true },
         );
-        return;
       }
-
-      if (input.urgent) {
-        // Time-critical and out of window → send its specific template now.
-        if (input.urgentTemplate) {
-          await this.orchestrator.sendTemplate(
-            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
-            input.urgentTemplate.name, input.urgentTemplate.language || 'en', input.urgentTemplate.components, input.channel,
-          );
-        }
-        return;
-      }
-
-      // Out of window, non-urgent marketing → buffer + schedule a single batch flush.
-      const key = this.pendKey(input.schema, input.recipientPhone, input.channel);
-      await this.redis.rpush(key, JSON.stringify(item));
-      await this.redis.expire(key, PEND_TTL_SEC);
-      const delay = await this.getBatchMs(input.schema);
-      await this.flushQueue.add(
-        'flush',
-        { schema: input.schema, phone: input.recipientPhone, channel: input.channel },
-        { jobId: `nflush:${input.schema}:${input.recipientPhone}:${input.channel}`, delay, removeOnComplete: true, removeOnFail: true },
-      );
     } catch (err: any) {
       this.logger.warn(`notify failed for ${input.recipientPhone}: ${err.message}`);
     }
   }
 
-  /** Batch flush (called by the delayed queue worker). */
-  async flush(schema: string, phone: string, channel: NotifyChannel): Promise<void> {
-    const items = await this.drain(this.pendKey(schema, phone, channel));
+  /** Door-opener decision (called by the debounced queue worker). */
+  async flush(schema: string, phone: string): Promise<void> {
+    const awaitK = this.awaitKey(schema, phone);
+    const raw = await this.redis.lrange(awaitK, 0, -1);
+    const items = raw.map((r) => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean) as PendingItem[];
     if (!items.length) return;
     const first = items[0];
 
     const windowOpen = await this.orchestrator.hasActiveServiceWindow(first.tenantId, phone);
     if (windowOpen) {
+      // Window opened in the meantime → deliver everything free-form, no template.
+      await this.redis.del(awaitK);
+      await this.redis.del(this.doorKey(schema, phone));
       await this.sendConsolidated(items, phone);
       return;
     }
 
-    // Still closed → stash the real content and send a single teaser template.
-    const awaitKey = this.awaitKey(schema, phone);
-    for (const it of items) await this.redis.rpush(awaitKey, JSON.stringify(it));
-    await this.redis.expire(awaitKey, AWAIT_TTL_SEC);
-
-    const total = await this.redis.llen(awaitKey);
-    await this.sendTeaser(first, phone, channel, total);
+    // Still closed → send exactly ONE utility door-opener (atomic guard). The
+    // buffered content stays put until the recipient taps/opens the window.
+    const reserved = await this.redis.set(this.doorKey(schema, phone), '1', 'EX', 24 * 60 * 60, 'NX');
+    if (reserved !== 'OK') return;
+    await this.sendDoorOpener(first, phone, items.length);
   }
 
   /** Called from the webhook on every inbound message (the service window just opened). */
   async onInbound(schema: string, phone: string): Promise<void> {
     try {
-      const items = [
-        ...(await this.drain(this.awaitKey(schema, phone))),
-        ...(await this.drain(this.pendKey(schema, phone, 'utility'))),
-        ...(await this.drain(this.pendKey(schema, phone, 'marketing'))),
-      ];
+      const items = await this.drain(this.awaitKey(schema, phone));
+      await this.redis.del(this.doorKey(schema, phone)); // reset for the next episode
       if (!items.length) return;
       await this.sendConsolidated(items, phone);
     } catch (err: any) {
@@ -303,23 +283,21 @@ export class SmartNotificationService {
     return `${header}\n\n${lines}`;
   }
 
-  private async sendTeaser(item: PendingItem, phone: string, channel: NotifyChannel, count: number): Promise<void> {
+  /**
+   * Send ONE utility "door-opener" template. Always utility (cheapest; a single
+   * tap opens the window so the real content — including any marketing — is then
+   * delivered free-form for free). forceTemplate ensures it's sent as a template
+   * even though the window is closed.
+   */
+  private async sendDoorOpener(item: PendingItem, phone: string, count: number): Promise<void> {
     const isAdmin = item.audience === 'admin';
-    let name: string;
-    let components: any[];
-    if (channel === 'marketing' && !isAdmin) {
-      name = 'customer_offers_teaser';
-      components = [{ type: 'body', parameters: [{ type: 'text', text: item.recipientName || 'there' }, { type: 'text', text: String(count) }] }];
-    } else if (isAdmin) {
-      name = 'admin_updates_teaser';
-      components = [{ type: 'body', parameters: [{ type: 'text', text: String(count) }] }];
-    } else {
-      name = 'customer_updates_teaser';
-      components = [{ type: 'body', parameters: [{ type: 'text', text: item.recipientName || 'there' }, { type: 'text', text: String(count) }] }];
-    }
+    const name = isAdmin ? 'admin_updates_teaser' : 'customer_updates_teaser';
+    const components = isAdmin
+      ? [{ type: 'body', parameters: [{ type: 'text', text: String(count) }] }]
+      : [{ type: 'body', parameters: [{ type: 'text', text: item.recipientName || 'there' }, { type: 'text', text: String(count) }] }];
 
     await this.orchestrator.sendTemplate(
-      item.tenantId, item.phoneNumberId, item.accessToken, phone, name, 'en', components, channel,
+      item.tenantId, item.phoneNumberId, item.accessToken, phone, name, 'en', components, 'utility', true,
     );
   }
 }
