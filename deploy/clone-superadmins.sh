@@ -60,9 +60,17 @@ load() {
   fi
 
   echo "[load] STAGING container=$STG_CONTAINER db=$db"
+  echo "  • extensions (uuid-ossp, pgcrypto)…"
+  docker exec -e PGPASSWORD="$pw" "$STG_CONTAINER" \
+    psql -v ON_ERROR_STOP=1 -U "$user" -d "$db" \
+    -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; CREATE EXTENSION IF NOT EXISTS pgcrypto;'
   echo "  • public schema…"
-  docker exec -i -e PGPASSWORD="$pw" "$STG_CONTAINER" \
-    psql -v ON_ERROR_STOP=1 -U "$user" -d "$db" < "$OUT_DIR/public-schema.sql"
+  # Strip schema-level lines that collide with the default public schema
+  # (pg_dump --schema=public emits CREATE/ALTER/COMMENT on the schema itself).
+  sed -E '/^CREATE SCHEMA public;/d; /^ALTER SCHEMA public OWNER/d; /^COMMENT ON SCHEMA public/d' \
+    "$OUT_DIR/public-schema.sql" \
+    | docker exec -i -e PGPASSWORD="$pw" "$STG_CONTAINER" \
+        psql -v ON_ERROR_STOP=1 -U "$user" -d "$db"
   echo "  • super_admins data…"
   docker exec -i -e PGPASSWORD="$pw" "$STG_CONTAINER" \
     psql -v ON_ERROR_STOP=1 -U "$user" -d "$db" < "$OUT_DIR/superadmins-data.sql"
