@@ -44,17 +44,47 @@ cp deploy/.env deploy/.env.staging
 nano deploy/.env.staging         # set DB_NAME, CORS_ORIGIN, FRONTEND_URL, OAUTH_CALLBACK_BASE_URL
 ```
 
-## Bring up staging (prod keeps running, untouched)
+## Bring up staging — SAME BOX, pausing prod (1 GB box)
+
+On a 1 GB box, prod and staging can't both run. This pauses prod (containers +
+data preserved) so staging has the RAM, then resumes prod afterward.
 
 ```bash
-# 1) Start ONLY the staging DB + Redis first.
+# 1) While PROD is still running, dump super-admins + public schema to files.
+bash deploy/clone-superadmins.sh dump
+
+# 2) PAUSE production (keeps containers + volumes; data is NOT deleted).
+docker compose -p deploy -f deploy/docker-compose.yml stop
+
+# 3) Bring up the staging stack.
 docker compose -p wa-staging -f deploy/docker-compose.staging.yml \
-  --env-file deploy/.env.staging up -d postgres redis
+  --env-file deploy/.env.staging up -d --build
 
-# 2) Clone PROD public schema + super_admins data ONLY (prod is read-only here).
-bash deploy/clone-superadmins.sh
+# 4) Load the cloned public schema + super_admins into staging.
+bash deploy/clone-superadmins.sh load
+# (restart staging backend so it picks up the freshly loaded schema)
+docker compose -p wa-staging -f deploy/docker-compose.staging.yml restart backend
+```
 
-# 3) Start the staging backend + frontend.
+### Resume production (when done testing)
+
+```bash
+# Stop staging to free the RAM…
+docker compose -p wa-staging -f deploy/docker-compose.staging.yml stop
+# …and bring prod back up exactly as it was:
+docker compose -p deploy -f deploy/docker-compose.yml start
+```
+
+> Prod's `-p deploy` assumes the prod stack was started from the `deploy/` dir
+> (project name = folder). If prod uses a different project name, substitute it
+> (`docker compose ls` shows the real name).
+
+## Alternative: separate / bigger box (prod keeps running)
+
+```bash
+docker compose -p wa-staging -f deploy/docker-compose.staging.yml \
+  --env-file deploy/.env.staging up -d postgres
+bash deploy/clone-superadmins.sh dump && bash deploy/clone-superadmins.sh load
 docker compose -p wa-staging -f deploy/docker-compose.staging.yml \
   --env-file deploy/.env.staging up -d --build
 ```
