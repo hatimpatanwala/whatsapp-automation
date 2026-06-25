@@ -570,7 +570,24 @@ export class OnboardingService {
   async markNumberRemoved(phoneId: string): Promise<{ removed: boolean; message: string }> {
     const phone = await this.phoneNumberRepository.findOne({ where: { id: phoneId } });
     if (!phone) throw new NotFoundException('Phone number not found');
-    await this.phoneNumberRepository.delete(phone.id);
+
+    // The number is being permanently removed. Several public tables FK-reference
+    // phone_numbers via NOT NULL columns with ON DELETE NO ACTION, so a plain
+    // delete is rejected ("violates foreign key constraint ... on conversation_sessions").
+    // Remove the dependent rows first, in dependency order, inside a transaction.
+    await this.phoneNumberRepository.manager.transaction(async (em) => {
+      await em.query(
+        `DELETE FROM public.conversation_costs
+          WHERE conversation_session_id IN (
+            SELECT id FROM public.conversation_sessions WHERE phone_number_id = $1)`,
+        [phone.id],
+      );
+      await em.query(`DELETE FROM public.conversation_sessions WHERE phone_number_id = $1`, [phone.id]);
+      await em.query(`DELETE FROM public.quality_scores WHERE phone_number_id = $1`, [phone.id]);
+      await em.query(`DELETE FROM public.number_health WHERE phone_number_id = $1`, [phone.id]);
+      await em.query(`DELETE FROM public.phone_numbers WHERE id = $1`, [phone.id]);
+    });
+
     await this.auditService.log({
       actorType: 'admin',
       actorId: 'system',
