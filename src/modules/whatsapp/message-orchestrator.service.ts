@@ -3,6 +3,7 @@ import { WhatsAppApiService } from './whatsapp-api.service';
 import { ConversationMeteringService, ConversationCategory } from '../waba/metering/conversation-metering.service';
 import { QuotaEnforcementService } from '../waba/metering/quota-enforcement.service';
 import { RateLimitService } from '../waba/metering/rate-limit.service';
+import { renderTemplateAsText } from './template-catalog';
 
 export interface OrchestatedSendResult {
   success: boolean;
@@ -57,7 +58,22 @@ export class MessageOrchestratorService {
     language: string,
     components?: any[],
     category: ConversationCategory = 'utility',
+    forceTemplate = false,
   ): Promise<OrchestatedSendResult> {
+    // If the recipient's service window is open, never send a (paid, restricted)
+    // template — send the SAME content as a free-form session message. Auth/OTP
+    // templates can opt out via forceTemplate.
+    if (!forceTemplate) {
+      const windowOpen = await this.hasActiveServiceWindow(tenantId, to);
+      if (windowOpen) {
+        const text = renderTemplateAsText(templateName, [], components);
+        if (text) {
+          this.logger.debug(`[Template→FreeForm] ${templateName} to ${to} (window open)`);
+          return this.sendText(tenantId, phoneNumberId, accessToken, to, text, 'service');
+        }
+      }
+    }
+
     const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category, 'business_initiated');
     if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
 

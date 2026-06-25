@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { WhatsAppApiService } from '../../../whatsapp/whatsapp-api.service';
+import { MessageOrchestratorService } from '../../../whatsapp/message-orchestrator.service';
 import { TenantConnectionManager } from '../../../../database/tenant-connection.manager';
 import { NodeHandler, WorkflowNode, WorkflowEdge, ExecutionContext, NodeExecutionResult, findNextEdge } from '../workflow-engine.types';
 
@@ -10,6 +11,7 @@ export class SendTemplateNodeHandler implements NodeHandler {
   constructor(
     private readonly whatsappApi: WhatsAppApiService,
     private readonly connectionManager: TenantConnectionManager,
+    @Optional() private readonly orchestrator: MessageOrchestratorService,
   ) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
@@ -18,9 +20,20 @@ export class SendTemplateNodeHandler implements NodeHandler {
 
     if (!templateName) return { action: 'error', message: 'send_template: no templateName configured' };
 
-    const result = await this.whatsappApi.sendTemplate(
-      ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, templateName, language,
-    );
+    // Window-aware: inside an open service window the orchestrator sends the
+    // free-form equivalent instead of a (paid) template.
+    const tenantId = (ctx.tenant as any)?.id || (ctx as any).tenantId;
+    let result: any;
+    if (tenantId && this.orchestrator) {
+      const r = await this.orchestrator.sendTemplate(
+        tenantId, ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, templateName, language,
+      );
+      result = { messages: r.messageId ? [{ id: r.messageId }] : [] };
+    } else {
+      result = await this.whatsappApi.sendTemplate(
+        ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, templateName, language,
+      );
+    }
 
     const waMessageId = result?.messages?.[0]?.id;
     await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {

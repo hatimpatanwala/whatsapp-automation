@@ -1,7 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { WhatsAppApiService } from '../whatsapp/whatsapp-api.service';
+import { MessageOrchestratorService } from '../whatsapp/message-orchestrator.service';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { QUEUE_BROADCAST } from '../../queue/queue.module';
 
@@ -18,6 +19,7 @@ export class BroadcastProcessor extends WorkerHost {
   constructor(
     private readonly whatsappApi: WhatsAppApiService,
     private readonly connectionManager: TenantConnectionManager,
+    @Optional() private readonly orchestrator: MessageOrchestratorService,
   ) {
     super();
   }
@@ -32,16 +34,25 @@ export class BroadcastProcessor extends WorkerHost {
       `Processing broadcast batch${batchIndex != null ? ` #${batchIndex}` : ''} for campaign ${campaignId}: ${recipients.length} recipients`,
     );
 
+    // Resolve the tenant id so the orchestrator can do per-recipient window checks
+    // (recipients with an open window get the free-form equivalent, not a template).
+    const tenantId = await this.connectionManager.executeInTenantContext('public', async (qr) =>
+      (await qr.query(`SELECT id FROM tenants WHERE schema_name = $1`, [schema]))[0]?.id);
+
+    const components = template.components
+      ? (typeof template.components === 'string' ? JSON.parse(template.components) : template.components)
+      : undefined;
+
     for (const phone of recipients) {
       try {
-        await this.whatsappApi.sendTemplate(
-          phoneNumberId,
-          accessToken,
-          phone,
-          template.wa_template_name,
-          template.language,
-          template.components ? JSON.parse(template.components) : undefined,
-        );
+        if (tenantId && this.orchestrator) {
+          await this.orchestrator.sendTemplate(
+            tenantId, phoneNumberId, accessToken, phone,
+            template.wa_template_name, template.language, components, 'marketing',
+          );
+        } else {
+          await this.whatsappApi.sendTemplate(phoneNumberId, accessToken, phone, template.wa_template_name, template.language, components);
+        }
         sentCount++;
       } catch (error) {
         failedCount++;
