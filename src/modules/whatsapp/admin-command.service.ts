@@ -391,8 +391,12 @@ export class AdminCommandService {
   /** Generate the chosen billing document, send it to the customer, and show the admin a copy. */
   private async issueInvoice(tenant: any, to: string, orderId: string, docType: DocType): Promise<void> {
     if (!this.invoiceService) return this.send(tenant, to, 'Invoicing is not available right now.');
-    const res = await this.invoiceService.generateAndSend(tenant.schemaName, tenant.id, orderId, docType);
+    const res = await this.invoiceService.generateAndSend(tenant, orderId, docType);
     if (!res.ok) return this.send(tenant, to, `⚠️ ${res.reason || 'Could not generate the document.'}\n\nSend *menu* for more.`);
+    // Send the admin the PDF copy too.
+    if (res.pdfMediaId) {
+      await this.whatsappApi.sendDocument(tenant.phoneNumberId, tenant.accessToken, to, { id: res.pdfMediaId }, res.pdfFilename || 'invoice.pdf', `${res.invoiceNumber}`).catch(() => undefined);
+    }
     await this.send(tenant, to, `✅ Generated *${res.invoiceNumber}* and sent it to the customer.\n\n${res.text}\n\nSend *menu* for more.`);
   }
 

@@ -768,8 +768,18 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
                         <label class="text-xs font-medium text-gray-600">Invoice Prefix</label>
                         <input pInputText [(ngModel)]="invoice.prefix" placeholder="INV" class="w-full" />
                       </div>
+                      <div class="flex flex-col gap-1">
+                        <label class="text-xs font-medium text-gray-600">Next Invoice Number</label>
+                        <p-inputnumber [(ngModel)]="invoice.nextNumber" [min]="1" [useGrouping]="false" placeholder="Auto" inputStyleClass="w-full" styleClass="w-full" />
+                        <small class="text-[11px] text-gray-400">Set this to continue your ERP series. Leave empty to auto-number.</small>
+                      </div>
+                      <div class="flex flex-col gap-1 sm:col-span-2">
+                        <label class="text-xs font-medium text-gray-600">Number Format</label>
+                        <input pInputText [(ngModel)]="invoice.numberFormat" placeholder="{{ '{prefix}' }}/{{ '{code}' }}/{{ '{year}' }}/{{ '{seq}' }}" class="w-full" />
+                        <small class="text-[11px] text-gray-400">Placeholders: {{ '{prefix}' }} {{ '{code}' }} (INV/BOS/DC) {{ '{year}' }} {{ '{fy}' }} (e.g. 2025-26) {{ '{seq}' }}</small>
+                      </div>
                     </div>
-                    <p class="text-[11px] text-gray-400 mt-2">GSTIN is required to issue a GST (Tax) Invoice. Bills of Supply and Delivery Memos don't need it.</p>
+                    <p class="text-[11px] text-gray-400 mt-2">GSTIN is required to issue a GST (Tax) Invoice. Bills of Supply and Delivery Memos don't need it. You can also set a custom invoice number per order from the order page to match your ERP exactly.</p>
                   </div>
 
                   <!-- Advanced: Meta Catalog (collapsible) -->
@@ -1023,6 +1033,8 @@ export class SettingsComponent implements OnInit {
     address: '',
     state: '',
     prefix: 'INV',
+    nextNumber: null as number | null,
+    numberFormat: '{prefix}/{code}/{year}/{seq}',
   };
 
   wa = {
@@ -1226,6 +1238,8 @@ export class SettingsComponent implements OnInit {
         if (settings.invoiceAddress !== undefined) this.invoice.address = settings.invoiceAddress || '';
         if (settings.invoiceState !== undefined) this.invoice.state = settings.invoiceState || '';
         if (settings.invoicePrefix) this.invoice.prefix = settings.invoicePrefix;
+        if (settings.invoiceNextNumber !== undefined && settings.invoiceNextNumber !== null) this.invoice.nextNumber = Number(settings.invoiceNextNumber);
+        if (settings.invoiceNumberFormat) this.invoice.numberFormat = settings.invoiceNumberFormat;
 
         // WhatsApp config
         if (settings.waPhone) this.wa.phone = settings.waPhone;
@@ -1364,6 +1378,8 @@ export class SettingsComponent implements OnInit {
       invoice_address: this.invoice.address,
       invoice_state: this.invoice.state,
       invoice_prefix: this.invoice.prefix || 'INV',
+      invoice_number_format: this.invoice.numberFormat || '{prefix}/{code}/{year}/{seq}',
+      ...(this.invoice.nextNumber ? { invoice_next_number: Number(this.invoice.nextNumber) } : {}),
       // WhatsApp config
       wa_phone: this.wa.phone,
       wa_account_id: this.wa.accountId,

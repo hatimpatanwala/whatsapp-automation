@@ -372,6 +372,47 @@ export class WhatsAppApiService {
     return data.id as string;
   }
 
+  /** Upload a raw buffer (e.g. a generated PDF) to WhatsApp media. Returns the media id. */
+  async uploadMediaBuffer(
+    phoneNumberId: string,
+    accessToken: string,
+    buffer: Buffer,
+    contentType: string,
+    filename: string,
+  ): Promise<string | null> {
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', contentType);
+    form.append('file', new Blob([new Uint8Array(buffer)], { type: contentType }), filename);
+
+    const url = `${this.apiUrl}/${this.apiVersion}/${phoneNumberId}/media`;
+    const up = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form as any,
+    });
+    const data = (await up.json().catch(() => ({}))) as any;
+    if (!up.ok || !data?.id) {
+      this.logger.error(`Media buffer upload failed: ${JSON.stringify(data)}`);
+      return null;
+    }
+    return data.id as string;
+  }
+
+  /** Send a document (PDF, etc.) by uploaded media id or public link. */
+  async sendDocument(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    media: { id?: string; link?: string },
+    filename: string,
+    caption?: string,
+  ): Promise<any> {
+    const document: any = { ...media, filename };
+    if (caption) document.caption = caption;
+    return this.sendDirectMessage(phoneNumberId, accessToken, to, { type: 'document', document });
+  }
+
   // ─── WhatsApp Commerce / Catalog Messages ───────────────────────────────
 
   /**
