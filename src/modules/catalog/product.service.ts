@@ -27,6 +27,10 @@ export class ProductService {
       category: row.category
         ? (typeof row.category === 'string' ? JSON.parse(row.category) : row.category)
         : row.category_name ? { id: row.category_id, name: row.category_name } : undefined,
+      brandId: row.brand_id,
+      brand: row.brand
+        ? (typeof row.brand === 'string' ? JSON.parse(row.brand) : row.brand)
+        : row.brand_name ? { id: row.brand_id, name: row.brand_name } : undefined,
       price: parseFloat(row.base_price) || 0,
       compareAtPrice: row.sale_price ? parseFloat(row.sale_price) : null,
       sku: metadata.sku || row.slug || '',
@@ -47,7 +51,7 @@ export class ProductService {
     };
   }
 
-  async findAll(schema: string, pagination: PaginationDto, categoryId?: string): Promise<PaginatedResponse<any>> {
+  async findAll(schema: string, pagination: PaginationDto, categoryId?: string, brandId?: string): Promise<PaginatedResponse<any>> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       let whereClause = 'WHERE p.is_active = true';
       const params: any[] = [];
@@ -55,6 +59,10 @@ export class ProductService {
       if (categoryId) {
         params.push(categoryId);
         whereClause += ` AND p.category_id = $${params.length}`;
+      }
+      if (brandId) {
+        params.push(brandId);
+        whereClause += ` AND p.brand_id = $${params.length}`;
       }
 
       const countResult = await qr.query(
@@ -69,9 +77,11 @@ export class ProductService {
         `SELECT p.*,
                 COALESCE(i.stock_quantity, 0) as stock_quantity,
                 COALESCE(i.low_stock_threshold, 5) as low_stock_threshold,
-                json_build_object('id', c.id, 'name', c.name) as category
+                json_build_object('id', c.id, 'name', c.name) as category,
+                CASE WHEN b.id IS NOT NULL THEN json_build_object('id', b.id, 'name', b.name) END as brand
          FROM products p
          LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN brands b ON b.id = p.brand_id
          LEFT JOIN inventory i ON i.product_id = p.id AND i.variant_id IS NULL
          ${whereClause}
          ORDER BY p.sort_order, p.created_at DESC
@@ -87,12 +97,13 @@ export class ProductService {
   async findById(schema: string, id: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const result = await qr.query(
-        `SELECT p.*, c.name as category_name,
+        `SELECT p.*, c.name as category_name, b.name as brand_name,
                 COALESCE(i.stock_quantity, 0) as stock_quantity,
                 COALESCE(i.reserved_quantity, 0) as reserved_quantity,
                 COALESCE(i.low_stock_threshold, 5) as low_stock_threshold
          FROM products p
          LEFT JOIN categories c ON c.id = p.category_id
+         LEFT JOIN brands b ON b.id = p.brand_id
          LEFT JOIN inventory i ON i.product_id = p.id AND i.variant_id IS NULL
          WHERE p.id = $1`,
         [id],

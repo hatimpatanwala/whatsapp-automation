@@ -24,6 +24,7 @@ interface ProductRow {
   name: string;
   sku: string;
   category: string;
+  brand: string;
   price: number;
   stock: number;
   status: 'active' | 'draft' | 'archived' | 'out_of_stock';
@@ -168,6 +169,15 @@ interface BulkUploadStatus {
           styleClass="min-w-40"
           (onChange)="onFilterChange()"
         />
+        <p-select
+          [(ngModel)]="selectedBrand"
+          [options]="brandOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="All brands"
+          styleClass="min-w-40"
+          (onChange)="onFilterChange()"
+        />
         <button pButton label="Reset" icon="pi pi-filter-slash" class="p-button-outlined p-button-sm" (click)="resetFilters()"></button>
       </div>
 
@@ -193,6 +203,7 @@ interface BulkUploadStatus {
                 Product <p-sortIcon field="name" />
               </th>
               <th class="text-xs text-gray-500 font-medium">Category</th>
+              <th class="text-xs text-gray-500 font-medium">Brand</th>
               <th pSortableColumn="price" class="text-xs text-gray-500 font-medium">
                 Price <p-sortIcon field="price" />
               </th>
@@ -219,6 +230,7 @@ interface BulkUploadStatus {
                 </div>
               </td>
               <td class="text-gray-600 text-sm">{{ product.category }}</td>
+              <td class="text-gray-600 text-sm">{{ product.brand || '—' }}</td>
               <td class="font-semibold text-gray-900">₹{{ product.price | number }}</td>
               <td>
                 <span
@@ -259,7 +271,7 @@ interface BulkUploadStatus {
           </ng-template>
           <ng-template pTemplate="emptymessage">
             <tr>
-              <td colspan="7" class="text-center py-12 text-gray-400">
+              <td colspan="8" class="text-center py-12 text-gray-400">
                 <i class="pi pi-box" style="font-size:2.5rem"></i>
                 <p class="mt-3 text-base font-medium">No products found</p>
                 <p class="text-sm mt-1">Try adjusting your filters or add a new product</p>
@@ -313,9 +325,14 @@ export class ProductListComponent implements OnInit, OnDestroy {
   categoryOptions: { label: string; value: string }[] = [
     { label: 'All Categories', value: '' },
   ];
+  selectedBrand = '';
+  brandOptions: { label: string; value: string }[] = [
+    { label: 'All Brands', value: '' },
+  ];
 
   ngOnInit() {
     this.loadCategories();
+    this.loadBrands();
     this.loadProducts();
     this.checkUploadStatus();
 
@@ -358,6 +375,7 @@ export class ProductListComponent implements OnInit, OnDestroy {
     this.searchQuery = '';
     this.selectedStatus = '';
     this.selectedCategory = '';
+    this.selectedBrand = '';
     this.currentPage = 1;
     this.loadProducts();
   }
@@ -545,6 +563,9 @@ export class ProductListComponent implements OnInit, OnDestroy {
     if (this.selectedCategory) {
       params.categoryId = this.selectedCategory;
     }
+    if (this.selectedBrand) {
+      params.brandId = this.selectedBrand;
+    }
     if (this.currentSortField) {
       params.sortBy = this.currentSortField;
       params.sortOrder = this.currentSortOrder;
@@ -575,6 +596,17 @@ export class ProductListComponent implements OnInit, OnDestroy {
     });
   }
 
+  private loadBrands() {
+    this.productService.getBrands().subscribe({
+      next: (brands) => {
+        this.brandOptions = [
+          { label: 'All Brands', value: '' },
+          ...(brands || []).map((b) => ({ label: b.name, value: b.id })),
+        ];
+      },
+    });
+  }
+
   private mapProductToRow(product: Product): ProductRow {
     const imageUrl =
       (product.imageUrls && product.imageUrls.length > 0
@@ -586,6 +618,7 @@ export class ProductListComponent implements OnInit, OnDestroy {
       name: product.name,
       sku: product.sku ?? '',
       category: product.category?.name ?? '',
+      brand: (product as any).brand?.name ?? '',
       price: product.price,
       stock: product.stockQuantity,
       status: product.status,

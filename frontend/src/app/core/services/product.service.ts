@@ -8,6 +8,7 @@ export interface ProductListParams extends QueryParams {
   limit?: number;
   search?: string;
   categoryId?: string;
+  brandId?: string;
   status?: string;
   minPrice?: number;
   maxPrice?: number;

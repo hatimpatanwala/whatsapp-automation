@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { CategoryService } from './category.service';
+import { BrandService } from './brand.service';
 import * as ExcelJS from 'exceljs';
 
 export interface BulkUploadStatus {
@@ -22,6 +23,7 @@ const COLUMNS: { header: string; key: string; width: number }[] = [
   { header: 'Name *', key: 'name', width: 30 },
   { header: 'Description', key: 'description', width: 40 },
   { header: 'Category', key: 'category', width: 20 },
+  { header: 'Brand', key: 'brand', width: 20 },
   { header: 'Price *', key: 'price', width: 12 },
   { header: 'Sale Price', key: 'salePrice', width: 12 },
   { header: 'SKU', key: 'sku', width: 15 },
@@ -36,6 +38,7 @@ const COLUMNS: { header: string; key: string; width: number }[] = [
   { header: 'Status', key: 'status', width: 12 },
 ];
 const CATEGORY_COL = COLUMNS.findIndex((c) => c.key === 'category') + 1;
+const BRAND_COL = COLUMNS.findIndex((c) => c.key === 'brand') + 1;
 const STATUS_COL = COLUMNS.findIndex((c) => c.key === 'status') + 1;
 
 @Injectable()
@@ -46,6 +49,7 @@ export class BulkUploadService {
   constructor(
     private readonly connectionManager: TenantConnectionManager,
     private readonly categoryService: CategoryService,
+    private readonly brandService: BrandService,
   ) {}
 
   private emptyStatus(): BulkUploadStatus {
@@ -110,6 +114,34 @@ export class BulkUploadService {
       /* categories optional */
     }
 
+    // Brands reference + dropdown
+    try {
+      const brands = await this.brandService.findAll(schema);
+      if (brands.length > 0) {
+        const brSheet = workbook.addWorksheet('Brands (Reference)');
+        brSheet.columns = [
+          { header: 'Brand Name', key: 'name', width: 30 },
+          { header: 'Brand ID', key: 'id', width: 40 },
+        ];
+        brSheet.getRow(1).eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF673AB7' } };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        });
+        brands.forEach((b: any) => brSheet.addRow({ name: b.name, id: b.id }));
+        const brNames = brands.map((b: any) => b.name).join(',');
+        if (brNames.length < 255) {
+          for (let i = 2; i <= 2000; i++) {
+            sheet.getCell(i, BRAND_COL).dataValidation = {
+              type: 'list', allowBlank: true, formulae: [`"${brNames}"`],
+              showErrorMessage: true, errorTitle: 'Invalid Brand', error: 'Pick a brand from the list',
+            };
+          }
+        }
+      }
+    } catch {
+      /* brands optional */
+    }
+
     if (products && products.length) {
       // Export mode: fill existing products (ID column locks them to updates).
       products.forEach((p) => sheet.addRow(p));
@@ -120,7 +152,7 @@ export class BulkUploadService {
     } else {
       // Template mode: one greyed sample row.
       sheet.addRow({
-        id: '', name: 'Sample Product (delete this row)', description: 'A sample product', category: '',
+        id: '', name: 'Sample Product (delete this row)', description: 'A sample product', category: '', brand: '',
         price: 299, salePrice: '', sku: 'SAMPLE-001', barcode: '', stockQuantity: 100, lowStockThreshold: 5,
         weight: '', image1: 'https://example.com/image.jpg', image2: '', image3: '', tags: 'sample, demo', status: 'active',
       });
@@ -160,12 +192,13 @@ export class BulkUploadService {
   async exportProducts(schema: string): Promise<ExcelJS.Buffer> {
     const products = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(
-        `SELECT p.id, p.name, p.description, c.name AS category_name,
+        `SELECT p.id, p.name, p.description, c.name AS category_name, b.name AS brand_name,
                 p.base_price, p.sale_price, p.metadata, p.images, p.is_active,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity,
                 COALESCE(inv.low_stock_threshold, 5) AS low_stock_threshold
            FROM products p
            LEFT JOIN categories c ON c.id = p.category_id
+           LEFT JOIN brands b ON b.id = p.brand_id
            LEFT JOIN inventory inv ON inv.product_id = p.id AND inv.variant_id IS NULL
           ORDER BY p.name ASC`,
       );
@@ -180,6 +213,7 @@ export class BulkUploadService {
         name: p.name,
         description: p.description || '',
         category: p.category_name || '',
+        brand: p.brand_name || '',
         price: Number(p.base_price ?? 0),
         salePrice: p.sale_price != null ? Number(p.sale_price) : '',
         sku: meta.sku || '',
@@ -227,6 +261,7 @@ export class BulkUploadService {
       else if (h.startsWith('name')) colOf.set('name', col);
       else if (h.startsWith('description')) colOf.set('description', col);
       else if (h.startsWith('category')) colOf.set('category', col);
+      else if (h.startsWith('brand')) colOf.set('brand', col);
       else if (h.startsWith('price')) colOf.set('price', col);
       else if (h.startsWith('sale')) colOf.set('salePrice', col);
       else if (h.startsWith('sku')) colOf.set('sku', col);
@@ -246,6 +281,10 @@ export class BulkUploadService {
     const categoryMap = new Map<string, string>();
     categories.forEach((c: any) => categoryMap.set(c.name.toLowerCase(), c.id));
 
+    const brands = await this.brandService.findAll(schema).catch(() => [] as any[]);
+    const brandMap = new Map<string, string>();
+    brands.forEach((b: any) => brandMap.set(b.name.toLowerCase(), b.id));
+
     const rows: any[] = [];
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
@@ -257,6 +296,7 @@ export class BulkUploadService {
         name,
         description: get(row, 'description')?.toString()?.trim() || '',
         category: get(row, 'category')?.toString()?.trim() || '',
+        brand: get(row, 'brand')?.toString()?.trim() || '',
         price: this.parseNumber(get(row, 'price')),
         salePrice: this.parseNumber(get(row, 'salePrice')),
         sku: get(row, 'sku')?.toString()?.trim() || '',
@@ -289,6 +329,12 @@ export class BulkUploadService {
           if (!categoryId) throw new Error(`Category "${row.category}" not found`);
         }
 
+        let brandId: string | null = null;
+        if (row.brand) {
+          brandId = brandMap.get(row.brand.toLowerCase()) || null;
+          if (!brandId) throw new Error(`Brand "${row.brand}" not found`);
+        }
+
         const isActive = row.status !== 'draft';
         const tags = row.tags ? row.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
         const metadata = JSON.stringify({ sku: row.sku, barcode: row.barcode, weight: row.weight, tags });
@@ -308,10 +354,10 @@ export class BulkUploadService {
           if (existingId) {
             await qr.query(
               `UPDATE products SET name = $1, description = $2, category_id = $3, base_price = $4,
-                      sale_price = $5, images = $6, is_active = $7, metadata = $8, updated_at = NOW()
-                WHERE id = $9`,
+                      sale_price = $5, images = $6, is_active = $7, metadata = $8, brand_id = $9, updated_at = NOW()
+                WHERE id = $10`,
               [row.name, row.description, categoryId, row.price, row.salePrice || null,
-               row.images.length ? row.images : [], isActive, metadata, existingId],
+               row.images.length ? row.images : [], isActive, metadata, brandId, existingId],
             );
             const inv = await qr.query(`SELECT id FROM inventory WHERE product_id = $1 AND variant_id IS NULL LIMIT 1`, [existingId]);
             if (inv.length) {
@@ -326,10 +372,10 @@ export class BulkUploadService {
 
           const slug = row.sku || row.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
           const product = await qr.query(
-            `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, has_variants, is_active, translations, metadata)
-             VALUES ($1, $2, $3, $4, $5, $6, 'INR', $7, false, $8, '{}', $9) RETURNING id`,
+            `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, has_variants, is_active, translations, metadata, brand_id)
+             VALUES ($1, $2, $3, $4, $5, $6, 'INR', $7, false, $8, '{}', $9, $10) RETURNING id`,
             [row.name, slug, row.description, categoryId, row.price, row.salePrice || null,
-             row.images.length ? row.images : [], isActive, metadata],
+             row.images.length ? row.images : [], isActive, metadata, brandId],
           );
           await qr.query(`INSERT INTO inventory (product_id, stock_quantity, low_stock_threshold) VALUES ($1, $2, $3)`,
             [product[0].id, row.stockQuantity, row.lowStockThreshold]);

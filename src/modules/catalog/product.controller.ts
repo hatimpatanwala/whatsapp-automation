@@ -76,8 +76,9 @@ export class ProductController {
     @Req() req: Request,
     @Query() pagination: PaginationDto,
     @Query('categoryId') categoryId?: string,
+    @Query('brandId') brandId?: string,
   ) {
-    return this.productService.findAll(req.tenantContext.schemaName, pagination, categoryId);
+    return this.productService.findAll(req.tenantContext.schemaName, pagination, categoryId, brandId);
   }
 
   @Get(':id')
