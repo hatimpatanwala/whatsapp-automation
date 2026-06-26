@@ -54,4 +54,12 @@ export class CategoryService {
       return result[0];
     });
   }
+
+  /** Soft-delete (products may still reference it). */
+  async delete(schema: string, id: string): Promise<{ deleted: boolean }> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      await qr.query(`UPDATE categories SET is_active = false WHERE id = $1`, [id]);
+      return { deleted: true };
+    });
+  }
 }

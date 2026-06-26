@@ -176,6 +176,8 @@ export class AdminCommandService {
         { id: 'prod_bulk', title: '📦 Bulk Add/Update', description: 'Download, edit & re-upload' },
         { id: 'prod_update', title: '✏️ Update Product' },
         { id: 'prod_delete', title: '🗑️ Delete Product' },
+        { id: 'cat_categories', title: '🏷️ Categories', description: 'List & add categories' },
+        { id: 'cat_brands', title: '🔖 Brands', description: 'List & add brands' },
         { id: 'cancel', title: '⬅️ Back to menu' },
       ],
     }]);
@@ -202,6 +204,10 @@ export class AdminCommandService {
     if (id === 'prod_list') return this.listProducts(tenant, to);
     if (id === 'prod_add') return this.startAddProduct(tenant, to);
     if (id === 'prod_bulk') return this.createBulkLink(tenant, to);
+    if (id === 'cat_categories') return this.showTaxonomy(tenant, to, 'category');
+    if (id === 'cat_brands') return this.showTaxonomy(tenant, to, 'brand');
+    if (id === 'new_category') return this.startAddTaxonomy(tenant, to, 'category');
+    if (id === 'new_brand') return this.startAddTaxonomy(tenant, to, 'brand');
     if (id === 'prod_update') return this.listProductsForAction(tenant, to, 'pupd', 'Select a product to update');
     if (id === 'prod_delete') return this.listProductsForAction(tenant, to, 'pdel', 'Select a product to delete');
 
@@ -525,6 +531,15 @@ export class AdminCommandService {
       return this.send(tenant, to, `✅ Renamed to *${text}*.\n\nSend *menu* for more.`);
     }
 
+    if (state.flow === 'add_category' || state.flow === 'add_brand') {
+      const kind: 'category' | 'brand' = state.flow === 'add_category' ? 'category' : 'brand';
+      if (!text) return this.send(tenant, to, `Please send a ${kind} name.`);
+      await this.clearState(schema, to);
+      await this.createTaxonomy(schema, kind, text.substring(0, 120));
+      await this.send(tenant, to, `✅ Added ${kind} *${text}*.`);
+      return this.showTaxonomy(tenant, to, kind);
+    }
+
     await this.clearState(schema, to);
     return this.showMainMenu(tenant, to);
   }
@@ -663,6 +678,41 @@ export class AdminCommandService {
       this.logger.error(`createBuilderLink failed: ${err.message}`);
       await this.send(tenant, to, '⚠️ Could not open the builder right now. Send *menu* and try again.');
     }
+  }
+
+  // ─── Categories & Brands ────────────────────────────────────────────────────
+  private async showTaxonomy(tenant: any, to: string, kind: 'category' | 'brand'): Promise<void> {
+    const table = kind === 'category' ? 'categories' : 'brands';
+    const label = kind === 'category' ? 'Categories' : 'Brands';
+    const rows = await this.query(tenant.schemaName, async (qr) =>
+      qr.query(`SELECT name FROM ${table} WHERE is_active = true ORDER BY sort_order, name LIMIT 50`));
+    const list = rows.length ? rows.map((r: any, i: number) => `${i + 1}. ${r.name}`).join('\n') : '_None yet._';
+    await this.sendButtons(tenant, to, `🏷️ *${label}*\n\n${list}`, [
+      { id: kind === 'category' ? 'new_category' : 'new_brand', title: `➕ Add ${kind === 'category' ? 'Category' : 'Brand'}` },
+    ]);
+  }
+
+  private async startAddTaxonomy(tenant: any, to: string, kind: 'category' | 'brand'): Promise<void> {
+    await this.setState(tenant.schemaName, to, {
+      flow: kind === 'category' ? 'add_category' : 'add_brand',
+      step: 'name',
+      data: {},
+    });
+    await this.send(tenant, to, `Send the new ${kind} *name*.\n(Send *menu* to cancel.)`);
+  }
+
+  private async createTaxonomy(schema: string, kind: 'category' | 'brand', name: string): Promise<void> {
+    const table = kind === 'category' ? 'categories' : 'brands';
+    const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    await this.query(schema, async (qr) => {
+      const dup = await qr.query(`SELECT 1 FROM ${table} WHERE slug = $1 LIMIT 1`, [base]);
+      const slug = dup.length ? `${base}-${Date.now().toString(36)}` : base;
+      if (kind === 'category') {
+        await qr.query(`INSERT INTO categories (name, slug, sort_order, translations) VALUES ($1, $2, 0, '{}')`, [name, slug]);
+      } else {
+        await qr.query(`INSERT INTO brands (name, slug, sort_order) VALUES ($1, $2, 0)`, [name, slug]);
+      }
+    });
   }
 
   /** Mint a bulk-products session and send the admin a CTA URL button. */

@@ -195,6 +195,7 @@ export class MainLayoutComponent implements OnInit {
   navItems: NavItem[] = [
     { label: 'Dashboard', icon: 'pi-home', route: '/dashboard' },
     { label: 'Products', icon: 'pi-box', route: '/products' },
+    { label: 'Categories & Brands', icon: 'pi-tags', route: '/catalog-taxonomy' },
     { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders' },
     { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory' },
     { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },

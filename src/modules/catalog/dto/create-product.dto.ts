@@ -16,6 +16,10 @@ export class CreateProductDto {
   @IsString()
   categoryId?: string;
 
+  @IsOptional()
+  @IsString()
+  brandId?: string;
+
   // Accept either "basePrice" or "price" from the frontend
   @IsOptional()
   @IsNumber()

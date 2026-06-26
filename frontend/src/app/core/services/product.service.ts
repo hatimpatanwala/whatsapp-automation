@@ -21,6 +21,7 @@ export interface CreateProductPayload {
   description?: string;
   shortDescription?: string;
   categoryId?: string;
+  brandId?: string;
   price: number;
   compareAtPrice?: number;
   sku?: string;
@@ -141,6 +142,10 @@ export class ProductService {
 
   getCategories(params?: QueryParams): Observable<Category[]> {
     return this.api.get<Category[]>('/products/categories', params);
+  }
+
+  getBrands(): Observable<{ id: string; name: string }[]> {
+    return this.api.get<{ id: string; name: string }[]>('/brands');
   }
 
   getCategoryById(id: string): Observable<Category> {

@@ -35,6 +35,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/products/products.routes').then(m => m.PRODUCTS_ROUTES),
       },
       {
+        path: 'catalog-taxonomy',
+        loadComponent: () => import('./features/catalog-taxonomy/catalog-taxonomy.component').then(m => m.CatalogTaxonomyComponent),
+      },
+      {
         path: 'orders',
         loadChildren: () => import('./features/orders/orders.routes').then(m => m.ORDERS_ROUTES),
       },

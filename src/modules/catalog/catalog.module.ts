@@ -6,6 +6,8 @@ import { BulkWebviewController } from './bulk-webview.controller';
 import { BuilderModule } from '../builder/builder.module';
 import { ProductService } from './product.service';
 import { CategoryService } from './category.service';
+import { BrandService } from './brand.service';
+import { BrandController } from './brand.controller';
 import { MetaCatalogSyncService } from './meta-catalog-sync.service';
 import { BulkUploadService } from './bulk-upload.service';
 import { DatabaseModule } from '../../database/database.module';
@@ -22,8 +24,8 @@ import { WabaModule } from '../waba/waba.module';
     forwardRef(() => WabaModule),
     BuilderModule,
   ],
-  controllers: [ProductController, CategoryController, BulkWebviewController],
-  providers: [ProductService, CategoryService, MetaCatalogSyncService, BulkUploadService, CommerceSettingsHelper],
-  exports: [ProductService, CategoryService, MetaCatalogSyncService, BulkUploadService],
+  controllers: [ProductController, CategoryController, BrandController, BulkWebviewController],
+  providers: [ProductService, CategoryService, BrandService, MetaCatalogSyncService, BulkUploadService, CommerceSettingsHelper],
+  exports: [ProductService, CategoryService, BrandService, MetaCatalogSyncService, BulkUploadService],
 })
 export class CatalogModule {}

@@ -177,6 +177,17 @@ import { ProductService, CreateProductPayload, UpdateProductPayload } from '../.
                     styleClass="w-full"
                   />
                 </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Brand</label>
+                  <p-select
+                    formControlName="brandId"
+                    [options]="brandOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Select brand"
+                    styleClass="w-full"
+                  />
+                </div>
               </div>
             </div>
 
@@ -257,6 +268,7 @@ export class ProductFormComponent implements OnInit {
   ];
 
   categoryOptions: { label: string; value: string }[] = [];
+  brandOptions: { label: string; value: string }[] = [];
 
   productForm = this.fb.group({
     name: ['', Validators.required],
@@ -272,6 +284,7 @@ export class ProductFormComponent implements OnInit {
     lowStockThreshold: [10],
     status: ['active'],
     categoryId: [''],
+    brandId: [''],
     syncToWhatsApp: [true],
   });
 
@@ -279,6 +292,7 @@ export class ProductFormComponent implements OnInit {
 
   ngOnInit() {
     this.loadCategories();
+    this.loadBrands();
 
     this.productId = this.route.snapshot.paramMap.get('id');
     if (this.productId) {
@@ -354,6 +368,7 @@ export class ProductFormComponent implements OnInit {
         description: formValue.description ?? undefined,
         shortDescription: formValue.shortDescription ?? undefined,
         categoryId: formValue.categoryId ?? undefined,
+        brandId: formValue.brandId ?? undefined,
         price: formValue.price ?? undefined,
         compareAtPrice: formValue.compareAtPrice ?? undefined,
         sku: formValue.sku ?? undefined,
@@ -394,6 +409,7 @@ export class ProductFormComponent implements OnInit {
         description: formValue.description ?? undefined,
         shortDescription: formValue.shortDescription ?? undefined,
         categoryId: formValue.categoryId ?? undefined,
+        brandId: formValue.brandId ?? undefined,
         price: formValue.price ?? 0,
         compareAtPrice: formValue.compareAtPrice ?? undefined,
         sku: formValue.sku ?? undefined,
@@ -445,6 +461,17 @@ export class ProductFormComponent implements OnInit {
     });
   }
 
+  private loadBrands() {
+    this.productService.getBrands().subscribe({
+      next: (brands) => {
+        this.brandOptions = (brands || []).map((b) => ({ label: b.name, value: b.id }));
+      },
+      error: () => {
+        this.brandOptions = [];
+      },
+    });
+  }
+
   private loadProduct(id: string) {
     this.loadingProduct.set(true);
 
@@ -463,6 +490,7 @@ export class ProductFormComponent implements OnInit {
           lowStockThreshold: product.lowStockThreshold ?? 10,
           status: product.status,
           categoryId: product.categoryId ?? '',
+          brandId: (product as any).brandId ?? (product as any).brand_id ?? '',
           tags: product.tags ?? [],
         });
 

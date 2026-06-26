@@ -145,6 +145,10 @@ interface CartLine {
               </div>
             }
 
+            @if (!cart().length) {
+              <p class="text-xs text-gray-400 mb-2 text-center">No items yet — search a product or add a custom item below 👇</p>
+            }
+
             <!-- Add item (stays below the list) -->
             <div class="border-t border-gray-100 pt-3 space-y-2">
               <div class="relative">

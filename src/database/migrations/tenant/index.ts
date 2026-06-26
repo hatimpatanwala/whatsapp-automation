@@ -970,6 +970,42 @@ const migration033SocialAuth: TenantMigration = {
   },
 };
 
+const migration034Brands: TenantMigration = {
+  name: '034_create_brands',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".brands (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(255) NOT NULL,
+        description TEXT,
+        logo_url VARCHAR(500),
+        sort_order INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        translations JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS brands_slug_uniq ON "${schema}".brands (slug)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".brands CASCADE`);
+  },
+};
+
+const migration035ProductBrand: TenantMigration = {
+  name: '035_add_brand_to_products',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS brand_id UUID REFERENCES "${schema}".brands(id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_products_brand ON "${schema}".products (brand_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_products_brand`);
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS brand_id`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1004,4 +1040,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration031WorkflowAudience,
   migration032Invoices,
   migration033SocialAuth,
+  migration034Brands,
+  migration035ProductBrand,
 ];

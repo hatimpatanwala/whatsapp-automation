@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Param, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { CategoryService } from './category.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
@@ -29,5 +29,11 @@ export class CategoryController {
   @Roles('owner', 'seller')
   async update(@Req() req: Request, @Param('id') id: string, @Body() body: any) {
     return this.categoryService.update(req.tenantContext.schemaName, id, body);
+  }
+
+  @Delete(':id')
+  @Roles('owner', 'seller')
+  async delete(@Req() req: Request, @Param('id') id: string) {
+    return this.categoryService.delete(req.tenantContext.schemaName, id);
   }
 }

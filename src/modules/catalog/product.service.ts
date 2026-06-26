@@ -133,8 +133,8 @@ export class ProductService {
       const slug = dto.sku || dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const product = await qr.query(
-        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
         [
           dto.name, slug, dto.description, dto.categoryId,
@@ -142,6 +142,7 @@ export class ProductService {
           norm.images, dto.thumbnail, dto.hasVariants || false,
           norm.isActive,
           JSON.stringify(dto.translations || {}), JSON.stringify(norm.metadata),
+          dto.brandId || null,
         ],
       );
 
@@ -182,6 +183,7 @@ export class ProductService {
       if (salePrice !== undefined) { fields.push(`sale_price = $${paramIndex++}`); params.push(salePrice); }
 
       if (dto.categoryId) { fields.push(`category_id = $${paramIndex++}`); params.push(dto.categoryId); }
+      if (dto.brandId !== undefined) { fields.push(`brand_id = $${paramIndex++}`); params.push(dto.brandId || null); }
 
       const images = dto.images || dto.imageUrls;
       if (images) { fields.push(`images = $${paramIndex++}`); params.push(images); }
