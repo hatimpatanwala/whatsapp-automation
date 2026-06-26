@@ -25,6 +25,11 @@ const DEFAULT_SUBSCRIBED_FIELDS = [
 export class WebhookSubscriptionService {
   private readonly logger = new Logger(WebhookSubscriptionService.name);
   private readonly graphApiVersion: string;
+  // When set (e.g. on staging, which shares ONE Meta app with prod), each WABA is
+  // subscribed with a per-WABA override_callback_uri so its webhooks route to THIS
+  // environment instead of the app-level (prod) callback URL.
+  private readonly overrideCallbackUrl: string;
+  private readonly verifyToken: string;
 
   constructor(
     @InjectRepository(WebhookSubscription)
@@ -32,6 +37,8 @@ export class WebhookSubscriptionService {
     private readonly config: ConfigService,
   ) {
     this.graphApiVersion = this.config.get<string>('META_GRAPH_API_VERSION', 'v21.0');
+    this.overrideCallbackUrl = (this.config.get<string>('WEBHOOK_CALLBACK_URL', '') || '').trim();
+    this.verifyToken = this.config.get<string>('WHATSAPP_VERIFY_TOKEN', '') || '';
   }
 
   /**
@@ -59,15 +66,25 @@ export class WebhookSubscriptionService {
     }
 
     try {
-      // Call Meta API to subscribe
+      // Call Meta API to subscribe. If a per-environment callback override is
+      // configured, route THIS WABA's webhooks there (so staging doesn't depend
+      // on the shared app-level callback URL, which points at prod).
       const url = `https://graph.facebook.com/${this.graphApiVersion}/${wabaId}/subscribed_apps`;
-      const response = await fetch(url, {
+      const init: RequestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-      });
+      };
+      if (this.overrideCallbackUrl) {
+        init.body = JSON.stringify({
+          override_callback_uri: this.overrideCallbackUrl,
+          verify_token: this.verifyToken,
+        });
+        this.logger.log(`Subscribing WABA ${wabaId} with callback override → ${this.overrideCallbackUrl}`);
+      }
+      const response = await fetch(url, init);
 
       const data = await response.json() as any;
 

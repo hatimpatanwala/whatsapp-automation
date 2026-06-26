@@ -148,6 +148,11 @@ services:
       # over WhatsApp). Leave unset in production.
       STATIC_OTP_CODE: ${STATIC_OTP_CODE:-}
 
+      # Per-WABA webhook callback override — staging shares ONE Meta app with prod
+      # (whose app-level callback points at prod), so route staging WABAs' webhooks
+      # here. Must be the public staging webhook URL. Leave unset in production.
+      WEBHOOK_CALLBACK_URL: ${WEBHOOK_CALLBACK_URL:-}
+
       # Meta Platform
       META_APP_ID: ${META_APP_ID}
       META_APP_SECRET: ${META_APP_SECRET}
