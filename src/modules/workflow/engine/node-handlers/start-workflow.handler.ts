@@ -9,10 +9,18 @@ export class StartWorkflowNodeHandler implements NodeHandler {
   constructor(private readonly connectionManager: TenantConnectionManager) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext): Promise<NodeExecutionResult> {
-    const workflowIdentifier = node.config.workflowId || node.config.workflowName || '';
+    // useReply: open the workflow the customer picked from a dynamic menu
+    // (selected_workflow_id is set by the wf_menu_ reply route).
+    let workflowIdentifier = node.config.useReply
+      ? (ctx.variables.selected_workflow_id || '')
+      : (node.config.workflowId || node.config.workflowName || '');
     const passVariables = node.config.passVariables !== false;
 
     if (!workflowIdentifier) {
+      if (node.config.useReply) {
+        // Nothing valid selected — just end gracefully.
+        return { action: 'end' };
+      }
       return { action: 'error', message: 'start_workflow: no target workflow configured' };
     }
 

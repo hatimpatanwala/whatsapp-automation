@@ -527,6 +527,11 @@ export class WorkflowExecutionEngine {
       } else if (actionId.startsWith('wf_cat_')) {
         ctx.variables.selected_category_id = actionId.replace('wf_cat_', '');
         if (outEdges[0]) return outEdges[0].to;
+      } else if (actionId.startsWith('wf_menu_')) {
+        // Dynamic Welcome menu pick → the chosen sub-workflow id. The next node
+        // (start_workflow with useReply) opens it.
+        ctx.variables.selected_workflow_id = actionId.replace('wf_menu_', '');
+        if (outEdges[0]) return outEdges[0].to;
       }
     }
 

@@ -1016,6 +1016,17 @@ const migration036SystemWorkflows: TenantMigration = {
   },
 };
 
+const migration037WorkflowMenuItem: TenantMigration = {
+  name: '037_workflow_menu_item',
+  async up(qr, schema) {
+    // When set, a workflow appears in the Welcome hub's dynamic menu: { label, order }.
+    await qr.query(`ALTER TABLE "${schema}".workflows ADD COLUMN IF NOT EXISTS menu_item JSONB`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".workflows DROP COLUMN IF EXISTS menu_item`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1053,4 +1064,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration034Brands,
   migration035ProductBrand,
   migration036SystemWorkflows,
+  migration037WorkflowMenuItem,
 ];

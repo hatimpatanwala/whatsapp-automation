@@ -24,6 +24,8 @@ export class SendListNodeHandler implements NodeHandler {
       sections = await this.buildCategorySections(ctx.schema);
     } else if (source === 'products') {
       sections = await this.buildProductSections(ctx.schema);
+    } else if (source === 'menu_workflows') {
+      sections = await this.buildMenuWorkflowSections(ctx.schema);
     } else {
       // Custom items — accept `sections` (array of { title, rows }) OR a flat
       // `items`/`rows` array of { id, title, description } from the builder.
@@ -52,6 +54,23 @@ export class SendListNodeHandler implements NodeHandler {
 
     // Pause for customer selection
     return { action: 'wait', waitType: 'reply', waitConfig: { nodeId: node.id, source } };
+  }
+
+  /** Dynamic menu: one row per ACTIVE workflow that registered a menu_item. */
+  private async buildMenuWorkflowSections(schema: string): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const wfs = await qr.query(
+        `SELECT id, name, menu_item FROM workflows
+          WHERE status = 'active' AND menu_item IS NOT NULL
+          ORDER BY COALESCE((menu_item->>'order')::int, 999), name
+          LIMIT 10`,
+      );
+      const rows = wfs.map((w: any) => {
+        const mi = typeof w.menu_item === 'string' ? JSON.parse(w.menu_item) : (w.menu_item || {});
+        return { id: `wf_menu_${w.id}`, title: String(mi.label || w.name).substring(0, 24) };
+      });
+      return [{ title: 'Menu', rows: rows.length ? rows : [{ id: 'wf_menu_none', title: 'No options yet' }] }];
+    });
   }
 
   private async buildCategorySections(schema: string): Promise<any[]> {

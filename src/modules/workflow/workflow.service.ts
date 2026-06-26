@@ -1,7 +1,7 @@
 import { Injectable, Inject, Optional, ForbiddenException } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { WorkflowTriggerMatcher } from './engine/workflow-trigger.matcher';
-import { buildWelcomeHub } from './default-workflows';
+import { buildWelcomeHub, buildDefaultSpokes } from './default-workflows';
 
 export interface CreateWorkflowDto {
   name: string;
@@ -12,6 +12,7 @@ export interface CreateWorkflowDto {
   audience?: 'customer' | 'admin';
   status?: string;
   isSystem?: boolean;
+  menuItem?: { label: string; order: number } | null;
 }
 
 export interface UpdateWorkflowDto {
@@ -39,15 +40,17 @@ export class WorkflowService {
   ) {}
 
   /**
-   * Ensure the system "Welcome" hub workflow exists for this tenant. Idempotent
-   * and best-effort — never throws (so it can't break the list view). Auto-seeds
-   * existing tenants on their first workflow-list load.
+   * Ensure the default e-commerce workflow set exists for this tenant: the
+   * SYSTEM "Welcome" hub (undeletable) + the modular spoke workflows (Browse,
+   * Cart, My Orders, Track, Quote, Support), each registered as a menu item.
+   * Seeds once per tenant (settings flag), idempotent, best-effort — never throws.
    */
-  async ensureWelcomeHub(schema: string, userId?: string): Promise<void> {
+  async ensureDefaultWorkflows(schema: string, userId?: string): Promise<void> {
     try {
       await this.tenantConn.executeInTenantContext(schema, async (qr) => {
-        const existing = await qr.query(`SELECT id FROM workflows WHERE is_system = true LIMIT 1`);
-        if (existing.length) return;
+        const flag = await qr.query(`SELECT value FROM settings WHERE key = 'default_workflows_seeded' LIMIT 1`);
+        if (flag[0]?.value) return;
+
         let storeName = 'our store';
         try {
           const t = await qr.query(
@@ -56,11 +59,33 @@ export class WorkflowService {
           );
           if (t[0]?.store) storeName = t[0].store;
         } catch { /* fall back to generic */ }
-        const hub = buildWelcomeHub(storeName);
+
+        const insert = async (wf: any, opts: { isSystem?: boolean; menuItem?: any }) => {
+          await qr.query(
+            `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience, status, is_system, menu_item)
+             VALUES ($1, $2, $3, $4, $5, $6, 'customer', 'active', $7, $8)`,
+            [
+              wf.name, wf.description, JSON.stringify(wf.trigger), JSON.stringify(wf.nodes), JSON.stringify(wf.edges),
+              userId || null, !!opts.isSystem, opts.menuItem ? JSON.stringify(opts.menuItem) : null,
+            ],
+          );
+        };
+
+        // Only seed the hub if no system workflow exists yet.
+        const hasSystem = await qr.query(`SELECT id FROM workflows WHERE is_system = true LIMIT 1`);
+        if (!hasSystem.length) {
+          await insert(buildWelcomeHub(storeName), { isSystem: true });
+        }
+        for (const spoke of buildDefaultSpokes()) {
+          // Don't duplicate a spoke an admin may already have by that name.
+          const dup = await qr.query(`SELECT id FROM workflows WHERE LOWER(name) = LOWER($1) LIMIT 1`, [spoke.name]);
+          if (dup.length) continue;
+          await insert(spoke, { menuItem: spoke.menuItem });
+        }
+
         await qr.query(
-          `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience, status, is_system)
-           VALUES ($1, $2, $3, $4, $5, $6, 'customer', 'active', true)`,
-          [hub.name, hub.description, JSON.stringify(hub.trigger), JSON.stringify(hub.nodes), JSON.stringify(hub.edges), userId || null],
+          `INSERT INTO settings (key, value) VALUES ('default_workflows_seeded', 'true')
+           ON CONFLICT (key) DO UPDATE SET value = 'true'`,
         );
       });
       await this.triggerMatcher?.invalidateCache(schema);
@@ -74,8 +99,8 @@ export class WorkflowService {
     const limit = params?.limit || 20;
     const offset = (page - 1) * limit;
 
-    // Make sure every tenant has the default Welcome workflow (idempotent).
-    await this.ensureWelcomeHub(schema);
+    // Make sure every tenant has the default e-commerce workflows (idempotent).
+    await this.ensureDefaultWorkflows(schema);
 
     return this.tenantConn.executeInTenantContext(schema, async (qr) => {
       let where = 'WHERE 1=1';
@@ -124,8 +149,8 @@ export class WorkflowService {
   async create(schema: string, dto: CreateWorkflowDto, userId?: string) {
     return this.tenantConn.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
-        `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience, status, is_system)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience, status, is_system, menu_item)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           dto.name,
@@ -137,6 +162,7 @@ export class WorkflowService {
           dto.audience || 'customer',
           dto.status || 'draft',
           dto.isSystem || false,
+          dto.menuItem ? JSON.stringify(dto.menuItem) : null,
         ],
       );
       return rows[0];
