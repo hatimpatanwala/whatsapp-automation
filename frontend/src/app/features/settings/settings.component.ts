@@ -180,7 +180,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                     </div>
                   </div>
 
-                  @if (embeddedSignupEnabled()) {
+                  @if (optionsLoaded() && embeddedSignupEnabled()) {
                     <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                       <div class="flex gap-3">
                         <i class="pi pi-whatsapp text-green-600 mt-0.5" style="font-size:1rem"></i>
@@ -240,7 +240,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
                     <!-- Connect via Embedded Signup (Coexistence) -->
                     @if (addPhonePhase() === 'input') {
-                      @if (embeddedSignupEnabled()) {
+                      @if (optionsLoaded() && embeddedSignupEnabled()) {
                         <p class="text-xs text-gray-500">Connect through Meta's secure popup. Pick or create your WhatsApp Business Account and number — coexistence keeps your WhatsApp Business App working.</p>
                         <wa-embedded-signup-button label="Connect WhatsApp Number" (connected)="onWhatsappConnected()" />
                       }
@@ -1014,6 +1014,8 @@ export class SettingsComponent implements OnInit {
   // Phone number management
   directRegistrationEnabled = signal(false);
   embeddedSignupEnabled = signal(true);
+  // Gate rendering until config loads — avoids a flash of Embedded Signup.
+  optionsLoaded = signal(false);
   showAddPhone = signal(false);
   newPhoneNumber = '';
   phoneChecking = signal(false);
@@ -1205,10 +1207,12 @@ export class SettingsComponent implements OnInit {
       next: (o) => {
         this.directRegistrationEnabled.set(!!o?.directRegistration);
         this.embeddedSignupEnabled.set(o?.embeddedSignup !== false);
+        this.optionsLoaded.set(true);
       },
       error: () => {
         this.directRegistrationEnabled.set(false);
         this.embeddedSignupEnabled.set(true);
+        this.optionsLoaded.set(true);
       },
     });
 

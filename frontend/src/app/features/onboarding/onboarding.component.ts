@@ -111,6 +111,9 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
               <div class="space-y-4">
                 <!-- WhatsApp connection via Meta Embedded Signup + Coexistence (only path) -->
                 @if (!embeddedSignupResult()?.success) {
+                 @if (!optionsLoaded()) {
+                   <div class="text-sm text-gray-400 py-4"><i class="pi pi-spin pi-spinner mr-2"></i>Loading connection options…</div>
+                 } @else {
                   @if (embeddedSignupEnabled()) {
                     <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
                       <div class="flex items-start gap-3 mb-4">
@@ -153,6 +156,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                       <span class="text-sm">No WhatsApp connection method is currently enabled. Please contact your administrator.</span>
                     </p-message>
                   }
+                 }
                 }
 
                 @if (embeddedSignupResult()?.success) {
@@ -861,6 +865,9 @@ export class OnboardingComponent implements OnInit {
   // Super-admin toggle: also offer direct (no-Facebook) registration.
   directRegistrationEnabled = signal(false);
   embeddedSignupEnabled = signal(true);
+  // Don't render connection options until we know the real config — prevents a
+  // flash of Embedded Signup before registration-options resolves.
+  optionsLoaded = signal(false);
 
   // Step 1: Phone registration (session-based)
   countryCode = '+91';
@@ -955,10 +962,12 @@ export class OnboardingComponent implements OnInit {
       next: (o) => {
         this.directRegistrationEnabled.set(!!o?.directRegistration);
         this.embeddedSignupEnabled.set(o?.embeddedSignup !== false);
+        this.optionsLoaded.set(true);
       },
       error: () => {
         this.directRegistrationEnabled.set(false);
         this.embeddedSignupEnabled.set(true);
+        this.optionsLoaded.set(true);
       },
     });
     this.onboardingService.getStatus().subscribe({
