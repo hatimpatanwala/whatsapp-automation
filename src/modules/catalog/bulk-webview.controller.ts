@@ -1,11 +1,14 @@
 import {
-  Controller, Get, Post, Req, Res, Query, UploadedFile, UseInterceptors, BadRequestException,
+  Controller, Get, Post, Req, Res, Query, Body, UploadedFile, UseInterceptors, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { BuilderService } from '../builder/builder.service';
 import { BulkUploadService } from './bulk-upload.service';
+import { ProductService } from './product.service';
+import { CategoryService } from './category.service';
+import { BrandService } from './brand.service';
 
 /**
  * Public, TOKEN-authenticated bulk product editor — the page the admin opens
@@ -19,6 +22,9 @@ export class BulkWebviewController {
   constructor(
     private readonly builder: BuilderService,
     private readonly bulk: BulkUploadService,
+    private readonly products: ProductService,
+    private readonly categories: CategoryService,
+    private readonly brands: BrandService,
   ) {}
 
   private token(req: Request, q?: string): string {
@@ -61,5 +67,40 @@ export class BulkWebviewController {
   async status(@Req() req: Request, @Query('token') token?: string) {
     const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
     return this.bulk.getStatus(schemaName);
+  }
+
+  /** Categories + brands for the single-product add web form. */
+  @Get('taxonomy')
+  async taxonomy(@Req() req: Request, @Query('token') token?: string) {
+    const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
+    const [categories, brands] = await Promise.all([
+      this.categories.findAll(schemaName).catch(() => []),
+      this.brands.findAll(schemaName).catch(() => []),
+    ]);
+    return {
+      categories: categories.map((c: any) => ({ id: c.id, name: c.name })),
+      brands: brands.map((b: any) => ({ id: b.id, name: b.name })),
+    };
+  }
+
+  /** Create a single product from the web form (token-authed). */
+  @Post('create')
+  async createProduct(@Req() req: Request, @Body() body: any, @Query('token') token?: string) {
+    const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
+    if (!body?.name?.trim()) throw new BadRequestException('Product name is required.');
+    const product = await this.products.create(schemaName, {
+      name: body.name.trim(),
+      description: body.description,
+      categoryId: body.categoryId || undefined,
+      brandId: body.brandId || undefined,
+      hsnCode: body.hsnCode || undefined,
+      gstRate: body.taxRate != null && body.taxRate !== '' ? Number(body.taxRate) : undefined,
+      price: Number(body.price) || 0,
+      salePrice: body.salePrice != null && body.salePrice !== '' ? Number(body.salePrice) : undefined,
+      sku: body.sku || undefined,
+      initialStock: body.stock != null && body.stock !== '' ? Number(body.stock) : 0,
+      imageUrls: body.imageUrl ? [body.imageUrl] : undefined,
+    } as any);
+    return { id: product.id, name: product.name };
   }
 }

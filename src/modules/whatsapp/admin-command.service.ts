@@ -202,7 +202,7 @@ export class AdminCommandService {
     if (id === 'menu_lowstock') return this.listLowStock(tenant, to);
     if (id === 'menu_help') return this.showHelp(tenant, to);
     if (id === 'prod_list') return this.listProducts(tenant, to);
-    if (id === 'prod_add') return this.startAddProduct(tenant, to);
+    if (id === 'prod_add') return this.createProductLink(tenant, to);
     if (id === 'prod_bulk') return this.createBulkLink(tenant, to);
     if (id === 'cat_categories') return this.showTaxonomy(tenant, to, 'category');
     if (id === 'cat_brands') return this.showTaxonomy(tenant, to, 'brand');
@@ -715,6 +715,28 @@ export class AdminCommandService {
         await qr.query(`INSERT INTO brands (name, slug, sort_order) VALUES ($1, $2, 0)`, [name, slug]);
       }
     });
+  }
+
+  /** Mint a product-add session and send the admin a CTA URL button (web form). */
+  private async createProductLink(tenant: any, to: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createProductSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        '➕ *Add Product*\n\nTap below to open the form — name, price, stock, category, brand, HSN & tax — then save. This link works for 2 hours.',
+        'Open Add Product',
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createProductLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the add-product form. Send *menu* and try again.');
+    }
   }
 
   /** Mint a bulk-products session and send the admin a CTA URL button. */

@@ -84,7 +84,7 @@ import { ProductService, CreateProductPayload, UpdateProductPayload } from '../.
                     <input pInputText formControlName="hsnCode" placeholder="e.g. 6109" class="w-full" />
                   </div>
                   <div class="flex flex-col gap-1">
-                    <label class="text-sm font-medium text-gray-700">GST Rate % <span class="text-xs text-gray-400">(optional)</span></label>
+                    <label class="text-sm font-medium text-gray-700">Tax Rate % <span class="text-xs text-gray-400">(optional)</span></label>
                     <input pInputText type="number" formControlName="gstRate" placeholder="e.g. 18" class="w-full" />
                   </div>
                 </div>

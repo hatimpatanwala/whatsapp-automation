@@ -29,7 +29,7 @@ const COLUMNS: { header: string; key: string; width: number }[] = [
   { header: 'SKU', key: 'sku', width: 15 },
   { header: 'Barcode', key: 'barcode', width: 15 },
   { header: 'HSN Code', key: 'hsn', width: 14 },
-  { header: 'GST %', key: 'gst', width: 10 },
+  { header: 'Tax %', key: 'gst', width: 10 },
   { header: 'Stock Quantity', key: 'stockQuantity', width: 15 },
   { header: 'Low Stock Threshold', key: 'lowStockThreshold', width: 18 },
   { header: 'Weight (g)', key: 'weight', width: 12 },
@@ -271,7 +271,7 @@ export class BulkUploadService {
       else if (h.startsWith('sku')) colOf.set('sku', col);
       else if (h.startsWith('barcode')) colOf.set('barcode', col);
       else if (h.startsWith('hsn')) colOf.set('hsn', col);
-      else if (h.startsWith('gst')) colOf.set('gst', col);
+      else if (h.startsWith('gst') || h.startsWith('tax')) colOf.set('gst', col);
       else if (h.startsWith('stock')) colOf.set('stockQuantity', col);
       else if (h.startsWith('low')) colOf.set('lowStockThreshold', col);
       else if (h.startsWith('weight')) colOf.set('weight', col);

@@ -263,6 +263,19 @@ export class BuilderService implements OnModuleInit {
     return { token, url: `${base}/m/bulk?token=${token}` };
   }
 
+  /** Mint a session for the single-product add web page (same 'bulk' access). */
+  async createProductSession(input: { tenantId: string; schemaName: string; createdBy?: string }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + this.ttlMs);
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions (token_hash, tenant_id, schema_name, type, status, mode, expires_at)
+       VALUES ($1,$2,$3,'bulk','open','bulk',$4)`,
+      [this.hash(token), input.tenantId, input.schemaName, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/product?token=${token}` };
+  }
+
   /** Validate a BULK token → the tenant schema it operates on. */
   async getBulkSchema(token: string): Promise<{ schemaName: string; tenantId: string }> {
     const s = await this.resolveSession(token, 'bulk');

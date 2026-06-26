@@ -125,5 +125,10 @@ export const routes: Routes = [
     path: 'm/bulk',
     loadComponent: () => import('./features/builder/bulk-webview.component').then(m => m.BulkWebviewComponent),
   },
+  {
+    // Token-secured single-product add page (opened from WhatsApp admin).
+    path: 'm/product',
+    loadComponent: () => import('./features/builder/product-add.component').then(m => m.ProductAddComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
