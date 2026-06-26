@@ -20,6 +20,7 @@ interface PlatformConfigView {
   metaLoginEnabled: boolean;
   googleAvailable: boolean;
   metaAvailable: boolean;
+  embeddedSignupEnabled: boolean;
   directRegistrationEnabled: boolean;
   creditLineSharingEnabled: boolean;
   metaCreditLineId: string;
@@ -131,6 +132,16 @@ interface PlatformConfigView {
           <h2 class="text-lg font-semibold text-gray-900">Number Connection</h2>
           <div class="flex items-start justify-between gap-4">
             <div>
+              <p class="text-sm font-semibold text-gray-700">Offer Embedded Signup</p>
+              <p class="text-xs text-gray-500 mt-1 max-w-xl">
+                When on, tenants can connect via Meta's Embedded Signup (coexistence). Turn off to hide it
+                — e.g. when you only want own-WABA direct registration. At least one method should stay on.
+              </p>
+            </div>
+            <p-toggleswitch [(ngModel)]="cfg.embeddedSignupEnabled" />
+          </div>
+          <div class="flex items-start justify-between gap-4 border-t border-gray-100 pt-4">
+            <div>
               <p class="text-sm font-semibold text-gray-700">Allow direct number registration</p>
               <p class="text-xs text-gray-500 mt-1 max-w-xl">
                 When on, tenants can also register a number directly on the platform WABA (no Facebook
@@ -189,7 +200,8 @@ export class AdminSettingsComponent implements OnInit {
   cfg: PlatformConfigView = {
     googleClientId: '', googleClientSecretSet: false, googleLoginEnabled: false,
     metaAppId: '', metaAppSecretSet: false, metaEmbeddedSignupConfigId: '', metaLoginEnabled: false,
-    googleAvailable: false, metaAvailable: false, directRegistrationEnabled: false,
+    googleAvailable: false, metaAvailable: false,
+    embeddedSignupEnabled: true, directRegistrationEnabled: false,
     creditLineSharingEnabled: false, metaCreditLineId: '', metaBillingCurrency: 'USD',
   };
   // Secrets are write-only inputs (never populated from the server).
@@ -219,6 +231,7 @@ export class AdminSettingsComponent implements OnInit {
       metaAppId: this.cfg.metaAppId,
       metaEmbeddedSignupConfigId: this.cfg.metaEmbeddedSignupConfigId,
       metaLoginEnabled: this.cfg.metaLoginEnabled,
+      embeddedSignupEnabled: this.cfg.embeddedSignupEnabled,
       directRegistrationEnabled: this.cfg.directRegistrationEnabled,
       creditLineSharingEnabled: this.cfg.creditLineSharingEnabled,
       metaCreditLineId: this.cfg.metaCreditLineId,

@@ -111,29 +111,33 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
               <div class="space-y-4">
                 <!-- WhatsApp connection via Meta Embedded Signup + Coexistence (only path) -->
                 @if (!embeddedSignupResult()?.success) {
-                  <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
-                    <div class="flex items-start gap-3 mb-4">
-                      <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <i class="pi pi-whatsapp text-white" style="font-size:1rem"></i>
+                  @if (embeddedSignupEnabled()) {
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+                      <div class="flex items-start gap-3 mb-4">
+                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <i class="pi pi-whatsapp text-white" style="font-size:1rem"></i>
+                        </div>
+                        <div>
+                          <p class="text-sm font-bold text-blue-900">Connect WhatsApp with Meta</p>
+                          <p class="text-xs text-blue-700 mt-1">
+                            Authorize through Meta's secure popup, then pick or create your WhatsApp
+                            Business Account and number. Works for new and existing numbers.
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p class="text-sm font-bold text-blue-900">Connect WhatsApp with Meta</p>
-                        <p class="text-xs text-blue-700 mt-1">
-                          Authorize through Meta's secure popup, then pick or create your WhatsApp
-                          Business Account and number. Works for new and existing numbers.
-                        </p>
-                      </div>
-                    </div>
 
-                    <wa-embedded-signup-button (connected)="onEmbeddedConnected($event)" />
-                  </div>
+                      <wa-embedded-signup-button (connected)="onEmbeddedConnected($event)" />
+                    </div>
+                  }
 
                   @if (directRegistrationEnabled()) {
-                    <div class="flex items-center gap-3 my-3">
-                      <div class="flex-1 h-px bg-gray-200"></div>
-                      <span class="text-xs text-gray-400 font-medium">OR</span>
-                      <div class="flex-1 h-px bg-gray-200"></div>
-                    </div>
+                    @if (embeddedSignupEnabled()) {
+                      <div class="flex items-center gap-3 my-3">
+                        <div class="flex-1 h-px bg-gray-200"></div>
+                        <span class="text-xs text-gray-400 font-medium">OR</span>
+                        <div class="flex-1 h-px bg-gray-200"></div>
+                      </div>
+                    }
                     <div class="bg-white border border-gray-200 rounded-xl p-5">
                       <p class="text-sm font-bold text-gray-900 mb-1">Register without a Facebook account</p>
                       <p class="text-xs text-gray-500 mb-3">
@@ -142,6 +146,12 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                       </p>
                       <wa-direct-number-registration (connected)="onDirectConnected()" />
                     </div>
+                  }
+
+                  @if (!embeddedSignupEnabled() && !directRegistrationEnabled()) {
+                    <p-message severity="warn" styleClass="w-full">
+                      <span class="text-sm">No WhatsApp connection method is currently enabled. Please contact your administrator.</span>
+                    </p-message>
                   }
                 }
 
@@ -850,6 +860,7 @@ export class OnboardingComponent implements OnInit {
   embeddedSignupResult = signal<EmbeddedSignupResult | null>(null);
   // Super-admin toggle: also offer direct (no-Facebook) registration.
   directRegistrationEnabled = signal(false);
+  embeddedSignupEnabled = signal(true);
 
   // Step 1: Phone registration (session-based)
   countryCode = '+91';
@@ -941,8 +952,14 @@ export class OnboardingComponent implements OnInit {
 
   ngOnInit() {
     this.onboardingService.getRegistrationOptions().subscribe({
-      next: (o) => this.directRegistrationEnabled.set(!!o?.directRegistration),
-      error: () => this.directRegistrationEnabled.set(false),
+      next: (o) => {
+        this.directRegistrationEnabled.set(!!o?.directRegistration);
+        this.embeddedSignupEnabled.set(o?.embeddedSignup !== false);
+      },
+      error: () => {
+        this.directRegistrationEnabled.set(false);
+        this.embeddedSignupEnabled.set(true);
+      },
     });
     this.onboardingService.getStatus().subscribe({
       next: (status) => {

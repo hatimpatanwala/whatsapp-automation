@@ -18,6 +18,10 @@ export interface PlatformConfigView {
   // Whether each provider is actually usable (configured + enabled).
   googleAvailable: boolean;
   metaAvailable: boolean;
+  // Whether tenants are offered Meta Embedded Signup as a connection method.
+  // Defaults ON. Turn off to hide it (e.g. when only own-WABA direct
+  // registration should be used).
+  embeddedSignupEnabled: boolean;
   // When on, tenants may register a number directly (no Facebook account) in
   // addition to Embedded Signup. When off, only Embedded Signup is offered.
   directRegistrationEnabled: boolean;
@@ -37,6 +41,7 @@ export interface UpdatePlatformConfigDto {
   metaAppSecret?: string;
   metaEmbeddedSignupConfigId?: string;
   metaLoginEnabled?: boolean;
+  embeddedSignupEnabled?: boolean;
   directRegistrationEnabled?: boolean;
   creditLineSharingEnabled?: boolean;
   metaCreditLineId?: string;
@@ -180,6 +185,11 @@ export class PlatformConfigService implements OnModuleInit {
     };
   }
 
+  /** Embedded Signup connection method toggle. Defaults ON when unset. */
+  async isEmbeddedSignupEnabled(): Promise<boolean> {
+    return (await this.getRaw('embedded_signup_enabled')) !== 'false';
+  }
+
   /** Direct (no-Facebook) number registration toggle. Defaults OFF (Embedded Signup only). */
   async isDirectRegistrationEnabled(): Promise<boolean> {
     return (await this.getRaw('direct_registration_enabled')) === 'true';
@@ -213,6 +223,7 @@ export class PlatformConfigService implements OnModuleInit {
       metaLoginEnabled: await this.isEnabled('meta'),
       googleAvailable: await this.isProviderAvailable('google'),
       metaAvailable: await this.isProviderAvailable('meta'),
+      embeddedSignupEnabled: await this.isEmbeddedSignupEnabled(),
       directRegistrationEnabled: await this.isDirectRegistrationEnabled(),
       ...(await (async () => {
         const cl = await this.getCreditLineConfig();
@@ -234,6 +245,8 @@ export class PlatformConfigService implements OnModuleInit {
       await this.setOne('google_login_enabled', dto.googleLoginEnabled ? 'true' : 'false', false);
     if (dto.metaLoginEnabled !== undefined)
       await this.setOne('meta_login_enabled', dto.metaLoginEnabled ? 'true' : 'false', false);
+    if (dto.embeddedSignupEnabled !== undefined)
+      await this.setOne('embedded_signup_enabled', dto.embeddedSignupEnabled ? 'true' : 'false', false);
     if (dto.directRegistrationEnabled !== undefined)
       await this.setOne('direct_registration_enabled', dto.directRegistrationEnabled ? 'true' : 'false', false);
     if (dto.creditLineSharingEnabled !== undefined)

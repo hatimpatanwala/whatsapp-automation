@@ -180,29 +180,39 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                     </div>
                   </div>
 
-                  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-                    <div class="flex gap-3">
-                      <i class="pi pi-whatsapp text-green-600 mt-0.5" style="font-size:1rem"></i>
-                      <div>
-                        <p class="text-sm font-semibold text-blue-900">Connect with Meta</p>
-                        <p class="text-xs text-blue-700 mt-1 leading-relaxed">
-                          Authorize through Meta's secure popup, then pick or create your WhatsApp
-                          Business Account and number. Coexistence keeps your WhatsApp Business App working.
-                        </p>
+                  @if (embeddedSignupEnabled()) {
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                      <div class="flex gap-3">
+                        <i class="pi pi-whatsapp text-green-600 mt-0.5" style="font-size:1rem"></i>
+                        <div>
+                          <p class="text-sm font-semibold text-blue-900">Connect with Meta</p>
+                          <p class="text-xs text-blue-700 mt-1 leading-relaxed">
+                            Authorize through Meta's secure popup, then pick or create your WhatsApp
+                            Business Account and number. Coexistence keeps your WhatsApp Business App working.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <wa-embedded-signup-button (connected)="onWhatsappConnected()" />
+                    <wa-embedded-signup-button (connected)="onWhatsappConnected()" />
+                  }
 
                   @if (directRegistrationEnabled()) {
-                    <div class="flex items-center gap-3 my-3">
-                      <div class="flex-1 h-px bg-gray-200"></div>
-                      <span class="text-xs text-gray-400 font-medium">OR</span>
-                      <div class="flex-1 h-px bg-gray-200"></div>
-                    </div>
+                    @if (embeddedSignupEnabled()) {
+                      <div class="flex items-center gap-3 my-3">
+                        <div class="flex-1 h-px bg-gray-200"></div>
+                        <span class="text-xs text-gray-400 font-medium">OR</span>
+                        <div class="flex-1 h-px bg-gray-200"></div>
+                      </div>
+                    }
                     <p class="text-sm font-semibold text-gray-900 mb-2">Register without a Facebook account</p>
                     <wa-direct-number-registration (connected)="onWhatsappConnected()" />
+                  }
+
+                  @if (!embeddedSignupEnabled() && !directRegistrationEnabled()) {
+                    <p-message severity="warn" styleClass="w-full">
+                      <span class="text-sm">No WhatsApp connection method is currently enabled. Please contact your administrator.</span>
+                    </p-message>
                   }
                 </div>
               }
@@ -230,17 +240,25 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
                     <!-- Connect via Embedded Signup (Coexistence) -->
                     @if (addPhonePhase() === 'input') {
-                      <p class="text-xs text-gray-500">Connect through Meta's secure popup. Pick or create your WhatsApp Business Account and number — coexistence keeps your WhatsApp Business App working.</p>
-                      <wa-embedded-signup-button label="Connect WhatsApp Number" (connected)="onWhatsappConnected()" />
+                      @if (embeddedSignupEnabled()) {
+                        <p class="text-xs text-gray-500">Connect through Meta's secure popup. Pick or create your WhatsApp Business Account and number — coexistence keeps your WhatsApp Business App working.</p>
+                        <wa-embedded-signup-button label="Connect WhatsApp Number" (connected)="onWhatsappConnected()" />
+                      }
 
                       @if (directRegistrationEnabled()) {
-                        <div class="flex items-center gap-3 my-3">
-                          <div class="flex-1 h-px bg-gray-200"></div>
-                          <span class="text-xs text-gray-400 font-medium">OR</span>
-                          <div class="flex-1 h-px bg-gray-200"></div>
-                        </div>
+                        @if (embeddedSignupEnabled()) {
+                          <div class="flex items-center gap-3 my-3">
+                            <div class="flex-1 h-px bg-gray-200"></div>
+                            <span class="text-xs text-gray-400 font-medium">OR</span>
+                            <div class="flex-1 h-px bg-gray-200"></div>
+                          </div>
+                        }
                         <p class="text-xs font-semibold text-gray-700 mb-1">Register without a Facebook account</p>
                         <wa-direct-number-registration (connected)="onWhatsappConnected()" />
+                      }
+
+                      @if (!embeddedSignupEnabled() && !directRegistrationEnabled()) {
+                        <p class="text-xs text-amber-700">No WhatsApp connection method is currently enabled. Please contact your administrator.</p>
                       }
                     }
 
@@ -995,6 +1013,7 @@ export class SettingsComponent implements OnInit {
 
   // Phone number management
   directRegistrationEnabled = signal(false);
+  embeddedSignupEnabled = signal(true);
   showAddPhone = signal(false);
   newPhoneNumber = '';
   phoneChecking = signal(false);
@@ -1183,8 +1202,14 @@ export class SettingsComponent implements OnInit {
     this.loadTenantData();
 
     this.onboardingService.getRegistrationOptions().subscribe({
-      next: (o) => this.directRegistrationEnabled.set(!!o?.directRegistration),
-      error: () => this.directRegistrationEnabled.set(false),
+      next: (o) => {
+        this.directRegistrationEnabled.set(!!o?.directRegistration);
+        this.embeddedSignupEnabled.set(o?.embeddedSignup !== false);
+      },
+      error: () => {
+        this.directRegistrationEnabled.set(false);
+        this.embeddedSignupEnabled.set(true);
+      },
     });
 
     // Initialize allowExceed from subscription

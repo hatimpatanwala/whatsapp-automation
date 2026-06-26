@@ -29,14 +29,14 @@ export class OnboardingController {
   }
 
   /**
-   * Which ways the tenant may connect a number. Embedded Signup is always
-   * available; direct (no-Facebook) registration is a super-admin toggle.
+   * Which ways the tenant may connect a number. Both Embedded Signup and direct
+   * (no-Facebook) registration are super-admin toggles.
    */
   @Get('registration-options')
   @Roles('owner', 'seller')
   async getRegistrationOptions() {
     return {
-      embeddedSignup: true,
+      embeddedSignup: await this.platformConfig.isEmbeddedSignupEnabled(),
       directRegistration: await this.platformConfig.isDirectRegistrationEnabled(),
     };
   }
