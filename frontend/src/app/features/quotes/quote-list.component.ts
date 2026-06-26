@@ -48,10 +48,7 @@ interface Quote {
           <h2 class="text-2xl font-bold text-gray-900">Quotes</h2>
           <p class="text-sm text-gray-500 mt-1">Create and manage customer quotes</p>
         </div>
-        <div class="flex items-center gap-2">
-          <p-button label="Quick Build" icon="pi pi-bolt" severity="secondary" [outlined]="true" (onClick)="openBuilder()" />
-          <p-button label="Create Quote" icon="pi pi-plus" routerLink="/quotes/new" />
-        </div>
+        <p-button label="Create Quote" icon="pi pi-plus" (onClick)="openBuilder()" />
       </div>
 
       <!-- Stats cards -->
