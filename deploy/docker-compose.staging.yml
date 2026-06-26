@@ -144,6 +144,10 @@ services:
       WHATSAPP_RATE_LIMIT_MAX: ${WHATSAPP_RATE_LIMIT_MAX:-70}
       WHATSAPP_RATE_LIMIT_DURATION: ${WHATSAPP_RATE_LIMIT_DURATION:-1000}
 
+      # Static OTP for staging admin-WhatsApp verification (fixed code, not sent
+      # over WhatsApp). Leave unset in production.
+      STATIC_OTP_CODE: ${STATIC_OTP_CODE:-}
+
       # Meta Platform
       META_APP_ID: ${META_APP_ID}
       META_APP_SECRET: ${META_APP_SECRET}
