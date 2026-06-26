@@ -28,6 +28,11 @@ export class BuilderController {
     return this.builder.getProducts(this.token(req, token));
   }
 
+  @Get('customers')
+  async customers(@Req() req: Request, @Query('q') q?: string, @Query('token') token?: string) {
+    return this.builder.searchCustomers(this.token(req, token), q || '');
+  }
+
   @Post('submit')
   @HttpCode(200)
   async submit(@Req() req: Request, @Query('token') token: string, @Body() body: any) {

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import {
   BuilderApiService,
+  BuilderCustomer,
   BuilderProduct,
   BuilderSessionInfo,
 } from './builder-api.service';
@@ -17,10 +18,10 @@ interface CartLine {
 }
 
 /**
- * Token-secured order/quote builder, designed to run inside WhatsApp's in-app
- * browser. Authenticated purely by the ?token= query param (validated server
- * side); shows products with live stock, lets the admin set qty + price, and
- * submits a new order/quote. Cannot do anything without a valid token.
+ * Token-secured order/quote builder. Responsive: a single-column app on phones
+ * (WhatsApp's in-app browser) and a wider two-column desktop layout on large
+ * screens. Authenticated purely by the ?token= query param (validated server
+ * side). Customer is chosen via a searchable dropdown (by name or number).
  */
 @Component({
   selector: 'wa-mobile-builder',
@@ -29,8 +30,8 @@ interface CartLine {
   template: `
     <div class="min-h-screen bg-gray-50 text-gray-900">
       <!-- Header -->
-      <header class="sticky top-0 z-10 bg-green-600 text-white px-4 py-3 shadow">
-        <div class="flex items-center gap-2">
+      <header class="sticky top-0 z-20 bg-green-600 text-white shadow">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-2">
           <i class="pi pi-whatsapp" style="font-size:1.1rem"></i>
           <h1 class="text-base font-semibold">
             {{ session() ? (session()!.type === 'quote' ? 'Create Quote' : 'Create Order') : 'Builder' }}
@@ -38,17 +39,13 @@ interface CartLine {
         </div>
       </header>
 
-      <!-- Loading -->
       @if (loading()) {
-        <div class="p-8 text-center text-gray-500 text-sm">
-          <i class="pi pi-spin pi-spinner mr-2"></i>Loading…
-        </div>
+        <div class="p-10 text-center text-gray-500 text-sm"><i class="pi pi-spin pi-spinner mr-2"></i>Loading…</div>
       }
 
-      <!-- Error / invalid token -->
       @if (error()) {
-        <div class="p-6">
-          <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+        <div class="max-w-md mx-auto p-6">
+          <div class="bg-red-50 border border-red-200 rounded-xl p-5 text-center">
             <i class="pi pi-lock text-red-500 mb-2" style="font-size:1.5rem"></i>
             <p class="text-sm font-semibold text-red-800">{{ error() }}</p>
             <p class="text-xs text-red-600 mt-1">This page can only be opened from a valid link.</p>
@@ -56,97 +53,69 @@ interface CartLine {
         </div>
       }
 
-      <!-- Done -->
       @if (done(); as d) {
-        <div class="p-6">
-          <div class="bg-green-50 border border-green-200 rounded-xl p-5 text-center">
+        <div class="max-w-md mx-auto p-6">
+          <div class="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
             <i class="pi pi-check-circle text-green-600 mb-2" style="font-size:2rem"></i>
-            <p class="text-sm font-semibold text-green-900">
-              {{ d.type === 'quote' ? 'Quote created' : 'Order created' }}
-            </p>
-            <p class="text-lg font-bold text-green-700 mt-1">{{ d.number }}</p>
+            <p class="text-sm font-semibold text-green-900">{{ d.type === 'quote' ? 'Quote created' : 'Order created' }}</p>
+            <p class="text-xl font-bold text-green-700 mt-1">{{ d.number }}</p>
             <p class="text-xs text-gray-500 mt-3">You can close this window and return to WhatsApp.</p>
           </div>
         </div>
       }
 
-      <!-- Builder -->
       @if (session() && !done() && !error()) {
-        <div class="p-4 space-y-4 pb-32">
-          <!-- Customer -->
-          <section class="bg-white rounded-xl border border-gray-200 p-4">
+        <main class="max-w-5xl mx-auto p-4 pb-32 grid gap-4 lg:grid-cols-2">
+          <!-- Customer (full width) -->
+          <section class="bg-white rounded-xl border border-gray-200 p-4 lg:col-span-2">
             <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Customer</p>
             @if (session()!.customerLocked) {
               <p class="text-sm font-medium">{{ session()!.customer.name || 'Customer' }}</p>
               <p class="text-xs text-gray-500">{{ session()!.customer.phone }}</p>
-            } @else {
-              <div class="space-y-2">
-                <input [(ngModel)]="customerPhone" inputmode="tel" placeholder="Customer phone (e.g. +91…)"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-                <input [(ngModel)]="customerName" placeholder="Customer name (optional)"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            } @else if (selectedCustomer(); as c) {
+              <div class="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                <div>
+                  <p class="text-sm font-semibold">{{ c.name || 'Customer' }}</p>
+                  <p class="text-xs text-gray-500">{{ c.phone }}</p>
+                </div>
+                <button class="text-gray-400 hover:text-red-500" (click)="clearCustomer()"><i class="pi pi-times"></i></button>
               </div>
-            }
-          </section>
-
-          <!-- Cart -->
-          @if (cart().length) {
-            <section class="bg-white rounded-xl border border-gray-200 p-4">
-              <p class="text-xs font-semibold text-gray-500 uppercase mb-3">Items</p>
-              <div class="space-y-3">
-                @for (line of cart(); track line.name; let i = $index) {
-                  <div class="border border-gray-100 rounded-lg p-3">
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="text-sm font-medium flex-1">{{ line.name }}</p>
-                      <button class="text-red-500 text-xs" (click)="remove(i)"><i class="pi pi-trash"></i></button>
-                    </div>
-                    <div class="flex items-center gap-2 mt-2">
-                      <div class="flex-1">
-                        <label class="block text-[10px] text-gray-400">Qty</label>
-                        <input type="number" min="1" [ngModel]="line.quantity"
-                          (ngModelChange)="setQty(i, $event)" inputmode="numeric"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                      </div>
-                      <div class="flex-1">
-                        <label class="block text-[10px] text-gray-400">Unit price</label>
-                        <input type="number" min="0" step="0.01" [ngModel]="line.unitPrice"
-                          (ngModelChange)="setPrice(i, $event)" inputmode="decimal"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
-                      </div>
-                      <div class="text-right">
-                        <label class="block text-[10px] text-gray-400">Total</label>
-                        <p class="text-sm font-semibold">{{ sym() }}{{ (line.quantity * line.unitPrice) | number:'1.0-2' }}</p>
-                      </div>
-                    </div>
-                    @if (line.stock != null) {
-                      <p class="text-[10px] mt-1"
-                         [class.text-red-500]="line.quantity > line.stock"
-                         [class.text-gray-400]="line.quantity <= line.stock">
-                        In stock: {{ line.stock }}{{ line.quantity > line.stock ? ' — exceeds stock!' : '' }}
-                      </p>
+            } @else {
+              <div class="relative">
+                <input [(ngModel)]="custQuery" (ngModelChange)="onCustInput($event)" (focus)="custFocused.set(true)"
+                  placeholder="Search customer by name or number…"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                @if (custFocused() && (custResults().length || custSearching() || newCustomerPhone())) {
+                  <div class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-auto">
+                    @if (custSearching()) {
+                      <div class="px-3 py-2 text-xs text-gray-400"><i class="pi pi-spin pi-spinner mr-1"></i>Searching…</div>
+                    }
+                    @for (c of custResults(); track c.id) {
+                      <button class="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                        (click)="selectCustomer(c)">
+                        <p class="text-sm font-medium">{{ c.name || 'Unnamed' }}</p>
+                        <p class="text-xs text-gray-500">{{ c.phone }}</p>
+                      </button>
+                    }
+                    @if (newCustomerPhone(); as np) {
+                      <button class="w-full text-left px-3 py-2 hover:bg-green-50 text-green-700"
+                        (click)="useNewCustomer()">
+                        <i class="pi pi-plus mr-1"></i>Use new customer <span class="font-semibold">{{ np }}</span>
+                      </button>
                     }
                   </div>
                 }
               </div>
-            </section>
-          }
-
-          <!-- Title (quote) + notes -->
-          <section class="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-            @if (session()!.type === 'quote') {
-              <input [(ngModel)]="title" placeholder="Quote title (optional)"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <p class="text-[11px] text-gray-400 mt-1">Search existing customers, or type a phone number to add a new one.</p>
             }
-            <textarea [(ngModel)]="notes" rows="2" placeholder="Notes (optional)"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
           </section>
 
-          <!-- Product picker -->
-          <section class="bg-white rounded-xl border border-gray-200 p-4">
+          <!-- Product picker (left on desktop) -->
+          <section class="bg-white rounded-xl border border-gray-200 p-4 lg:order-1">
             <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Add products</p>
             <input [(ngModel)]="search" placeholder="Search products…"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3" />
-            <div class="divide-y divide-gray-100 max-h-80 overflow-auto">
+            <div class="divide-y divide-gray-100 max-h-[28rem] overflow-auto">
               @for (p of filteredProducts(); track p.id) {
                 <div class="flex items-center justify-between py-2 gap-2">
                   <div class="flex-1 min-w-0">
@@ -156,29 +125,83 @@ interface CartLine {
                       · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span>
                     </p>
                   </div>
-                  <button class="bg-green-600 text-white text-xs rounded-lg px-3 py-1.5"
-                    (click)="add(p)">Add</button>
+                  <button class="bg-green-600 text-white text-xs rounded-lg px-3 py-1.5 hover:bg-green-700" (click)="add(p)">Add</button>
                 </div>
               } @empty {
                 <p class="text-xs text-gray-400 py-3 text-center">No products found.</p>
               }
             </div>
           </section>
-        </div>
 
-        <!-- Sticky footer: total + submit -->
-        <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-gray-500">Total</span>
-            <span class="text-lg font-bold">{{ sym() }}{{ total() | number:'1.0-2' }}</span>
+          <!-- Cart + notes (right on desktop) -->
+          <div class="space-y-4 lg:order-2">
+            @if (cart().length) {
+              <section class="bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs font-semibold text-gray-500 uppercase mb-3">Items</p>
+                <div class="space-y-3">
+                  @for (line of cart(); track line.name; let i = $index) {
+                    <div class="border border-gray-100 rounded-lg p-3">
+                      <div class="flex items-start justify-between gap-2">
+                        <p class="text-sm font-medium flex-1">{{ line.name }}</p>
+                        <button class="text-red-500 text-xs" (click)="remove(i)"><i class="pi pi-trash"></i></button>
+                      </div>
+                      <div class="flex items-center gap-2 mt-2">
+                        <div class="flex-1">
+                          <label class="block text-[10px] text-gray-400">Qty</label>
+                          <input type="number" min="1" [ngModel]="line.quantity" (ngModelChange)="setQty(i, $event)"
+                            inputmode="numeric" class="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div class="flex-1">
+                          <label class="block text-[10px] text-gray-400">Unit price</label>
+                          <input type="number" min="0" step="0.01" [ngModel]="line.unitPrice" (ngModelChange)="setPrice(i, $event)"
+                            inputmode="decimal" class="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div class="text-right">
+                          <label class="block text-[10px] text-gray-400">Total</label>
+                          <p class="text-sm font-semibold">{{ sym() }}{{ (line.quantity * line.unitPrice) | number:'1.0-2' }}</p>
+                        </div>
+                      </div>
+                      <p class="text-[10px] mt-1"
+                         [class.text-red-500]="line.quantity > line.stock"
+                         [class.text-gray-400]="line.quantity <= line.stock">
+                        In stock: {{ line.stock }}{{ line.quantity > line.stock ? ' — exceeds stock!' : '' }}
+                      </p>
+                    </div>
+                  }
+                </div>
+              </section>
+            } @else {
+              <section class="bg-white rounded-xl border border-dashed border-gray-200 p-6 text-center text-xs text-gray-400">
+                No items yet — add products to build the {{ session()!.type }}.
+              </section>
+            }
+
+            <section class="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+              @if (session()!.type === 'quote') {
+                <input [(ngModel)]="title" placeholder="Quote title (optional)"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              }
+              <textarea [(ngModel)]="notes" rows="2" placeholder="Notes (optional)"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+            </section>
           </div>
-          @if (submitError()) {
-            <p class="text-xs text-red-600 mb-2"><i class="pi pi-exclamation-circle mr-1"></i>{{ submitError() }}</p>
-          }
-          <button class="w-full bg-green-600 text-white font-semibold rounded-lg py-3 disabled:opacity-50"
-            [disabled]="!cart().length || submitting()" (click)="submit()">
-            {{ submitting() ? 'Submitting…' : (session()!.type === 'quote' ? 'Create Quote' : 'Create Order') }}
-          </button>
+        </main>
+
+        <!-- Sticky action bar -->
+        <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
+          <div class="max-w-5xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm text-gray-500">Total ({{ cart().length }} item{{ cart().length === 1 ? '' : 's' }})</span>
+              <span class="text-lg font-bold">{{ sym() }}{{ total() | number:'1.0-2' }}</span>
+            </div>
+            @if (submitError()) {
+              <p class="text-xs text-red-600 mb-2"><i class="pi pi-exclamation-circle mr-1"></i>{{ submitError() }}</p>
+            }
+            <button class="w-full bg-green-600 text-white font-semibold rounded-lg py-3 hover:bg-green-700 disabled:opacity-50"
+              [disabled]="!cart().length || submitting()" (click)="submit()">
+              {{ submitting() ? 'Submitting…' : (session()!.type === 'quote' ? 'Create Quote' : 'Create Order') }}
+            </button>
+          </div>
         </footer>
       }
     </div>
@@ -197,9 +220,15 @@ export class MobileBuilderComponent implements OnInit {
   submitError = signal<string | null>(null);
   done = signal<{ type: string; number: string } | null>(null);
 
+  // Customer picker
+  custQuery = '';
+  custResults = signal<BuilderCustomer[]>([]);
+  custSearching = signal(false);
+  custFocused = signal(false);
+  selectedCustomer = signal<BuilderCustomer | null>(null);
+  private custTimer: any = null;
+
   search = '';
-  customerPhone = '';
-  customerName = '';
   title = '';
   notes = '';
 
@@ -210,6 +239,13 @@ export class MobileBuilderComponent implements OnInit {
   });
 
   total = computed(() => this.cart().reduce((s, l) => s + l.quantity * l.unitPrice, 0));
+
+  /** If the typed query looks like a phone number, offer it as a new customer. */
+  newCustomerPhone = computed(() => {
+    const q = this.custQuery.trim();
+    const digits = q.replace(/\D/g, '');
+    return digits.length >= 7 && !this.custResults().some((c) => c.phone.replace(/\D/g, '') === digits) ? q : null;
+  });
 
   ngOnInit(): void {
     const token = this.route.snapshot.queryParamMap.get('token') || '';
@@ -244,6 +280,44 @@ export class MobileBuilderComponent implements OnInit {
     });
   }
 
+  onCustInput(_: string): void {
+    this.custFocused.set(true);
+    if (this.custTimer) clearTimeout(this.custTimer);
+    const q = this.custQuery.trim();
+    this.custSearching.set(true);
+    this.custTimer = setTimeout(() => {
+      this.api.searchCustomers(q).subscribe({
+        next: (r) => {
+          this.custResults.set(r || []);
+          this.custSearching.set(false);
+        },
+        error: () => {
+          this.custResults.set([]);
+          this.custSearching.set(false);
+        },
+      });
+    }, 280);
+  }
+
+  selectCustomer(c: BuilderCustomer): void {
+    this.selectedCustomer.set(c);
+    this.custFocused.set(false);
+    this.custResults.set([]);
+  }
+
+  useNewCustomer(): void {
+    const q = this.custQuery.trim();
+    this.selectedCustomer.set({ id: '', name: '', phone: q });
+    this.custFocused.set(false);
+    this.custResults.set([]);
+  }
+
+  clearCustomer(): void {
+    this.selectedCustomer.set(null);
+    this.custQuery = '';
+    this.custResults.set([]);
+  }
+
   sym(): string {
     const c = this.products()[0]?.currency || 'INR';
     return c === 'INR' ? '₹' : c === 'USD' ? '$' : c === 'EUR' ? '€' : c + ' ';
@@ -252,11 +326,8 @@ export class MobileBuilderComponent implements OnInit {
   add(p: BuilderProduct): void {
     const cart = [...this.cart()];
     const existing = cart.find((l) => l.productId === p.id);
-    if (existing) {
-      existing.quantity += 1;
-    } else {
-      cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock });
-    }
+    if (existing) existing.quantity += 1;
+    else cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock });
     this.cart.set(cart);
   }
 
@@ -281,21 +352,32 @@ export class MobileBuilderComponent implements OnInit {
   submit(): void {
     const s = this.session();
     if (!s || !this.cart().length) return;
-    if (!s.customerLocked && !this.customerPhone.trim()) {
-      this.submitError.set('Enter the customer phone number.');
-      return;
+
+    let customerId: string | undefined;
+    let customer: { phone?: string; name?: string } | undefined;
+    if (!s.customerLocked) {
+      const sel = this.selectedCustomer();
+      if (sel && sel.id) {
+        customerId = sel.id;
+      } else if (sel && sel.phone) {
+        customer = { phone: sel.phone, name: sel.name };
+      } else {
+        const digits = this.custQuery.replace(/\D/g, '');
+        if (digits.length < 7) {
+          this.submitError.set('Select a customer or enter a valid phone number.');
+          return;
+        }
+        customer = { phone: this.custQuery.trim() };
+      }
     }
+
     this.submitting.set(true);
     this.submitError.set(null);
     this.api
       .submit({
-        items: this.cart().map((l) => ({
-          productId: l.productId,
-          name: l.name,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-        })),
-        customer: s.customerLocked ? undefined : { phone: this.customerPhone.trim(), name: this.customerName.trim() },
+        items: this.cart().map((l) => ({ productId: l.productId, name: l.name, quantity: l.quantity, unitPrice: l.unitPrice })),
+        customerId,
+        customer,
         title: this.title.trim() || undefined,
         notes: this.notes.trim() || undefined,
       })

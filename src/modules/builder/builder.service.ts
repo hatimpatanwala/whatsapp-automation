@@ -13,6 +13,8 @@ import { createHash, randomBytes } from 'crypto';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { OrderService } from '../order/order.service';
 import { QuoteService } from '../quote/quote.service';
+import { EventBusService } from '../events/event-bus.service';
+import { BuilderSubmittedEvent } from '../events/domain-events';
 
 export type BuilderType = 'order' | 'quote';
 
@@ -56,6 +58,7 @@ export class BuilderService implements OnModuleInit {
     private readonly orderService: OrderService,
     private readonly quoteService: QuoteService,
     private readonly config: ConfigService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -165,10 +168,38 @@ export class BuilderService implements OnModuleInit {
     });
   }
 
+  /** Search the token's tenant customers by name or phone (for the picker). */
+  async searchCustomers(token: string, q: string): Promise<{ id: string; name: string; phone: string }[]> {
+    const s = await this.resolveSession(token);
+    const term = (q || '').trim();
+    return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
+      const rows = term
+        ? await qr.query(
+            `SELECT id, name, phone FROM customers
+              WHERE name ILIKE $1 OR phone ILIKE $1
+              ORDER BY (last_order_at IS NULL), last_order_at DESC NULLS LAST, name ASC
+              LIMIT 15`,
+            [`%${term}%`],
+          )
+        : await qr.query(
+            `SELECT id, name, phone FROM customers
+              ORDER BY (last_order_at IS NULL), last_order_at DESC NULLS LAST, name ASC
+              LIMIT 15`,
+          );
+      return rows.map((r: any) => ({ id: r.id, name: r.name || '', phone: r.phone || '' }));
+    });
+  }
+
   /** Submit the built order/quote into the tenant schema; invalidate the token. */
   async submit(
     token: string,
-    payload: { items: BuilderItemInput[]; customer?: { phone?: string; name?: string }; title?: string; notes?: string },
+    payload: {
+      items: BuilderItemInput[];
+      customerId?: string;
+      customer?: { phone?: string; name?: string };
+      title?: string;
+      notes?: string;
+    },
   ): Promise<{ type: BuilderType; id: string; number: string }> {
     const s = await this.resolveSession(token);
     const items = (payload?.items || []).filter((i) => i && i.quantity > 0);
@@ -181,10 +212,27 @@ export class BuilderService implements OnModuleInit {
 
     const schema = s.schema_name;
     let customerId: string | null = s.customer_id;
+    let customerPhone: string | null = s.customer_phone;
+    let customerName: string | null = s.customer_name;
     if (!customerId) {
-      const phone = (payload.customer?.phone || s.customer_phone || '').trim();
-      if (!phone) throw new BadRequestException('Customer phone number is required.');
-      customerId = await this.resolveCustomer(schema, phone, payload.customer?.name || s.customer_name);
+      if (payload.customerId) {
+        // Existing customer chosen from the picker — verify it belongs to tenant.
+        const found = await this.lookupCustomer(schema, payload.customerId);
+        if (!found) throw new BadRequestException('Selected customer was not found.');
+        customerId = found.id;
+        customerPhone = found.phone;
+        customerName = found.name;
+      } else {
+        const phone = (payload.customer?.phone || s.customer_phone || '').trim();
+        if (!phone) throw new BadRequestException('Customer phone number is required.');
+        customerName = payload.customer?.name || s.customer_name || null;
+        customerId = await this.resolveCustomer(schema, phone, customerName);
+        customerPhone = phone;
+      }
+    } else if (!customerPhone) {
+      const found = await this.lookupCustomer(schema, customerId);
+      customerPhone = found?.phone || null;
+      customerName = customerName || found?.name || null;
     }
 
     let resultId: string;
@@ -225,8 +273,23 @@ export class BuilderService implements OnModuleInit {
       [resultId, resultNumber, s.id],
     );
 
+    // Notify the customer (window-aware) via the builder.submitted listener.
+    this.eventBus.emit(
+      new BuilderSubmittedEvent(schema, s.tenant_id, type, resultId, resultNumber, customerId!, customerPhone, customerName),
+    );
+
     this.logger.log(`Builder submit: ${type} ${resultNumber} for tenant ${s.tenant_id}`);
     return { type, id: resultId, number: resultNumber };
+  }
+
+  private async lookupCustomer(
+    schema: string,
+    id: string,
+  ): Promise<{ id: string; name: string; phone: string } | null> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(`SELECT id, name, phone FROM customers WHERE id = $1 LIMIT 1`, [id]);
+      return rows[0] ? { id: rows[0].id, name: rows[0].name || '', phone: rows[0].phone || '' } : null;
+    });
   }
 
   private async resolveCustomer(schema: string, phone: string, name?: string | null): Promise<string> {

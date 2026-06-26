@@ -4,6 +4,7 @@ import { REDIS_CLIENT } from '../../config/redis.module';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { InvoiceService, DocType } from './invoice.service';
+import { BuilderService } from '../builder/builder.service';
 
 interface AdminState {
   flow: string;
@@ -43,6 +44,7 @@ export class AdminCommandService {
     private readonly connectionManager: TenantConnectionManager,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Optional() private readonly invoiceService: InvoiceService,
+    private readonly builder: BuilderService,
   ) {}
 
   // ─── Entry point ────────────────────────────────────────────────────────────
@@ -147,6 +149,7 @@ export class AdminCommandService {
   private async showOrdersMenu(tenant: any, to: string): Promise<void> {
     await this.sendList(tenant, to, '📦 *Orders*', 'Choose', [{
       title: 'Orders', rows: [
+        { id: 'new_order', title: '✨ Create New Order', description: 'Build a new order' },
         { id: 'menu_orders', title: '📋 All Orders', description: 'Recent orders' },
         { id: 'menu_pending', title: '⏳ Pending', description: 'Confirm new orders' },
         { id: 'cancel', title: '⬅️ Back to menu' },
@@ -157,6 +160,7 @@ export class AdminCommandService {
   private async showQuotesMenu(tenant: any, to: string): Promise<void> {
     await this.sendList(tenant, to, '📄 *Quotes*', 'Choose', [{
       title: 'Quotes', rows: [
+        { id: 'new_quote', title: '✨ Create New Quote', description: 'Build a new quote' },
         { id: 'menu_quotes', title: '📋 All Quotes', description: 'Recent quotes' },
         { id: 'menu_qpending', title: '⏳ Open Quotes', description: 'Draft/sent quotes' },
         { id: 'cancel', title: '⬅️ Back to menu' },
@@ -183,6 +187,8 @@ export class AdminCommandService {
     if (id === 'cat_quotes') return this.showQuotesMenu(tenant, to);
     if (id === 'cat_products') return this.showProductsMenu(tenant, to);
 
+    if (id === 'new_order') return this.createBuilderLink(tenant, to, 'order');
+    if (id === 'new_quote') return this.createBuilderLink(tenant, to, 'quote');
     if (id === 'menu_orders') return this.listOrders(tenant, to, false);
     if (id === 'menu_pending') return this.listOrders(tenant, to, true);
     if (id === 'menu_quotes') return this.listQuotes(tenant, to, false);
@@ -631,6 +637,30 @@ export class AdminCommandService {
 
   private query<T = any>(schema: string, fn: (qr: any) => Promise<T>): Promise<T> {
     return this.connectionManager.executeInTenantContext(schema, fn);
+  }
+
+  /** Mint a Builder session and send the admin a CTA URL button to open it. */
+  private async createBuilderLink(tenant: any, to: string, type: 'order' | 'quote'): Promise<void> {
+    try {
+      const { url } = await this.builder.createSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        type,
+        createdBy: to,
+      });
+      const label = type === 'quote' ? 'Quote' : 'Order';
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        `✨ *Create New ${label}*\n\nTap below to open the builder — pick products, set quantity & price, then submit. This link works for 2 hours.`,
+        `Open ${label} Builder`,
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createBuilderLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the builder right now. Send *menu* and try again.');
+    }
   }
 
   private async send(tenant: any, to: string, text: string): Promise<void> {

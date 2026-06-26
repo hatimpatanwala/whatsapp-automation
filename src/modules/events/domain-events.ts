@@ -246,6 +246,23 @@ export class QuoteStatusChangedEvent extends DomainEvent {
   }
 }
 
+// Builder Events
+export class BuilderSubmittedEvent extends DomainEvent {
+  readonly eventName = 'builder.submitted';
+  constructor(
+    schema: string,
+    public readonly tenantId: string,
+    public readonly type: 'order' | 'quote',
+    public readonly resultId: string,
+    public readonly resultNumber: string,
+    public readonly customerId: string,
+    public readonly customerPhone: string | null,
+    public readonly customerName: string | null,
+  ) {
+    super(schema);
+  }
+}
+
 // Delivery Events
 export class DeliveryStatusChangedEvent extends DomainEvent {
   readonly eventName = 'delivery.status_changed';

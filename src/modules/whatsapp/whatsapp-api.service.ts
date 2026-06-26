@@ -180,6 +180,36 @@ export class WhatsAppApiService {
     });
   }
 
+  /**
+   * Interactive CTA URL button — opens a URL (e.g. the Builder webview) in
+   * WhatsApp's in-app browser. Only works inside an open service window.
+   */
+  async sendCtaUrl(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    body: string,
+    buttonText: string,
+    url: string,
+    header?: string,
+    footer?: string,
+  ): Promise<any> {
+    const interactive: any = {
+      type: 'cta_url',
+      body: { text: body },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: buttonText, url },
+      },
+    };
+    if (header) interactive.header = { type: 'text', text: header };
+    if (footer) interactive.footer = { text: footer };
+    return this.sendDirectMessage(phoneNumberId, accessToken, to, {
+      type: 'interactive',
+      interactive,
+    });
+  }
+
   /** Interactive reply buttons with an image header (product card style). */
   async sendInteractiveButtonsWithImage(
     phoneNumberId: string,

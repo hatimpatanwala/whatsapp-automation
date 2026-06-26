@@ -19,8 +19,15 @@ export interface BuilderProduct {
   stock: number;
 }
 
+export interface BuilderCustomer {
+  id: string;
+  name: string;
+  phone: string;
+}
+
 export interface BuilderSubmitPayload {
   items: { productId?: string; name: string; quantity: number; unitPrice: number }[];
+  customerId?: string;
   customer?: { phone?: string; name?: string };
   title?: string;
   notes?: string;
@@ -55,6 +62,13 @@ export class BuilderApiService {
 
   getProducts(): Observable<BuilderProduct[]> {
     return this.http.get<BuilderProduct[]>(`${this.base}/m/builder/products`, this.opts());
+  }
+
+  searchCustomers(q: string): Observable<BuilderCustomer[]> {
+    return this.http.get<BuilderCustomer[]>(`${this.base}/m/builder/customers`, {
+      headers: { 'X-Builder-Token': this.token },
+      params: { q: q || '' },
+    });
   }
 
   submit(payload: BuilderSubmitPayload): Observable<{ type: string; id: string; number: string }> {

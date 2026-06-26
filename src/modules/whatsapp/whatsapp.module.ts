@@ -23,11 +23,14 @@ import { InvoiceService } from './invoice.service';
 import { TenantModule } from '../tenant/tenant.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WabaModule } from '../waba/waba.module';
+import { BuilderModule } from '../builder/builder.module';
+import { BuilderNotificationListener } from './builder-notification.listener';
 
 @Module({
-  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
   controllers: [WhatsAppWebhookController],
   providers: [
+    BuilderNotificationListener,
     WhatsAppApiService,
     WhatsAppMessageService,
     WebhookProcessorService,

@@ -428,6 +428,34 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
     ],
   },
 
+  // ─── BUILDER NOTIFICATIONS (sent when an admin builds an order/quote) ───
+  {
+    name: 'order_created_notify',
+    category: 'UTILITY',
+    language: 'en',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hi {{1}}, a new order *{{2}}* is being created for you. Tap below to view it, and reply here with any changes.',
+        example: { body_text: [['Rahul', 'ORD-0042']] },
+      },
+      { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Check the order' }] },
+    ],
+  },
+  {
+    name: 'quote_ready_notify',
+    category: 'UTILITY',
+    language: 'en',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Hi {{1}}, your quote *{{2}}* is ready. Tap below to review it, and reply here if you have any questions.',
+        example: { body_text: [['Rahul', 'QT-00042']] },
+      },
+      { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Check the quote' }] },
+    ],
+  },
+
   // ─── SMART TEASERS ──────────────────────────────────────────────
   // Sent (batched) when the recipient is OUTSIDE their 24h service window.
   // A single tap opens the window so the real, detailed updates can be
