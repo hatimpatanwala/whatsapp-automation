@@ -121,6 +121,16 @@ export class AdminWhatsAppService {
       this.logger.log(`Admin WhatsApp OTP sent to ${fullPhone} for tenant ${tenantId}`);
     }
 
+    // In static-OTP mode (staging), surface the code so testers don't wait for a
+    // WhatsApp message that is never sent. Guarded to static mode only.
+    if (this.staticOtpCode) {
+      return {
+        sent: true,
+        message: `Test mode — your verification code is ${code}. No WhatsApp message is sent on staging.`,
+        staticCode: code,
+      };
+    }
+
     return { sent: true, message: 'Verification code sent to your WhatsApp number.' };
   }
 

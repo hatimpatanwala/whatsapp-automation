@@ -1747,11 +1747,15 @@ export class SettingsComponent implements OnInit {
     if (!this.adminWaPhoneInput.trim()) return;
 
     this.adminWaLoading.set(true);
-    this.apiService.post<{ sent: boolean; message: string }>('/settings/admin-whatsapp/send-otp', { phone: this.adminWaPhoneInput.trim() }).subscribe({
-      next: () => {
+    this.apiService.post<{ sent: boolean; message: string; staticCode?: string }>('/settings/admin-whatsapp/send-otp', { phone: this.adminWaPhoneInput.trim() }).subscribe({
+      next: (res) => {
         this.adminWaLoading.set(false);
         this.adminWaOtpSent.set(true);
-        this.messageService.add({ severity: 'success', summary: 'OTP Sent', detail: 'Check your WhatsApp for the verification code.' });
+        // Test mode (staging static OTP): prefill the code so no WhatsApp message is needed.
+        if (res?.staticCode) {
+          this.adminWaOtpCode = res.staticCode;
+        }
+        this.messageService.add({ severity: 'success', summary: 'OTP Sent', detail: res?.message || 'Check your WhatsApp for the verification code.' });
       },
       error: (err) => {
         this.adminWaLoading.set(false);
