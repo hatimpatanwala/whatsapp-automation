@@ -104,6 +104,14 @@ export class ProductService {
     });
   }
 
+  /** Download ALL products as an editable .xlsx (re-upload to bulk-update). */
+  exportProducts(): Observable<Blob> {
+    return this.api.http.get(this.api.url('/products/bulk-upload/export'), {
+      responseType: 'blob',
+      withCredentials: true,
+    });
+  }
+
   bulkUpload(file: File): Observable<{ message: string; status: string }> {
     const formData = new FormData();
     formData.append('file', file);

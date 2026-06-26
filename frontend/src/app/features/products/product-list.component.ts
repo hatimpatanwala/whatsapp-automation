@@ -129,8 +129,9 @@ interface BulkUploadStatus {
           <p class="text-gray-500 text-sm">Manage your product catalog</p>
         </div>
         <div class="flex items-center gap-2">
-          <button pButton label="Download Template" icon="pi pi-download" class="p-button-outlined p-button-sm" (click)="downloadTemplate()" [disabled]="isUploading()"></button>
-          <button pButton label="Bulk Upload" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()"></button>
+          <button pButton label="Export Products" icon="pi pi-file-export" class="p-button-outlined p-button-sm" (click)="exportProducts()" [disabled]="isUploading()" [loading]="exporting()" pTooltip="Download all products to edit & re-upload"></button>
+          <button pButton label="Template" icon="pi pi-download" class="p-button-outlined p-button-sm" (click)="downloadTemplate()" [disabled]="isUploading()"></button>
+          <button pButton label="Upload / Update" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()" pTooltip="Upload to add new or update existing products"></button>
           <button pButton label="Add Product" icon="pi pi-plus" severity="success" routerLink="new" [disabled]="isUploading()"></button>
         </div>
       </div>
@@ -411,6 +412,28 @@ export class ProductListComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to download template' });
+      },
+    });
+  }
+
+  exporting = signal(false);
+
+  /** Download all products as an editable xlsx (re-upload to bulk-update). */
+  exportProducts() {
+    this.exporting.set(true);
+    this.productService.exportProducts().subscribe({
+      next: (blob) => {
+        this.exporting.set(false);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'products-export.xlsx';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.exporting.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to export products' });
       },
     });
   }

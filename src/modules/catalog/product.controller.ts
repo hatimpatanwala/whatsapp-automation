@@ -36,6 +36,15 @@ export class ProductController {
     res.send(Buffer.from(buffer));
   }
 
+  @Get('bulk-upload/export')
+  @Roles('owner', 'seller')
+  async exportProducts(@Req() req: Request, @Res() res: Response) {
+    const buffer = await this.bulkUploadService.exportProducts(req.tenantContext.schemaName);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=products-export.xlsx');
+    res.send(Buffer.from(buffer));
+  }
+
   @Post('bulk-upload')
   @Roles('owner', 'seller')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
