@@ -104,6 +104,7 @@ export interface FeatureInfo {
   description: string;
   icon: string;
   group: string;
+  kind?: 'workflow' | 'notification';
 }
 
 export interface CategoriesResponse {

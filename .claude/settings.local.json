@@ -168,7 +168,21 @@
       "Bash(sed -i 's/\\\\${ADMIN_PASSWORD:-Admin@123456}/${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}/g' docker-compose.yml)",
       "Bash(grep -viE \"template-provisioning|getAllTemplates|//|message_templates\\\\?|/message_templates\\\\`\")",
       "Bash(grep -nA3 \"async uploadBuffer\" src/modules/media/media.service.ts)",
-      "Bash(grep -nA2 \"async uploadMediaFromUrl\" src/modules/whatsapp/whatsapp-api.service.ts)"
+      "Bash(grep -nA2 \"async uploadMediaFromUrl\" src/modules/whatsapp/whatsapp-api.service.ts)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(chmod 600 ./wa-commece.pem)",
+      "Bash(cp wa-commece.pem /tmp/wa.pem)",
+      "Bash(chmod 600 /tmp/wa.pem)",
+      "Bash(nslookup staging.whatsappdemo.duckdns.org)",
+      "Bash(nslookup staging-whatsappdemo.duckdns.org 1.1.1.1)",
+      "Bash(nslookup staging-whatsappdemo.duckdns.org 8.8.8.8)",
+      "Bash(nslookup staging-whatsappdemo.duckdns.org ns1.duckdns.org)",
+      "Bash(nslookup whatsappdemo.duckdns.org ns1.duckdns.org)",
+      "Bash(grep -E \"\\\\.\\(ts|sql\\)$\")",
+      "PowerShell(Head *)",
+      "Bash(git pull *)",
+      "Bash(git merge *)",
+      "Bash(grep -nE \"workflows = signal|editingWorkflow = signal|import \\\\{ Component|signal, computed|computed|loading = signal\" /d/whatsapp-automation/frontend/src/app/features/workflow-builder/workflow-builder.component.ts)"
     ]
   }
 }

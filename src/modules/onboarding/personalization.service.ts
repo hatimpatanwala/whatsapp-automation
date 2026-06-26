@@ -15,6 +15,18 @@ export interface PersonalizeDto {
   selectedFeatures: string[]; // feature keys from FEATURE_OPTIONS
 }
 
+/**
+ * Event/schedule-triggered features (sent automatically) → "Notifications".
+ * Everything else is customer-initiated → "Workflows".
+ */
+export const NOTIFICATION_FEATURE_KEYS = new Set<string>([
+  'order_confirmation', 'order_shipped', 'delivery_tracking', 'order_cancellation', 'abandoned_cart',
+  'payment_confirmation', 'payment_reminder', 'cod_confirmation',
+  'quote_followup', 'quote_accepted', 'back_in_stock', 'appointment_reminder',
+  'feedback_after_delivery', 'loyalty_reengagement', 'birthday_wishes', 'referral_program',
+  'promotional_broadcast', 'new_customer_welcome',
+]);
+
 @Injectable()
 export class PersonalizationService {
   private readonly logger = new Logger(PersonalizationService.name);
@@ -41,6 +53,7 @@ export class PersonalizationService {
         description: f.description,
         icon: f.icon,
         group: f.group,
+        kind: NOTIFICATION_FEATURE_KEYS.has(f.key) ? 'notification' : 'workflow',
       })),
     };
   }
@@ -82,6 +95,14 @@ export class PersonalizationService {
         this.logger.error(`Failed to create workflow "${template.name}": ${err?.message}`);
         errors.push(template.name);
       }
+    }
+
+    // Always ensure the undeletable Welcome hub + its menu spokes exist so the
+    // customer has a working entry point regardless of which features were picked.
+    try {
+      await this.workflowService.ensureDefaultWorkflows(schema);
+    } catch (err: any) {
+      this.logger.error(`Failed to ensure default workflows: ${err?.message}`);
     }
 
     return {

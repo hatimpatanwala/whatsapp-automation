@@ -694,19 +694,40 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
                 <!-- Feature selection -->
                 <div class="flex flex-col gap-2">
-                  <div class="flex items-center justify-between">
-                    <label class="text-sm font-semibold text-gray-700">Select Automations</label>
-                    <span class="text-xs text-primary-500 font-medium">{{ selectedFeatures().size }} / {{ allFeatures().length }} selected</span>
-                  </div>
-                  <div class="flex items-center gap-2 -mt-1">
-                    <button class="text-xs text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 font-medium" (click)="selectRecommended()">Recommended</button>
-                    <span class="text-gray-300">|</span>
-                    <button class="text-xs text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 font-medium" (click)="selectAllFeatures()">Select All</button>
-                    <span class="text-gray-300">|</span>
-                    <button class="text-xs text-gray-400 hover:underline border-0 bg-transparent cursor-pointer p-0" (click)="clearFeatures()">Clear All</button>
+                  <label class="text-sm font-semibold text-gray-700">Select Automations</label>
+
+                  <!-- Workflows / Notifications tabs -->
+                  <div class="flex gap-1 bg-gray-100 rounded-xl p-1 mt-1">
+                    @for (tab of personalizeTabs; track tab.value) {
+                      <button
+                        class="flex-1 text-xs font-semibold rounded-lg py-2 px-2 border-0 cursor-pointer transition-all"
+                        [class.bg-white]="personalizeTab() === tab.value"
+                        [class.shadow-sm]="personalizeTab() === tab.value"
+                        [class.text-primary-600]="personalizeTab() === tab.value"
+                        [class.bg-transparent]="personalizeTab() !== tab.value"
+                        [class.text-gray-500]="personalizeTab() !== tab.value"
+                        (click)="personalizeTab.set(tab.value)"
+                      >
+                        {{ tab.label }}
+                        <span class="ml-1 opacity-70">({{ selectedCountForKind(tab.value) }}/{{ totalCountForKind(tab.value) }})</span>
+                      </button>
+                    }
                   </div>
 
-                  <!-- Grouped features -->
+                  <div class="flex items-center justify-between mt-1">
+                    <span class="text-xs text-gray-400">
+                      {{ personalizeTab() === 'workflow' ? 'Customer-initiated chat journeys' : 'Auto-sent updates & reminders' }}
+                    </span>
+                    <div class="flex items-center gap-2">
+                      <button class="text-xs text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 font-medium" (click)="selectRecommended()">Recommended</button>
+                      <span class="text-gray-300">|</span>
+                      <button class="text-xs text-primary-500 hover:underline border-0 bg-transparent cursor-pointer p-0 font-medium" (click)="selectAllInTab()">Select All</button>
+                      <span class="text-gray-300">|</span>
+                      <button class="text-xs text-gray-400 hover:underline border-0 bg-transparent cursor-pointer p-0" (click)="clearTab()">Clear</button>
+                    </div>
+                  </div>
+
+                  <!-- Grouped features (filtered by active tab) -->
                   @for (group of featureGroups(); track group.name) {
                     <div class="mt-3">
                       <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{{ group.name }}</p>
@@ -742,6 +763,10 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                           </div>
                         }
                       </div>
+                    </div>
+                  } @empty {
+                    <div class="text-center text-xs text-gray-400 py-6 border border-dashed border-gray-200 rounded-xl mt-2">
+                      No {{ personalizeTab() === 'workflow' ? 'workflows' : 'notifications' }} available for this category.
                     </div>
                   }
                 </div>
@@ -1275,8 +1300,21 @@ export class OnboardingComponent implements OnInit {
     }
   }
 
+  // Personalization is split into two tabs: customer-initiated Workflows and
+  // auto-sent Notifications. A feature's `kind` (from the API) decides its tab.
+  personalizeTab = signal<'workflow' | 'notification'>('workflow');
+  personalizeTabs: { value: 'workflow' | 'notification'; label: string }[] = [
+    { value: 'workflow', label: '🤖 Workflows' },
+    { value: 'notification', label: '🔔 Notifications' },
+  ];
+
+  private kindOf(f: FeatureInfo): 'workflow' | 'notification' {
+    return f.kind === 'notification' ? 'notification' : 'workflow';
+  }
+
   featureGroups = computed(() => {
-    const features = this.allFeatures();
+    const tab = this.personalizeTab();
+    const features = this.allFeatures().filter(f => this.kindOf(f) === tab);
     const groups: { name: string; features: FeatureInfo[] }[] = [];
     const groupMap = new Map<string, FeatureInfo[]>();
     for (const f of features) {
@@ -1290,8 +1328,32 @@ export class OnboardingComponent implements OnInit {
     return groups;
   });
 
-  selectAllFeatures() {
-    this.selectedFeatures.set(new Set(this.allFeatures().map(f => f.key)));
+  /** Features in a given tab. */
+  private featuresForKind(kind: 'workflow' | 'notification'): FeatureInfo[] {
+    return this.allFeatures().filter(f => this.kindOf(f) === kind);
+  }
+
+  totalCountForKind(kind: 'workflow' | 'notification'): number {
+    return this.featuresForKind(kind).length;
+  }
+
+  selectedCountForKind(kind: 'workflow' | 'notification'): number {
+    const sel = this.selectedFeatures();
+    return this.featuresForKind(kind).filter(f => sel.has(f.key)).length;
+  }
+
+  /** Select all features in the active tab (preserving the other tab's choices). */
+  selectAllInTab() {
+    const next = new Set(this.selectedFeatures());
+    for (const f of this.featuresForKind(this.personalizeTab())) next.add(f.key);
+    this.selectedFeatures.set(next);
+  }
+
+  /** Clear only the active tab's selections. */
+  clearTab() {
+    const tabKeys = new Set(this.featuresForKind(this.personalizeTab()).map(f => f.key));
+    const next = new Set(Array.from(this.selectedFeatures()).filter(k => !tabKeys.has(k)));
+    this.selectedFeatures.set(next);
   }
 
   selectRecommended() {
@@ -1299,10 +1361,6 @@ export class OnboardingComponent implements OnInit {
     if (cat) {
       this.selectedFeatures.set(new Set(cat.recommendedFeatures));
     }
-  }
-
-  clearFeatures() {
-    this.selectedFeatures.set(new Set());
   }
 
   toggleFeature(featureKey: string) {

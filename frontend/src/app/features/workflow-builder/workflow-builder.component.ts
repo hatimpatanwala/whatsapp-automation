@@ -69,6 +69,20 @@ import {
           </div>
         </div>
 
+        <!-- Segregate: interactive Workflows vs automatic Notifications -->
+        <div class="flex gap-1 border-b border-gray-200">
+          @for (t of kindTabs; track t.value) {
+            <button class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition bg-transparent"
+              [class.border-green-500]="selectedKind() === t.value"
+              [class.text-green-700]="selectedKind() === t.value"
+              [class.border-transparent]="selectedKind() !== t.value"
+              [class.text-gray-500]="selectedKind() !== t.value"
+              (click)="selectedKind.set(t.value)">
+              {{ t.label }} <span class="text-xs text-gray-400">({{ countByKind(t.value) }})</span>
+            </button>
+          }
+        </div>
+
         @if (loading()) {
           <!-- Skeleton loading state -->
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -96,7 +110,7 @@ import {
           </div>
         } @else {
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            @for (wf of workflows(); track wf.id) {
+            @for (wf of filteredWorkflows(); track wf.id) {
               <div
                 class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-primary-200 transition-all cursor-pointer group"
                 (click)="openWorkflow(wf)"
@@ -110,6 +124,9 @@ import {
                       }
                       @if ($any(wf).isSystem) {
                         <span class="text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 whitespace-nowrap" pTooltip="Default workflow — editable but can't be deleted">🔒 Default</span>
+                      }
+                      @if ($any(wf).kind === 'notification') {
+                        <span class="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">🔔 Notification</span>
                       }
                     </div>
                     <p class="text-xs text-gray-400 mt-0.5">{{ wf.description || 'No description' }}</p>
@@ -145,13 +162,13 @@ import {
               </div>
             }
 
-            @if (!workflows().length) {
+            @if (!filteredWorkflows().length) {
               <div class="col-span-3 text-center py-16">
                 <div class="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <i class="pi pi-sitemap text-gray-400" style="font-size:2.5rem"></i>
                 </div>
-                <h3 class="text-lg font-semibold text-gray-700">No workflows yet</h3>
-                <p class="text-gray-400 text-sm mt-1">Create your first workflow to automate WhatsApp interactions</p>
+                <h3 class="text-lg font-semibold text-gray-700">{{ selectedKind() === 'notification' ? 'No notifications yet' : selectedKind() === 'workflow' ? 'No workflows yet' : 'No workflows yet' }}</h3>
+                <p class="text-gray-400 text-sm mt-1">Create your first {{ selectedKind() === 'notification' ? 'notification' : 'workflow' }} to automate WhatsApp interactions</p>
                 <button pButton label="Create Workflow" icon="pi pi-plus" severity="success" class="mt-4" (click)="newWorkflowDialog = true"></button>
               </div>
             }
@@ -423,6 +440,29 @@ export class WorkflowBuilderComponent implements OnInit {
   // Data
   workflows = signal<WorkflowDefinition[]>([]);
 
+  // Segregate interactive Workflows vs automatic Notifications.
+  selectedKind = signal<'all' | 'workflow' | 'notification'>('all');
+  kindTabs: { value: 'all' | 'workflow' | 'notification'; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'workflow', label: '🤖 Workflows' },
+    { value: 'notification', label: '🔔 Notifications' },
+  ];
+  filteredWorkflows = computed(() => {
+    const k = this.selectedKind();
+    const list = this.workflows();
+    return k === 'all' ? list : list.filter((w) => (w as any).kind === k);
+  });
+  countByKind(k: 'all' | 'workflow' | 'notification'): number {
+    const list = this.workflows();
+    return k === 'all' ? list.length : list.filter((w) => (w as any).kind === k).length;
+  }
+  private deriveKind(trigger: any): 'workflow' | 'notification' {
+    const type = typeof trigger === 'string' ? trigger : trigger?.type;
+    // Interactive (customer-initiated) = workflow; event/schedule = notification.
+    if (!type || type === 'trigger_message' || type === 'message_received') return 'workflow';
+    return 'notification';
+  }
+
   workflowTemplates = [
     { name: 'Order Flow', desc: 'Confirm, pay, and deliver', icon: 'pi-shopping-cart' },
     { name: 'Support Flow', desc: 'Greet, route, and resolve', icon: 'pi-headphones' },
@@ -462,6 +502,7 @@ export class WorkflowBuilderComponent implements OnInit {
           executionCount: w.execution_count ?? w.executionCount ?? 0,
           lastExecutedAt: w.last_executed_at || w.lastExecutedAt,
           isSystem: w.is_system ?? w.isSystem ?? false,
+          kind: this.deriveKind(w.trigger),
         }) as any);
         this.workflows.set(mapped);
         this.loading.set(false);
