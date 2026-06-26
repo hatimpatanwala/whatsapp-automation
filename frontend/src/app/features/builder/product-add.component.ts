@@ -42,7 +42,7 @@ interface Taxon { id: string; name: string; }
           </div>
         </div>
       } @else {
-        <main class="max-w-xl mx-auto p-4 space-y-3 pb-28">
+        <main class="max-w-xl mx-auto p-4 space-y-3 pb-10">
           <div class="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Name *</label>
@@ -120,25 +120,33 @@ interface Taxon { id: string; name: string; }
               <input [(ngModel)]="form.tags" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. new, sale, featured" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Image URL <span class="text-gray-300">(optional)</span></label>
-              <input [(ngModel)]="form.imageUrl" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://…" />
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Image <span class="text-gray-300">(optional)</span></label>
+              @if (form.imageUrl) {
+                <div class="relative inline-block">
+                  <img [src]="form.imageUrl" class="w-24 h-24 rounded-lg object-cover border border-gray-200" />
+                  <button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border border-gray-200 w-6 h-6 text-red-500 flex items-center justify-center" (click)="form.imageUrl = ''"><i class="pi pi-times text-xs"></i></button>
+                </div>
+              } @else {
+                <input #img type="file" accept="image/*" class="hidden" (change)="uploadImage($event)" />
+                <button type="button" class="w-full border border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  [disabled]="uploading()" (click)="img.click()">
+                  <i class="pi pi-camera mr-1"></i>{{ uploading() ? 'Uploading…' : 'Upload image' }}
+                </button>
+                <input [(ngModel)]="form.imageUrl" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2" placeholder="…or paste an image URL" />
+              }
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Description</label>
               <textarea [(ngModel)]="form.description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="optional"></textarea>
             </div>
           </div>
-        </main>
 
-        <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-          <div class="max-w-xl mx-auto px-4 py-3">
-            @if (error()) { <p class="text-xs text-red-600 mb-2"><i class="pi pi-exclamation-circle mr-1"></i>{{ error() }}</p> }
-            <button class="w-full bg-green-600 text-white font-semibold rounded-lg py-3 hover:bg-green-700 disabled:opacity-50"
-              [disabled]="!canSubmit() || saving()" (click)="submit()">
-              {{ saving() ? 'Saving…' : 'Save Product' }}
-            </button>
-          </div>
-        </footer>
+          @if (error()) { <p class="text-xs text-red-600"><i class="pi pi-exclamation-circle mr-1"></i>{{ error() }}</p> }
+          <button class="w-full bg-green-600 text-white font-semibold rounded-lg py-3.5 hover:bg-green-700 disabled:opacity-50"
+            [disabled]="saving() || uploading()" (click)="submit()">
+            {{ saving() ? 'Saving…' : 'Save Product' }}
+          </button>
+        </main>
       }
     </div>
   `,
@@ -152,6 +160,7 @@ export class ProductAddComponent implements OnInit {
   categories = signal<Taxon[]>([]);
   brands = signal<Taxon[]>([]);
   saving = signal(false);
+  uploading = signal(false);
   error = signal<string | null>(null);
   done = signal<{ name: string } | null>(null);
 
@@ -174,6 +183,20 @@ export class ProductAddComponent implements OnInit {
     this.http.get<{ categories: Taxon[]; brands: Taxon[] }>(`${this.base}/m/products/taxonomy?token=${t}`).subscribe({
       next: (r) => { this.categories.set(r.categories || []); this.brands.set(r.brands || []); },
       error: () => {},
+    });
+  }
+
+  uploadImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const f = input.files?.[0];
+    if (!f) return;
+    this.uploading.set(true);
+    this.error.set(null);
+    const fd = new FormData();
+    fd.append('file', f);
+    this.http.post<{ url: string }>(`${this.base}/m/products/upload-image?token=${this.token()}`, fd).subscribe({
+      next: (r) => { this.uploading.set(false); this.form.imageUrl = r.url; input.value = ''; },
+      error: (e) => { this.uploading.set(false); this.error.set(e?.error?.message || 'Image upload failed.'); },
     });
   }
 

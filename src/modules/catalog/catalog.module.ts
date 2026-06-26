@@ -4,6 +4,7 @@ import { ProductController } from './product.controller';
 import { CategoryController } from './category.controller';
 import { BulkWebviewController } from './bulk-webview.controller';
 import { BuilderModule } from '../builder/builder.module';
+import { MediaModule } from '../media/media.module';
 import { ProductService } from './product.service';
 import { CategoryService } from './category.service';
 import { BrandService } from './brand.service';
@@ -23,6 +24,7 @@ import { WabaModule } from '../waba/waba.module';
     TypeOrmModule.forFeature([WabaAccount, PhoneNumber, Tenant]),
     forwardRef(() => WabaModule),
     BuilderModule,
+    MediaModule,
   ],
   controllers: [ProductController, CategoryController, BrandController, BulkWebviewController],
   providers: [ProductService, CategoryService, BrandService, MetaCatalogSyncService, BulkUploadService, CommerceSettingsHelper],

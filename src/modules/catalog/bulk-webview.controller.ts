@@ -9,6 +9,7 @@ import { BulkUploadService } from './bulk-upload.service';
 import { ProductService } from './product.service';
 import { CategoryService } from './category.service';
 import { BrandService } from './brand.service';
+import { MediaService } from '../media/media.service';
 
 /**
  * Public, TOKEN-authenticated bulk product editor — the page the admin opens
@@ -25,6 +26,7 @@ export class BulkWebviewController {
     private readonly products: ProductService,
     private readonly categories: CategoryService,
     private readonly brands: BrandService,
+    private readonly media: MediaService,
   ) {}
 
   private token(req: Request, q?: string): string {
@@ -67,6 +69,22 @@ export class BulkWebviewController {
   async status(@Req() req: Request, @Query('token') token?: string) {
     const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
     return this.bulk.getStatus(schemaName);
+  }
+
+  /** Upload a product image from the web form → returns a public URL. */
+  @Post('upload-image')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024 } }))
+  async uploadImage(
+    @Req() req: Request,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string },
+    @Query('token') token?: string,
+  ) {
+    const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
+    if (!file) throw new BadRequestException('No file uploaded');
+    if (!/^image\//.test(file.mimetype || '')) throw new BadRequestException('Please upload an image file.');
+    const safeName = (file.originalname || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const url = await this.media.uploadBuffer(schemaName, file.buffer, safeName, file.mimetype);
+    return { url };
   }
 
   /** Categories + brands for the single-product add web form. */
