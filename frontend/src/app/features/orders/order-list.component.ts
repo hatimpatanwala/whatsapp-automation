@@ -1,6 +1,6 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
@@ -15,6 +15,7 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OrderService } from '../../core/services/order.service';
+import { ApiService } from '../../core/services/api.service';
 import { Order, OrderStats } from '../../core/models';
 
 interface OrderRow {
@@ -58,6 +59,7 @@ interface OrderRow {
           <p class="text-gray-500 text-sm">Track and manage customer orders</p>
         </div>
         <div class="flex gap-2">
+          <button pButton label="New Order" icon="pi pi-bolt" class="p-button-sm" (click)="openBuilder()"></button>
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
         </div>
       </div>
@@ -155,6 +157,16 @@ export class OrderListComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly orderService = inject(OrderService);
   private readonly datePipe = inject(DatePipe);
+  private readonly router = inject(Router);
+  private readonly api = inject(ApiService);
+
+  /** Mint a token-secured Builder session and open the order builder. */
+  openBuilder() {
+    this.api.post<{ token: string }>('/builder/sessions', { type: 'order' }).subscribe({
+      next: (r) => this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }),
+      error: () => this.messageService.add({ severity: 'error', summary: 'Could not open builder' }),
+    });
+  }
 
   private readonly searchSubject = new Subject<string>();
 

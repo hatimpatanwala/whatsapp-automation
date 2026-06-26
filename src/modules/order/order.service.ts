@@ -194,6 +194,51 @@ export class OrderService {
     });
   }
 
+  /**
+   * Create an order directly from a provided list of items with explicit prices
+   * (used by the Builder webview — admin builds an order with custom prices/qty,
+   * bypassing the cart). No address required; status starts 'pending'.
+   */
+  async createDirect(
+    schema: string,
+    data: {
+      customerId: string;
+      items: { productId?: string; productName?: string; quantity: number; unitPrice: number }[];
+      notes?: string;
+    },
+  ): Promise<any> {
+    return this.connectionManager.executeInTransaction(schema, async (qr) => {
+      let subtotal = 0;
+      data.items.forEach((it) => {
+        subtotal += Number(it.quantity) * Number(it.unitPrice);
+      });
+
+      const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
+
+      const order = await qr.query(
+        `INSERT INTO orders (order_number, customer_id, status, subtotal, total, notes)
+         VALUES ($1, $2, 'pending', $3, $3, $4) RETURNING *`,
+        [orderNumber, data.customerId, subtotal, data.notes || null],
+      );
+
+      for (const it of data.items) {
+        await qr.query(
+          `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, total_price)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [order[0].id, it.productId || null, it.productName || 'Item', it.quantity, it.unitPrice, Number(it.quantity) * Number(it.unitPrice)],
+        );
+      }
+
+      await qr.query(
+        `UPDATE customers SET total_orders = total_orders + 1, total_spent = total_spent + $1, last_order_at = NOW() WHERE id = $2`,
+        [subtotal, data.customerId],
+      );
+
+      this.eventBus.emit(new OrderCreatedEvent(schema, order[0].id, data.customerId, orderNumber, subtotal));
+      return order[0];
+    });
+  }
+
   async updateStatus(schema: string, orderId: string, newStatus: string, reason?: string): Promise<any> {
     return this.connectionManager.executeInTransaction(schema, async (qr) => {
       const order = await qr.query(`SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [orderId]);

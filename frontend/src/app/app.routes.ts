@@ -104,5 +104,12 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    // Token-secured Builder webview — opened inside WhatsApp's in-app browser (or
+    // the panel). No auth guard: the ?token= query param is the only credential,
+    // validated server-side. Useless without a valid token.
+    path: 'm/builder',
+    loadComponent: () => import('./features/builder/mobile-builder.component').then(m => m.MobileBuilderComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

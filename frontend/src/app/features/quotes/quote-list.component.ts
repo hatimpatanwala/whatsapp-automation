@@ -48,7 +48,10 @@ interface Quote {
           <h2 class="text-2xl font-bold text-gray-900">Quotes</h2>
           <p class="text-sm text-gray-500 mt-1">Create and manage customer quotes</p>
         </div>
-        <p-button label="Create Quote" icon="pi pi-plus" routerLink="/quotes/new" />
+        <div class="flex items-center gap-2">
+          <p-button label="Quick Build" icon="pi pi-bolt" severity="secondary" [outlined]="true" (onClick)="openBuilder()" />
+          <p-button label="Create Quote" icon="pi pi-plus" routerLink="/quotes/new" />
+        </div>
       </div>
 
       <!-- Stats cards -->
@@ -198,6 +201,14 @@ export class QuoteListComponent implements OnInit {
       { label: 'Converted Value', value: '\u20B9' + this.formatAmount(s.converted_value || 0), color: '#8b5cf6' },
     ];
   });
+
+  /** Mint a token-secured Builder session and open the quote builder. */
+  openBuilder() {
+    this.api.post<{ token: string }>('/builder/sessions', { type: 'quote' }).subscribe({
+      next: (r) => this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }),
+      error: () => this.messageService.add({ severity: 'error', summary: 'Could not open builder' }),
+    });
+  }
 
   ngOnInit() {
     this.loadQuotes();
