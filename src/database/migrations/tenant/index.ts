@@ -1006,6 +1006,16 @@ const migration035ProductBrand: TenantMigration = {
   },
 };
 
+const migration036SystemWorkflows: TenantMigration = {
+  name: '036_workflow_is_system',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".workflows ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT false`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".workflows DROP COLUMN IF EXISTS is_system`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1042,4 +1052,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration033SocialAuth,
   migration034Brands,
   migration035ProductBrand,
+  migration036SystemWorkflows,
 ];

@@ -1,6 +1,7 @@
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject, Optional, ForbiddenException } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { WorkflowTriggerMatcher } from './engine/workflow-trigger.matcher';
+import { buildWelcomeHub } from './default-workflows';
 
 export interface CreateWorkflowDto {
   name: string;
@@ -9,6 +10,8 @@ export interface CreateWorkflowDto {
   nodes?: any[];
   edges?: any[];
   audience?: 'customer' | 'admin';
+  status?: string;
+  isSystem?: boolean;
 }
 
 export interface UpdateWorkflowDto {
@@ -35,10 +38,44 @@ export class WorkflowService {
     @Optional() private readonly triggerMatcher?: WorkflowTriggerMatcher,
   ) {}
 
+  /**
+   * Ensure the system "Welcome" hub workflow exists for this tenant. Idempotent
+   * and best-effort — never throws (so it can't break the list view). Auto-seeds
+   * existing tenants on their first workflow-list load.
+   */
+  async ensureWelcomeHub(schema: string, userId?: string): Promise<void> {
+    try {
+      await this.tenantConn.executeInTenantContext(schema, async (qr) => {
+        const existing = await qr.query(`SELECT id FROM workflows WHERE is_system = true LIMIT 1`);
+        if (existing.length) return;
+        let storeName = 'our store';
+        try {
+          const t = await qr.query(
+            `SELECT COALESCE(NULLIF(business_name, ''), name, 'our store') AS store FROM public.tenants WHERE schema_name = $1 LIMIT 1`,
+            [schema],
+          );
+          if (t[0]?.store) storeName = t[0].store;
+        } catch { /* fall back to generic */ }
+        const hub = buildWelcomeHub(storeName);
+        await qr.query(
+          `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience, status, is_system)
+           VALUES ($1, $2, $3, $4, $5, $6, 'customer', 'active', true)`,
+          [hub.name, hub.description, JSON.stringify(hub.trigger), JSON.stringify(hub.nodes), JSON.stringify(hub.edges), userId || null],
+        );
+      });
+      await this.triggerMatcher?.invalidateCache(schema);
+    } catch {
+      /* never break the caller */
+    }
+  }
+
   async findAll(schema: string, params?: { status?: string; search?: string; page?: number; limit?: number }) {
     const page = params?.page || 1;
     const limit = params?.limit || 20;
     const offset = (page - 1) * limit;
+
+    // Make sure every tenant has the default Welcome workflow (idempotent).
+    await this.ensureWelcomeHub(schema);
 
     return this.tenantConn.executeInTenantContext(schema, async (qr) => {
       let where = 'WHERE 1=1';
@@ -87,8 +124,8 @@ export class WorkflowService {
   async create(schema: string, dto: CreateWorkflowDto, userId?: string) {
     return this.tenantConn.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
-        `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO workflows (name, description, trigger, nodes, edges, created_by, audience, status, is_system)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           dto.name,
@@ -98,6 +135,8 @@ export class WorkflowService {
           JSON.stringify(dto.edges || []),
           userId || null,
           dto.audience || 'customer',
+          dto.status || 'draft',
+          dto.isSystem || false,
         ],
       );
       return rows[0];
@@ -159,6 +198,10 @@ export class WorkflowService {
 
   async delete(schema: string, id: string) {
     return this.tenantConn.executeInTenantContext(schema, async (qr) => {
+      const r = await qr.query('SELECT is_system FROM workflows WHERE id = $1', [id]);
+      if (r[0]?.is_system) {
+        throw new ForbiddenException('The default Welcome workflow cannot be deleted. You can edit or pause it instead.');
+      }
       await qr.query('DELETE FROM workflows WHERE id = $1', [id]);
     });
   }

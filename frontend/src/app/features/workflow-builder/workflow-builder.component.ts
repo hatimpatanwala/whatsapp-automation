@@ -108,6 +108,9 @@ import {
                       @if (wf.audience === 'admin') {
                         <span class="text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 whitespace-nowrap">🛠️ Admin</span>
                       }
+                      @if ($any(wf).isSystem) {
+                        <span class="text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 whitespace-nowrap" pTooltip="Default workflow — editable but can't be deleted">🔒 Default</span>
+                      }
                     </div>
                     <p class="text-xs text-gray-400 mt-0.5">{{ wf.description || 'No description' }}</p>
                   </div>
@@ -135,7 +138,9 @@ import {
                     (click)="toggleWorkflow($event, wf)">
                   </button>
                   <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm p-button-rounded" pTooltip="Edit" (click)="openWorkflow(wf); $event.stopPropagation()"></button>
-                  <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger" pTooltip="Delete" (click)="deleteWorkflow($event, wf)"></button>
+                  @if (!$any(wf).isSystem) {
+                    <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger" pTooltip="Delete" (click)="deleteWorkflow($event, wf)"></button>
+                  }
                 </div>
               </div>
             }
@@ -456,7 +461,8 @@ export class WorkflowBuilderComponent implements OnInit {
           updatedAt: w.updated_at || w.updatedAt || '',
           executionCount: w.execution_count ?? w.executionCount ?? 0,
           lastExecutedAt: w.last_executed_at || w.lastExecutedAt,
-        }));
+          isSystem: w.is_system ?? w.isSystem ?? false,
+        }) as any);
         this.workflows.set(mapped);
         this.loading.set(false);
       },
