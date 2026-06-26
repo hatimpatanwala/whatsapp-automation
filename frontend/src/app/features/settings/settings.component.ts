@@ -224,10 +224,17 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                     <h3 class="text-base font-semibold text-gray-900">Phone Numbers</h3>
                     <p class="text-sm text-gray-500">Manage your WhatsApp phone numbers</p>
                   </div>
+                  <!--
+                    TODO(multi-number): Only ONE WhatsApp number is supported for now, so adding
+                    additional numbers is disabled. The first number is connected via the
+                    "Not connected" card above. Re-enable this "Add Number" button when
+                    multiple WhatsApp numbers per tenant are supported.
                   <button pButton label="Add Number" icon="pi pi-plus" class="p-button-sm p-button-outlined"
                     (click)="showAddPhone.set(true)"
                     [disabled]="showAddPhone() || tenantPhones().length > 0"
                     [pTooltip]="tenantPhones().length > 0 ? 'Only one WhatsApp number is supported for now' : ''"></button>
+                  -->
+                  <span></span>
                 </div>
 
                 <!-- Add Phone Number Form -->

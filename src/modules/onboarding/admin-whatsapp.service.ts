@@ -27,6 +27,10 @@ export class AdminWhatsAppService {
   private readonly MAX_SENDS_PER_INTERVAL = 3;
   private readonly sendTracker = new Map<string, number[]>();
   private readonly isDev: boolean;
+  // When set (e.g. on staging via STATIC_OTP_CODE), the OTP is this fixed code
+  // and is NOT sent over WhatsApp — handy for test environments that have no
+  // working platform sender. Never set this in production.
+  private readonly staticOtpCode: string;
 
   constructor(
     @InjectRepository(Tenant)
@@ -42,6 +46,7 @@ export class AdminWhatsAppService {
     private readonly redis: Redis,
   ) {
     this.isDev = this.configService.get<string>('NODE_ENV', 'development') !== 'production';
+    this.staticOtpCode = (this.configService.get<string>('STATIC_OTP_CODE', '') || '').trim();
   }
 
   /**
@@ -84,8 +89,9 @@ export class AdminWhatsAppService {
     // Rate limit: max 3 sends per 15 minutes
     this.enforceRateLimit(tenantId);
 
-    // Generate a cryptographically random 6-digit code and deliver it over WhatsApp.
-    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    // Use the configured static code (test envs) or a cryptographically random
+    // 6-digit code that we deliver over WhatsApp.
+    const code = this.staticOtpCode || randomInt(0, 1_000_000).toString().padStart(6, '0');
 
     // Store OTP
     this.otpStore.set(tenantId, {
@@ -95,12 +101,23 @@ export class AdminWhatsAppService {
       attempts: 0,
     });
 
-    if (this.isDev) {
+    if (this.staticOtpCode) {
+      // Static-OTP mode (e.g. staging): do NOT call WhatsApp; the code is fixed.
+      this.logger.log(`[STATIC OTP] Admin WhatsApp OTP for tenant ${tenantId}: ${code}`);
+    } else if (this.isDev) {
       this.logger.log(`[DEV] Admin WhatsApp OTP for tenant ${tenantId}: ${code}`);
     } else {
       // Send OTP via WhatsApp using the platform's shared WABA. Fail closed if
-      // delivery is not possible — never silently accept an unsent code.
-      await this.sendWhatsAppOtp(fullPhone, code);
+      // delivery is not possible — but surface a clean 4xx, never a 500.
+      try {
+        await this.sendWhatsAppOtp(fullPhone, code);
+      } catch (err: any) {
+        if (err instanceof BadRequestException) throw err;
+        this.logger.error(`Admin WhatsApp OTP send failed for tenant ${tenantId}: ${err?.message}`);
+        throw new BadRequestException(
+          'Could not send the verification code over WhatsApp right now. Please ensure a platform WhatsApp number is configured, or contact support.',
+        );
+      }
       this.logger.log(`Admin WhatsApp OTP sent to ${fullPhone} for tenant ${tenantId}`);
     }
 
