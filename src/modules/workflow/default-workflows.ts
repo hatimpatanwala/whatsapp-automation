@@ -4,9 +4,15 @@
  * Modular / loosely-coupled hub-and-spoke design:
  *  - A tiny SYSTEM "Welcome" hub (undeletable, editable): greeting → a DYNAMIC
  *    menu built from whichever sub-workflows are active → starts the chosen one.
- *  - Each feature (Browse, Cart, My Orders, Track, Quote, Support) is its OWN
- *    workflow with its own trigger keyword AND a `menuItem` registration, so it
- *    works standalone and appears in the Welcome menu while it's active.
+ *  - Each customer journey (Browse, Search, Cart→Checkout, My Orders, Track,
+ *    Quote, Support) is its OWN workflow with its own trigger keyword AND a
+ *    `menuItem` registration, so it works standalone and appears in the Welcome
+ *    menu while it's active. Spokes connect to each other by name via
+ *    `start_workflow` (e.g. a product card → View Cart → Browse again).
+ *  - Event-driven NOTIFICATIONS (order/payment/quote updates) are their own
+ *    workflows too — no menu item, triggered automatically by domain events.
+ *    They render with placeholders ({{order_number}}, {{order_total}},
+ *    {{currency}}, {{customer_name}}, …) and are fully admin-editable.
  *
  * Adding/activating/pausing a spoke automatically changes the Welcome menu —
  * no edits to the hub needed.
@@ -26,7 +32,7 @@ export function buildWelcomeHub(storeName: string): DefaultWorkflowDef {
   const store = (storeName || 'our store').trim() || 'our store';
   return {
     name: 'Welcome',
-    description: 'Greets customers and shows a menu of whatever is active (browse, cart, orders, quotes, support).',
+    description: 'Greets customers and shows a menu of whatever is active (browse, search, cart, orders, quotes, support).',
     trigger: { type: 'trigger_message', keywords: 'hi,hello,hey,menu,start,shop,hii,helo', matchType: 'contains' },
     nodes: [
       { id: 'n1', type: 'trigger_message', label: 'Customer Says Hi', x: 340, y: 40, config: { keywords: 'hi,hello,hey,menu,start,shop,hii,helo', matchType: 'contains' }, outputs: ['n2'] },
@@ -42,50 +48,103 @@ export function buildWelcomeHub(storeName: string): DefaultWorkflowDef {
   };
 }
 
-/** The modular e-commerce spoke workflows (each standalone + a Welcome menu item). */
+/** The modular customer-facing spoke workflows (each standalone + a Welcome menu item). */
 export function buildDefaultSpokes(): DefaultWorkflowDef[] {
   return [
+    // ── 1. Browse Products — All / By Category / By Brand → product card → cart ──
     {
       name: 'Browse Products',
-      description: 'Show the catalog so customers can browse and add to cart.',
+      description: 'Browse the catalog by all products, category, or brand, then add to cart.',
       menuItem: { label: '🛍️ Browse Products', order: 1 },
       trigger: { type: 'trigger_message', keywords: 'browse,catalog,products,shop now', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Browse', x: 300, y: 40, config: { keywords: 'browse,catalog,products,shop now', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'show_catalog', label: 'Show Catalog', x: 300, y: 200, config: { maxProducts: 10, sortBy: 'newest' }, outputs: ['n3'] },
-        { id: 'n3', type: 'product_card', label: 'Product Card', x: 300, y: 360, config: {}, outputs: [] },
+        { id: 'n2', type: 'send_buttons', label: 'How to Browse', x: 300, y: 180, config: { message: '🛍️ How would you like to browse?', buttons: [{ id: 'br_all', title: '🛍️ All Products' }, { id: 'br_cat', title: '📂 By Category' }, { id: 'br_brand', title: '🏷️ By Brand' }] }, outputs: ['n3', 'n5', 'n7'] },
+        { id: 'n3', type: 'show_catalog', label: 'All Products', x: 80, y: 340, config: { maxProducts: 10, sortBy: 'newest', header: 'Browse our products:' }, outputs: ['n4'] },
+        { id: 'n4', type: 'product_card', label: 'Product Card', x: 300, y: 500, config: {}, outputs: [] },
+        { id: 'n5', type: 'send_list', label: 'Pick Category', x: 300, y: 340, config: { message: '📂 Pick a category:', buttonText: 'Categories', source: 'categories' }, outputs: ['n6'] },
+        { id: 'n6', type: 'show_catalog', label: 'Category Products', x: 300, y: 420, config: { maxProducts: 10, sortBy: 'newest', useSelectedCategory: true, header: 'Products in this category:' }, outputs: ['n4'] },
+        { id: 'n7', type: 'send_list', label: 'Pick Brand', x: 520, y: 340, config: { message: '🏷️ Pick a brand:', buttonText: 'Brands', source: 'brands' }, outputs: ['n8'] },
+        { id: 'n8', type: 'show_catalog', label: 'Brand Products', x: 520, y: 420, config: { maxProducts: 10, sortBy: 'newest', useSelectedBrand: true, header: 'Products from this brand:' }, outputs: ['n4'] },
+        { id: 'n9', type: 'start_workflow', label: 'Open Cart', x: 520, y: 500, config: { workflowName: 'View Cart', passVariables: true }, outputs: [] },
+      ],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },   // br_all
+        { id: 'e3', from: 'n2', to: 'n5' },   // br_cat
+        { id: 'e4', from: 'n2', to: 'n7' },   // br_brand
+        { id: 'e5', from: 'n3', to: 'n4' },
+        { id: 'e6', from: 'n5', to: 'n6' },
+        { id: 'e7', from: 'n6', to: 'n4' },
+        { id: 'e8', from: 'n7', to: 'n8' },
+        { id: 'e9', from: 'n8', to: 'n4' },
+        { id: 'e10', from: 'n4', to: 'n9', label: 'view' },   // View Cart button
+        { id: 'e11', from: 'n4', to: 'n2', label: 'back' },   // Keep Shopping
+      ],
+    },
+
+    // ── 2. Search Products — type a name → results → product card → cart ──
+    {
+      name: 'Search Products',
+      description: 'Let customers search products by name and add to cart.',
+      menuItem: { label: '🔎 Search Products', order: 2 },
+      trigger: { type: 'trigger_message', keywords: 'search,find,looking for', matchType: 'contains' },
+      nodes: [
+        { id: 'n1', type: 'trigger_message', label: 'Search', x: 300, y: 40, config: { keywords: 'search,find,looking for', matchType: 'contains' }, outputs: ['n2'] },
+        { id: 'n2', type: 'send_text', label: 'Ask Query', x: 300, y: 180, config: { message: '🔎 What are you looking for? Type a product name to search.' }, outputs: ['n3'] },
+        { id: 'n3', type: 'wait_for_reply', label: 'Wait', x: 300, y: 320, config: { timeoutMinutes: 10, timeoutMessage: 'No problem — send *menu* whenever you’re ready.' }, outputs: ['n4'] },
+        { id: 'n4', type: 'search_products', label: 'Search Products', x: 300, y: 460, config: { maxResults: 8, noResultsMessage: 'No products found for "{{last_input}}". Send *menu* to browse instead.' }, outputs: ['n5'] },
+        { id: 'n5', type: 'product_card', label: 'Product Card', x: 300, y: 600, config: {}, outputs: [] },
+        { id: 'n6', type: 'start_workflow', label: 'Open Cart', x: 520, y: 600, config: { workflowName: 'View Cart', passVariables: true }, outputs: [] },
       ],
       edges: [
         { id: 'e1', from: 'n1', to: 'n2' },
         { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4' },
+        { id: 'e4', from: 'n4', to: 'n5' },
+        { id: 'e5', from: 'n5', to: 'n6', label: 'view' },
       ],
     },
+
+    // ── 3. View Cart & Checkout — cart → checkout (emits order event) → close ──
     {
       name: 'View Cart',
-      description: 'Show the customer’s cart with checkout.',
-      menuItem: { label: '🛒 View Cart & Checkout', order: 2 },
+      description: 'Show the cart, checkout to place the order, or keep shopping.',
+      menuItem: { label: '🛒 View Cart & Checkout', order: 3 },
       trigger: { type: 'trigger_message', keywords: 'cart,my cart,view cart,checkout', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Cart', x: 300, y: 40, config: { keywords: 'cart,my cart,view cart,checkout', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'view_cart', label: 'View Cart', x: 300, y: 200, config: { showCheckout: true, showClear: true }, outputs: [] },
+        { id: 'n2', type: 'view_cart', label: 'View Cart', x: 300, y: 190, config: { header: '🛒 Your Cart', showCheckout: true, showClear: false, checkoutLabel: 'Checkout', continueLabel: 'Continue Shopping', emptyMessage: 'Your cart is empty. Send *browse* to add items!' }, outputs: ['n3', 'n5'] },
+        { id: 'n3', type: 'checkout', label: 'Place Order', x: 160, y: 360, config: {}, outputs: ['n4'] },
+        { id: 'n4', type: 'send_text', label: 'Order Placed', x: 160, y: 520, config: { message: '🎉 Thank you, {{customer_name}}! You’ll get order updates right here.\nReply *menu* anytime. 🛍️' }, outputs: [] },
+        { id: 'n5', type: 'start_workflow', label: 'Keep Shopping', x: 440, y: 360, config: { workflowName: 'Browse Products', passVariables: true }, outputs: [] },
       ],
-      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3', label: 'Checkout' },
+        { id: 'e3', from: 'n2', to: 'n5', label: 'Continue Shopping' },
+        { id: 'e4', from: 'n3', to: 'n4' },
+      ],
     },
+
+    // ── 4. My Orders ──
     {
       name: 'My Orders',
       description: 'List the customer’s recent orders.',
-      menuItem: { label: '📦 My Orders', order: 3 },
+      menuItem: { label: '📦 My Orders', order: 4 },
       trigger: { type: 'trigger_message', keywords: 'orders,my orders', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'My Orders', x: 300, y: 40, config: { keywords: 'orders,my orders', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'my_orders', label: 'My Orders', x: 300, y: 200, config: { header: '📦 Your Orders', maxOrders: 5, emptyMessage: 'You have no orders yet. Send *menu* to browse!' }, outputs: [] },
+        { id: 'n2', type: 'my_orders', label: 'My Orders', x: 300, y: 200, config: { header: '📦 Your Orders', maxOrders: 5, emptyMessage: 'You have no orders yet. Send *browse* to shop!' }, outputs: [] },
       ],
       edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
     },
+
+    // ── 5. Track Order ──
     {
       name: 'Track Order',
       description: 'Look up an order’s status by order number.',
-      menuItem: { label: '🚚 Track Order', order: 4 },
+      menuItem: { label: '🚚 Track Order', order: 5 },
       trigger: { type: 'trigger_message', keywords: 'track,track order', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Track', x: 300, y: 40, config: { keywords: 'track,track order', matchType: 'contains' }, outputs: ['n2'] },
@@ -99,25 +158,117 @@ export function buildDefaultSpokes(): DefaultWorkflowDef[] {
         { id: 'e3', from: 'n3', to: 'n4' },
       ],
     },
+
+    // ── 6. Get a Quote — capture the request (admin builds + sends the quote) ──
     {
       name: 'Get a Quote',
-      description: 'Let customers request a price quote.',
-      menuItem: { label: '🧾 Get a Quote', order: 5 },
+      description: 'Capture a price-quote request; the team prepares and sends the quote.',
+      menuItem: { label: '🧾 Get a Quote', order: 6 },
       trigger: { type: 'trigger_message', keywords: 'quote,quotation,get a quote', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Quote', x: 300, y: 40, config: { keywords: 'quote,quotation,get a quote', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'send_text', label: 'Quote Request', x: 300, y: 200, config: { message: '🧾 Happy to help with a quote!\nReply with the *products and quantities* you need, and our team will prepare a price quote for you.' }, outputs: [] },
+        { id: 'n2', type: 'send_text', label: 'Ask Items', x: 300, y: 200, config: { message: '🧾 Happy to help with a quote!\nReply with the *products and quantities* you need.' }, outputs: ['n3'] },
+        { id: 'n3', type: 'wait_for_reply', label: 'Wait', x: 300, y: 360, config: { timeoutMinutes: 60, timeoutMessage: 'No rush — send your request whenever you’re ready.' }, outputs: ['n4'] },
+        { id: 'n4', type: 'send_text', label: 'Confirm', x: 300, y: 520, config: { message: '✅ Thanks, {{customer_name}}! Our team is preparing your quote and will send it here shortly.' }, outputs: [] },
       ],
-      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4' },
+      ],
     },
+
+    // ── 7. Talk to us ──
     {
       name: 'Talk to us',
       description: 'Hand the conversation to a human.',
-      menuItem: { label: '💬 Talk to us', order: 6 },
+      menuItem: { label: '💬 Talk to us', order: 7 },
       trigger: { type: 'trigger_message', keywords: 'support,help,agent,human', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Support', x: 300, y: 40, config: { keywords: 'support,help,agent,human', matchType: 'contains' }, outputs: ['n2'] },
         { id: 'n2', type: 'send_text', label: 'Support', x: 300, y: 200, config: { message: '💬 We’re here to help! Reply with your question and our team will get back to you shortly.' }, outputs: [] },
+      ],
+      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+    },
+  ];
+}
+
+/**
+ * Event-driven NOTIFICATION workflows. No menu item — each fires automatically
+ * when the matching domain event happens (order/payment/quote), and renders an
+ * admin-editable message with live placeholders. These populate the
+ * "Notifications" tab and keep the customer updated end-to-end.
+ */
+export function buildDefaultNotifications(): DefaultWorkflowDef[] {
+  const orderNote = (name: string, description: string, event: string, message: string): DefaultWorkflowDef => ({
+    name,
+    description,
+    trigger: { type: 'trigger_order', event },
+    nodes: [
+      { id: 'n1', type: 'trigger_order', label: 'Order Event', x: 300, y: 40, config: { event }, outputs: ['n2'] },
+      { id: 'n2', type: 'send_text', label: 'Notify', x: 300, y: 200, config: { message }, outputs: [] },
+    ],
+    edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+  });
+
+  const payNote = (name: string, description: string, event: string, message: string): DefaultWorkflowDef => ({
+    name,
+    description,
+    trigger: { type: 'trigger_payment', event },
+    nodes: [
+      { id: 'n1', type: 'trigger_payment', label: 'Payment Event', x: 300, y: 40, config: { event }, outputs: ['n2'] },
+      { id: 'n2', type: 'send_text', label: 'Notify', x: 300, y: 200, config: { message }, outputs: [] },
+    ],
+    edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+  });
+
+  return [
+    orderNote(
+      'Order Received', 'Confirms a new order the moment it is placed.', 'created',
+      '🧾 Hi {{customer_name}}, we’ve received your order *#{{order_number}}* — total {{currency}}{{order_total}}.\nWe’ll keep you posted! Reply *track* to track it.',
+    ),
+    orderNote(
+      'Order Confirmed', 'Tells the customer their order is confirmed.', 'confirmed',
+      '✅ Your order *#{{order_number}}* is confirmed and is being prepared. We’ll let you know when it ships.',
+    ),
+    orderNote(
+      'Order Out for Delivery', 'Notifies when the order is out for delivery.', 'out_for_delivery',
+      '🚚 Your order *#{{order_number}}* is out for delivery — arriving soon!',
+    ),
+    orderNote(
+      'Order Delivered', 'Thanks the customer once delivered.', 'delivered',
+      '🎉 Your order *#{{order_number}}* has been delivered. We hope you love it!\nReply *menu* to shop again. 🛍️',
+    ),
+    orderNote(
+      'Order Cancelled', 'Lets the customer know an order was cancelled.', 'cancelled',
+      '❌ Your order *#{{order_number}}* has been cancelled. Reply here if you need any help.',
+    ),
+    payNote(
+      'Payment Received', 'Confirms a successful payment.', 'verified',
+      '✅ Payment of {{currency}}{{payment_amount}} received for order *#{{order_number}}*. Thank you, {{customer_name}}!',
+    ),
+    payNote(
+      'Payment Pending', 'Reminds the customer to complete a pending payment.', 'expired',
+      '⏰ Your payment for order *#{{order_number}}* is still pending. Reply here to complete it.',
+    ),
+    // Quote ready → render the full quote, then nudge to proceed.
+    {
+      name: 'Quote Ready',
+      description: 'Sends the full quote to the customer as soon as it is created.',
+      trigger: { type: 'trigger_quote', event: 'created' },
+      nodes: [
+        { id: 'n1', type: 'trigger_quote', label: 'Quote Created', x: 300, y: 40, config: { event: 'created' }, outputs: ['n2'] },
+        { id: 'n2', type: 'send_quote', label: 'Send Quote', x: 300, y: 200, config: { headerMessage: '📋 Hi {{customer_name}}, here’s your quote:', footerMessage: 'Reply *order* to proceed, or ask us anything!' }, outputs: [] },
+      ],
+      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+    },
+    {
+      name: 'Quote Accepted',
+      description: 'Thanks the customer when a quote is accepted.',
+      trigger: { type: 'trigger_quote', event: 'accepted' },
+      nodes: [
+        { id: 'n1', type: 'trigger_quote', label: 'Quote Accepted', x: 300, y: 40, config: { event: 'accepted' }, outputs: ['n2'] },
+        { id: 'n2', type: 'send_text', label: 'Notify', x: 300, y: 200, config: { message: '🎉 Thanks for accepting quote *{{quote_number}}*, {{customer_name}}! We’ll get started right away.' }, outputs: [] },
       ],
       edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
     },

@@ -1,7 +1,14 @@
 import { Injectable, Inject, Optional, ForbiddenException } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { WorkflowTriggerMatcher } from './engine/workflow-trigger.matcher';
-import { buildWelcomeHub, buildDefaultSpokes } from './default-workflows';
+import { buildWelcomeHub, buildDefaultSpokes, buildDefaultNotifications } from './default-workflows';
+
+/**
+ * Bump when the default workflow set changes so existing tenants pick up newly
+ * added spokes/notifications on their next workflow-list load (by-name dedupe
+ * keeps any admin edits intact).
+ */
+const DEFAULT_WORKFLOWS_VERSION = 2;
 
 export interface CreateWorkflowDto {
   name: string;
@@ -49,7 +56,9 @@ export class WorkflowService {
     try {
       await this.tenantConn.executeInTenantContext(schema, async (qr) => {
         const flag = await qr.query(`SELECT value FROM settings WHERE key = 'default_workflows_seeded' LIMIT 1`);
-        if (flag[0]?.value) return;
+        // Value may be a legacy boolean `true` (→ version 1) or a version number.
+        const seededVersion = Number(flag[0]?.value) || 0;
+        if (seededVersion >= DEFAULT_WORKFLOWS_VERSION) return;
 
         let storeName = 'our store';
         try {
@@ -82,10 +91,17 @@ export class WorkflowService {
           if (dup.length) continue;
           await insert(spoke, { menuItem: spoke.menuItem });
         }
+        // Event-driven notification workflows (order/payment/quote updates).
+        for (const note of buildDefaultNotifications()) {
+          const dup = await qr.query(`SELECT id FROM workflows WHERE LOWER(name) = LOWER($1) LIMIT 1`, [note.name]);
+          if (dup.length) continue;
+          await insert(note, {});
+        }
 
         await qr.query(
-          `INSERT INTO settings (key, value) VALUES ('default_workflows_seeded', 'true')
-           ON CONFLICT (key) DO UPDATE SET value = 'true'`,
+          `INSERT INTO settings (key, value) VALUES ('default_workflows_seeded', $1::jsonb)
+           ON CONFLICT (key) DO UPDATE SET value = $1::jsonb`,
+          [JSON.stringify(DEFAULT_WORKFLOWS_VERSION)],
         );
       });
       await this.triggerMatcher?.invalidateCache(schema);

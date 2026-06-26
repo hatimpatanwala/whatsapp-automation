@@ -22,6 +22,8 @@ export class SendListNodeHandler implements NodeHandler {
 
     if (source === 'categories') {
       sections = await this.buildCategorySections(ctx.schema);
+    } else if (source === 'brands') {
+      sections = await this.buildBrandSections(ctx.schema);
     } else if (source === 'products') {
       sections = await this.buildProductSections(ctx.schema);
     } else if (source === 'menu_workflows') {
@@ -70,6 +72,20 @@ export class SendListNodeHandler implements NodeHandler {
         return { id: `wf_menu_${w.id}`, title: String(mi.label || w.name).substring(0, 24) };
       });
       return [{ title: 'Menu', rows: rows.length ? rows : [{ id: 'wf_menu_none', title: 'No options yet' }] }];
+    });
+  }
+
+  private async buildBrandSections(schema: string): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const brands = await qr.query(
+        `SELECT id, name FROM brands WHERE is_active = true ORDER BY sort_order, name LIMIT 10`,
+      );
+      return [{
+        title: 'Brands',
+        rows: brands.length
+          ? brands.map((b: any) => ({ id: `wf_brand_${b.id}`, title: b.name.substring(0, 24) }))
+          : [{ id: 'wf_brand_none', title: 'No brands yet' }],
+      }];
     });
   }
 

@@ -21,28 +21,35 @@ export class ShowCatalogNodeHandler implements NodeHandler {
       : sortBy === 'price_desc' ? 'COALESCE(p.sale_price, p.base_price) DESC'
       : 'p.created_at DESC';
 
-    const categoryId = node.config.categoryId || node.config.categoryFilter || '';
+    // Filter by an explicit config id, or — for the modular Browse flow — by the
+    // category/brand the customer just picked (only when the node opts in, so an
+    // "All Products" branch never inherits a leftover selection).
+    const categoryId = node.config.categoryId || node.config.categoryFilter
+      || (node.config.useSelectedCategory ? ctx.variables.selected_category_id : '') || '';
+    const brandId = node.config.brandId
+      || (node.config.useSelectedBrand ? ctx.variables.selected_brand_id : '') || '';
 
     const products = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
+      const conditions = ['p.is_active = true'];
+      const queryParams: any[] = [];
+      let idx = 1;
       if (categoryId) {
-        return qr.query(
-          `SELECT p.id, p.name, COALESCE(p.sale_price, p.base_price) AS price, c.name as category_name
-           FROM products p
-           LEFT JOIN categories c ON p.category_id = c.id
-           WHERE p.is_active = true AND p.category_id = $1
-           ORDER BY ${orderClause}
-           LIMIT $2`,
-          [categoryId, maxProducts],
-        );
+        conditions.push(`p.category_id = $${idx++}`);
+        queryParams.push(categoryId);
       }
+      if (brandId) {
+        conditions.push(`p.brand_id = $${idx++}`);
+        queryParams.push(brandId);
+      }
+      queryParams.push(maxProducts);
       return qr.query(
         `SELECT p.id, p.name, COALESCE(p.sale_price, p.base_price) AS price, c.name as category_name
          FROM products p
          LEFT JOIN categories c ON p.category_id = c.id
-         WHERE p.is_active = true
+         WHERE ${conditions.join(' AND ')}
          ORDER BY ${orderClause}
-         LIMIT $1`,
-        [maxProducts],
+         LIMIT $${idx}`,
+        queryParams,
       );
     });
 
