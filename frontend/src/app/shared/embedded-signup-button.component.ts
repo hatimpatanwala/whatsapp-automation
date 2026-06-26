@@ -32,7 +32,9 @@ import { EmbeddedSignupService, EmbeddedSignupConfig, EmbeddedSignupResult } fro
           <i class="pi pi-check-circle text-green-600 mt-0.5" style="font-size:0.85rem"></i>
           <p class="text-xs text-green-800 leading-relaxed">
             <span class="font-semibold">Coexistence enabled:</span> keep using the WhatsApp Business App
-            on this number while it also works through our platform. Works for new and existing numbers.
+            on this number while it also works through our platform. Works for new and existing numbers —
+            and if it's a brand-new number, it stays <span class="font-semibold">coexistence-ready</span>,
+            so you can install the WhatsApp Business App on it later without any errors.
           </p>
         </div>
 

@@ -5,6 +5,7 @@ import { TemplateRegistry } from '../../../database/entities/public/template-reg
 import { MetaCloudApiClient } from '../meta-cloud-api.client';
 import { MetaTokenService } from '../meta-token.service';
 import { AuditLogService } from '../audit-log.service';
+import { DEFAULT_TEMPLATES } from './default-templates';
 
 export interface CreateTemplateInput {
   wabaAccountId: string;
@@ -94,6 +95,77 @@ export class TemplateService {
     });
 
     return saved;
+  }
+
+  /**
+   * Seed the platform's default template library onto a WABA.
+   *
+   * Used right after a tenant connects via Embedded Signup so their (own) WABA
+   * gets the full template set automatically — the tenant never logs into Meta
+   * or creates templates by hand. Fully tolerant: skips templates that already
+   * exist, records each failure, and NEVER throws (a seeding hiccup must not
+   * break an otherwise-successful connection). Approval is async — Meta returns
+   * each template as PENDING and the status webhook updates it later.
+   */
+  async seedDefaultTemplates(
+    wabaAccountId: string,
+    tenantId?: string,
+  ): Promise<{ created: number; existing: number; failed: number }> {
+    let accessToken: string;
+    try {
+      accessToken = await this.tokenService.getActiveToken(wabaAccountId);
+    } catch (err: any) {
+      this.logger.warn(`seedDefaultTemplates: no token for WABA ${wabaAccountId}: ${err.message}`);
+      return { created: 0, existing: 0, failed: 0 };
+    }
+
+    const wabaAccount = await this.templateRepo.manager.findOne('WabaAccount', {
+      where: { id: wabaAccountId },
+    }) as any;
+    if (!wabaAccount?.wabaId) {
+      this.logger.warn(`seedDefaultTemplates: WABA ${wabaAccountId} not found`);
+      return { created: 0, existing: 0, failed: 0 };
+    }
+
+    let created = 0, existing = 0, failed = 0;
+    for (const tpl of DEFAULT_TEMPLATES) {
+      try {
+        const already = await this.findByName(wabaAccountId, tpl.name, tpl.language);
+        if (already) { existing++; continue; }
+
+        const metaResult = await this.metaApi.createTemplate(wabaAccount.wabaId, accessToken, {
+          name: tpl.name,
+          language: tpl.language,
+          category: tpl.category,
+          components: tpl.components,
+        });
+
+        const template = this.templateRepo.create({
+          wabaAccountId,
+          tenantId,
+          templateName: tpl.name,
+          metaTemplateId: metaResult.id,
+          language: tpl.language,
+          category: tpl.category,
+          components: tpl.components,
+          status: 'PENDING',
+        });
+        await this.templateRepo.save(template);
+        created++;
+        // Gentle pacing so we don't trip Meta's template-create rate limit.
+        await new Promise((r) => setTimeout(r, 400));
+      } catch (err: any) {
+        const msg = err?.message || '';
+        if (/already exists/i.test(msg) || err?.code === 2388047) { existing++; continue; }
+        this.logger.warn(`seedDefaultTemplates: "${tpl.name}" failed: ${msg}`);
+        failed++;
+      }
+    }
+
+    this.logger.log(
+      `Seeded default templates on WABA ${wabaAccountId}: ${created} created, ${existing} existing, ${failed} failed`,
+    );
+    return { created, existing, failed };
   }
 
   /**

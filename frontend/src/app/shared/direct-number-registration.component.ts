@@ -25,6 +25,15 @@ import { OnboardingService, RegisterNumberResult } from '../core/services/onboar
   template: `
     <div class="space-y-3">
       @if (phase() === 'input') {
+        <div class="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <i class="pi pi-exclamation-triangle text-amber-600 mt-0.5" style="font-size:0.85rem"></i>
+          <p class="text-xs text-amber-800 leading-relaxed">
+            <span class="font-semibold">Cloud API only:</span> this number will run entirely on our
+            platform. <span class="font-semibold">Do not install or register the WhatsApp Business App</span>
+            on it afterwards — doing so will disconnect the number from our platform. If you want to keep
+            using the WhatsApp Business App, use the “Connect WhatsApp” (Embedded Signup) option instead.
+          </p>
+        </div>
         <p class="text-xs text-gray-500">
           Enter your number with country code (e.g. +91XXXXXXXXXX). We'll register it on our
           platform and text you a verification code. No Facebook account required.

@@ -21,6 +21,9 @@ interface PlatformConfigView {
   googleAvailable: boolean;
   metaAvailable: boolean;
   directRegistrationEnabled: boolean;
+  creditLineSharingEnabled: boolean;
+  metaCreditLineId: string;
+  metaBillingCurrency: string;
 }
 
 @Component({
@@ -139,6 +142,35 @@ interface PlatformConfigView {
           </div>
         </div>
 
+        <!-- Billing — platform credit line -->
+        <div class="bg-white shadow-sm rounded-xl border border-gray-200 p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900">Billing — Platform Credit Line</h2>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-500">Share credit line</span>
+              <p-toggleswitch [(ngModel)]="cfg.creditLineSharingEnabled" />
+            </div>
+          </div>
+          <p class="text-xs text-gray-500 max-w-xl">
+            When on, the platform's credit line is automatically attached to each new customer WABA
+            created via Embedded Signup, so <span class="font-semibold">all messaging is billed to the
+            platform and the customer is never charged by Meta</span>. Requires the credit line id from
+            your Meta Business Settings → Billing &amp; payments → WhatsApp credit line.
+          </p>
+          <div class="grid grid-cols-1 gap-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-sm font-semibold text-gray-700">Credit Line ID</label>
+              <input pInputText [(ngModel)]="cfg.metaCreditLineId"
+                     placeholder="Extended credit line ID" class="w-full text-sm" />
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label class="text-sm font-semibold text-gray-700">Billing Currency</label>
+              <input pInputText [(ngModel)]="cfg.metaBillingCurrency"
+                     placeholder="USD" maxlength="3" class="w-full text-sm uppercase" style="max-width:8rem" />
+            </div>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-3">
           <button pButton label="Reload" icon="pi pi-refresh" class="p-button-text" (click)="load()" [disabled]="saving()"></button>
           <button pButton label="Save changes" icon="pi pi-check" severity="success" (click)="save()" [loading]="saving()"></button>
@@ -158,6 +190,7 @@ export class AdminSettingsComponent implements OnInit {
     googleClientId: '', googleClientSecretSet: false, googleLoginEnabled: false,
     metaAppId: '', metaAppSecretSet: false, metaEmbeddedSignupConfigId: '', metaLoginEnabled: false,
     googleAvailable: false, metaAvailable: false, directRegistrationEnabled: false,
+    creditLineSharingEnabled: false, metaCreditLineId: '', metaBillingCurrency: 'USD',
   };
   // Secrets are write-only inputs (never populated from the server).
   googleClientSecret = '';
@@ -187,6 +220,9 @@ export class AdminSettingsComponent implements OnInit {
       metaEmbeddedSignupConfigId: this.cfg.metaEmbeddedSignupConfigId,
       metaLoginEnabled: this.cfg.metaLoginEnabled,
       directRegistrationEnabled: this.cfg.directRegistrationEnabled,
+      creditLineSharingEnabled: this.cfg.creditLineSharingEnabled,
+      metaCreditLineId: this.cfg.metaCreditLineId,
+      metaBillingCurrency: this.cfg.metaBillingCurrency,
     };
     // Only send a secret when the admin actually typed a new one.
     if (this.googleClientSecret.trim()) body['googleClientSecret'] = this.googleClientSecret.trim();

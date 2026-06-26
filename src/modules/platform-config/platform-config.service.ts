@@ -21,6 +21,12 @@ export interface PlatformConfigView {
   // When on, tenants may register a number directly (no Facebook account) in
   // addition to Embedded Signup. When off, only Embedded Signup is offered.
   directRegistrationEnabled: boolean;
+  // Platform billing: when on, the platform's credit line is attached to each
+  // new customer WABA at Embedded Signup, so ALL messaging is billed to the
+  // platform (the customer is never charged by Meta).
+  creditLineSharingEnabled: boolean;
+  metaCreditLineId: string;
+  metaBillingCurrency: string;
 }
 
 export interface UpdatePlatformConfigDto {
@@ -32,6 +38,9 @@ export interface UpdatePlatformConfigDto {
   metaEmbeddedSignupConfigId?: string;
   metaLoginEnabled?: boolean;
   directRegistrationEnabled?: boolean;
+  creditLineSharingEnabled?: boolean;
+  metaCreditLineId?: string;
+  metaBillingCurrency?: string;
 }
 
 const SECRET_MASK = '••••••••';
@@ -176,6 +185,19 @@ export class PlatformConfigService implements OnModuleInit {
     return (await this.getRaw('direct_registration_enabled')) === 'true';
   }
 
+  /**
+   * Platform credit-line sharing config. When enabled (and a credit line id is
+   * set), the platform's credit line is attached to each new customer WABA so
+   * the PLATFORM is billed for all messaging and the customer is never charged.
+   * Defaults OFF.
+   */
+  async getCreditLineConfig(): Promise<{ enabled: boolean; creditLineId: string; currency: string }> {
+    const creditLineId = await this.getWithFallback('meta_credit_line_id', 'META_CREDIT_LINE_ID');
+    const currency = (await this.getWithFallback('meta_billing_currency', 'META_BILLING_CURRENCY')) || 'USD';
+    const rawEnabled = await this.getRaw('credit_line_sharing_enabled');
+    return { enabled: rawEnabled === 'true', creditLineId, currency };
+  }
+
   // ─── Super-admin read/write ────────────────────────────────────────────────
 
   async getAdminView(): Promise<PlatformConfigView> {
@@ -192,6 +214,14 @@ export class PlatformConfigService implements OnModuleInit {
       googleAvailable: await this.isProviderAvailable('google'),
       metaAvailable: await this.isProviderAvailable('meta'),
       directRegistrationEnabled: await this.isDirectRegistrationEnabled(),
+      ...(await (async () => {
+        const cl = await this.getCreditLineConfig();
+        return {
+          creditLineSharingEnabled: cl.enabled,
+          metaCreditLineId: cl.creditLineId,
+          metaBillingCurrency: cl.currency,
+        };
+      })()),
     };
   }
 
@@ -206,6 +236,12 @@ export class PlatformConfigService implements OnModuleInit {
       await this.setOne('meta_login_enabled', dto.metaLoginEnabled ? 'true' : 'false', false);
     if (dto.directRegistrationEnabled !== undefined)
       await this.setOne('direct_registration_enabled', dto.directRegistrationEnabled ? 'true' : 'false', false);
+    if (dto.creditLineSharingEnabled !== undefined)
+      await this.setOne('credit_line_sharing_enabled', dto.creditLineSharingEnabled ? 'true' : 'false', false);
+    if (dto.metaCreditLineId !== undefined)
+      await this.setOne('meta_credit_line_id', dto.metaCreditLineId.trim(), false);
+    if (dto.metaBillingCurrency !== undefined)
+      await this.setOne('meta_billing_currency', (dto.metaBillingCurrency.trim() || 'USD').toUpperCase(), false);
 
     // Secrets: only overwrite when a real new value is provided (not the mask, not blank).
     if (dto.googleClientSecret !== undefined && dto.googleClientSecret !== SECRET_MASK && dto.googleClientSecret.trim()) {

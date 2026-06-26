@@ -13,8 +13,10 @@ import { AuditLogService } from '../audit-log.service';
 import { SystemTokenService } from './system-token.service';
 import { WebhookSubscriptionService } from './webhook-subscription.service';
 import { CoexistenceService } from './coexistence.service';
+import { CreditLineService } from './credit-line.service';
 import { OnboardingRollbackService } from './onboarding-rollback.service';
 import { PlatformConfigService } from '../../platform-config/platform-config.service';
+import { TemplateService } from '../template/template.service';
 
 /**
  * Handles Meta's Embedded Signup flow for WhatsApp Business.
@@ -50,9 +52,11 @@ export class EmbeddedSignupService {
     private readonly systemTokenService: SystemTokenService,
     private readonly webhookService: WebhookSubscriptionService,
     private readonly coexistenceService: CoexistenceService,
+    private readonly creditLineService: CreditLineService,
     private readonly rollbackService: OnboardingRollbackService,
     private readonly configService: ConfigService,
     private readonly platformConfig: PlatformConfigService,
+    private readonly templateService: TemplateService,
   ) {
     // Env values are fallbacks; the live values come from PlatformConfig (super-admin
     // managed) at call time so they can be changed without a redeploy.
@@ -238,12 +242,40 @@ export class EmbeddedSignupService {
       await this.webhookService.subscribeWaba(waba.id, wabaId, finalToken);
       await this.transition(session, 'webhook_subscribed');
 
+      // Step 8b: Attach the platform's credit line to this (customer) WABA so the
+      // PLATFORM is billed for all messaging and the customer is never charged by
+      // Meta. No-op unless super-admin enabled credit-line sharing + set a credit
+      // line id. Non-fatal — billing setup must not fail an onboarding.
+      let creditLineAttached = false;
+      try {
+        const cl = await this.creditLineService.attachPlatformCreditLine(wabaId);
+        creditLineAttached = cl.attached;
+        if (!cl.attached && cl.reason) {
+          this.logger.warn(`Credit-line not attached for WABA ${wabaId}: ${cl.reason}`);
+        }
+      } catch (clErr: any) {
+        this.logger.warn(`Credit-line attach threw for WABA ${wabaId}: ${clErr.message}`);
+      }
+
       // Step 9: Update tenant record (token resolved via MetaTokenService, NOT stored in plain text)
       await this.tenantRepo.update(tenantId, {
         phoneNumberId: phoneNumberId || '',
         wabaId,
         onboardingStatus: 'whatsapp_connected',
       });
+
+      // Step 9b: Auto-seed the platform's default template library onto the
+      // tenant's WABA in the background, so they get every template without ever
+      // logging into Meta. Fire-and-forget — template seeding must never block or
+      // fail an otherwise-successful connection (approval is async anyway).
+      this.templateService
+        .seedDefaultTemplates(waba.id, tenantId)
+        .then((s) =>
+          this.logger.log(
+            `Auto-seeded templates for WABA ${wabaId}: ${s.created} created, ${s.existing} existing, ${s.failed} failed`,
+          ),
+        )
+        .catch((e) => this.logger.warn(`Template seeding failed for WABA ${wabaId}: ${e.message}`));
 
       // Step 10: Complete
       await this.transition(session, 'completed');
@@ -259,6 +291,7 @@ export class EmbeddedSignupService {
           wabaId,
           phoneNumberId,
           isCoexistence,
+          creditLineAttached,
           sessionId: session.id,
         },
       });

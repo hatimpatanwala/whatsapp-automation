@@ -563,6 +563,7 @@ export class OnboardingService {
     }
 
     let deregistered = false;
+    let deregisterReason: string | undefined;
     const wasOnMeta = !!phone.phoneNumberId;
 
     if (wasOnMeta) {
@@ -572,9 +573,14 @@ export class OnboardingService {
         if (token) {
           // Only un-hosts a number that is actually connected to Cloud API; a
           // pending/unverified number returns "not currently linked" (expected).
-          deregistered = await this.deregisterFromCloudApi(phone.phoneNumberId, token);
+          const result = await this.deregisterFromCloudApi(phone.phoneNumberId, token);
+          deregistered = result.success;
+          deregisterReason = result.reason;
+        } else {
+          deregisterReason = 'No active WABA token available to deregister.';
         }
       } catch (err: any) {
+        deregisterReason = err.message;
         this.logger.warn(`Deregister failed for ${phone.phoneNumber}: ${err.message}`);
       }
     }
@@ -605,6 +611,7 @@ export class OnboardingService {
           releasedAt: new Date().toISOString(),
           releasedByTenantId: tenantId,
           deregistered,
+          deregisterReason: deregisterReason || null,
         } as any,
       });
     } else {
@@ -630,6 +637,12 @@ export class OnboardingService {
       },
     }).catch((e) => this.logger.warn(`Audit log for phone.released failed: ${e.message}`));
 
+    // Meta has NO API to delete a number from a WABA, so a verified/registered
+    // number must be removed by hand in WhatsApp Manager. Spell out the steps.
+    const manualRemovalSteps =
+      'To fully remove it from Meta: open WhatsApp Manager (business.facebook.com/wa/manage) → ' +
+      'Account tools → Phone numbers → select this number → Manage → Delete/Remove phone number. ' +
+      'Unverified numbers are auto-removed by Meta after a couple of days.';
     const reuseNote =
       'If this number is unverified or has not yet been deregistered from Meta, you can reuse it again within 2 business days — ' +
       'or contact our support team to have it freed sooner.';
@@ -638,9 +651,12 @@ export class OnboardingService {
     if (!wasOnMeta) {
       message = 'Number removed from your account. It was never registered on WhatsApp, so nothing remains on the WABA.';
     } else if (deregistered) {
-      message = `Number removed from your account and deregistered from WhatsApp. Our team will remove it from the WhatsApp Business Account. ${reuseNote}`;
+      message = `Number removed from your account and deregistered (un-hosted) from the WhatsApp Cloud API. ` +
+        `It still exists on the WhatsApp Business Account — Meta has no API to delete it automatically. ${manualRemovalSteps} ${reuseNote}`;
     } else {
-      message = `Number removed from your account. Our team will remove it from the WhatsApp Business Account (Meta's API can't remove it automatically). ${reuseNote}`;
+      const why = deregisterReason ? ` (${deregisterReason})` : '';
+      message = `Number removed from your account, but it could not be deregistered from the Cloud API automatically${why}. ` +
+        `It still exists on the WhatsApp Business Account. ${manualRemovalSteps} ${reuseNote}`;
     }
 
     return { message, freed, manualRemovalNeeded };
@@ -672,15 +688,21 @@ export class OnboardingService {
     const token = await this.metaTokenService.getActiveToken(waba.id).catch(() => null);
     if (!token) throw new BadRequestException('No active WABA token is available to deregister this number.');
 
-    const deregistered = await this.deregisterFromCloudApi(phone.phoneNumberId, token);
+    const result = await this.deregisterFromCloudApi(phone.phoneNumberId, token);
+    const deregistered = result.success;
     await this.phoneNumberRepository.update(phone.id, {
-      metadata: { ...(phone.metadata || {}), deregistered, deregisteredAt: new Date().toISOString() } as any,
+      metadata: {
+        ...(phone.metadata || {}),
+        deregistered,
+        deregisterReason: result.reason || null,
+        deregisteredAt: new Date().toISOString(),
+      } as any,
     });
     return {
       deregistered,
       message: deregistered
-        ? 'Number deregistered from WhatsApp hosting. Now remove it from WhatsApp Manager to free it completely.'
-        : 'Deregister did not apply (number is unverified / not connected). Remove it directly from WhatsApp Manager.',
+        ? 'Number deregistered (un-hosted) from the WhatsApp Cloud API. Now remove it from WhatsApp Manager to delete it from the WABA completely.'
+        : `Deregister did not apply${result.reason ? ` (${result.reason})` : ''} — the number may be unverified / not connected. Remove it directly from WhatsApp Manager.`,
     };
   }
 
@@ -961,21 +983,37 @@ export class OnboardingService {
 
   /**
    * Deregister a number from the WhatsApp Cloud API (POST /{id}/deregister).
-   * This releases the number so it can be registered on another account/BSP.
+   * This UN-HOSTS the number from Cloud API — it does NOT remove it from the
+   * WABA (Meta has no API for that; see releaseNumber).
+   *
+   * Returns a structured result and logs Meta's full response so we never
+   * silently over-report success. Meta returns { "success": true } on a real
+   * un-host; anything else (an error, a bare 200, a "not currently linked"
+   * message for an unverified number) is reported as NOT deregistered with the
+   * actual reason, instead of being masked by an optimistic `?? true`.
    */
-  private async deregisterFromCloudApi(phoneNumberId: string, accessToken: string): Promise<boolean> {
+  private async deregisterFromCloudApi(
+    phoneNumberId: string,
+    accessToken: string,
+  ): Promise<{ success: boolean; raw: any; reason?: string }> {
     try {
       const res = await fetch(
         `https://graph.facebook.com/${this.graphApiVersion}/${phoneNumberId}/deregister`,
         { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
       );
-      const data = await res.json() as any;
-      if (res.ok && (data.success ?? true)) return true;
-      this.logger.warn(`Deregister failed for ${phoneNumberId}: ${data.error?.message}`);
-      return false;
+      const data = await res.json().catch(() => ({} as any));
+      // Log exactly what Meta returned (status + body) for diagnostics.
+      this.logger.log(`Deregister ${phoneNumberId} → HTTP ${res.status} ${JSON.stringify(data)}`);
+
+      if (res.ok && data?.success === true) {
+        return { success: true, raw: data };
+      }
+      const reason = data?.error?.message || `Unexpected response (HTTP ${res.status})`;
+      this.logger.warn(`Deregister not applied for ${phoneNumberId}: ${reason}`);
+      return { success: false, raw: data, reason };
     } catch (err: any) {
       this.logger.warn(`Deregister error for ${phoneNumberId}: ${err.message}`);
-      return false;
+      return { success: false, raw: null, reason: err.message };
     }
   }
 
