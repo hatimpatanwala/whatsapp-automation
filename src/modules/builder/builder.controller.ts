@@ -33,6 +33,12 @@ export class BuilderController {
     return this.builder.searchCustomers(this.token(req, token), q || '');
   }
 
+  /** Read-only order/quote details behind a VIEW token (for the customer). */
+  @Get('result')
+  async result(@Req() req: Request, @Query('token') token?: string) {
+    return this.builder.getResult(this.token(req, token));
+  }
+
   @Post('submit')
   @HttpCode(200)
   async submit(@Req() req: Request, @Query('token') token: string, @Body() body: any) {

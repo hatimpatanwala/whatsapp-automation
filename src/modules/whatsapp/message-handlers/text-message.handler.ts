@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { WhatsAppMessageService } from '../whatsapp-message.service';
 import { CommerceSettingsHelper } from '../helpers/commerce-settings.helper';
+import { WhatsAppApiService } from '../whatsapp-api.service';
+import { BuilderService } from '../../builder/builder.service';
 
 export interface MessageContext {
   schema: string;
@@ -19,6 +21,8 @@ export class TextMessageHandler {
     private readonly connectionManager: TenantConnectionManager,
     private readonly messageService: WhatsAppMessageService,
     private readonly commerceSettings: CommerceSettingsHelper,
+    private readonly whatsappApi: WhatsAppApiService,
+    private readonly builder: BuilderService,
   ) {}
 
   async handle(context: MessageContext, text: string): Promise<void> {
@@ -64,6 +68,24 @@ export class TextMessageHandler {
       return;
     }
 
+    // "Check the order/quote" — from a builder notification button. Send the
+    // read-only webview link for the customer's most recent order/quote.
+    if (['check the order', 'view order', 'check order'].includes(normalizedText)) {
+      await this.sendResultLink(context, customer, conversation.id, 'order');
+      return;
+    }
+    if (['check the quote', 'view quote', 'check quote'].includes(normalizedText)) {
+      await this.sendResultLink(context, customer, conversation.id, 'quote');
+      return;
+    }
+
+    // Customer quote request → mint a quote builder session bound to this
+    // customer and ping the admin to price it.
+    if (/\b(quote|quotation)\b/.test(normalizedText)) {
+      await this.handleQuoteRequest(context, customer, conversation);
+      return;
+    }
+
     if (['cart', 'my cart', 'view cart'].includes(normalizedText)) {
       const cs = await this.commerceSettings.getCommerceSettings(schema);
       if (cs.cartEnabled) {
@@ -95,6 +117,71 @@ export class TextMessageHandler {
 
     // Default: show main menu
     await this.sendMainMenu(context, conversation.id);
+  }
+
+  /** Customer requested a quote → bind a quote session + notify the admin. */
+  private async handleQuoteRequest(context: MessageContext, customer: any, conversation: any): Promise<void> {
+    const { schema, tenant } = context;
+    let url: string;
+    try {
+      const session = await this.builder.createSession({
+        tenantId: tenant.id,
+        schemaName: schema,
+        type: 'quote',
+        customerId: customer.id,
+        customerPhone: customer.phone,
+        customerName: customer.name,
+        conversationId: conversation.id,
+        createdBy: 'customer_request',
+      });
+      url = session.url;
+    } catch (e: any) {
+      this.logger.warn(`quote-request session failed: ${e.message}`);
+      await this.messageService.logAndSendText(
+        schema, tenant.phoneNumberId, tenant.accessToken, context.from, conversation.id,
+        'Thanks! Our team will get back to you with a quote shortly.',
+      );
+      return;
+    }
+
+    await this.messageService.logAndSendText(
+      schema, tenant.phoneNumberId, tenant.accessToken, context.from, conversation.id,
+      'Thanks! 🙌 We\'ve received your quote request — our team will prepare a quote for you shortly.',
+    );
+
+    if (tenant.adminWhatsappNumber && tenant.adminWhatsappVerified) {
+      try {
+        await this.whatsappApi.sendCtaUrl(
+          tenant.phoneNumberId, tenant.accessToken, tenant.adminWhatsappNumber,
+          `📄 *New quote request*\nFrom: ${customer.name || customer.phone} (${customer.phone})\n\nTap below to build the quote — your products are ready to price.`,
+          'Build Quote', url,
+        );
+      } catch (e: any) {
+        this.logger.warn(`admin quote-request notify failed: ${e.message}`);
+      }
+    }
+  }
+
+  /** Send the customer a read-only webview link for their latest order/quote. */
+  private async sendResultLink(context: MessageContext, customer: any, conversationId: string, type: 'order' | 'quote'): Promise<void> {
+    const { schema, tenant } = context;
+    try {
+      const res = await this.builder.createViewForLatestResult(tenant.id, schema, type, customer.id);
+      if (!res) {
+        await this.messageService.logAndSendText(
+          schema, tenant.phoneNumberId, tenant.accessToken, context.from, conversationId,
+          `You don't have a recent ${type} yet. Type "menu" to get started.`,
+        );
+        return;
+      }
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId, tenant.accessToken, context.from,
+        `Here is your ${type} *${res.number}*. Tap below to view the details.`,
+        type === 'quote' ? 'View quote' : 'View order', res.url,
+      );
+    } catch (e: any) {
+      this.logger.warn(`sendResultLink failed: ${e.message}`);
+    }
   }
 
   private async sendMainMenu(context: MessageContext, conversationId: string): Promise<void> {

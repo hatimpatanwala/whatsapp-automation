@@ -2,25 +2,64 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { BuilderSubmittedEvent } from '../events/domain-events';
 import { SmartNotificationService } from './smart-notification.service';
+import { MessageOrchestratorService } from './message-orchestrator.service';
+import { WhatsAppApiService } from './whatsapp-api.service';
+import { BuilderService } from '../builder/builder.service';
 
 /**
- * When an admin submits a new order/quote from the Builder, notify the customer.
- * Window-aware via SmartNotificationService: free-form text inside the 24h
- * service window, a UTILITY template ("…is being created", with a tap-to-open
- * button) when the window is closed.
+ * When an admin submits a new order/quote from the Builder, notify the customer:
+ *  - INSIDE the 24h service window → a CTA URL button ("Check the order/quote")
+ *    that opens the read-only webview directly.
+ *  - OUTSIDE the window → a UTILITY door-opener template ("…is being created")
+ *    whose "Check the order" quick-reply opens the window; tapping it then
+ *    delivers the webview link (handled in the text handler).
  */
 @Injectable()
 export class BuilderNotificationListener {
   private readonly logger = new Logger(BuilderNotificationListener.name);
 
-  constructor(private readonly smart: SmartNotificationService) {}
+  constructor(
+    private readonly smart: SmartNotificationService,
+    private readonly orchestrator: MessageOrchestratorService,
+    private readonly whatsappApi: WhatsAppApiService,
+    private readonly builder: BuilderService,
+  ) {}
 
   @OnEvent('builder.submitted')
   async onBuilderSubmitted(e: BuilderSubmittedEvent): Promise<void> {
     if (!e.customerPhone) return;
     const isQuote = e.type === 'quote';
     const word = isQuote ? 'quote' : 'order';
+    const btn = isQuote ? 'Check the quote' : 'Check the order';
+
     try {
+      const windowOpen = await this.orchestrator.hasActiveServiceWindow(e.tenantId, e.customerPhone);
+
+      if (windowOpen) {
+        const creds = await this.smart.getCreds(e.tenantId);
+        const view = await this.builder.createViewSession({
+          tenantId: e.tenantId,
+          schemaName: e.tenantSchema,
+          type: e.type,
+          resultId: e.resultId,
+          resultNumber: e.resultNumber,
+          customerId: e.customerId,
+          customerPhone: e.customerPhone,
+        });
+        if (creds) {
+          await this.whatsappApi.sendCtaUrl(
+            creds.phoneNumberId,
+            creds.accessToken,
+            e.customerPhone,
+            `Hi${e.customerName ? ' ' + e.customerName : ''}, your ${word} *${e.resultNumber}* is ready. Tap below to review it.`,
+            btn,
+            view.url,
+          );
+          return;
+        }
+      }
+
+      // Window closed (or no creds) → door-opener template via smart notify.
       await this.smart.notify({
         tenantId: e.tenantId,
         schema: e.tenantSchema,
@@ -31,7 +70,7 @@ export class BuilderNotificationListener {
         summary: `Your ${word} ${e.resultNumber} is ready`,
         detail:
           `Hi${e.customerName ? ' ' + e.customerName : ''}, your ${word} *${e.resultNumber}* ` +
-          `has been created. Reply here if you have any questions or to confirm.`,
+          `has been created. Reply "${btn}" to review it.`,
         template: {
           name: isQuote ? 'quote_ready_notify' : 'order_created_notify',
           params: [e.customerName || 'there', e.resultNumber],

@@ -5,6 +5,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -83,6 +84,10 @@ export class BuilderService implements OnModuleInit {
           expires_at TIMESTAMPTZ NOT NULL
         )
       `);
+      // 'build' = create order/quote; 'view' = read-only customer view of a result.
+      await this.ds.query(
+        `ALTER TABLE public.builder_sessions ADD COLUMN IF NOT EXISTS mode VARCHAR(10) NOT NULL DEFAULT 'build'`,
+      );
     } catch (e: any) {
       this.logger.error(`Failed to ensure builder_sessions table: ${e?.message || e}`);
     }
@@ -98,8 +103,8 @@ export class BuilderService implements OnModuleInit {
     const expiresAt = new Date(Date.now() + this.ttlMs);
     await this.ds.query(
       `INSERT INTO public.builder_sessions
-         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, customer_name, conversation_id, created_by, status, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open',$10)`,
+         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, customer_name, conversation_id, created_by, status, mode, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open','build',$10)`,
       [
         this.hash(token),
         input.tenantId,
@@ -118,18 +123,149 @@ export class BuilderService implements OnModuleInit {
     return { token, url: `${base}${path}`, path };
   }
 
+  /** Mint a read-only VIEW link for a created order/quote (for the customer). */
+  async createViewSession(input: {
+    tenantId: string;
+    schemaName: string;
+    type: BuilderType;
+    resultId: string;
+    resultNumber: string;
+    customerId?: string | null;
+    customerPhone?: string | null;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions
+         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, status, mode, result_id, result_number, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,'open','view',$7,$8,$9)`,
+      [
+        this.hash(token),
+        input.tenantId,
+        input.schemaName,
+        input.type,
+        input.customerId || null,
+        input.customerPhone || null,
+        input.resultId,
+        input.resultNumber,
+        expiresAt,
+      ],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/view?token=${token}` };
+  }
+
+  /** Mint a view link for the customer's most recent order/quote (for "Check the order" taps). */
+  async createViewForLatestResult(
+    tenantId: string,
+    schemaName: string,
+    type: BuilderType,
+    customerId: string,
+  ): Promise<{ url: string; number: string } | null> {
+    const latest = await this.connectionManager.executeInTenantContext(schemaName, async (qr) => {
+      if (type === 'order') {
+        const r = await qr.query(
+          `SELECT id, order_number AS number FROM orders WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          [customerId],
+        );
+        return r[0] || null;
+      }
+      const r = await qr.query(
+        `SELECT id, quote_number AS number FROM quotes WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [customerId],
+      );
+      return r[0] || null;
+    });
+    if (!latest) return null;
+    const { url } = await this.createViewSession({
+      tenantId,
+      schemaName,
+      type,
+      resultId: latest.id,
+      resultNumber: latest.number,
+      customerId,
+    });
+    return { url, number: latest.number };
+  }
+
+  /** Read-only details of the order/quote behind a VIEW token. */
+  async getResult(token: string): Promise<any> {
+    const s = await this.resolveSession(token, 'view');
+    return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
+      const cust = (await qr.query(`SELECT name, phone FROM customers WHERE id = $1`, [s.customer_id]))[0];
+      const customer = { name: cust?.name || null, phone: cust?.phone || null };
+      if (s.type === 'order') {
+        const o = (await qr.query(
+          `SELECT order_number, status, subtotal, total, currency, created_at FROM orders WHERE id = $1`,
+          [s.result_id],
+        ))[0];
+        if (!o) throw new NotFoundException('Order not found.');
+        const items = await qr.query(
+          `SELECT product_name AS name, quantity, unit_price, total_price FROM order_items WHERE order_id = $1`,
+          [s.result_id],
+        );
+        return {
+          type: 'order',
+          number: o.order_number,
+          status: o.status,
+          subtotal: Number(o.subtotal),
+          total: Number(o.total),
+          currency: o.currency || 'INR',
+          createdAt: o.created_at,
+          customer,
+          items: items.map((i: any) => ({
+            name: i.name,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unit_price),
+            total: Number(i.total_price),
+          })),
+        };
+      }
+      const q = (await qr.query(
+        `SELECT quote_number, title, status, subtotal, total_amount, created_at FROM quotes WHERE id = $1`,
+        [s.result_id],
+      ))[0];
+      if (!q) throw new NotFoundException('Quote not found.');
+      const items = await qr.query(
+        `SELECT description AS name, quantity, unit_price, line_total FROM quote_items WHERE quote_id = $1 ORDER BY sort_order`,
+        [s.result_id],
+      );
+      return {
+        type: 'quote',
+        number: q.quote_number,
+        title: q.title,
+        status: q.status,
+        subtotal: Number(q.subtotal),
+        total: Number(q.total_amount),
+        currency: 'INR',
+        createdAt: q.created_at,
+        customer,
+        items: items.map((i: any) => ({
+          name: i.name,
+          quantity: Number(i.quantity),
+          unitPrice: Number(i.unit_price),
+          total: Number(i.line_total),
+        })),
+      };
+    });
+  }
+
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,
       [this.hash(token)],
     );
     const s = rows[0];
-    if (!s) throw new UnauthorizedException('Invalid builder link.');
-    if (s.status !== 'open') throw new ForbiddenException('This builder link has already been used.');
+    if (!s) throw new UnauthorizedException('Invalid link.');
+    if ((s.mode || 'build') !== expectedMode) throw new ForbiddenException('This link is not valid here.');
+    // 'view' links stay usable until expiry; 'build' links are single-use.
+    if (expectedMode === 'build' && s.status !== 'open') {
+      throw new ForbiddenException('This builder link has already been used.');
+    }
     if (new Date(s.expires_at).getTime() < Date.now()) {
-      throw new ForbiddenException('This builder link has expired. Please request a new one.');
+      throw new ForbiddenException('This link has expired. Please request a new one.');
     }
     return s;
   }

@@ -111,5 +111,10 @@ export const routes: Routes = [
     path: 'm/builder',
     loadComponent: () => import('./features/builder/mobile-builder.component').then(m => m.MobileBuilderComponent),
   },
+  {
+    // Token-secured read-only order/quote view ("Check the order" button).
+    path: 'm/view',
+    loadComponent: () => import('./features/builder/order-view.component').then(m => m.OrderViewComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

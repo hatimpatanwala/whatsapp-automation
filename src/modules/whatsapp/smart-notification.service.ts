@@ -150,6 +150,11 @@ export class SmartNotificationService {
     return mode;
   }
 
+  /** Public wrapper for callers that need the tenant's WhatsApp sender creds. */
+  async getCreds(tenantId: string): Promise<{ phoneNumberId: string; accessToken: string } | null> {
+    return this.resolveCreds(tenantId);
+  }
+
   /** Resolve the tenant's sender phone-number-id + a live access token. */
   private async resolveCreds(tenantId: string): Promise<{ phoneNumberId: string; accessToken: string } | null> {
     if (!this.tenantRepo || !this.wabaRepo) return null;

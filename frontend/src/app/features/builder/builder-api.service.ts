@@ -78,4 +78,8 @@ export class BuilderApiService {
       this.opts(),
     );
   }
+
+  getResult(): Observable<any> {
+    return this.http.get<any>(`${this.base}/m/builder/result`, this.opts());
+  }
 }
