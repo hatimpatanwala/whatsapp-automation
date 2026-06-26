@@ -88,9 +88,13 @@ export class BulkWebviewController {
   async createProduct(@Req() req: Request, @Body() body: any, @Query('token') token?: string) {
     const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
     if (!body?.name?.trim()) throw new BadRequestException('Product name is required.');
+    const tags = typeof body.tags === 'string' && body.tags.trim()
+      ? body.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+      : undefined;
     const product = await this.products.create(schemaName, {
       name: body.name.trim(),
-      description: body.description,
+      description: body.description || undefined,
+      shortDescription: body.shortDescription || undefined,
       categoryId: body.categoryId || undefined,
       brandId: body.brandId || undefined,
       hsnCode: body.hsnCode || undefined,
@@ -98,7 +102,11 @@ export class BulkWebviewController {
       price: Number(body.price) || 0,
       salePrice: body.salePrice != null && body.salePrice !== '' ? Number(body.salePrice) : undefined,
       sku: body.sku || undefined,
+      barcode: body.barcode || undefined,
+      status: body.status || 'active',
+      tags,
       initialStock: body.stock != null && body.stock !== '' ? Number(body.stock) : 0,
+      lowStockThreshold: body.lowStockThreshold != null && body.lowStockThreshold !== '' ? Number(body.lowStockThreshold) : undefined,
       imageUrls: body.imageUrl ? [body.imageUrl] : undefined,
     } as any);
     return { id: product.id, name: product.name };

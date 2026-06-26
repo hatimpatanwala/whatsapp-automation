@@ -64,8 +64,18 @@ interface Taxon { id: string; name: string; }
                 <input type="number" [(ngModel)]="form.stock" inputmode="numeric" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0" />
               </div>
               <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Low stock alert</label>
+                <input type="number" [(ngModel)]="form.lowStockThreshold" inputmode="numeric" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="5" />
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">SKU</label>
                 <input [(ngModel)]="form.sku" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="optional" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Barcode</label>
+                <input [(ngModel)]="form.barcode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="optional" />
               </div>
             </div>
             <div class="grid grid-cols-2 gap-3">
@@ -93,6 +103,21 @@ interface Taxon { id: string; name: string; }
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Tax % <span class="text-gray-300">(optional)</span></label>
                 <input type="number" [(ngModel)]="form.taxRate" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. 18" />
               </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+              <select [(ngModel)]="form.status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Short description <span class="text-gray-300">(optional)</span></label>
+              <input [(ngModel)]="form.shortDescription" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Brief summary" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Tags <span class="text-gray-300">(comma separated)</span></label>
+              <input [(ngModel)]="form.tags" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. new, sale, featured" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Image URL <span class="text-gray-300">(optional)</span></label>
@@ -130,7 +155,11 @@ export class ProductAddComponent implements OnInit {
   error = signal<string | null>(null);
   done = signal<{ name: string } | null>(null);
 
-  form: any = { name: '', price: null, salePrice: null, stock: 0, sku: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null, imageUrl: '', description: '' };
+  form: any = {
+    name: '', price: null, salePrice: null, stock: 0, lowStockThreshold: 5,
+    sku: '', barcode: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null,
+    status: 'active', shortDescription: '', tags: '', imageUrl: '', description: '',
+  };
 
   canSubmit = computed(() => true);
 
@@ -160,7 +189,11 @@ export class ProductAddComponent implements OnInit {
   }
 
   addAnother(): void {
-    this.form = { name: '', price: null, salePrice: null, stock: 0, sku: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null, imageUrl: '', description: '' };
+    this.form = {
+      name: '', price: null, salePrice: null, stock: 0, lowStockThreshold: 5,
+      sku: '', barcode: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null,
+      status: 'active', shortDescription: '', tags: '', imageUrl: '', description: '',
+    };
     this.done.set(null);
     this.error.set(null);
   }
