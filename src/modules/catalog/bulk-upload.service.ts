@@ -28,6 +28,8 @@ const COLUMNS: { header: string; key: string; width: number }[] = [
   { header: 'Sale Price', key: 'salePrice', width: 12 },
   { header: 'SKU', key: 'sku', width: 15 },
   { header: 'Barcode', key: 'barcode', width: 15 },
+  { header: 'HSN Code', key: 'hsn', width: 14 },
+  { header: 'GST %', key: 'gst', width: 10 },
   { header: 'Stock Quantity', key: 'stockQuantity', width: 15 },
   { header: 'Low Stock Threshold', key: 'lowStockThreshold', width: 18 },
   { header: 'Weight (g)', key: 'weight', width: 12 },
@@ -193,7 +195,7 @@ export class BulkUploadService {
     const products = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       return qr.query(
         `SELECT p.id, p.name, p.description, c.name AS category_name, b.name AS brand_name,
-                p.base_price, p.sale_price, p.metadata, p.images, p.is_active,
+                p.base_price, p.sale_price, p.metadata, p.images, p.is_active, p.hsn_code, p.gst_rate,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity,
                 COALESCE(inv.low_stock_threshold, 5) AS low_stock_threshold
            FROM products p
@@ -218,6 +220,8 @@ export class BulkUploadService {
         salePrice: p.sale_price != null ? Number(p.sale_price) : '',
         sku: meta.sku || '',
         barcode: meta.barcode || '',
+        hsn: p.hsn_code || '',
+        gst: p.gst_rate != null ? Number(p.gst_rate) : '',
         stockQuantity: Number(p.stock_quantity ?? 0),
         lowStockThreshold: Number(p.low_stock_threshold ?? 5),
         weight: meta.weight ?? '',
@@ -266,6 +270,8 @@ export class BulkUploadService {
       else if (h.startsWith('sale')) colOf.set('salePrice', col);
       else if (h.startsWith('sku')) colOf.set('sku', col);
       else if (h.startsWith('barcode')) colOf.set('barcode', col);
+      else if (h.startsWith('hsn')) colOf.set('hsn', col);
+      else if (h.startsWith('gst')) colOf.set('gst', col);
       else if (h.startsWith('stock')) colOf.set('stockQuantity', col);
       else if (h.startsWith('low')) colOf.set('lowStockThreshold', col);
       else if (h.startsWith('weight')) colOf.set('weight', col);
@@ -301,6 +307,8 @@ export class BulkUploadService {
         salePrice: this.parseNumber(get(row, 'salePrice')),
         sku: get(row, 'sku')?.toString()?.trim() || '',
         barcode: get(row, 'barcode')?.toString()?.trim() || '',
+        hsn: get(row, 'hsn')?.toString()?.trim() || '',
+        gst: this.parseNumber(get(row, 'gst')),
         stockQuantity: this.parseNumber(get(row, 'stockQuantity')) ?? 0,
         lowStockThreshold: this.parseNumber(get(row, 'lowStockThreshold')) ?? 5,
         weight: this.parseNumber(get(row, 'weight')),
@@ -354,10 +362,12 @@ export class BulkUploadService {
           if (existingId) {
             await qr.query(
               `UPDATE products SET name = $1, description = $2, category_id = $3, base_price = $4,
-                      sale_price = $5, images = $6, is_active = $7, metadata = $8, brand_id = $9, updated_at = NOW()
-                WHERE id = $10`,
+                      sale_price = $5, images = $6, is_active = $7, metadata = $8, brand_id = $9,
+                      hsn_code = $10, gst_rate = $11, updated_at = NOW()
+                WHERE id = $12`,
               [row.name, row.description, categoryId, row.price, row.salePrice || null,
-               row.images.length ? row.images : [], isActive, metadata, brandId, existingId],
+               row.images.length ? row.images : [], isActive, metadata, brandId,
+               row.hsn || null, row.gst ?? null, existingId],
             );
             const inv = await qr.query(`SELECT id FROM inventory WHERE product_id = $1 AND variant_id IS NULL LIMIT 1`, [existingId]);
             if (inv.length) {
@@ -372,10 +382,10 @@ export class BulkUploadService {
 
           const slug = row.sku || row.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
           const product = await qr.query(
-            `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, has_variants, is_active, translations, metadata, brand_id)
-             VALUES ($1, $2, $3, $4, $5, $6, 'INR', $7, false, $8, '{}', $9, $10) RETURNING id`,
+            `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate)
+             VALUES ($1, $2, $3, $4, $5, $6, 'INR', $7, false, $8, '{}', $9, $10, $11, $12) RETURNING id`,
             [row.name, slug, row.description, categoryId, row.price, row.salePrice || null,
-             row.images.length ? row.images : [], isActive, metadata, brandId],
+             row.images.length ? row.images : [], isActive, metadata, brandId, row.hsn || null, row.gst ?? null],
           );
           await qr.query(`INSERT INTO inventory (product_id, stock_quantity, low_stock_threshold) VALUES ($1, $2, $3)`,
             [product[0].id, row.stockQuantity, row.lowStockThreshold]);

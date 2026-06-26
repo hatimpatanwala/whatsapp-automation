@@ -20,6 +20,17 @@ export class CreateProductDto {
   @IsString()
   brandId?: string;
 
+  // HSN/SAC code for GST invoices (optional).
+  @IsOptional()
+  @IsString()
+  hsnCode?: string;
+
+  // GST rate % applied on invoices (optional).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  gstRate?: number;
+
   // Accept either "basePrice" or "price" from the frontend
   @IsOptional()
   @IsNumber()

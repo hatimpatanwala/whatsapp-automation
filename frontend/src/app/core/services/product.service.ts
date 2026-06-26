@@ -23,6 +23,8 @@ export interface CreateProductPayload {
   shortDescription?: string;
   categoryId?: string;
   brandId?: string;
+  hsnCode?: string;
+  gstRate?: number;
   price: number;
   compareAtPrice?: number;
   sku?: string;
