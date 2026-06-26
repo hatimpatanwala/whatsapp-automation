@@ -116,5 +116,10 @@ export const routes: Routes = [
     path: 'm/view',
     loadComponent: () => import('./features/builder/order-view.component').then(m => m.OrderViewComponent),
   },
+  {
+    // Token-secured bulk product editor (opened from WhatsApp admin).
+    path: 'm/bulk',
+    loadComponent: () => import('./features/builder/bulk-webview.component').then(m => m.BulkWebviewComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

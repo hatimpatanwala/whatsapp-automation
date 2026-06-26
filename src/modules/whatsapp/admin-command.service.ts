@@ -173,6 +173,7 @@ export class AdminCommandService {
       title: 'Products', rows: [
         { id: 'prod_list', title: '📋 List Products' },
         { id: 'prod_add', title: '➕ Add Product' },
+        { id: 'prod_bulk', title: '📦 Bulk Add/Update', description: 'Download, edit & re-upload' },
         { id: 'prod_update', title: '✏️ Update Product' },
         { id: 'prod_delete', title: '🗑️ Delete Product' },
         { id: 'cancel', title: '⬅️ Back to menu' },
@@ -200,6 +201,7 @@ export class AdminCommandService {
     if (id === 'menu_help') return this.showHelp(tenant, to);
     if (id === 'prod_list') return this.listProducts(tenant, to);
     if (id === 'prod_add') return this.startAddProduct(tenant, to);
+    if (id === 'prod_bulk') return this.createBulkLink(tenant, to);
     if (id === 'prod_update') return this.listProductsForAction(tenant, to, 'pupd', 'Select a product to update');
     if (id === 'prod_delete') return this.listProductsForAction(tenant, to, 'pdel', 'Select a product to delete');
 
@@ -660,6 +662,28 @@ export class AdminCommandService {
     } catch (err: any) {
       this.logger.error(`createBuilderLink failed: ${err.message}`);
       await this.send(tenant, to, '⚠️ Could not open the builder right now. Send *menu* and try again.');
+    }
+  }
+
+  /** Mint a bulk-products session and send the admin a CTA URL button. */
+  private async createBulkLink(tenant: any, to: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createBulkSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        '📦 *Bulk Products*\n\nTap below to download all your products, edit prices/stock or add new ones, then upload to update everything at once. This link works for 2 hours.',
+        'Open Bulk Editor',
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createBulkLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the bulk editor right now. Send *menu* and try again.');
     }
   }
 

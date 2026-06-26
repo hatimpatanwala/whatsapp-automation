@@ -250,8 +250,27 @@ export class BuilderService implements OnModuleInit {
     });
   }
 
+  /** Mint a BULK session (admin downloads/uploads the products sheet over the web). */
+  async createBulkSession(input: { tenantId: string; schemaName: string; createdBy?: string }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + this.ttlMs);
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions (token_hash, tenant_id, schema_name, type, status, mode, expires_at)
+       VALUES ($1,$2,$3,'bulk','open','bulk',$4)`,
+      [this.hash(token), input.tenantId, input.schemaName, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/bulk?token=${token}` };
+  }
+
+  /** Validate a BULK token → the tenant schema it operates on. */
+  async getBulkSchema(token: string): Promise<{ schemaName: string; tenantId: string }> {
+    const s = await this.resolveSession(token, 'bulk');
+    return { schemaName: s.schema_name, tenantId: s.tenant_id };
+  }
+
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

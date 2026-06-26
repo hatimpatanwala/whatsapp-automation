@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductController } from './product.controller';
 import { CategoryController } from './category.controller';
+import { BulkWebviewController } from './bulk-webview.controller';
+import { BuilderModule } from '../builder/builder.module';
 import { ProductService } from './product.service';
 import { CategoryService } from './category.service';
 import { MetaCatalogSyncService } from './meta-catalog-sync.service';
@@ -18,8 +20,9 @@ import { WabaModule } from '../waba/waba.module';
     DatabaseModule,
     TypeOrmModule.forFeature([WabaAccount, PhoneNumber, Tenant]),
     forwardRef(() => WabaModule),
+    BuilderModule,
   ],
-  controllers: [ProductController, CategoryController],
+  controllers: [ProductController, CategoryController, BulkWebviewController],
   providers: [ProductService, CategoryService, MetaCatalogSyncService, BulkUploadService, CommerceSettingsHelper],
   exports: [ProductService, CategoryService, MetaCatalogSyncService, BulkUploadService],
 })
