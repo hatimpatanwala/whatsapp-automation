@@ -12,6 +12,7 @@ export interface BuilderSessionInfo {
 export interface BuilderProduct {
   id: string;
   name: string;
+  brand?: string | null;
   price: number;
   basePrice: number;
   currency: string;

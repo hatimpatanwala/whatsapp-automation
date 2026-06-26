@@ -419,7 +419,7 @@ export class AdminCommandService {
     const products = await this.productsWithStock(tenant.schemaName, 20);
     if (!products.length) return this.send(tenant, to, '🛍️ No products yet. Use *➕ Add Product* from the menu.');
     const lines = products
-      .map((p: any) => `• *${p.name}* — ${p.currency || '₹'}${p.price}${p.track ? ` · stock ${p.stock}` : ''}${p.is_active ? '' : ' (inactive)'}`)
+      .map((p: any) => `• *${p.name}*${p.brand ? ` _(${p.brand})_` : ''} — ${p.currency || '₹'}${p.price}${p.track ? ` · stock ${p.stock}` : ''}${p.is_active ? '' : ' (inactive)'}`)
       .join('\n');
     await this.send(tenant, to, `🛍️ *Products* (${products.length})\n\n${lines}\n\nSend *menu* to go back.`);
   }
@@ -584,10 +584,12 @@ export class AdminCommandService {
   private async productsWithStock(schema: string, limit: number): Promise<any[]> {
     return this.query(schema, async (qr) =>
       qr.query(
-        `SELECT p.id, p.name, p.is_active, p.currency,
+        `SELECT p.id, p.name, p.is_active, p.currency, b.name AS brand,
                 COALESCE(p.sale_price, p.base_price) AS price,
                 i.stock_quantity AS stock, COALESCE(i.track_inventory, false) AS track
-         FROM products p LEFT JOIN inventory i ON i.product_id = p.id
+         FROM products p
+         LEFT JOIN inventory i ON i.product_id = p.id
+         LEFT JOIN brands b ON b.id = p.brand_id
          ORDER BY p.created_at DESC LIMIT $1`,
         [limit],
       ),

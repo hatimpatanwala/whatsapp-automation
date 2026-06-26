@@ -160,7 +160,7 @@ interface CartLine {
                       <button class="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 flex items-center justify-between" (click)="addProduct(p)">
                         <span>
                           <span class="text-sm font-medium">{{ p.name }}</span>
-                          <span class="block text-xs text-gray-500">{{ sym() }}{{ p.price | number:'1.0-2' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
+                          <span class="block text-xs text-gray-500">{{ p.brand ? p.brand + ' · ' : '' }}{{ sym() }}{{ p.price | number:'1.0-2' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
                         </span>
                         <i class="pi pi-plus text-green-600"></i>
                       </button>

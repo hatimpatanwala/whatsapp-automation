@@ -305,8 +305,10 @@ export class BuilderService implements OnModuleInit {
     return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
       const rows = await qr.query(
         `SELECT p.id, p.name, p.base_price, p.sale_price, p.currency, p.thumbnail,
+                b.name AS brand_name,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity
            FROM products p
+           LEFT JOIN brands b ON b.id = p.brand_id
            LEFT JOIN inventory inv ON inv.product_id = p.id AND inv.variant_id IS NULL
           WHERE p.is_active = true
           ORDER BY p.sort_order ASC NULLS LAST, p.name ASC`,
@@ -314,6 +316,7 @@ export class BuilderService implements OnModuleInit {
       return rows.map((r: any) => ({
         id: r.id,
         name: r.name,
+        brand: r.brand_name || null,
         price: Number(r.sale_price ?? r.base_price ?? 0),
         basePrice: Number(r.base_price ?? 0),
         currency: r.currency || 'INR',
