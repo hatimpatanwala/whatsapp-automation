@@ -165,16 +165,31 @@ interface EditItem {
                 <!-- EDIT MODE -->
                 <div class="divide-y divide-gray-100">
                   @for (item of editItems(); track $index) {
-                    <div class="flex items-center gap-3 p-4">
-                      <div class="flex-1 min-w-0">
-                        <input pInputText [(ngModel)]="item.name" placeholder="Item name" class="w-full text-sm" />
+                    <div class="p-4">
+                      <div class="flex items-center gap-2 mb-3">
+                        <input pInputText [(ngModel)]="item.name" placeholder="Item name" class="flex-1 text-sm" />
+                        <button pButton icon="pi pi-trash" class="p-button-text p-button-rounded p-button-sm" severity="danger" (click)="removeItem($index)"></button>
                       </div>
-                      <p-inputNumber [(ngModel)]="item.qty" [min]="1" [showButtons]="true" buttonLayout="horizontal"
-                        incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" inputStyleClass="w-12 text-center" styleClass="w-28" />
-                      <p-inputNumber [(ngModel)]="item.unitPrice" [min]="0" mode="currency" [currency]="order().currency || 'INR'"
-                        [maxFractionDigits]="2" inputStyleClass="w-28 text-right" styleClass="w-32" />
-                      <div class="w-24 text-right font-semibold text-gray-800 text-sm">{{ cur }}{{ (item.qty * item.unitPrice) | number }}</div>
-                      <button pButton icon="pi pi-trash" class="p-button-text p-button-rounded p-button-sm" severity="danger" (click)="removeItem($index)"></button>
+                      <div class="flex flex-wrap items-end gap-4">
+                        <div>
+                          <label class="block text-xs text-gray-500 mb-1">Quantity</label>
+                          <div class="w-32">
+                            <p-inputNumber [(ngModel)]="item.qty" [min]="1" [showButtons]="true" buttonLayout="horizontal"
+                              incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" styleClass="w-full" inputStyleClass="w-full text-center" />
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-xs text-gray-500 mb-1">Unit Price</label>
+                          <div class="w-40">
+                            <p-inputNumber [(ngModel)]="item.unitPrice" [min]="0" mode="currency" [currency]="order().currency || 'INR'"
+                              [maxFractionDigits]="2" styleClass="w-full" inputStyleClass="w-full" />
+                          </div>
+                        </div>
+                        <div class="ml-auto text-right">
+                          <label class="block text-xs text-gray-500 mb-1">Line Total</label>
+                          <span class="font-semibold text-gray-800">{{ cur }}{{ (item.qty * item.unitPrice) | number }}</span>
+                        </div>
+                      </div>
                     </div>
                   }
                 </div>
@@ -189,6 +204,7 @@ interface EditItem {
                     optionLabel="name"
                     placeholder="Search a product to add..."
                     styleClass="flex-1"
+                    appendTo="body"
                     [forceSelection]="false"
                     [delay]="250"
                   >
@@ -304,6 +320,7 @@ interface EditItem {
             optionValue="value"
             placeholder="Select new status"
             styleClass="w-full"
+            appendTo="body"
           />
         </div>
         <ng-template pTemplate="footer">
