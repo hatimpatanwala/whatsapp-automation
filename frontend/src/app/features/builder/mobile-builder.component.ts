@@ -7,6 +7,7 @@ import {
   BuilderCustomer,
   BuilderProduct,
   BuilderOffer,
+  BuilderFreeItem,
   BuilderSessionInfo,
 } from './builder-api.service';
 
@@ -266,8 +267,23 @@ interface CartLine {
                         <input type="checkbox" [checked]="isOfferOn(o.schemeId)" (change)="toggleOffer(o.schemeId)" class="accent-green-600" />
                         <span class="text-xs text-gray-600 truncate">{{ o.name }} <span class="text-[10px] bg-green-100 text-green-700 rounded px-1">{{ o.label }}</span>@if (!o.combinable) { <span class="text-[9px] text-gray-400 ml-1">(not combinable)</span> }</span>
                       </span>
-                      <span class="text-xs font-medium text-green-700 whitespace-nowrap">− {{ sym() }}{{ o.discount | number:'1.0-2' }}</span>
+                      @if (o.discount > 0) {
+                        <span class="text-xs font-medium text-green-700 whitespace-nowrap">− {{ sym() }}{{ o.discount | number:'1.0-2' }}</span>
+                      } @else if (o.freeItems?.length) {
+                        <span class="text-xs font-medium text-green-700 whitespace-nowrap">🎁 free</span>
+                      }
                     </label>
+                  }
+                  @if (orderFreeItems().length) {
+                    <div class="bg-green-50 rounded-lg px-3 py-2 mt-1 space-y-1">
+                      <p class="text-[11px] font-semibold text-green-700">🎁 Free items added</p>
+                      @for (f of orderFreeItems(); track f.productId) {
+                        <div class="flex items-center justify-between text-xs text-gray-600">
+                          <span class="truncate">{{ f.quantity }} × {{ f.name }} <span class="text-[9px] bg-green-600 text-white rounded px-1 ml-1">FREE</span></span>
+                          <span class="text-gray-400 line-through">{{ sym() }}{{ (f.quantity * f.unitPrice) | number:'1.0-2' }}</span>
+                        </div>
+                      }
+                    </div>
                   }
                   @if (schemeDiscount() > 0) {
                     <div class="flex items-center justify-between text-sm mt-1">
@@ -369,17 +385,21 @@ export class MobileBuilderComponent implements OnInit {
   selectedOfferIds = signal<string[]>([]);
   private offersTimer: any = null;
 
-  schemeDiscount = computed(() => {
+  // The offers that actually apply, honouring the combinable rule: a non-combinable
+  // selection wins alone (highest weight, then saving); otherwise combinables stack.
+  effectiveOffers = computed(() => {
     const sel = this.offers().filter((o) => this.selectedOfferIds().includes(o.schemeId));
-    if (!sel.length) return 0;
+    if (!sel.length) return [] as BuilderOffer[];
     const nonComb = sel.filter((o) => !o.combinable);
-    // A non-combinable offer applies alone (highest weight, then discount).
     if (nonComb.length) {
-      const best = [...nonComb].sort((a, b) => b.weight - a.weight || b.discount - a.discount)[0];
-      return Math.round(best.discount * 100) / 100;
+      const best = [...nonComb].sort((a, b) => b.weight - a.weight || (b.saving || b.discount) - (a.saving || a.discount))[0];
+      return [best];
     }
-    return Math.round(sel.reduce((s, o) => s + o.discount, 0) * 100) / 100;
+    return sel;
   });
+
+  schemeDiscount = computed(() => Math.round(this.effectiveOffers().reduce((s, o) => s + (Number(o.discount) || 0), 0) * 100) / 100);
+  orderFreeItems = computed<BuilderFreeItem[]>(() => this.effectiveOffers().flatMap((o) => o.freeItems || []));
 
   total = computed(() => Math.max(0, this.subtotal() + this.tax() - (Number(this.discountAmt()) || 0) - this.schemeDiscount() + (Number(this.deliveryAmt()) || 0)));
 
@@ -517,9 +537,11 @@ export class MobileBuilderComponent implements OnInit {
 
     this.submitting.set(true);
     this.submitError.set(null);
+    const cartLines = this.cart().map((l) => ({ productId: l.productId, name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, gstRate: l.gstRate }));
+    const freeLines = this.orderFreeItems().map((f) => ({ productId: f.productId, name: '🎁 FREE: ' + f.name, quantity: f.quantity, unitPrice: 0, gstRate: 0 }));
     this.api
       .submit({
-        items: this.cart().map((l) => ({ productId: l.productId, name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, gstRate: l.gstRate })),
+        items: [...cartLines, ...freeLines],
         customerId,
         customer,
         title: this.title.trim() || undefined,

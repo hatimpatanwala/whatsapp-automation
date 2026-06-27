@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -82,19 +82,44 @@ import { ApiService } from '../../core/services/api.service';
             <textarea pTextarea [(ngModel)]="form.description" rows="2" class="w-full" placeholder="Shown to customers (optional)"></textarea>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Discount type</label>
-              <p-select [(ngModel)]="form.discountType" [options]="discountTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">{{ form.discountType === 'amount' ? 'Amount (₹) *' : 'Percent (%) *' }}</label>
-              <p-inputNumber [(ngModel)]="form.discountValue" [min]="0" [max]="form.discountType === 'percent' ? 100 : 9999999" styleClass="w-full" inputStyleClass="w-full" />
-            </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Offer type *</label>
+            <p-select [(ngModel)]="form.action" [options]="actionTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
           </div>
 
+          @if (isDiscount()) {
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Discount type</label>
+                <p-select [(ngModel)]="form.discountType" [options]="discountTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">{{ form.discountType === 'amount' ? 'Amount (₹) *' : 'Percent (%) *' }}</label>
+                <p-inputNumber [(ngModel)]="form.discountValue" [min]="0" [max]="form.discountType === 'percent' ? 100 : 9999999" styleClass="w-full" inputStyleClass="w-full" />
+              </div>
+            </div>
+          }
+          @if (isFree()) {
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Buy qty *</label>
+                <p-inputNumber [(ngModel)]="form.buyQty" [min]="1" styleClass="w-full" inputStyleClass="w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Free qty *</label>
+                <p-inputNumber [(ngModel)]="form.getQty" [min]="1" styleClass="w-full" inputStyleClass="w-full" />
+              </div>
+            </div>
+          }
+          @if (form.action === 'buy_x_get_y_free') {
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Free product (gift) *</label>
+              <p-select [(ngModel)]="form.getProductId" [options]="products()" optionLabel="name" optionValue="id" placeholder="Choose the free product" styleClass="w-full" appendTo="body" [filter]="true" />
+            </div>
+          }
+
           <div>
-            <label class="block text-xs font-semibold text-gray-500 mb-1">Applies to</label>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">{{ isFree() ? 'Buy from' : 'Applies to' }}</label>
             <p-select [(ngModel)]="form.scope" [options]="scopes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" (onChange)="form.scopeIds = []" />
           </div>
           @if (form.scope === 'category') {
@@ -162,6 +187,14 @@ export class SchemesComponent implements OnInit {
 
   dialogOpen = false;
   discountTypes = [{ label: 'Percent (%)', value: 'percent' }, { label: 'Flat amount (₹)', value: 'amount' }];
+  actionTypes = [
+    { label: 'Discount (% or ₹ off)', value: 'discount' },
+    { label: 'Buy X get same free (BOGO)', value: 'buy_x_get_x_free' },
+    { label: 'Buy X get another product free', value: 'buy_x_get_y_free' },
+    { label: 'Buy N+ qty → discount', value: 'qty_discount' },
+  ];
+  isDiscount(): boolean { return ['discount', 'qty_discount'].includes(this.form.action); }
+  isFree(): boolean { return ['buy_x_get_x_free', 'buy_x_get_y_free'].includes(this.form.action); }
   scopes = [
     { label: 'All products', value: 'all' },
     { label: 'Specific categories', value: 'category' },
@@ -198,26 +231,33 @@ export class SchemesComponent implements OnInit {
 
   blankForm() {
     return {
-      id: '', name: '', description: '', discountType: 'percent', discountValue: 10,
+      id: '', name: '', description: '', action: 'discount',
+      discountType: 'percent', discountValue: 10,
       scope: 'all', scopeIds: [] as string[], minQty: null, minCartValue: null,
+      buyQty: 2, getQty: 1, getProductId: '',
       weight: 0, combinable: false, validFrom: '', validUntil: '',
     };
   }
 
   valid(): boolean {
-    return !!this.form.name?.trim() && Number(this.form.discountValue) > 0 &&
-      (this.form.scope === 'all' || (this.form.scopeIds && this.form.scopeIds.length > 0));
+    if (!this.form.name?.trim()) return false;
+    if (this.form.scope !== 'all' && !(this.form.scopeIds && this.form.scopeIds.length > 0)) return false;
+    if (this.isDiscount()) return Number(this.form.discountValue) > 0;
+    if (this.form.action === 'buy_x_get_x_free') return Number(this.form.buyQty) > 0 && Number(this.form.getQty) > 0;
+    if (this.form.action === 'buy_x_get_y_free') return Number(this.form.buyQty) > 0 && Number(this.form.getQty) > 0 && !!this.form.getProductId;
+    return false;
   }
 
   openNew() { this.form = this.blankForm(); this.dialogOpen = true; }
 
   openEdit(s: Scheme) {
+    const c = s.conditions || {};
     this.form = {
-      id: s.id, name: s.name, description: s.description || '',
-      discountType: s.conditions?.discountType || 'percent',
-      discountValue: s.conditions?.discountValue ?? 0,
+      id: s.id, name: s.name, description: s.description || '', action: s.action || 'discount',
+      discountType: c.discountType || 'percent', discountValue: c.discountValue ?? 0,
       scope: s.scope, scopeIds: [...(s.scopeIds || [])],
-      minQty: s.conditions?.minQty ?? null, minCartValue: s.conditions?.minCartValue ?? null,
+      minQty: c.minQty ?? null, minCartValue: c.minCartValue ?? null,
+      buyQty: c.buyQty ?? 2, getQty: c.getQty ?? 1, getProductId: c.getProductId || '',
       weight: s.weight ?? 0, combinable: !!s.combinable,
       validFrom: (s.validFrom || '').slice(0, 10), validUntil: (s.validUntil || '').slice(0, 10),
     };
@@ -225,15 +265,25 @@ export class SchemesComponent implements OnInit {
   }
 
   save() {
+    const conditions: any = {};
+    if (this.isDiscount()) {
+      conditions.discountType = this.form.discountType;
+      conditions.discountValue = Number(this.form.discountValue) || 0;
+      if (this.form.action === 'qty_discount' && this.form.minQty) conditions.minQty = Number(this.form.minQty);
+      else if (this.form.minQty) conditions.minQty = Number(this.form.minQty);
+    } else if (this.form.action === 'buy_x_get_x_free') {
+      conditions.buyQty = Number(this.form.buyQty) || 1; conditions.getQty = Number(this.form.getQty) || 1;
+    } else if (this.form.action === 'buy_x_get_y_free') {
+      conditions.buyQty = Number(this.form.buyQty) || 1; conditions.getQty = Number(this.form.getQty) || 1;
+      conditions.getProductId = this.form.getProductId;
+    }
+    if (this.form.minCartValue) conditions.minCartValue = Number(this.form.minCartValue);
+
     const payload: Partial<Scheme> = {
       name: this.form.name.trim(), description: this.form.description?.trim() || undefined,
-      type: 'instant', action: 'discount', scope: this.form.scope,
+      type: 'instant', action: this.form.action, scope: this.form.scope,
       scopeIds: this.form.scope === 'all' ? [] : this.form.scopeIds,
-      conditions: {
-        discountType: this.form.discountType, discountValue: Number(this.form.discountValue) || 0,
-        ...(this.form.minQty ? { minQty: Number(this.form.minQty) } : {}),
-        ...(this.form.minCartValue ? { minCartValue: Number(this.form.minCartValue) } : {}),
-      },
+      conditions,
       weight: Number(this.form.weight) || 0, combinable: !!this.form.combinable, audience: 'all',
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null,
       status: 'active',
@@ -256,6 +306,8 @@ export class SchemesComponent implements OnInit {
 
   badge(s: Scheme): string {
     const c = s.conditions || {};
+    if (s.action === 'buy_x_get_x_free') return `Buy ${c.buyQty || 1} Get ${c.getQty || 1}`;
+    if (s.action === 'buy_x_get_y_free') return `🎁 Free`;
     return c.discountType === 'amount' ? `₹${c.discountValue} OFF` : `${c.discountValue || 0}% OFF`;
   }
 
@@ -264,9 +316,13 @@ export class SchemesComponent implements OnInit {
       : s.scope === 'category' ? `${(s.scopeIds || []).length} category(ies)`
       : s.scope === 'brand' ? `${(s.scopeIds || []).length} brand(s)`
       : `${(s.scopeIds || []).length} product(s)`;
+    const c = s.conditions || {};
+    let action = '';
+    if (s.action === 'buy_x_get_x_free') action = `Buy ${c.buyQty || 1} get ${c.getQty || 1} free · `;
+    else if (s.action === 'buy_x_get_y_free') action = `Buy ${c.buyQty || 1} → free gift · `;
     const cond = [];
-    if (s.conditions?.minQty) cond.push(`min ${s.conditions.minQty} qty`);
-    if (s.conditions?.minCartValue) cond.push(`min ₹${s.conditions.minCartValue} cart`);
-    return `On ${scopeText}${cond.length ? ' · ' + cond.join(', ') : ''}`;
+    if (c.minQty) cond.push(`min ${c.minQty} qty`);
+    if (c.minCartValue) cond.push(`min ₹${c.minCartValue} cart`);
+    return `${action}On ${scopeText}${cond.length ? ' · ' + cond.join(', ') : ''}`;
   }
 }

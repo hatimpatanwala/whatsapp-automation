@@ -34,13 +34,23 @@ export interface BuilderProduct {
   offer?: string | null;
 }
 
+export interface BuilderFreeItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+}
+
 export interface BuilderOffer {
   schemeId: string;
   name: string;
   description: string;
+  action: string;
   combinable: boolean;
   weight: number;
   discount: number;
+  freeItems: BuilderFreeItem[];
+  saving: number;
   label: string;
 }
 
@@ -49,6 +59,7 @@ export interface BuilderOffersResult {
   applicable: BuilderOffer[];
   recommendedIds: string[];
   discountTotal: number;
+  freeItems: BuilderFreeItem[];
 }
 
 export interface BuilderCustomer {
