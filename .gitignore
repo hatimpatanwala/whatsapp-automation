@@ -18,3 +18,5 @@ MobaXterm_Portable_v25.3/MobaXterm_Personal_25.3.exe
 
 # private keys / certs
 *.pem
+order-detail-before.png
+.playwright-mcp/
