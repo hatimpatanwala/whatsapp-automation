@@ -319,6 +319,7 @@ export class BuilderService implements OnModuleInit {
     return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
       const rows = await qr.query(
         `SELECT p.id, p.name, p.base_price, p.sale_price, p.currency, p.thumbnail, p.gst_rate,
+                p.uom, p.hsn_code, p.slug,
                 b.name AS brand_name,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity
            FROM products p
@@ -331,12 +332,15 @@ export class BuilderService implements OnModuleInit {
         id: r.id,
         name: r.name,
         brand: r.brand_name || null,
+        sku: r.slug || null,
         price: Number(r.sale_price ?? r.base_price ?? 0),
         basePrice: Number(r.base_price ?? 0),
         currency: r.currency || 'INR',
         thumbnail: r.thumbnail || null,
         stock: Number(r.stock_quantity ?? 0),
         gstRate: Number(r.gst_rate ?? 0),
+        uom: r.uom || 'pcs',
+        hsnCode: r.hsn_code || null,
       }));
     });
   }

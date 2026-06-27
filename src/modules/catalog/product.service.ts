@@ -37,6 +37,7 @@ export class ProductService {
       barcode: metadata.barcode || '',
       hsnCode: row.hsn_code || '',
       gstRate: row.gst_rate != null ? Number(row.gst_rate) : null,
+      uom: row.uom || 'pcs',
       imageUrls: row.images || [],
       thumbnail: row.thumbnail,
       status: row.is_active ? 'active' : 'draft',
@@ -146,8 +147,8 @@ export class ProductService {
       const slug = dto.sku || dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const product = await qr.query(
-        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          RETURNING *`,
         [
           dto.name, slug, dto.description, dto.categoryId,
@@ -156,6 +157,7 @@ export class ProductService {
           norm.isActive,
           JSON.stringify(dto.translations || {}), JSON.stringify(norm.metadata),
           dto.brandId || null, dto.hsnCode || null, dto.gstRate ?? null,
+          (dto.uom || 'pcs').trim() || 'pcs',
         ],
       );
 
@@ -199,6 +201,7 @@ export class ProductService {
       if (dto.brandId !== undefined) { fields.push(`brand_id = $${paramIndex++}`); params.push(dto.brandId || null); }
       if (dto.hsnCode !== undefined) { fields.push(`hsn_code = $${paramIndex++}`); params.push(dto.hsnCode || null); }
       if (dto.gstRate !== undefined) { fields.push(`gst_rate = $${paramIndex++}`); params.push(dto.gstRate ?? null); }
+      if (dto.uom !== undefined) { fields.push(`uom = $${paramIndex++}`); params.push((dto.uom || 'pcs').trim() || 'pcs'); }
 
       const images = dto.images || dto.imageUrls;
       if (images) { fields.push(`images = $${paramIndex++}`); params.push(images); }

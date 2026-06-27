@@ -70,9 +70,17 @@ interface Taxon { id: string; name: string; }
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Unit (UOM) *</label>
+                <select [(ngModel)]="form.uom" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  @for (u of uomOptions; track u.value) { <option [value]="u.value">{{ u.label }}</option> }
+                </select>
+              </div>
+              <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">SKU</label>
                 <input [(ngModel)]="form.sku" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="optional" />
               </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Barcode</label>
                 <input [(ngModel)]="form.barcode" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="optional" />
@@ -166,9 +174,21 @@ export class ProductAddComponent implements OnInit {
 
   form: any = {
     name: '', price: null, salePrice: null, stock: 0, lowStockThreshold: 5,
-    sku: '', barcode: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null,
+    sku: '', uom: 'pcs', barcode: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null,
     status: 'active', shortDescription: '', tags: '', imageUrl: '', description: '',
   };
+
+  readonly uomOptions = [
+    { value: 'pcs', label: 'Piece (pcs)' }, { value: 'unit', label: 'Unit' },
+    { value: 'kg', label: 'Kilogram (kg)' }, { value: 'g', label: 'Gram (g)' },
+    { value: 'l', label: 'Litre (L)' }, { value: 'ml', label: 'Millilitre (ml)' },
+    { value: 'm', label: 'Metre (m)' }, { value: 'cm', label: 'Centimetre (cm)' },
+    { value: 'box', label: 'Box' }, { value: 'pack', label: 'Pack' },
+    { value: 'dozen', label: 'Dozen' }, { value: 'pair', label: 'Pair' },
+    { value: 'set', label: 'Set' }, { value: 'bottle', label: 'Bottle' },
+    { value: 'bag', label: 'Bag' }, { value: 'carton', label: 'Carton' },
+    { value: 'sqft', label: 'Sq. ft' }, { value: 'sqm', label: 'Sq. m' },
+  ];
 
   canSubmit = computed(() => true);
 
@@ -214,7 +234,7 @@ export class ProductAddComponent implements OnInit {
   addAnother(): void {
     this.form = {
       name: '', price: null, salePrice: null, stock: 0, lowStockThreshold: 5,
-      sku: '', barcode: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null,
+      sku: '', uom: 'pcs', barcode: '', categoryId: '', brandId: '', hsnCode: '', taxRate: null,
       status: 'active', shortDescription: '', tags: '', imageUrl: '', description: '',
     };
     this.done.set(null);

@@ -28,6 +28,7 @@ export interface CreateProductPayload {
   price: number;
   compareAtPrice?: number;
   sku?: string;
+  uom?: string;
   barcode?: string;
   status?: string;
   trackInventory?: boolean;

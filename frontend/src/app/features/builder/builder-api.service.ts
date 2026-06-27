@@ -22,12 +22,15 @@ export interface BuilderProduct {
   id: string;
   name: string;
   brand?: string | null;
+  sku?: string | null;
   price: number;
   basePrice: number;
   currency: string;
   thumbnail: string | null;
   stock: number;
   gstRate?: number;
+  uom?: string;
+  hsnCode?: string | null;
 }
 
 export interface BuilderCustomer {

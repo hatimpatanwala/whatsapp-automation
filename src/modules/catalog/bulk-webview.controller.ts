@@ -120,6 +120,7 @@ export class BulkWebviewController {
       price: Number(body.price) || 0,
       salePrice: body.salePrice != null && body.salePrice !== '' ? Number(body.salePrice) : undefined,
       sku: body.sku || undefined,
+      uom: body.uom || 'pcs',
       barcode: body.barcode || undefined,
       status: body.status || 'active',
       tags,

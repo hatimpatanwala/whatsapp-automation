@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   BuilderApiService,
   BuilderCustomer,
@@ -17,6 +17,9 @@ interface CartLine {
   stock: number | null; // null = custom item (no stock)
   image?: string | null;
   gstRate?: number;
+  uom?: string;
+  brand?: string | null;
+  sku?: string | null;
 }
 
 /**
@@ -32,6 +35,9 @@ interface CartLine {
     <div class="min-h-screen bg-gray-50 text-gray-900">
       <header class="sticky top-0 z-20 bg-green-600 text-white shadow">
         <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-2">
+          <button (click)="goBack()" class="w-8 h-8 -ml-1 flex items-center justify-center rounded-full hover:bg-white/15 active:bg-white/25 transition-colors" aria-label="Go back">
+            <i class="pi pi-arrow-left"></i>
+          </button>
           <i class="pi pi-whatsapp" style="font-size:1.1rem"></i>
           <h1 class="text-base font-semibold">
             {{ session() ? (session()!.type === 'quote' ? 'Create Quote' : 'Create Order') : 'Builder' }}
@@ -129,28 +135,37 @@ interface CartLine {
                           {{ line.name }}
                           @if (line.stock === null) { <span class="text-[10px] bg-amber-100 text-amber-700 rounded px-1 ml-1 align-middle">custom</span> }
                         </p>
-                        @if (line.stock !== null) {
-                          <p class="text-[11px] mt-0.5" [class.text-red-500]="line.quantity > line.stock!" [class.text-gray-400]="line.quantity <= line.stock!">
-                            {{ line.quantity > line.stock! ? '⚠ exceeds stock (' + line.stock + ')' : 'In stock: ' + line.stock }}
+                        @if (line.brand || line.sku) {
+                          <p class="text-[11px] text-gray-400 truncate mt-0.5">
+                            @if (line.brand) { <span class="font-medium text-gray-500">{{ line.brand }}</span> }
+                            @if (line.brand && line.sku) { <span> · </span> }
+                            @if (line.sku) { <span>SKU: {{ line.sku }}</span> }
                           </p>
                         }
+                        <div class="flex items-center gap-2 mt-1">
+                          <span class="text-[11px] font-medium text-gray-600">{{ sym() }}{{ line.unitPrice | number:'1.0-2' }} / {{ line.uom || 'pcs' }}</span>
+                          @if (line.gstRate) { <span class="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">GST {{ line.gstRate }}%</span> }
+                          @if (line.stock !== null && line.quantity > line.stock!) { <span class="text-[10px] text-red-500">⚠ exceeds stock ({{ line.stock }})</span> }
+                          @else if (line.stock !== null) { <span class="text-[10px] text-gray-400">{{ line.stock }} in stock</span> }
+                        </div>
                       </div>
                       <button class="text-gray-300 hover:text-red-500 transition-colors p-1 -mt-1 -mr-1" (click)="remove(i)"><i class="pi pi-trash text-sm"></i></button>
                     </div>
                     <div class="flex items-center gap-3 mt-3">
                       <!-- qty stepper -->
-                      <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                      <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden flex-shrink-0">
                         <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 active:bg-gray-100" (click)="setQty(i, line.quantity - 1)"><i class="pi pi-minus text-[10px]"></i></button>
                         <input type="number" min="1" [ngModel]="line.quantity" (ngModelChange)="setQty(i, $event)" inputmode="numeric"
                           class="w-10 h-8 text-center text-sm border-x border-gray-200 focus:outline-none" />
                         <button class="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 active:bg-gray-100" (click)="setQty(i, line.quantity + 1)"><i class="pi pi-plus text-[10px]"></i></button>
                       </div>
-                      <div class="flex items-center gap-1 flex-1">
+                      <span class="text-[11px] text-gray-400 flex-shrink-0">{{ line.uom || 'pcs' }} ×</span>
+                      <div class="flex items-center gap-1 flex-1 min-w-0">
                         <span class="text-xs text-gray-400">{{ sym() }}</span>
                         <input type="number" min="0" step="0.01" [ngModel]="line.unitPrice" (ngModelChange)="setPrice(i, $event)" inputmode="decimal"
                           class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm" />
                       </div>
-                      <p class="text-sm font-bold text-gray-900 w-20 text-right">{{ sym() }}{{ (line.quantity * line.unitPrice) | number:'1.0-2' }}</p>
+                      <p class="text-sm font-bold text-gray-900 w-20 text-right flex-shrink-0">{{ sym() }}{{ (line.quantity * line.unitPrice) | number:'1.0-2' }}</p>
                     </div>
                   </div>
                 }
@@ -179,7 +194,7 @@ interface CartLine {
                         }
                         <span class="flex-1 min-w-0">
                           <span class="text-sm font-medium block truncate">{{ p.name }}</span>
-                          <span class="block text-xs text-gray-500">{{ p.brand ? p.brand + ' · ' : '' }}{{ sym() }}{{ p.price | number:'1.0-2' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
+                          <span class="block text-xs text-gray-500 truncate">{{ p.brand ? p.brand + ' · ' : '' }}{{ sym() }}{{ p.price | number:'1.0-2' }} / {{ p.uom || 'pcs' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
                         </span>
                         <i class="pi pi-plus-circle text-green-600 flex-shrink-0" style="font-size:1.2rem"></i>
                       </button>
@@ -269,7 +284,17 @@ interface CartLine {
 })
 export class MobileBuilderComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly api = inject(BuilderApiService);
+
+  /** Back to the orders/quotes list (or browser back if opened standalone). */
+  goBack(): void {
+    if (typeof history !== 'undefined' && history.length > 1) {
+      history.back();
+    } else {
+      this.router.navigate([this.session()?.type === 'quote' ? '/quotes' : '/orders']);
+    }
+  }
 
   loading = signal(true);
   error = signal<string | null>(null);
@@ -366,7 +391,7 @@ export class MobileBuilderComponent implements OnInit {
     const cart = [...this.cart()];
     const existing = cart.find((l) => l.productId === p.id);
     if (existing) existing.quantity += 1;
-    else cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock, image: p.thumbnail, gstRate: p.gstRate });
+    else cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock, image: p.thumbnail, gstRate: p.gstRate, uom: p.uom, brand: p.brand, sku: p.sku });
     this.cart.set(cart);
     this.addQuery = '';
     this.addFocused.set(false);
@@ -378,7 +403,7 @@ export class MobileBuilderComponent implements OnInit {
     if (!name) { this.submitError.set('Enter a custom item name.'); return; }
     if (isNaN(price) || price < 0) { this.submitError.set('Enter a valid custom item price.'); return; }
     this.submitError.set(null);
-    this.cart.set([...this.cart(), { name, quantity: Math.max(1, Math.floor(Number(this.customQty) || 1)), unitPrice: price, stock: null }]);
+    this.cart.set([...this.cart(), { name, quantity: Math.max(1, Math.floor(Number(this.customQty) || 1)), unitPrice: price, stock: null, uom: 'pcs' }]);
     this.customName = '';
     this.customQty = 1;
     this.customPrice = null;

@@ -69,9 +69,18 @@ import { ProductService, CreateProductPayload, UpdateProductPayload } from '../.
 
                 <div class="grid grid-cols-2 gap-4">
                   <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Unit of Measurement *</label>
+                    <select formControlName="uom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+                      @for (u of uomOptions; track u.value) { <option [value]="u.value">{{ u.label }}</option> }
+                    </select>
+                  </div>
+                  <div class="flex flex-col gap-1">
                     <label class="text-sm font-medium text-gray-700">SKU</label>
                     <input pInputText formControlName="sku" placeholder="SKU-001" class="w-full" />
                   </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
                   <div class="flex flex-col gap-1">
                     <label class="text-sm font-medium text-gray-700">Barcode</label>
                     <input pInputText formControlName="barcode" placeholder="123456789" class="w-full" />
@@ -281,9 +290,22 @@ export class ProductFormComponent implements OnInit {
   categoryOptions: { label: string; value: string }[] = [];
   brandOptions: { label: string; value: string }[] = [];
 
+  uomOptions: { label: string; value: string }[] = [
+    { value: 'pcs', label: 'Piece (pcs)' }, { value: 'unit', label: 'Unit' },
+    { value: 'kg', label: 'Kilogram (kg)' }, { value: 'g', label: 'Gram (g)' },
+    { value: 'l', label: 'Litre (L)' }, { value: 'ml', label: 'Millilitre (ml)' },
+    { value: 'm', label: 'Metre (m)' }, { value: 'cm', label: 'Centimetre (cm)' },
+    { value: 'box', label: 'Box' }, { value: 'pack', label: 'Pack' },
+    { value: 'dozen', label: 'Dozen' }, { value: 'pair', label: 'Pair' },
+    { value: 'set', label: 'Set' }, { value: 'bottle', label: 'Bottle' },
+    { value: 'bag', label: 'Bag' }, { value: 'carton', label: 'Carton' },
+    { value: 'sqft', label: 'Sq. ft' }, { value: 'sqm', label: 'Sq. m' },
+  ];
+
   productForm = this.fb.group({
     name: ['', Validators.required],
     sku: [''],
+    uom: ['pcs', Validators.required],
     barcode: [''],
     shortDescription: [''],
     description: [''],
@@ -387,6 +409,7 @@ export class ProductFormComponent implements OnInit {
         price: formValue.price ?? undefined,
         compareAtPrice: formValue.compareAtPrice ?? undefined,
         sku: formValue.sku ?? undefined,
+        uom: formValue.uom ?? 'pcs',
         barcode: formValue.barcode ?? undefined,
         status: formValue.status ?? undefined,
         trackInventory: formValue.trackInventory ?? undefined,
@@ -430,6 +453,7 @@ export class ProductFormComponent implements OnInit {
         price: formValue.price ?? 0,
         compareAtPrice: formValue.compareAtPrice ?? undefined,
         sku: formValue.sku ?? undefined,
+        uom: formValue.uom ?? 'pcs',
         barcode: formValue.barcode ?? undefined,
         status: formValue.status ?? 'active',
         trackInventory: formValue.trackInventory ?? true,
@@ -497,6 +521,7 @@ export class ProductFormComponent implements OnInit {
         this.productForm.patchValue({
           name: product.name,
           sku: product.sku ?? '',
+          uom: (product as any).uom ?? 'pcs',
           barcode: product.barcode ?? '',
           shortDescription: product.shortDescription ?? '',
           description: product.description ?? '',

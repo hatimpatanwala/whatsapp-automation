@@ -1039,6 +1039,18 @@ const migration038OrderTax: TenantMigration = {
   },
 };
 
+const migration039ProductUom: TenantMigration = {
+  name: '039_product_uom',
+  async up(qr, schema) {
+    // Unit of measurement (compulsory) — NOT NULL DEFAULT backfills every
+    // existing product with 'pcs'. New products must provide one (form-enforced).
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS uom VARCHAR(20) NOT NULL DEFAULT 'pcs'`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS uom`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1078,4 +1090,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration036SystemWorkflows,
   migration037WorkflowMenuItem,
   migration038OrderTax,
+  migration039ProductUom,
 ];
