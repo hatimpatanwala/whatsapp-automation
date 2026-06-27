@@ -162,7 +162,7 @@ export class PromotionsEngine {
     const pack = (list: ApplicableScheme[]) => ({
       ids: list.map((a) => a.schemeId),
       discount: round(list.reduce((s, a) => s + a.discount, 0)),
-      freeItems: list.flatMap((a) => a.freeItems),
+      freeItems: list.flatMap((a) => a.freeItems || []).filter(Boolean),
     });
 
     if (appliedIds && appliedIds.length) {

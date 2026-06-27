@@ -106,7 +106,7 @@ export class OrderService {
       if (!order[0]) throw new NotFoundException('Order not found');
 
       const items = await qr.query(
-        `SELECT oi.*, p.name as product_name, p.slug as sku, p.images as image_urls
+        `SELECT oi.*, COALESCE(oi.product_name, p.name) as product_name, p.slug as sku, p.images as image_urls
          FROM order_items oi
          LEFT JOIN products p ON p.id = oi.product_id
          WHERE oi.order_id = $1`, [id],
