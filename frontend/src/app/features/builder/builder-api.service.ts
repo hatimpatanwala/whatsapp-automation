@@ -1,7 +1,16 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpBackend, HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
+
+/**
+ * The backend wraps every response in `{ success, data }`. This service uses a
+ * bare HttpClient (HttpBackend) that bypasses the app's unwrap interceptor, so
+ * we must unwrap `.data` here — otherwise callers get the envelope object
+ * instead of the array/payload (e.g. products().slice is not a function).
+ */
+const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.data : r) as T;
 
 export interface BuilderSessionInfo {
   type: 'order' | 'quote';
@@ -58,29 +67,29 @@ export class BuilderApiService {
   }
 
   getSession(): Observable<BuilderSessionInfo> {
-    return this.http.get<BuilderSessionInfo>(`${this.base}/m/builder/session`, this.opts());
+    return this.http.get<any>(`${this.base}/m/builder/session`, this.opts()).pipe(map(unwrap<BuilderSessionInfo>));
   }
 
   getProducts(): Observable<BuilderProduct[]> {
-    return this.http.get<BuilderProduct[]>(`${this.base}/m/builder/products`, this.opts());
+    return this.http.get<any>(`${this.base}/m/builder/products`, this.opts()).pipe(map((r) => unwrap<BuilderProduct[]>(r) || []));
   }
 
   searchCustomers(q: string): Observable<BuilderCustomer[]> {
-    return this.http.get<BuilderCustomer[]>(`${this.base}/m/builder/customers`, {
+    return this.http.get<any>(`${this.base}/m/builder/customers`, {
       headers: { 'X-Builder-Token': this.token },
       params: { q: q || '' },
-    });
+    }).pipe(map((r) => unwrap<BuilderCustomer[]>(r) || []));
   }
 
   submit(payload: BuilderSubmitPayload): Observable<{ type: string; id: string; number: string }> {
-    return this.http.post<{ type: string; id: string; number: string }>(
+    return this.http.post<any>(
       `${this.base}/m/builder/submit`,
       payload,
       this.opts(),
-    );
+    ).pipe(map(unwrap<{ type: string; id: string; number: string }>));
   }
 
   getResult(): Observable<any> {
-    return this.http.get<any>(`${this.base}/m/builder/result`, this.opts());
+    return this.http.get<any>(`${this.base}/m/builder/result`, this.opts()).pipe(map(unwrap<any>));
   }
 }

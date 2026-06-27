@@ -248,7 +248,8 @@ export class MobileBuilderComponent implements OnInit {
   addResults = computed(() => {
     const q = this.addQuery.trim().toLowerCase();
     const list = this.products();
-    return (q ? list.filter((p) => p.name.toLowerCase().includes(q)) : list).slice(0, 8);
+    const arr = Array.isArray(list) ? list : [];
+    return (q ? arr.filter((p) => p.name.toLowerCase().includes(q)) : arr).slice(0, 8);
   });
 
   total = computed(() => this.cart().reduce((s, l) => s + l.quantity * l.unitPrice, 0));
