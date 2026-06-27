@@ -134,5 +134,10 @@ export const routes: Routes = [
     path: 'm/product',
     loadComponent: () => import('./features/builder/product-add.component').then(m => m.ProductAddComponent),
   },
+  {
+    // Token-secured schemes/coupons editor (opened from WhatsApp admin).
+    path: 'm/promotions',
+    loadComponent: () => import('./features/builder/promo-webview.component').then(m => m.PromoWebviewComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

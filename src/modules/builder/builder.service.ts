@@ -287,8 +287,49 @@ export class BuilderService implements OnModuleInit {
     return { schemaName: s.schema_name, tenantId: s.tenant_id };
   }
 
+  /** Mint a PROMO session (admin manages schemes/coupons over the web from WhatsApp). */
+  async createPromoSession(input: { tenantId: string; schemaName: string; createdBy?: string }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + this.ttlMs);
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions (token_hash, tenant_id, schema_name, type, status, mode, expires_at)
+       VALUES ($1,$2,$3,'promo','open','promo',$4)`,
+      [this.hash(token), input.tenantId, input.schemaName, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/promotions?token=${token}` };
+  }
+
+  /** Validate a PROMO token → the tenant schema it operates on. */
+  async getPromoSchema(token: string): Promise<{ schemaName: string; tenantId: string }> {
+    const s = await this.resolveSession(token, 'promo');
+    return { schemaName: s.schema_name, tenantId: s.tenant_id };
+  }
+
+  /** Categories / brands / products / customers for the promo scope & audience pickers. */
+  async promoTaxonomy(schema: string): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const [categories, brands, products, customers] = await Promise.all([
+        qr.query(`SELECT id, name FROM categories WHERE is_active = true ORDER BY sort_order, name`),
+        qr.query(`SELECT id, name FROM brands WHERE is_active = true ORDER BY sort_order, name`),
+        qr.query(`SELECT id, name FROM products WHERE is_active = true ORDER BY name LIMIT 500`),
+        qr.query(
+          `SELECT id, name, phone FROM customers
+            ORDER BY (last_order_at IS NULL), last_order_at DESC NULLS LAST, name ASC
+            LIMIT 200`,
+        ),
+      ]);
+      return {
+        categories: categories.map((r: any) => ({ id: r.id, name: r.name })),
+        brands: brands.map((r: any) => ({ id: r.id, name: r.name })),
+        products: products.map((r: any) => ({ id: r.id, name: r.name })),
+        customers: customers.map((r: any) => ({ id: r.id, name: r.name || r.phone || '', phone: r.phone || '' })),
+      };
+    });
+  }
+
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

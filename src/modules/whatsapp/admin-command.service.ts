@@ -68,6 +68,12 @@ export class AdminCommandService {
         return this.showMainMenu(tenant, to);
       }
 
+      // "offers" / "schemes" / "coupons" → marketing menu.
+      if (!id && /^(offers?|schemes?|coupons?|deals?|promotions?)$/i.test(text)) {
+        await this.clearState(schema, to);
+        return this.showPromotionsMenu(tenant, to);
+      }
+
       // An interactive tap (id) always wins and resets any text-input flow.
       if (id) {
         await this.clearState(schema, to);
@@ -104,6 +110,12 @@ export class AdminCommandService {
         ],
       },
       {
+        title: 'Marketing',
+        rows: [
+          { id: 'cat_promotions', title: '🎯 Schemes & Offers', description: 'Discounts, BOGO & coupons' },
+        ],
+      },
+      {
         title: 'Store',
         rows: [
           { id: 'menu_customers', title: '👥 Customers', description: 'Top customers' },
@@ -113,6 +125,64 @@ export class AdminCommandService {
         ],
       },
     ]);
+  }
+
+  // ─── Marketing: schemes & offers ──────────────────────────────────────────────
+  private async showPromotionsMenu(tenant: any, to: string): Promise<void> {
+    await this.sendList(tenant, to, '🎯 *Schemes & Offers*\nRun discounts, BOGO offers & coupon codes.', 'Choose', [{
+      title: 'Offers', rows: [
+        { id: 'promo_manage', title: '🛠️ Create / Manage', description: 'Open the offers editor' },
+        { id: 'promo_active', title: '📋 Active Offers', description: 'What customers see now' },
+        { id: 'cancel', title: '⬅️ Back to menu' },
+      ],
+    }]);
+  }
+
+  /** Mint a promo-editor session and send the admin a CTA URL button (web editor). */
+  private async createPromoLink(tenant: any, to: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createPromoSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        '🎯 *Schemes & Offers*\n\nTap below to open the editor — create discounts, Buy-X-Get-Y offers, free gifts & coupon codes, target specific customers, and pause/edit anytime. This link works for 2 hours.',
+        'Open Offers Editor',
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createPromoLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the offers editor right now. Send *menu* and try again.');
+    }
+  }
+
+  /** Quick text list of the offers customers currently see (active schemes + coupons). */
+  private async listActiveOffers(tenant: any, to: string): Promise<void> {
+    const schema = tenant.schemaName;
+    const [schemes, coupons] = await Promise.all([
+      this.query(schema, async (qr) =>
+        qr.query(`SELECT name FROM schemes WHERE status = 'active'
+                   AND (valid_until IS NULL OR valid_until >= NOW()) ORDER BY weight DESC, created_at DESC LIMIT 15`)),
+      this.query(schema, async (qr) =>
+        qr.query(`SELECT code, discount_type, discount_value FROM coupons WHERE status = 'active'
+                   AND (valid_until IS NULL OR valid_until >= NOW()) ORDER BY created_at DESC LIMIT 15`)),
+    ]);
+    const cur = tenant.currency || '₹';
+    const sLines = schemes.length
+      ? schemes.map((s: any, i: number) => `${i + 1}. ${s.name}`).join('\n')
+      : '_No active offers._';
+    const cLines = coupons.length
+      ? coupons.map((c: any) => `• *${c.code}* — ${c.discount_type === 'percent' ? `${Number(c.discount_value)}% off` : `${cur}${Number(c.discount_value)} off`}`).join('\n')
+      : '_No active coupons._';
+    await this.sendButtons(
+      tenant, to,
+      `🎯 *Active Offers*\n\n*Schemes*\n${sLines}\n\n*Coupons*\n${cLines}`,
+      [{ id: 'promo_manage', title: '🛠️ Manage Offers' }],
+    );
   }
 
   // ─── Help / command guide ─────────────────────────────────────────────────────
@@ -136,6 +206,10 @@ export class AdminCommandService {
       '• *Products → Add* — I’ll ask name → price → stock\n' +
       '• *Products → Update* — pick a product → change price / stock / name\n' +
       '• *Products → Delete* — pick a product → confirm\n\n' +
+      '🎯 *Schemes & Offers*\n' +
+      '• Send *offers* (or *Menu → Schemes & Offers*) → *Create / Manage*\n' +
+      '• Build discounts, Buy-X-Get-Y, free gifts & coupon codes in the editor\n' +
+      '• Target everyone or specific customers; pause/edit anytime\n\n' +
       '📊 *Store*\n' +
       '• *Low Stock* — items running low (restock via Update → Stock)\n' +
       '• *Customers* — your top customers\n' +
@@ -189,6 +263,9 @@ export class AdminCommandService {
     if (id === 'cat_orders') return this.showOrdersMenu(tenant, to);
     if (id === 'cat_quotes') return this.showQuotesMenu(tenant, to);
     if (id === 'cat_products') return this.showProductsMenu(tenant, to);
+    if (id === 'cat_promotions') return this.showPromotionsMenu(tenant, to);
+    if (id === 'promo_manage') return this.createPromoLink(tenant, to);
+    if (id === 'promo_active') return this.listActiveOffers(tenant, to);
 
     if (id === 'new_order') return this.createBuilderLink(tenant, to, 'order');
     if (id === 'new_quote') return this.createBuilderLink(tenant, to, 'quote');

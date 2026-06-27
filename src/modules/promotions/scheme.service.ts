@@ -30,7 +30,9 @@ export class SchemeService {
       if (params?.status) { p.push(params.status); where.push(`status = $${p.length}`); }
       if (params?.type) { p.push(params.type); where.push(`type = $${p.length}`); }
       return qr.query(
-        `SELECT *, (SELECT COUNT(*)::int FROM scheme_customers sc WHERE sc.scheme_id = s.id) AS targeted_count
+        `SELECT *,
+                (SELECT COUNT(*)::int FROM scheme_customers sc WHERE sc.scheme_id = s.id) AS targeted_count,
+                COALESCE((SELECT array_agg(sc.customer_id) FROM scheme_customers sc WHERE sc.scheme_id = s.id), '{}') AS customer_ids
            FROM schemes s WHERE ${where.join(' AND ')} ORDER BY weight DESC, created_at DESC`,
         p,
       );
