@@ -86,6 +86,7 @@ interface CartLine {
                   placeholder="Search customer by name or number…"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 @if (custFocused() && (custResults().length || custSearching() || newCustomerPhone())) {
+                  <div class="fixed inset-0 z-[5]" (click)="custFocused.set(false)"></div>
                   <div class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-auto">
                     @if (custSearching()) { <div class="px-3 py-2 text-xs text-gray-400"><i class="pi pi-spin pi-spinner mr-1"></i>Searching…</div> }
                     @for (c of custResults(); track c.id) {
@@ -167,6 +168,7 @@ interface CartLine {
                 <input [(ngModel)]="addQuery" (focus)="addFocused.set(true)" placeholder="🔍 Search a product to add…"
                   class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-green-400 focus:outline-none" />
                 @if (addFocused() && addResults().length) {
+                  <div class="fixed inset-0 z-[5]" (click)="addFocused.set(false)"></div>
                   <div class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-auto">
                     @for (p of addResults(); track p.id) {
                       <button class="w-full text-left px-3 py-2 hover:bg-green-50 border-b border-gray-50 last:border-0 flex items-center gap-3" (click)="addProduct(p)">
