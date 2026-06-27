@@ -294,6 +294,25 @@ interface CartLine {
                 </div>
               }
 
+              <!-- Coupon -->
+              <div class="border-t border-gray-100 pt-2 mt-1">
+                @if (appliedCoupon(); as cp) {
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="flex items-center gap-2">
+                      <span class="text-[10px] bg-green-600 text-white rounded px-1.5 py-0.5 font-mono font-bold">{{ cp.code }}</span>
+                      <button class="text-[11px] text-red-500 hover:underline" (click)="removeCoupon()">remove</button>
+                    </span>
+                    <span class="font-medium text-green-700">− {{ sym() }}{{ cp.discount | number:'1.0-2' }}</span>
+                  </div>
+                } @else {
+                  <div class="flex items-center gap-2">
+                    <input [(ngModel)]="couponInput" placeholder="Coupon code" class="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm uppercase" (keyup.enter)="applyCouponCode()" />
+                    <button class="bg-gray-800 text-white text-xs font-medium rounded-lg px-3 py-1.5 disabled:opacity-50" [disabled]="couponBusy() || !couponInput.trim()" (click)="applyCouponCode()">{{ couponBusy() ? '…' : 'Apply' }}</button>
+                  </div>
+                  @if (couponError()) { <p class="text-[11px] text-red-500 mt-1">{{ couponError() }}</p> }
+                }
+              </div>
+
               <div class="border-t border-dashed border-gray-200 my-1"></div>
               <div class="flex items-center justify-between">
                 <span class="text-base font-bold text-gray-900">Total</span>
@@ -401,7 +420,30 @@ export class MobileBuilderComponent implements OnInit {
   schemeDiscount = computed(() => Math.round(this.effectiveOffers().reduce((s, o) => s + (Number(o.discount) || 0), 0) * 100) / 100);
   orderFreeItems = computed<BuilderFreeItem[]>(() => this.effectiveOffers().flatMap((o) => o.freeItems || []));
 
-  total = computed(() => Math.max(0, this.subtotal() + this.tax() - (Number(this.discountAmt()) || 0) - this.schemeDiscount() + (Number(this.deliveryAmt()) || 0)));
+  // Coupon
+  couponInput = '';
+  appliedCoupon = signal<{ code: string; discount: number; label: string } | null>(null);
+  couponError = signal<string | null>(null);
+  couponBusy = signal(false);
+  couponDiscount = computed(() => this.appliedCoupon()?.discount || 0);
+
+  total = computed(() => Math.max(0, this.subtotal() + this.tax() - (Number(this.discountAmt()) || 0) - this.schemeDiscount() - this.couponDiscount() + (Number(this.deliveryAmt()) || 0)));
+
+  applyCouponCode(): void {
+    const code = this.couponInput.trim();
+    if (!code) return;
+    const items = this.cart().filter((l) => l.productId).map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice }));
+    this.couponBusy.set(true); this.couponError.set(null);
+    this.api.applyCoupon(code, items).subscribe({
+      next: (r) => {
+        this.couponBusy.set(false);
+        if (r.valid && r.coupon) { this.appliedCoupon.set({ code: r.coupon.code, discount: r.discount, label: r.coupon.label }); this.couponInput = ''; }
+        else this.couponError.set(r.reason || 'Invalid coupon.');
+      },
+      error: (e) => { this.couponBusy.set(false); this.couponError.set(e?.error?.message || 'Could not apply coupon.'); },
+    });
+  }
+  removeCoupon(): void { this.appliedCoupon.set(null); this.couponError.set(null); }
 
   toggleOffer(id: string): void {
     const set = new Set(this.selectedOfferIds());
@@ -415,11 +457,21 @@ export class MobileBuilderComponent implements OnInit {
     if (this.offersTimer) clearTimeout(this.offersTimer);
     this.offersTimer = setTimeout(() => {
       const items = this.cart().filter((l) => l.productId).map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice }));
-      if (!items.length) { this.offers.set([]); this.selectedOfferIds.set([]); return; }
+      if (!items.length) { this.offers.set([]); this.selectedOfferIds.set([]); this.appliedCoupon.set(null); return; }
       this.api.evaluateOffers(items).subscribe({
         next: (r) => { this.offers.set(r.applicable || []); this.selectedOfferIds.set(r.recommendedIds || []); },
         error: () => { this.offers.set([]); this.selectedOfferIds.set([]); },
       });
+      // Re-validate an applied coupon against the new cart.
+      const applied = this.appliedCoupon();
+      if (applied) {
+        this.api.applyCoupon(applied.code, items).subscribe({
+          next: (r) => {
+            if (r.valid && r.coupon) this.appliedCoupon.set({ code: r.coupon.code, discount: r.discount, label: r.coupon.label });
+            else { this.appliedCoupon.set(null); this.couponError.set(r.reason || 'Coupon no longer applies.'); }
+          },
+        });
+      }
     }, 300);
   }
 
@@ -548,6 +600,7 @@ export class MobileBuilderComponent implements OnInit {
         notes: this.notes.trim() || undefined,
         discount: (Number(this.discountAmt()) || 0) + this.schemeDiscount(),
         deliveryFee: Number(this.deliveryAmt()) || 0,
+        couponCode: this.appliedCoupon()?.code,
       })
       .subscribe({
         next: (r) => { this.submitting.set(false); this.done.set({ type: r.type, number: r.number }); },

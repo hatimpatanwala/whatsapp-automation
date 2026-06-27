@@ -60,6 +60,35 @@ export interface SchemeBadges {
   products: Record<string, string>;
 }
 
+export interface Coupon {
+  id: string;
+  code: string;
+  description?: string;
+  discount_type?: 'percent' | 'amount';
+  discountType?: 'percent' | 'amount';
+  discount_value?: number;
+  discountValue?: number;
+  min_cart_value?: number;
+  minCartValue?: number;
+  max_discount?: number | null;
+  maxDiscount?: number | null;
+  scope?: string;
+  scopeIds?: string[];
+  scope_ids?: string[];
+  usage_limit?: number | null;
+  usageLimit?: number | null;
+  per_customer_limit?: number;
+  perCustomerLimit?: number;
+  used_count?: number;
+  usedCount?: number;
+  audience?: string;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  status: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SchemeService {
   private readonly api = inject(ApiService);
@@ -95,4 +124,11 @@ export class SchemeService {
   badges(): Observable<SchemeBadges> {
     return this.api.get<SchemeBadges>('/schemes/badges');
   }
+
+  // ─── Coupons ───────────────────────────────────────────────────────────────
+  listCoupons(): Observable<Coupon[]> { return this.api.get<Coupon[]>('/coupons'); }
+  createCoupon(payload: Partial<Coupon>): Observable<Coupon> { return this.api.post<Coupon>('/coupons', payload); }
+  updateCoupon(id: string, payload: Partial<Coupon>): Observable<Coupon> { return this.api.put<Coupon>(`/coupons/${id}`, payload); }
+  setCouponStatus(id: string, status: string): Observable<Coupon> { return this.api.patch<Coupon>(`/coupons/${id}/status`, { status }); }
+  deleteCoupon(id: string): Observable<{ deleted: boolean }> { return this.api.delete<{ deleted: boolean }>(`/coupons/${id}`); }
 }

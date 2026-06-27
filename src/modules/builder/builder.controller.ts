@@ -45,6 +45,12 @@ export class BuilderController {
     return this.builder.evaluateOffers(this.token(req, token), body?.items || []);
   }
 
+  @Post('coupon')
+  @HttpCode(200)
+  async coupon(@Req() req: Request, @Query('token') token: string, @Body() body: any) {
+    return this.builder.applyCoupon(this.token(req, token), body?.code || '', body?.items || []);
+  }
+
   @Post('submit')
   @HttpCode(200)
   async submit(@Req() req: Request, @Query('token') token: string, @Body() body: any) {

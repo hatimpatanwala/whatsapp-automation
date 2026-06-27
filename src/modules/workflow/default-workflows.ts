@@ -190,6 +190,19 @@ export function buildDefaultSpokes(): DefaultWorkflowDef[] {
       ],
       edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
     },
+
+    // ── 8. Offers & Deals ──
+    {
+      name: 'Offers',
+      description: 'Show current offers, schemes and coupons to the customer.',
+      menuItem: { label: '🎉 Offers & Deals', order: 8 },
+      trigger: { type: 'trigger_message', keywords: 'offers,offer,deals,deal,discount,coupon,scheme,sale', matchType: 'contains' },
+      nodes: [
+        { id: 'n1', type: 'trigger_message', label: 'Offers', x: 300, y: 40, config: { keywords: 'offers,offer,deals,deal,discount,coupon,scheme,sale', matchType: 'contains' }, outputs: ['n2'] },
+        { id: 'n2', type: 'show_offers', label: 'Show Offers', x: 300, y: 200, config: { header: '🎉 *Today’s Offers*' }, outputs: [] },
+      ],
+      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+    },
   ];
 }
 

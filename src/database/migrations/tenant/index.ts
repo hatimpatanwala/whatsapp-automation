@@ -1101,6 +1101,60 @@ const migration040Schemes: TenantMigration = {
   },
 };
 
+const migration041Coupons: TenantMigration = {
+  name: '041_coupons',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".coupons (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(40) NOT NULL,
+        description TEXT,
+        discount_type VARCHAR(10) NOT NULL DEFAULT 'percent',
+        discount_value NUMERIC(12,2) NOT NULL DEFAULT 0,
+        min_cart_value NUMERIC(12,2) NOT NULL DEFAULT 0,
+        max_discount NUMERIC(12,2),
+        scope VARCHAR(20) NOT NULL DEFAULT 'all',
+        scope_ids UUID[] NOT NULL DEFAULT '{}',
+        usage_limit INTEGER,
+        per_customer_limit INTEGER NOT NULL DEFAULT 1,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        audience VARCHAR(20) NOT NULL DEFAULT 'all',
+        valid_from TIMESTAMPTZ,
+        valid_until TIMESTAMPTZ,
+        status VARCHAR(16) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS coupons_code_uniq ON "${schema}".coupons (UPPER(code))`);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".coupon_customers (
+        coupon_id UUID NOT NULL REFERENCES "${schema}".coupons(id) ON DELETE CASCADE,
+        customer_id UUID NOT NULL,
+        PRIMARY KEY (coupon_id, customer_id)
+      )
+    `);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".coupon_redemptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        coupon_id UUID NOT NULL REFERENCES "${schema}".coupons(id) ON DELETE CASCADE,
+        customer_id UUID,
+        order_id UUID,
+        discount_applied NUMERIC(12,2) DEFAULT 0,
+        redeemed_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon ON "${schema}".coupon_redemptions (coupon_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".coupon_redemptions CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".coupon_customers CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".coupons CASCADE`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1142,4 +1196,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration038OrderTax,
   migration039ProductUom,
   migration040Schemes,
+  migration041Coupons,
 ];

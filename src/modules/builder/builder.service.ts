@@ -17,6 +17,7 @@ import { QuoteService } from '../quote/quote.service';
 import { EventBusService } from '../events/event-bus.service';
 import { BuilderSubmittedEvent } from '../events/domain-events';
 import { PromotionsEngine, CartItemInput } from '../promotions/promotions-engine.service';
+import { CouponService } from '../promotions/coupon.service';
 
 export type BuilderType = 'order' | 'quote';
 
@@ -63,6 +64,7 @@ export class BuilderService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly eventBus: EventBusService,
     private readonly promotions: PromotionsEngine,
+    private readonly coupons: CouponService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -357,6 +359,12 @@ export class BuilderService implements OnModuleInit {
     return this.promotions.evaluateCart(s.schema_name, items || [], s.customer_id || undefined);
   }
 
+  /** Validate a coupon code against the built cart (for the builder webview). */
+  async applyCoupon(token: string, code: string, items: CartItemInput[]): Promise<any> {
+    const s = await this.resolveSession(token);
+    return this.coupons.validate(s.schema_name, code, items || [], s.customer_id || undefined);
+  }
+
   /** Search the token's tenant customers by name or phone (for the picker). */
   async searchCustomers(token: string, q: string): Promise<{ id: string; name: string; phone: string }[]> {
     const s = await this.resolveSession(token);
@@ -390,6 +398,7 @@ export class BuilderService implements OnModuleInit {
       notes?: string;
       discount?: number;
       deliveryFee?: number;
+      couponCode?: string;
     },
   ): Promise<{ type: BuilderType; id: string; number: string }> {
     const s = await this.resolveSession(token);
@@ -435,6 +444,19 @@ export class BuilderService implements OnModuleInit {
       customerName = customerName || found?.name || null;
     }
 
+    // Coupon: validate server-side (never trust the client's amount) and fold its
+    // discount in; redeem after the order/quote is created.
+    let couponId: string | null = null;
+    let couponDiscount = 0;
+    if (payload.couponCode && payload.couponCode.trim()) {
+      const cartItems = items.map((i) => ({ productId: i.productId, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) }));
+      const v = await this.coupons.validate(schema, payload.couponCode, cartItems, customerId || undefined);
+      if (!v.valid) throw new BadRequestException(v.reason || 'Coupon could not be applied.');
+      couponId = v.coupon!.id;
+      couponDiscount = v.discount;
+    }
+    const totalDiscount = Math.round((discount + couponDiscount) * 100) / 100;
+
     let resultId: string;
     let resultNumber: string;
     const type = s.type as BuilderType;
@@ -443,7 +465,7 @@ export class BuilderService implements OnModuleInit {
       const order = await this.orderService.createDirect(schema, {
         customerId: customerId!,
         notes: payload.notes,
-        discount,
+        discount: totalDiscount,
         deliveryFee,
         taxAmount,
         items: items.map((i) => ({
@@ -460,7 +482,7 @@ export class BuilderService implements OnModuleInit {
         customerId: customerId!,
         title: payload.title,
         notes: payload.notes,
-        discount,
+        discount: totalDiscount,
         taxAmount,
         items: items.map((i) => ({
           productId: i.productId,
@@ -471,6 +493,10 @@ export class BuilderService implements OnModuleInit {
       });
       resultId = quote.id;
       resultNumber = quote.quote_number;
+    }
+
+    if (couponId && couponDiscount > 0) {
+      await this.coupons.redeem(schema, couponId, customerId || null, resultId, couponDiscount).catch(() => undefined);
     }
 
     await this.ds.query(

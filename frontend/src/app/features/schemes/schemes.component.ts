@@ -12,7 +12,7 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { TextareaModule } from 'primeng/textarea';
 import { MessageService } from 'primeng/api';
-import { SchemeService, Scheme } from '../../core/services/scheme.service';
+import { SchemeService, Scheme, Coupon } from '../../core/services/scheme.service';
 import { ApiService } from '../../core/services/api.service';
 
 @Component({
@@ -27,15 +27,60 @@ import { ApiService } from '../../core/services/api.service';
     <div class="p-6 max-w-6xl mx-auto">
       <p-toast />
 
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-4">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Schemes & Offers</h1>
-          <p class="text-gray-500 text-sm mt-1">Create discounts that auto-apply to the cart. More types (BOGO, loyalty, coupons) coming next.</p>
+          <p class="text-gray-500 text-sm mt-1">Offers auto-apply in the cart; coupons are codes customers enter.</p>
         </div>
-        <button pButton label="New Scheme" icon="pi pi-plus" severity="success" (click)="openNew()"></button>
+        @if (tab() === 'schemes') {
+          <button pButton label="New Scheme" icon="pi pi-plus" severity="success" (click)="openNew()"></button>
+        } @else {
+          <button pButton label="New Coupon" icon="pi pi-plus" severity="success" (click)="openNewCoupon()"></button>
+        }
       </div>
 
-      @if (loading()) {
+      <div class="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+        <button class="text-sm font-semibold rounded-lg py-1.5 px-4 border-0 cursor-pointer transition-all"
+          [class.bg-white]="tab()==='schemes'" [class.shadow-sm]="tab()==='schemes'" [class.text-primary-600]="tab()==='schemes'" [class.bg-transparent]="tab()!=='schemes'" [class.text-gray-500]="tab()!=='schemes'"
+          (click)="tab.set('schemes')">🏷️ Offers</button>
+        <button class="text-sm font-semibold rounded-lg py-1.5 px-4 border-0 cursor-pointer transition-all"
+          [class.bg-white]="tab()==='coupons'" [class.shadow-sm]="tab()==='coupons'" [class.text-primary-600]="tab()==='coupons'" [class.bg-transparent]="tab()!=='coupons'" [class.text-gray-500]="tab()!=='coupons'"
+          (click)="tab.set('coupons'); loadCoupons()">🎟️ Coupons</button>
+      </div>
+
+      @if (tab() === 'coupons') {
+        @if (!coupons().length) {
+          <div class="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center">
+            <i class="pi pi-ticket text-gray-200" style="font-size:2.5rem"></i>
+            <h3 class="text-lg font-semibold text-gray-700 mt-3">No coupons yet</h3>
+            <p class="text-gray-400 text-sm mt-1">Create a code like SAVE10 that customers can enter at checkout.</p>
+            <button pButton label="New Coupon" icon="pi pi-plus" class="mt-4" severity="success" (click)="openNewCoupon()"></button>
+          </div>
+        } @else {
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            @for (c of coupons(); track c.id) {
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3 class="font-bold text-gray-900 font-mono tracking-wide">{{ c.code }}</h3>
+                      <p-tag [value]="c.status" [severity]="c.status === 'active' ? 'success' : 'secondary'" styleClass="text-xs capitalize" />
+                    </div>
+                    <p class="text-sm text-gray-500 mt-1">{{ couponDesc(c) }}</p>
+                    <p class="text-xs text-gray-400 mt-2">Used {{ c.usedCount ?? c.used_count ?? 0 }}{{ (c.usageLimit ?? c.usage_limit) ? ' / ' + (c.usageLimit ?? c.usage_limit) : '' }} · {{ (c.perCustomerLimit ?? c.per_customer_limit) || 1 }}/customer</p>
+                  </div>
+                  <span class="text-lg font-extrabold text-green-700 whitespace-nowrap">{{ couponBadge(c) }}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50">
+                  <button pButton [label]="c.status === 'active' ? 'Pause' : 'Activate'" [icon]="c.status === 'active' ? 'pi pi-pause' : 'pi pi-play'" class="p-button-text p-button-sm" (click)="toggleCoupon(c)"></button>
+                  <button pButton label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" (click)="openEditCoupon(c)"></button>
+                  <button pButton label="Delete" icon="pi pi-trash" class="p-button-text p-button-sm" severity="danger" (click)="removeCoupon(c)"></button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      } @else if (loading()) {
         <div class="text-center py-20"><i class="pi pi-spin pi-spinner text-4xl text-gray-300"></i></div>
       } @else if (!schemes().length) {
         <div class="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center">
@@ -170,6 +215,81 @@ import { ApiService } from '../../core/services/api.service';
           <button pButton [label]="saving() ? 'Saving…' : 'Save Scheme'" severity="success" [disabled]="saving() || !valid()" (click)="save()"></button>
         </ng-template>
       </p-dialog>
+
+      <!-- Coupon create / edit dialog -->
+      <p-dialog [(visible)]="couponDialog" [header]="cForm.id ? 'Edit Coupon' : 'New Coupon'" [modal]="true" [style]="{width: '520px'}" [dismissableMask]="true">
+        <div class="space-y-4 py-1">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Code *</label>
+              <input pInputText [(ngModel)]="cForm.code" class="w-full font-mono uppercase" placeholder="SAVE10" [disabled]="!!cForm.id" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+              <p-select [(ngModel)]="cForm.status" [options]="statusOptions" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Description</label>
+            <input pInputText [(ngModel)]="cForm.description" class="w-full" placeholder="Shown to customers (optional)" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Discount type</label>
+              <p-select [(ngModel)]="cForm.discountType" [options]="discountTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">{{ cForm.discountType === 'amount' ? 'Amount (₹) *' : 'Percent (%) *' }}</label>
+              <p-inputNumber [(ngModel)]="cForm.discountValue" [min]="0" [max]="cForm.discountType === 'percent' ? 100 : 9999999" styleClass="w-full" inputStyleClass="w-full" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Min cart ₹ <span class="text-gray-300">(optional)</span></label>
+              <p-inputNumber [(ngModel)]="cForm.minCartValue" [min]="0" styleClass="w-full" inputStyleClass="w-full" placeholder="0" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Max discount ₹ <span class="text-gray-300">(optional)</span></label>
+              <p-inputNumber [(ngModel)]="cForm.maxDiscount" [min]="0" styleClass="w-full" inputStyleClass="w-full" placeholder="no cap" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Applies to</label>
+            <p-select [(ngModel)]="cForm.scope" [options]="scopes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" (onChange)="cForm.scopeIds = []" />
+          </div>
+          @if (cForm.scope === 'category') {
+            <p-multiSelect [(ngModel)]="cForm.scopeIds" [options]="categories()" optionLabel="name" optionValue="id" placeholder="Select categories" styleClass="w-full" appendTo="body" [filter]="true" />
+          } @else if (cForm.scope === 'brand') {
+            <p-multiSelect [(ngModel)]="cForm.scopeIds" [options]="brands()" optionLabel="name" optionValue="id" placeholder="Select brands" styleClass="w-full" appendTo="body" [filter]="true" />
+          } @else if (cForm.scope === 'product') {
+            <p-multiSelect [(ngModel)]="cForm.scopeIds" [options]="products()" optionLabel="name" optionValue="id" placeholder="Select products" styleClass="w-full" appendTo="body" [filter]="true" />
+          }
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Total uses <span class="text-gray-300">(optional)</span></label>
+              <p-inputNumber [(ngModel)]="cForm.usageLimit" [min]="0" styleClass="w-full" inputStyleClass="w-full" placeholder="unlimited" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Per customer</label>
+              <p-inputNumber [(ngModel)]="cForm.perCustomerLimit" [min]="1" styleClass="w-full" inputStyleClass="w-full" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Valid from <span class="text-gray-300">(optional)</span></label>
+              <input type="date" [(ngModel)]="cForm.validFrom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Valid until <span class="text-gray-300">(optional)</span></label>
+              <input type="date" [(ngModel)]="cForm.validUntil" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+            </div>
+          </div>
+        </div>
+        <ng-template pTemplate="footer">
+          <button pButton label="Cancel" class="p-button-outlined" (click)="couponDialog = false"></button>
+          <button pButton [label]="savingCoupon() ? 'Saving…' : 'Save Coupon'" severity="success" [disabled]="savingCoupon() || !couponValid()" (click)="saveCoupon()"></button>
+        </ng-template>
+      </p-dialog>
     </div>
   `,
 })
@@ -184,6 +304,14 @@ export class SchemesComponent implements OnInit {
   categories = signal<any[]>([]);
   brands = signal<any[]>([]);
   products = signal<any[]>([]);
+
+  tab = signal<'schemes' | 'coupons'>('schemes');
+  coupons = signal<Coupon[]>([]);
+  couponsLoaded = false;
+  couponDialog = false;
+  savingCoupon = signal(false);
+  statusOptions = [{ label: 'Active', value: 'active' }, { label: 'Paused', value: 'paused' }];
+  cForm: any = this.blankCoupon();
 
   dialogOpen = false;
   discountTypes = [{ label: 'Percent (%)', value: 'percent' }, { label: 'Flat amount (₹)', value: 'amount' }];
@@ -324,5 +452,78 @@ export class SchemesComponent implements OnInit {
     if (c.minQty) cond.push(`min ${c.minQty} qty`);
     if (c.minCartValue) cond.push(`min ₹${c.minCartValue} cart`);
     return `${action}On ${scopeText}${cond.length ? ' · ' + cond.join(', ') : ''}`;
+  }
+
+  // ─── Coupons ───────────────────────────────────────────────────────────────
+  blankCoupon() {
+    return {
+      id: '', code: '', description: '', discountType: 'percent', discountValue: 10,
+      minCartValue: null, maxDiscount: null, scope: 'all', scopeIds: [] as string[],
+      usageLimit: null, perCustomerLimit: 1, validFrom: '', validUntil: '', status: 'active',
+    };
+  }
+
+  loadCoupons() {
+    if (this.couponsLoaded) return;
+    this.couponsLoaded = true;
+    this.svc.listCoupons().subscribe({
+      next: (cs) => this.coupons.set((cs || []).map((c) => ({ ...c, scopeIds: (c as any).scopeIds ?? (c as any).scope_ids ?? [] }))),
+    });
+  }
+
+  couponValid(): boolean {
+    return !!this.cForm.code?.trim() && Number(this.cForm.discountValue) > 0 &&
+      (this.cForm.scope === 'all' || (this.cForm.scopeIds && this.cForm.scopeIds.length > 0));
+  }
+
+  openNewCoupon() { this.cForm = this.blankCoupon(); this.couponDialog = true; }
+
+  openEditCoupon(c: Coupon) {
+    this.cForm = {
+      id: c.id, code: c.code, description: c.description || '',
+      discountType: c.discountType ?? c.discount_type ?? 'percent',
+      discountValue: c.discountValue ?? c.discount_value ?? 0,
+      minCartValue: (c.minCartValue ?? c.min_cart_value) || null,
+      maxDiscount: (c.maxDiscount ?? c.max_discount) ?? null,
+      scope: c.scope || 'all', scopeIds: [...((c.scopeIds ?? c.scope_ids) || [])],
+      usageLimit: (c.usageLimit ?? c.usage_limit) ?? null,
+      perCustomerLimit: (c.perCustomerLimit ?? c.per_customer_limit) || 1,
+      validFrom: ((c.validFrom ?? c.valid_from) || '').slice(0, 10),
+      validUntil: ((c.validUntil ?? c.valid_until) || '').slice(0, 10),
+      status: c.status || 'active',
+    };
+    this.couponDialog = true;
+  }
+
+  saveCoupon() {
+    const payload: Partial<Coupon> = {
+      code: this.cForm.code.trim().toUpperCase(), description: this.cForm.description?.trim() || undefined,
+      discountType: this.cForm.discountType, discountValue: Number(this.cForm.discountValue) || 0,
+      minCartValue: Number(this.cForm.minCartValue) || 0,
+      maxDiscount: this.cForm.maxDiscount ? Number(this.cForm.maxDiscount) : null,
+      scope: this.cForm.scope, scopeIds: this.cForm.scope === 'all' ? [] : this.cForm.scopeIds,
+      usageLimit: this.cForm.usageLimit ? Number(this.cForm.usageLimit) : null,
+      perCustomerLimit: Number(this.cForm.perCustomerLimit) || 1, audience: 'all',
+      validFrom: this.cForm.validFrom || null, validUntil: this.cForm.validUntil || null, status: this.cForm.status,
+    };
+    this.savingCoupon.set(true);
+    const obs = this.cForm.id ? this.svc.updateCoupon(this.cForm.id, payload) : this.svc.createCoupon(payload);
+    obs.subscribe({
+      next: () => { this.savingCoupon.set(false); this.couponDialog = false; this.couponsLoaded = false; this.loadCoupons(); this.toast.add({ severity: 'success', summary: 'Saved', detail: 'Coupon saved.' }); },
+      error: (e) => { this.savingCoupon.set(false); this.toast.add({ severity: 'error', summary: 'Error', detail: e?.error?.message || 'Could not save coupon.' }); },
+    });
+  }
+
+  toggleCoupon(c: Coupon) { this.svc.setCouponStatus(c.id, c.status === 'active' ? 'paused' : 'active').subscribe({ next: () => { this.couponsLoaded = false; this.loadCoupons(); } }); }
+  removeCoupon(c: Coupon) { this.svc.deleteCoupon(c.id).subscribe({ next: () => { this.couponsLoaded = false; this.loadCoupons(); this.toast.add({ severity: 'success', summary: 'Deleted', detail: 'Coupon removed.' }); } }); }
+
+  couponBadge(c: Coupon): string {
+    const t = c.discountType ?? c.discount_type; const v = c.discountValue ?? c.discount_value;
+    return t === 'amount' ? `₹${v} OFF` : `${v || 0}% OFF`;
+  }
+  couponDesc(c: Coupon): string {
+    const scope = c.scope === 'all' ? 'all products' : `${((c.scopeIds ?? c.scope_ids) || []).length} ${c.scope}(s)`;
+    const min = (c.minCartValue ?? c.min_cart_value) || 0;
+    return `On ${scope}${min > 0 ? ` · min ₹${min} cart` : ''}${c.description ? ' · ' + c.description : ''}`;
   }
 }

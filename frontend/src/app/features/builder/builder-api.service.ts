@@ -76,6 +76,14 @@ export interface BuilderSubmitPayload {
   notes?: string;
   discount?: number;
   deliveryFee?: number;
+  couponCode?: string;
+}
+
+export interface BuilderCouponResult {
+  valid: boolean;
+  reason?: string;
+  discount: number;
+  coupon?: { id: string; code: string; description: string; label: string };
 }
 
 /**
@@ -130,5 +138,9 @@ export class BuilderApiService {
 
   evaluateOffers(items: { productId?: string; quantity: number; unitPrice: number }[]): Observable<BuilderOffersResult> {
     return this.http.post<any>(`${this.base}/m/builder/offers`, { items }, this.opts()).pipe(map(unwrap<BuilderOffersResult>));
+  }
+
+  applyCoupon(code: string, items: { productId?: string; quantity: number; unitPrice: number }[]): Observable<BuilderCouponResult> {
+    return this.http.post<any>(`${this.base}/m/builder/coupon`, { code, items }, this.opts()).pipe(map(unwrap<BuilderCouponResult>));
   }
 }
