@@ -31,6 +31,7 @@ import { ProductCardNodeHandler } from './product-card.handler';
 import { OrderDetailsNodeHandler } from './order-details.handler';
 import { PaymentReceiptNodeHandler } from './payment-receipt.handler';
 import { ShowOffersNodeHandler } from './show-offers.handler';
+import { OpenShopNodeHandler } from './open-shop.handler';
 
 // Re-export all
 export {
@@ -67,6 +68,7 @@ export {
   OrderDetailsNodeHandler,
   PaymentReceiptNodeHandler,
   ShowOffersNodeHandler,
+  OpenShopNodeHandler,
 };
 
 /** All node handler classes for DI registration */
@@ -104,4 +106,5 @@ export const ALL_NODE_HANDLERS = [
   OrderDetailsNodeHandler,
   PaymentReceiptNodeHandler,
   ShowOffersNodeHandler,
+  OpenShopNodeHandler,
 ];

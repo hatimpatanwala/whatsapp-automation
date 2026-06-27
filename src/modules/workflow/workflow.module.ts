@@ -9,9 +9,10 @@ import { ALL_NODE_HANDLERS } from './engine/node-handlers';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { WabaModule } from '../waba/waba.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { BuilderModule } from '../builder/builder.module';
 
 @Module({
-  imports: [forwardRef(() => WhatsAppModule), forwardRef(() => WabaModule), PromotionsModule],
+  imports: [forwardRef(() => WhatsAppModule), forwardRef(() => WabaModule), PromotionsModule, BuilderModule],
   controllers: [WorkflowController],
   providers: [
     WorkflowService,

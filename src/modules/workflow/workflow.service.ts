@@ -8,7 +8,7 @@ import { buildWelcomeHub, buildDefaultSpokes, buildDefaultNotifications } from '
  * added spokes/notifications on their next workflow-list load (by-name dedupe
  * keeps any admin edits intact).
  */
-const DEFAULT_WORKFLOWS_VERSION = 4;
+const DEFAULT_WORKFLOWS_VERSION = 5;
 
 export interface CreateWorkflowDto {
   name: string;

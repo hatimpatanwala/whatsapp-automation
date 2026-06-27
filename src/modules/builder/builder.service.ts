@@ -306,6 +306,31 @@ export class BuilderService implements OnModuleInit {
     return { schemaName: s.schema_name, tenantId: s.tenant_id };
   }
 
+  /** Mint a SHOP session — a customer-facing ecommerce webview bound to a customer. */
+  async createShopSession(input: {
+    tenantId: string;
+    schemaName: string;
+    customerId?: string | null;
+    customerPhone?: string | null;
+    customerName?: string | null;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days — customers browse at leisure
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions
+         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, customer_name, status, mode, expires_at)
+       VALUES ($1,$2,$3,'shop',$4,$5,$6,'open','shop',$7)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.customerId || null, input.customerPhone || null, input.customerName || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/shop?token=${token}` };
+  }
+
+  /** Resolve + validate a SHOP token → its session row (tenant, schema, customer). */
+  async getShopSession(token: string): Promise<any> {
+    return this.resolveSession(token, 'shop');
+  }
+
   /** Categories / brands / products / customers for the promo scope & audience pickers. */
   async promoTaxonomy(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
@@ -329,7 +354,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

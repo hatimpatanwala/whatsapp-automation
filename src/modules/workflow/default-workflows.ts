@@ -51,6 +51,19 @@ export function buildWelcomeHub(storeName: string): DefaultWorkflowDef {
 /** The modular customer-facing spoke workflows (each standalone + a Welcome menu item). */
 export function buildDefaultSpokes(): DefaultWorkflowDef[] {
   return [
+    // ── 0. Shop Online — opens the full ecommerce webview (grid → cart → checkout) ──
+    {
+      name: 'Shop Online',
+      description: 'Opens the ecommerce storefront webview where the customer browses products, builds a cart and checks out.',
+      menuItem: { label: '🛍️ Shop Online', order: 0 },
+      trigger: { type: 'trigger_message', keywords: 'shop,store,buy,order online,shop online', matchType: 'contains' },
+      nodes: [
+        { id: 'n1', type: 'trigger_message', label: 'Shop', x: 300, y: 40, config: { keywords: 'shop,store,buy,order online,shop online', matchType: 'contains' }, outputs: ['n2'] },
+        { id: 'n2', type: 'open_shop', label: 'Open Store', x: 300, y: 200, config: { message: '🛍️ Tap below to open our store — browse products, add to your cart and checkout, all in one place.', buttonLabel: '🛒 Open Store' }, outputs: [] },
+      ],
+      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+    },
+
     // ── 1. Browse Products — All / By Category / By Brand → product card → cart ──
     {
       name: 'Browse Products',

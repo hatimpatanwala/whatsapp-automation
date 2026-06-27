@@ -50,6 +50,7 @@ import {
   OrderDetailsNodeHandler,
   PaymentReceiptNodeHandler,
   ShowOffersNodeHandler,
+  OpenShopNodeHandler,
 } from './node-handlers';
 
 const MAX_STEPS = 50;
@@ -98,6 +99,7 @@ export class WorkflowExecutionEngine {
     orderDetails: OrderDetailsNodeHandler,
     paymentReceipt: PaymentReceiptNodeHandler,
     showOffers: ShowOffersNodeHandler,
+    openShop: OpenShopNodeHandler,
   ) {
     const handlers: NodeHandler[] = [
       sendText, sendButtons, sendList, sendImage, sendTemplate,
@@ -106,7 +108,7 @@ export class WorkflowExecutionEngine {
       searchProducts, filterProducts, paymentQr,
       tagCustomer, updateOrder, assignAgent, httpRequest, setLanguage,
       fallback, startWorkflow, sendQuote, updateQuote, myOrders, trackOrder, productCard,
-      orderDetails, paymentReceipt, showOffers,
+      orderDetails, paymentReceipt, showOffers, openShop,
     ];
     this.handlerMap = new Map(handlers.map((h) => [h.nodeType, h]));
   }
