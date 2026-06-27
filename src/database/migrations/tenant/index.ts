@@ -1051,6 +1051,56 @@ const migration039ProductUom: TenantMigration = {
   },
 };
 
+const migration040Schemes: TenantMigration = {
+  name: '040_schemes',
+  async up(qr, schema) {
+    // Promotions / offers / loyalty schemes.
+    //  type:   'instant' (applied at cart) | 'cumulative' (loyalty target → reward)
+    //  action: 'discount' | 'buy_x_get_y_free' | 'buy_x_get_x_free' | 'qty_discount' | 'gift'
+    //  scope:  'all' | 'category' | 'brand' | 'product'  (+ scope_ids)
+    //  conditions JSONB: { discountType:'percent'|'amount', discountValue, buyQty, getQty,
+    //                      getProductId, minQty, minCartValue, targetType, targetValue, period }
+    //  weight (priority, higher wins among non-combinable) + combinable (can stack).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".schemes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        description TEXT,
+        type VARCHAR(20) NOT NULL DEFAULT 'instant',
+        action VARCHAR(30) NOT NULL DEFAULT 'discount',
+        scope VARCHAR(20) NOT NULL DEFAULT 'all',
+        scope_ids UUID[] NOT NULL DEFAULT '{}',
+        conditions JSONB NOT NULL DEFAULT '{}',
+        reward JSONB NOT NULL DEFAULT '{}',
+        weight INTEGER NOT NULL DEFAULT 0,
+        combinable BOOLEAN NOT NULL DEFAULT false,
+        audience VARCHAR(20) NOT NULL DEFAULT 'all',
+        valid_from TIMESTAMPTZ,
+        valid_until TIMESTAMPTZ,
+        status VARCHAR(16) NOT NULL DEFAULT 'active',
+        created_by UUID,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_schemes_status ON "${schema}".schemes (status)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_schemes_scope ON "${schema}".schemes USING GIN (scope_ids)`);
+
+    // Per-customer targeting (audience = 'specific').
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".scheme_customers (
+        scheme_id UUID NOT NULL REFERENCES "${schema}".schemes(id) ON DELETE CASCADE,
+        customer_id UUID NOT NULL,
+        PRIMARY KEY (scheme_id, customer_id)
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".scheme_customers CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".schemes CASCADE`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1091,4 +1141,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration037WorkflowMenuItem,
   migration038OrderTax,
   migration039ProductUom,
+  migration040Schemes,
 ];

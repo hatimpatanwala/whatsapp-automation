@@ -31,6 +31,24 @@ export interface BuilderProduct {
   gstRate?: number;
   uom?: string;
   hsnCode?: string | null;
+  offer?: string | null;
+}
+
+export interface BuilderOffer {
+  schemeId: string;
+  name: string;
+  description: string;
+  combinable: boolean;
+  weight: number;
+  discount: number;
+  label: string;
+}
+
+export interface BuilderOffersResult {
+  subtotal: number;
+  applicable: BuilderOffer[];
+  recommendedIds: string[];
+  discountTotal: number;
 }
 
 export interface BuilderCustomer {
@@ -97,5 +115,9 @@ export class BuilderApiService {
 
   getResult(): Observable<any> {
     return this.http.get<any>(`${this.base}/m/builder/result`, this.opts()).pipe(map(unwrap<any>));
+  }
+
+  evaluateOffers(items: { productId?: string; quantity: number; unitPrice: number }[]): Observable<BuilderOffersResult> {
+    return this.http.post<any>(`${this.base}/m/builder/offers`, { items }, this.opts()).pipe(map(unwrap<BuilderOffersResult>));
   }
 }

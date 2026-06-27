@@ -33,6 +33,7 @@ import { SubscriptionPlanModule } from './modules/subscription-plan/subscription
 import { QuoteModule } from './modules/quote/quote.module';
 import { InvoiceModule } from './modules/invoice/invoice.module';
 import { BuilderModule } from './modules/builder/builder.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
@@ -73,6 +74,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     QuoteModule,
     InvoiceModule,
     BuilderModule,
+    PromotionsModule,
   ],
   providers: [
     // Global authentication then role enforcement. Routes opt out with @Public().

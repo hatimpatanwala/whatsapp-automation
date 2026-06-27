@@ -6,6 +6,7 @@ import {
   BuilderApiService,
   BuilderCustomer,
   BuilderProduct,
+  BuilderOffer,
   BuilderSessionInfo,
 } from './builder-api.service';
 
@@ -193,7 +194,10 @@ interface CartLine {
                           <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><i class="pi pi-box text-gray-300"></i></div>
                         }
                         <span class="flex-1 min-w-0">
-                          <span class="text-sm font-medium block truncate">{{ p.name }}</span>
+                          <span class="text-sm font-medium block truncate">
+                            {{ p.name }}
+                            @if (p.offer) { <span class="text-[9px] bg-green-100 text-green-700 font-bold rounded px-1 ml-1 align-middle">{{ p.offer }}</span> }
+                          </span>
                           <span class="block text-xs text-gray-500 truncate">{{ p.brand ? p.brand + ' · ' : '' }}{{ sym() }}{{ p.price | number:'1.0-2' }} / {{ p.uom || 'pcs' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
                         </span>
                         <i class="pi pi-plus-circle text-green-600 flex-shrink-0" style="font-size:1.2rem"></i>
@@ -251,6 +255,29 @@ interface CartLine {
                   </div>
                 </div>
               }
+
+              <!-- Applicable offers (auto-applied; toggle which to use) -->
+              @if (offers().length) {
+                <div class="border-t border-gray-100 pt-2 mt-1">
+                  <p class="text-[11px] font-semibold text-green-700 mb-1.5"><i class="pi pi-tag text-[10px] mr-1"></i>Offers</p>
+                  @for (o of offers(); track o.schemeId) {
+                    <label class="flex items-center justify-between gap-2 py-1 cursor-pointer">
+                      <span class="flex items-center gap-2 min-w-0">
+                        <input type="checkbox" [checked]="isOfferOn(o.schemeId)" (change)="toggleOffer(o.schemeId)" class="accent-green-600" />
+                        <span class="text-xs text-gray-600 truncate">{{ o.name }} <span class="text-[10px] bg-green-100 text-green-700 rounded px-1">{{ o.label }}</span>@if (!o.combinable) { <span class="text-[9px] text-gray-400 ml-1">(not combinable)</span> }</span>
+                      </span>
+                      <span class="text-xs font-medium text-green-700 whitespace-nowrap">− {{ sym() }}{{ o.discount | number:'1.0-2' }}</span>
+                    </label>
+                  }
+                  @if (schemeDiscount() > 0) {
+                    <div class="flex items-center justify-between text-sm mt-1">
+                      <span class="text-gray-500">Offer discount</span>
+                      <span class="font-medium text-green-700">− {{ sym() }}{{ schemeDiscount() | number:'1.0-2' }}</span>
+                    </div>
+                  }
+                </div>
+              }
+
               <div class="border-t border-dashed border-gray-200 my-1"></div>
               <div class="flex items-center justify-between">
                 <span class="text-base font-bold text-gray-900">Total</span>
@@ -336,7 +363,45 @@ export class MobileBuilderComponent implements OnInit {
   tax = computed(() => this.cart().reduce((s, l) => s + l.quantity * l.unitPrice * (Number(l.gstRate) || 0) / 100, 0));
   discountAmt = signal(0);
   deliveryAmt = signal(0);
-  total = computed(() => Math.max(0, this.subtotal() + this.tax() - (Number(this.discountAmt()) || 0) + (Number(this.deliveryAmt()) || 0)));
+
+  // Offers / schemes (auto-applied; admin can toggle which to apply).
+  offers = signal<BuilderOffer[]>([]);
+  selectedOfferIds = signal<string[]>([]);
+  private offersTimer: any = null;
+
+  schemeDiscount = computed(() => {
+    const sel = this.offers().filter((o) => this.selectedOfferIds().includes(o.schemeId));
+    if (!sel.length) return 0;
+    const nonComb = sel.filter((o) => !o.combinable);
+    // A non-combinable offer applies alone (highest weight, then discount).
+    if (nonComb.length) {
+      const best = [...nonComb].sort((a, b) => b.weight - a.weight || b.discount - a.discount)[0];
+      return Math.round(best.discount * 100) / 100;
+    }
+    return Math.round(sel.reduce((s, o) => s + o.discount, 0) * 100) / 100;
+  });
+
+  total = computed(() => Math.max(0, this.subtotal() + this.tax() - (Number(this.discountAmt()) || 0) - this.schemeDiscount() + (Number(this.deliveryAmt()) || 0)));
+
+  toggleOffer(id: string): void {
+    const set = new Set(this.selectedOfferIds());
+    set.has(id) ? set.delete(id) : set.add(id);
+    this.selectedOfferIds.set([...set]);
+  }
+  isOfferOn(id: string): boolean { return this.selectedOfferIds().includes(id); }
+
+  /** Re-evaluate offers against the current cart (debounced). */
+  private refreshOffers(): void {
+    if (this.offersTimer) clearTimeout(this.offersTimer);
+    this.offersTimer = setTimeout(() => {
+      const items = this.cart().filter((l) => l.productId).map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice }));
+      if (!items.length) { this.offers.set([]); this.selectedOfferIds.set([]); return; }
+      this.api.evaluateOffers(items).subscribe({
+        next: (r) => { this.offers.set(r.applicable || []); this.selectedOfferIds.set(r.recommendedIds || []); },
+        error: () => { this.offers.set([]); this.selectedOfferIds.set([]); },
+      });
+    }, 300);
+  }
 
   newCustomerPhone = computed(() => {
     const q = this.custQuery().trim();
@@ -393,6 +458,7 @@ export class MobileBuilderComponent implements OnInit {
     if (existing) existing.quantity += 1;
     else cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock, image: p.thumbnail, gstRate: p.gstRate, uom: p.uom, brand: p.brand, sku: p.sku });
     this.cart.set(cart);
+    this.refreshOffers();
     this.addQuery = '';
     this.addFocused.set(false);
   }
@@ -404,6 +470,7 @@ export class MobileBuilderComponent implements OnInit {
     if (isNaN(price) || price < 0) { this.submitError.set('Enter a valid custom item price.'); return; }
     this.submitError.set(null);
     this.cart.set([...this.cart(), { name, quantity: Math.max(1, Math.floor(Number(this.customQty) || 1)), unitPrice: price, stock: null, uom: 'pcs' }]);
+    this.refreshOffers();
     this.customName = '';
     this.customQty = 1;
     this.customPrice = null;
@@ -414,18 +481,21 @@ export class MobileBuilderComponent implements OnInit {
     const cart = [...this.cart()];
     cart[i] = { ...cart[i], quantity: Math.max(1, Math.floor(Number(v) || 1)) };
     this.cart.set(cart);
+    this.refreshOffers();
   }
 
   setPrice(i: number, v: any): void {
     const cart = [...this.cart()];
     cart[i] = { ...cart[i], unitPrice: Math.max(0, Number(v) || 0) };
     this.cart.set(cart);
+    this.refreshOffers();
   }
 
   remove(i: number): void {
     const cart = [...this.cart()];
     cart.splice(i, 1);
     this.cart.set(cart);
+    this.refreshOffers();
   }
 
   submit(): void {
@@ -454,7 +524,7 @@ export class MobileBuilderComponent implements OnInit {
         customer,
         title: this.title.trim() || undefined,
         notes: this.notes.trim() || undefined,
-        discount: Number(this.discountAmt()) || 0,
+        discount: (Number(this.discountAmt()) || 0) + this.schemeDiscount(),
         deliveryFee: Number(this.deliveryAmt()) || 0,
       })
       .subscribe({

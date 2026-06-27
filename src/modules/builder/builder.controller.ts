@@ -39,6 +39,12 @@ export class BuilderController {
     return this.builder.getResult(this.token(req, token));
   }
 
+  @Post('offers')
+  @HttpCode(200)
+  async offers(@Req() req: Request, @Query('token') token: string, @Body() body: any) {
+    return this.builder.evaluateOffers(this.token(req, token), body?.items || []);
+  }
+
   @Post('submit')
   @HttpCode(200)
   async submit(@Req() req: Request, @Query('token') token: string, @Body() body: any) {

@@ -201,6 +201,7 @@ export class MainLayoutComponent implements OnInit {
     { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },
     { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries', featureKey: 'deliveries' },
     { label: 'Customers', icon: 'pi-users', route: '/customers', featureKey: 'customers' },
+    { label: 'Schemes & Offers', icon: 'pi-percentage', route: '/schemes' },
     { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns' },
     { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations' },
     { label: 'Quotes', icon: 'pi-file-edit', route: '/quotes', featureKey: 'quotes' },

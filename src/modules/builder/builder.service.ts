@@ -16,6 +16,7 @@ import { OrderService } from '../order/order.service';
 import { QuoteService } from '../quote/quote.service';
 import { EventBusService } from '../events/event-bus.service';
 import { BuilderSubmittedEvent } from '../events/domain-events';
+import { PromotionsEngine, CartItemInput } from '../promotions/promotions-engine.service';
 
 export type BuilderType = 'order' | 'quote';
 
@@ -61,6 +62,7 @@ export class BuilderService implements OnModuleInit {
     private readonly quoteService: QuoteService,
     private readonly config: ConfigService,
     private readonly eventBus: EventBusService,
+    private readonly promotions: PromotionsEngine,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -316,10 +318,11 @@ export class BuilderService implements OnModuleInit {
   /** Active products with live stock for the token's tenant. */
   async getProducts(token: string): Promise<any[]> {
     const s = await this.resolveSession(token);
+    const badges = await this.promotions.productBadges(s.schema_name).catch(() => null);
     return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
       const rows = await qr.query(
         `SELECT p.id, p.name, p.base_price, p.sale_price, p.currency, p.thumbnail, p.gst_rate,
-                p.uom, p.hsn_code, p.slug,
+                p.uom, p.hsn_code, p.slug, p.category_id, p.brand_id,
                 b.name AS brand_name,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity
            FROM products p
@@ -341,8 +344,17 @@ export class BuilderService implements OnModuleInit {
         gstRate: Number(r.gst_rate ?? 0),
         uom: r.uom || 'pcs',
         hsnCode: r.hsn_code || null,
+        offer: badges
+          ? (badges.products[r.id] || badges.categories[r.category_id] || badges.brands[r.brand_id] || badges.all || null)
+          : null,
       }));
     });
+  }
+
+  /** Evaluate the built cart against active offer schemes (for the builder webview). */
+  async evaluateOffers(token: string, items: CartItemInput[]): Promise<any> {
+    const s = await this.resolveSession(token);
+    return this.promotions.evaluateCart(s.schema_name, items || [], s.customer_id || undefined);
   }
 
   /** Search the token's tenant customers by name or phone (for the picker). */
