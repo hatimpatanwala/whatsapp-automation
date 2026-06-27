@@ -20,3 +20,6 @@ MobaXterm_Portable_v25.3/MobaXterm_Personal_25.3.exe
 *.pem
 order-detail-before.png
 .playwright-mcp/
+
+.shoptok
+.cookies.txt
