@@ -13,6 +13,7 @@ import {
 import { WorkflowTriggerMatcher } from './workflow-trigger.matcher';
 import { WorkflowExecutionEngine } from './workflow-execution.engine';
 import { ConversationHelper } from '../../whatsapp/helpers/conversation.helper';
+import { MetaTokenService } from '../../waba/meta-token.service';
 
 @Injectable()
 export class WorkflowEventListener {
@@ -24,6 +25,7 @@ export class WorkflowEventListener {
     private readonly connectionManager: TenantConnectionManager,
     private readonly conversationHelper: ConversationHelper,
     @Optional() private readonly smartNotification: SmartNotificationService,
+    @Optional() private readonly metaTokenService?: MetaTokenService,
   ) {}
 
   /**
@@ -171,13 +173,33 @@ export class WorkflowEventListener {
       });
       if (!tenant) return;
 
+      // Embedded-signup tenants keep their token in meta_tokens, not on the
+      // tenants row. The inbound webhook path resolves it the same way — without
+      // this, every order/payment/quote notification fails with 190 reauth_required.
+      // meta_tokens is keyed by the internal waba_accounts UUID, so resolve that
+      // from the tenant's Meta waba_id first.
+      let accessToken = tenant.access_token;
+      if (!accessToken && this.metaTokenService && tenant.waba_id) {
+        try {
+          const wabaUuid = await this.connectionManager.executeGlobal(async (qr) => {
+            const r = await qr.query(`SELECT id FROM waba_accounts WHERE waba_id = $1 LIMIT 1`, [tenant.waba_id]);
+            return r[0]?.id || null;
+          });
+          if (wabaUuid) {
+            accessToken = await this.metaTokenService.getActiveToken(wabaUuid);
+          }
+        } catch (err: any) {
+          this.logger.warn(`Token resolution failed for ${schema}: ${err.message}`);
+        }
+      }
+
       await this.engine.startExecution({
         schema,
         tenant: {
-          phoneNumberId: tenant.phone_number_id,
-          accessToken: tenant.access_token,
-          schemaName: schema,
           ...tenant,
+          phoneNumberId: tenant.phone_number_id,
+          accessToken,
+          schemaName: schema,
         },
         workflowId: match.workflowId,
         triggerNodeId: match.triggerNodeId,

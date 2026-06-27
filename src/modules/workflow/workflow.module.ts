@@ -7,9 +7,10 @@ import { WorkflowResumeProcessor } from './engine/workflow-resume.processor';
 import { WorkflowEventListener } from './engine/workflow-event.listener';
 import { ALL_NODE_HANDLERS } from './engine/node-handlers';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { WabaModule } from '../waba/waba.module';
 
 @Module({
-  imports: [forwardRef(() => WhatsAppModule)],
+  imports: [forwardRef(() => WhatsAppModule), forwardRef(() => WabaModule)],
   controllers: [WorkflowController],
   providers: [
     WorkflowService,
