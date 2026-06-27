@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -333,8 +333,15 @@ export class OrderDetailComponent implements OnInit {
   productQuery: any = '';
   productSuggestions = signal<any[]>([]);
 
-  editSubtotal = computed(() => this.editItems().reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0));
-  editTotal = computed(() => Math.max(0, this.editSubtotal() - (Number(this.editDiscount) || 0) + (Number(this.editDeliveryFee) || 0)));
+  // Plain methods (not computed signals): item qty/price are mutated in place by
+  // [(ngModel)], which doesn't notify the editItems signal — a method re-runs each
+  // change-detection cycle so the live Subtotal/Total stay in sync as you edit.
+  editSubtotal(): number {
+    return this.editItems().reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+  }
+  editTotal(): number {
+    return Math.max(0, this.editSubtotal() - (Number(this.editDiscount) || 0) + (Number(this.editDeliveryFee) || 0));
+  }
 
   // Currency symbol for the store/order (defaults to INR ₹).
   private static readonly CURRENCY_SYMBOLS: Record<string, string> = {
