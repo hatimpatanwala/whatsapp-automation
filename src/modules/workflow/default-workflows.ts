@@ -200,77 +200,120 @@ export function buildDefaultSpokes(): DefaultWorkflowDef[] {
  * "Notifications" tab and keep the customer updated end-to-end.
  */
 export function buildDefaultNotifications(): DefaultWorkflowDef[] {
-  const orderNote = (name: string, description: string, event: string, message: string): DefaultWorkflowDef => ({
-    name,
-    description,
-    trigger: { type: 'trigger_order', event },
-    nodes: [
+  // Each order notification: trigger → interactive buttons → detail response.
+  // Button 1 is always "📦 Order Details" (→ order_details node). An optional
+  // second button starts another spoke workflow (e.g. Browse, Talk to us).
+  const orderNote = (
+    name: string, description: string, event: string, message: string,
+    extra?: { title: string; workflow: string },
+  ): DefaultWorkflowDef => {
+    const buttons: { id: string; title: string }[] = [{ id: 'od', title: '📦 Order Details' }];
+    const nodes: any[] = [
       { id: 'n1', type: 'trigger_order', label: 'Order Event', x: 300, y: 40, config: { event }, outputs: ['n2'] },
-      { id: 'n2', type: 'send_text', label: 'Notify', x: 300, y: 200, config: { message }, outputs: [] },
-    ],
-    edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
-  });
+      { id: 'n2', type: 'send_buttons', label: 'Notify', x: 300, y: 190, config: { message, buttons }, outputs: ['n3'] },
+      { id: 'n3', type: 'order_details', label: 'Order Details', x: 200, y: 340, config: {}, outputs: [] },
+    ];
+    const edges: any[] = [
+      { id: 'e1', from: 'n1', to: 'n2' },
+      { id: 'e2', from: 'n2', to: 'n3' },
+    ];
+    if (extra) {
+      buttons.push({ id: 'x', title: extra.title });
+      nodes[1].outputs = ['n3', 'n4'];
+      nodes.push({ id: 'n4', type: 'start_workflow', label: extra.title, x: 420, y: 340, config: { workflowName: extra.workflow, passVariables: true }, outputs: [] });
+      edges.push({ id: 'e3', from: 'n2', to: 'n4' });
+    }
+    return { name, description, trigger: { type: 'trigger_order', event }, nodes, edges };
+  };
 
-  const payNote = (name: string, description: string, event: string, message: string): DefaultWorkflowDef => ({
+  // Payment notification: buttons → receipt / order details.
+  const payNote = (
+    name: string, description: string, event: string, message: string, receiptLabel: string,
+  ): DefaultWorkflowDef => ({
     name,
     description,
     trigger: { type: 'trigger_payment', event },
     nodes: [
       { id: 'n1', type: 'trigger_payment', label: 'Payment Event', x: 300, y: 40, config: { event }, outputs: ['n2'] },
-      { id: 'n2', type: 'send_text', label: 'Notify', x: 300, y: 200, config: { message }, outputs: [] },
+      { id: 'n2', type: 'send_buttons', label: 'Notify', x: 300, y: 190, config: { message, buttons: [{ id: 'rcpt', title: receiptLabel }, { id: 'od', title: '📦 Order Details' }] }, outputs: ['n3', 'n4'] },
+      { id: 'n3', type: 'payment_receipt', label: 'Payment Receipt', x: 200, y: 340, config: {}, outputs: [] },
+      { id: 'n4', type: 'order_details', label: 'Order Details', x: 420, y: 340, config: {}, outputs: [] },
     ],
-    edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+    edges: [
+      { id: 'e1', from: 'n1', to: 'n2' },
+      { id: 'e2', from: 'n2', to: 'n3' },
+      { id: 'e3', from: 'n2', to: 'n4' },
+    ],
   });
 
   return [
     orderNote(
-      'Order Received', 'Confirms a new order the moment it is placed.', 'created',
-      '🧾 Hi {{customer_name}}, we’ve received your order *#{{order_number}}* — total {{currency}}{{order_total}}.\nWe’ll keep you posted! Reply *track* to track it.',
+      'Order Received', 'Confirms a new order with an Order Details button.', 'created',
+      '🧾 Hi {{customer_name}}, we’ve received your order *#{{order_number}}* — total {{currency}}{{order_total}}.\nWe’ll keep you posted!',
     ),
     orderNote(
-      'Order Confirmed', 'Tells the customer their order is confirmed.', 'confirmed',
+      'Order Confirmed', 'Confirms the order, with an Order Details button.', 'confirmed',
       '✅ Your order *#{{order_number}}* is confirmed and is being prepared. We’ll let you know when it ships.',
     ),
     orderNote(
-      'Order Out for Delivery', 'Notifies when the order is out for delivery.', 'out_for_delivery',
+      'Order Out for Delivery', 'Out-for-delivery update with order details.', 'out_for_delivery',
       '🚚 Your order *#{{order_number}}* is out for delivery — arriving soon!',
     ),
     orderNote(
-      'Order Delivered', 'Thanks the customer once delivered.', 'delivered',
-      '🎉 Your order *#{{order_number}}* has been delivered. We hope you love it!\nReply *menu* to shop again. 🛍️',
+      'Order Delivered', 'Delivered update with details + shop again.', 'delivered',
+      '🎉 Your order *#{{order_number}}* has been delivered. We hope you love it!',
+      { title: '🛍️ Shop Again', workflow: 'Browse Products' },
     ),
     orderNote(
-      'Order Cancelled', 'Lets the customer know an order was cancelled.', 'cancelled',
+      'Order Cancelled', 'Cancellation update with details + support.', 'cancelled',
       '❌ Your order *#{{order_number}}* has been cancelled. Reply here if you need any help.',
+      { title: '💬 Talk to us', workflow: 'Talk to us' },
     ),
     payNote(
-      'Payment Received', 'Confirms a successful payment.', 'verified',
+      'Payment Received', 'Confirms payment with a View Receipt button.', 'verified',
       '✅ Payment of {{currency}}{{payment_amount}} received for order *#{{order_number}}*. Thank you, {{customer_name}}!',
+      '🧾 View Receipt',
     ),
     payNote(
-      'Payment Pending', 'Reminds the customer to complete a pending payment.', 'expired',
+      'Payment Pending', 'Pending-payment reminder with payment details.', 'expired',
       '⏰ Your payment for order *#{{order_number}}* is still pending. Reply here to complete it.',
+      '💳 Payment Details',
     ),
-    // Quote ready → render the full quote, then nudge to proceed.
+    // Quote ready → send the full quote, then offer to resend it or get help.
     {
       name: 'Quote Ready',
-      description: 'Sends the full quote to the customer as soon as it is created.',
+      description: 'Sends the full quote, with buttons to resend or ask questions.',
       trigger: { type: 'trigger_quote', event: 'created' },
       nodes: [
         { id: 'n1', type: 'trigger_quote', label: 'Quote Created', x: 300, y: 40, config: { event: 'created' }, outputs: ['n2'] },
-        { id: 'n2', type: 'send_quote', label: 'Send Quote', x: 300, y: 200, config: { headerMessage: '📋 Hi {{customer_name}}, here’s your quote:', footerMessage: 'Reply *order* to proceed, or ask us anything!' }, outputs: [] },
+        { id: 'n2', type: 'send_quote', label: 'Send Quote', x: 300, y: 180, config: { headerMessage: '📋 Hi {{customer_name}}, here’s your quote:', footerMessage: 'Tap below if you need anything 👇' }, outputs: ['n3'] },
+        { id: 'n3', type: 'send_buttons', label: 'Options', x: 300, y: 330, config: { message: 'What would you like to do?', buttons: [{ id: 'rq', title: '📋 Resend Quote' }, { id: 'help', title: '💬 Talk to us' }] }, outputs: ['n4', 'n5'] },
+        { id: 'n4', type: 'send_quote', label: 'Resend Quote', x: 200, y: 480, config: { headerMessage: '📋 Here’s your quote again:' }, outputs: [] },
+        { id: 'n5', type: 'start_workflow', label: 'Talk to us', x: 420, y: 480, config: { workflowName: 'Talk to us', passVariables: true }, outputs: [] },
       ],
-      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4' },
+        { id: 'e4', from: 'n3', to: 'n5' },
+      ],
     },
+    // Quote accepted → thank, then resend the quote for reference.
     {
       name: 'Quote Accepted',
-      description: 'Thanks the customer when a quote is accepted.',
+      description: 'Thanks the customer and resends the accepted quote.',
       trigger: { type: 'trigger_quote', event: 'accepted' },
       nodes: [
         { id: 'n1', type: 'trigger_quote', label: 'Quote Accepted', x: 300, y: 40, config: { event: 'accepted' }, outputs: ['n2'] },
-        { id: 'n2', type: 'send_text', label: 'Notify', x: 300, y: 200, config: { message: '🎉 Thanks for accepting quote *{{quote_number}}*, {{customer_name}}! We’ll get started right away.' }, outputs: [] },
+        { id: 'n2', type: 'send_text', label: 'Thanks', x: 300, y: 180, config: { message: '🎉 Thanks for accepting quote *{{quote_number}}*, {{customer_name}}! We’ll get started right away.' }, outputs: ['n3'] },
+        { id: 'n3', type: 'send_buttons', label: 'Options', x: 300, y: 330, config: { message: 'Here for your reference 👇', buttons: [{ id: 'vq', title: '📋 View Quote' }] }, outputs: ['n4'] },
+        { id: 'n4', type: 'send_quote', label: 'Resend Quote', x: 300, y: 480, config: { headerMessage: '📋 Your accepted quote:' }, outputs: [] },
       ],
-      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },
+        { id: 'e3', from: 'n3', to: 'n4' },
+      ],
     },
   ];
 }

@@ -28,6 +28,8 @@ import { UpdateQuoteNodeHandler } from './update-quote.handler';
 import { MyOrdersNodeHandler } from './my-orders.handler';
 import { TrackOrderNodeHandler } from './track-order.handler';
 import { ProductCardNodeHandler } from './product-card.handler';
+import { OrderDetailsNodeHandler } from './order-details.handler';
+import { PaymentReceiptNodeHandler } from './payment-receipt.handler';
 
 // Re-export all
 export {
@@ -61,6 +63,8 @@ export {
   MyOrdersNodeHandler,
   TrackOrderNodeHandler,
   ProductCardNodeHandler,
+  OrderDetailsNodeHandler,
+  PaymentReceiptNodeHandler,
 };
 
 /** All node handler classes for DI registration */
@@ -95,4 +99,6 @@ export const ALL_NODE_HANDLERS = [
   MyOrdersNodeHandler,
   TrackOrderNodeHandler,
   ProductCardNodeHandler,
+  OrderDetailsNodeHandler,
+  PaymentReceiptNodeHandler,
 ];
