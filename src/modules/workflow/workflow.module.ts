@@ -8,9 +8,10 @@ import { WorkflowEventListener } from './engine/workflow-event.listener';
 import { ALL_NODE_HANDLERS } from './engine/node-handlers';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { WabaModule } from '../waba/waba.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
-  imports: [forwardRef(() => WhatsAppModule), forwardRef(() => WabaModule)],
+  imports: [forwardRef(() => WhatsAppModule), forwardRef(() => WabaModule), PromotionsModule],
   controllers: [WorkflowController],
   providers: [
     WorkflowService,

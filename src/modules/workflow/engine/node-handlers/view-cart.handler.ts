@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantConnectionManager } from '../../../../database/tenant-connection.manager';
 import { WhatsAppMessageService } from '../../../whatsapp/whatsapp-message.service';
+import { PromotionsEngine } from '../../../promotions/promotions-engine.service';
 import { NodeHandler, WorkflowNode, WorkflowEdge, ExecutionContext, NodeExecutionResult } from '../workflow-engine.types';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class ViewCartNodeHandler implements NodeHandler {
   constructor(
     private readonly messageService: WhatsAppMessageService,
     private readonly connectionManager: TenantConnectionManager,
+    private readonly promotions: PromotionsEngine,
   ) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
@@ -24,7 +26,7 @@ export class ViewCartNodeHandler implements NodeHandler {
       if (!customerId) return [];
       ctx.customerId = customerId;
       return qr.query(
-        `SELECT p.name AS product_name, ci.unit_price AS price, ci.quantity
+        `SELECT ci.product_id, p.name AS product_name, ci.unit_price AS price, ci.quantity
          FROM cart_items ci
          JOIN carts c ON ci.cart_id = c.id
          JOIN products p ON p.id = ci.product_id
@@ -47,23 +49,51 @@ export class ViewCartNodeHandler implements NodeHandler {
       return next ? { action: 'continue', nextNodeId: next.to } : { action: 'end' };
     }
 
-    let total = 0;
+    let subtotal = 0;
     const lineFmt = cfg.lineFormat || '• {name} × {qty} — {currency}{subtotal}';
     const lines = cartItems.map((item: any) => {
-      const subtotal = item.price * item.quantity;
-      total += subtotal;
+      const lineSub = item.price * item.quantity;
+      subtotal += lineSub;
       return lineFmt
         .replace('{name}', item.product_name)
         .replace('{qty}', String(item.quantity))
         .replace('{currency}', cur)
-        .replace('{subtotal}', String(subtotal))
+        .replace('{subtotal}', String(lineSub))
         .replace('{price}', String(item.price));
     });
 
+    // Auto-apply active offer schemes (discounts + free items) to the cart.
+    const offers = await this.promotions
+      .evaluateCart(
+        ctx.schema,
+        cartItems.map((i: any) => ({ productId: i.product_id, quantity: Number(i.quantity), unitPrice: Number(i.price) })),
+        ctx.customerId,
+      )
+      .catch(() => null);
+    const discount = offers ? Number(offers.discountTotal) || 0 : 0;
+    const freeItems = offers?.freeItems || [];
+    const appliedNames = (offers?.applicable || [])
+      .filter((a) => offers!.recommendedIds.includes(a.schemeId))
+      .map((a) => a.name);
+    const total = Math.max(0, subtotal - discount);
+    ctx.variables.cart_total = total;
+    ctx.variables.cart_subtotal = subtotal;
+    ctx.variables.cart_discount = discount;
+
     const header = cfg.header || '🛒 Your Cart:';
     const totalLabel = cfg.totalLabel || 'Total';
-    const body = `${header}\n${lines.join('\n')}\n\n*${totalLabel}: ${cur}${total}*`;
-    ctx.variables.cart_total = total;
+    let body = `${header}\n${lines.join('\n')}`;
+    if (freeItems.length) {
+      body += '\n' + freeItems.map((f) => `🎁 FREE: ${f.name} × ${f.quantity}`).join('\n');
+    }
+    if (discount > 0 || freeItems.length) {
+      body += `\n\nSubtotal: ${cur}${subtotal}`;
+      if (discount > 0) body += `\n💸 Offer discount: -${cur}${discount}`;
+      if (appliedNames.length) body += `\n_Applied: ${appliedNames.join(', ')}_`;
+      body += `\n*${totalLabel}: ${cur}${total}*`;
+    } else {
+      body += `\n\n*${totalLabel}: ${cur}${total}*`;
+    }
 
     const buttons: Array<{ id: string; title: string }> = [];
     if (cfg.showCheckout !== false) {

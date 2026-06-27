@@ -3,6 +3,7 @@ import { TenantConnectionManager } from '../../../../database/tenant-connection.
 import { WhatsAppApiService } from '../../../whatsapp/whatsapp-api.service';
 import { WhatsAppMessageService } from '../../../whatsapp/whatsapp-message.service';
 import { CommerceSettingsHelper } from '../../../whatsapp/helpers/commerce-settings.helper';
+import { PromotionsEngine } from '../../../promotions/promotions-engine.service';
 import { NodeHandler, WorkflowNode, WorkflowEdge, ExecutionContext, NodeExecutionResult, findNextEdge } from '../workflow-engine.types';
 
 /**
@@ -23,6 +24,7 @@ export class ProductCardNodeHandler implements NodeHandler {
     private readonly messageService: WhatsAppMessageService,
     private readonly connectionManager: TenantConnectionManager,
     private readonly commerceSettings: CommerceSettingsHelper,
+    private readonly promotions: PromotionsEngine,
   ) {}
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
@@ -44,7 +46,9 @@ export class ProductCardNodeHandler implements NodeHandler {
       }
 
       const p = (await qr.query(
-        `SELECT name, description, thumbnail, images, COALESCE(sale_price, base_price) AS price, currency FROM products WHERE id = $1 AND is_active = true`,
+        `SELECT name, description, thumbnail, images, COALESCE(sale_price, base_price) AS price, currency,
+                category_id, brand_id, metadata
+           FROM products WHERE id = $1 AND is_active = true`,
         [productId],
       ))[0];
       if (!p) return null;
@@ -84,7 +88,24 @@ export class ProductCardNodeHandler implements NodeHandler {
     const descLimit = Number(cfg.descriptionLimit) > 0 ? Number(cfg.descriptionLimit) : 350;
     const image = showImage ? (p.thumbnail || (Array.isArray(p.images) && p.images.length ? p.images[0] : null)) : null;
     const cur = cfg.currencySymbol || p.currency || '₹';
-    let body = `*${p.name}*`;
+
+    // Offer badge (best active scheme for this product) + NEW-arrival tag.
+    let badgeLine = '';
+    if (cfg.showOffers !== false) {
+      const badges = await this.promotions.productBadges(ctx.schema).catch(() => null);
+      const offer = badges
+        ? (badges.products[productId] || badges.categories[p.category_id] || badges.brands[p.brand_id] || badges.all || null)
+        : null;
+      const meta = typeof p.metadata === 'string' ? safeJson(p.metadata) : (p.metadata || {});
+      const tags: string[] = Array.isArray(meta.tags) ? meta.tags : [];
+      const isNew = tags.some((t) => /^(new|new[\s-]?arrival)$/i.test(String(t).trim()));
+      const chips: string[] = [];
+      if (isNew) chips.push('🆕 NEW');
+      if (offer) chips.push(`🏷️ ${offer}`);
+      if (chips.length) badgeLine = chips.join('  ') + '\n';
+    }
+
+    let body = `${badgeLine}*${p.name}*`;
     if (showPrice) body += `\n${cur}${p.price}`;
     if (showDescription && p.description) body += `\n\n${String(p.description).substring(0, descLimit)}`;
     if (cartEnabled && qty > 0) {
@@ -158,4 +179,8 @@ export class ProductCardNodeHandler implements NodeHandler {
   private async text(ctx: ExecutionContext, body: string): Promise<void> {
     await this.messageService.logAndSendText(ctx.schema, ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone, ctx.conversationId, body);
   }
+}
+
+function safeJson(s: string): any {
+  try { return s ? JSON.parse(s) : {}; } catch { return {}; }
 }
