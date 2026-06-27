@@ -15,6 +15,7 @@ interface CartLine {
   quantity: number;
   unitPrice: number;
   stock: number | null; // null = custom item (no stock)
+  image?: string | null;
 }
 
 /**
@@ -112,7 +113,10 @@ interface CartLine {
               <div class="space-y-3 mb-3">
                 @for (line of cart(); track $index; let i = $index) {
                   <div class="border border-gray-100 rounded-lg p-3">
-                    <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-start gap-2">
+                      @if (line.image) {
+                        <img [src]="line.image" [alt]="line.name" class="w-10 h-10 rounded-lg object-cover border border-gray-100 flex-shrink-0" loading="lazy" />
+                      }
                       <p class="text-sm font-medium flex-1">
                         {{ line.name }}
                         @if (line.stock === null) { <span class="text-[10px] bg-amber-100 text-amber-700 rounded px-1 ml-1">custom</span> }
@@ -157,12 +161,17 @@ interface CartLine {
                 @if (addFocused() && addResults().length) {
                   <div class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-auto">
                     @for (p of addResults(); track p.id) {
-                      <button class="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 flex items-center justify-between" (click)="addProduct(p)">
-                        <span>
-                          <span class="text-sm font-medium">{{ p.name }}</span>
+                      <button class="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 flex items-center gap-3" (click)="addProduct(p)">
+                        @if (p.thumbnail) {
+                          <img [src]="p.thumbnail" [alt]="p.name" class="w-10 h-10 rounded-lg object-cover border border-gray-100 flex-shrink-0" loading="lazy" />
+                        } @else {
+                          <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><i class="pi pi-box text-gray-300"></i></div>
+                        }
+                        <span class="flex-1 min-w-0">
+                          <span class="text-sm font-medium block truncate">{{ p.name }}</span>
                           <span class="block text-xs text-gray-500">{{ p.brand ? p.brand + ' · ' : '' }}{{ sym() }}{{ p.price | number:'1.0-2' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
                         </span>
-                        <i class="pi pi-plus text-green-600"></i>
+                        <i class="pi pi-plus-circle text-green-600 flex-shrink-0" style="font-size:1.1rem"></i>
                       </button>
                     }
                   </div>
@@ -307,7 +316,7 @@ export class MobileBuilderComponent implements OnInit {
     const cart = [...this.cart()];
     const existing = cart.find((l) => l.productId === p.id);
     if (existing) existing.quantity += 1;
-    else cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock });
+    else cart.push({ productId: p.id, name: p.name, quantity: 1, unitPrice: p.price, stock: p.stock, image: p.thumbnail });
     this.cart.set(cart);
     this.addQuery = '';
     this.addFocused.set(false);
