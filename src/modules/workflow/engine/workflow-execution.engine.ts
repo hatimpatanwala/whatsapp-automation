@@ -47,6 +47,8 @@ import {
   MyOrdersNodeHandler,
   TrackOrderNodeHandler,
   ProductCardNodeHandler,
+  OrderDetailsNodeHandler,
+  PaymentReceiptNodeHandler,
 } from './node-handlers';
 
 const MAX_STEPS = 50;
@@ -92,6 +94,8 @@ export class WorkflowExecutionEngine {
     myOrders: MyOrdersNodeHandler,
     trackOrder: TrackOrderNodeHandler,
     productCard: ProductCardNodeHandler,
+    orderDetails: OrderDetailsNodeHandler,
+    paymentReceipt: PaymentReceiptNodeHandler,
   ) {
     const handlers: NodeHandler[] = [
       sendText, sendButtons, sendList, sendImage, sendTemplate,
@@ -100,6 +104,7 @@ export class WorkflowExecutionEngine {
       searchProducts, filterProducts, paymentQr,
       tagCustomer, updateOrder, assignAgent, httpRequest, setLanguage,
       fallback, startWorkflow, sendQuote, updateQuote, myOrders, trackOrder, productCard,
+      orderDetails, paymentReceipt,
     ];
     this.handlerMap = new Map(handlers.map((h) => [h.nodeType, h]));
   }
