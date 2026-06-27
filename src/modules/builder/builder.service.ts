@@ -486,7 +486,7 @@ export class BuilderService implements OnModuleInit {
       const existing = await qr.query(`SELECT id FROM customers WHERE phone = $1 LIMIT 1`, [phone]);
       if (existing[0]) return existing[0].id;
       const created = await qr.query(
-        `INSERT INTO customers (phone, name, status) VALUES ($1, $2, 'active') RETURNING id`,
+        `INSERT INTO customers (phone, name) VALUES ($1, $2) RETURNING id`,
         [phone, name || phone],
       );
       return created[0].id;
