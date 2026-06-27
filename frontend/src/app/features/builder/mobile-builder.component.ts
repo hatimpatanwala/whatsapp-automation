@@ -81,7 +81,7 @@ interface CartLine {
               </div>
             } @else {
               <div class="relative">
-                <input [(ngModel)]="custQuery" (ngModelChange)="onCustInput($event)" (focus)="custFocused.set(true)"
+                <input [ngModel]="custQuery()" (ngModelChange)="custQuery.set($event); onCustInput()" (focus)="custFocused.set(true)"
                   placeholder="Search customer by name or number…"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 @if (custFocused() && (custResults().length || custSearching() || newCustomerPhone())) {
@@ -205,7 +205,7 @@ interface CartLine {
           </section>
         </main>
 
-        <footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
+        <footer class="fixed inset-x-0 bottom-0 w-full bg-white border-t border-gray-200 shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
           <div class="max-w-2xl mx-auto px-4 py-3">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm text-gray-500">Total ({{ cart().length }} item{{ cart().length === 1 ? '' : 's' }})</span>
@@ -236,7 +236,7 @@ export class MobileBuilderComponent implements OnInit {
   done = signal<{ type: string; number: string } | null>(null);
 
   // Customer picker
-  custQuery = '';
+  custQuery = signal('');
   custResults = signal<BuilderCustomer[]>([]);
   custSearching = signal(false);
   custFocused = signal(false);
@@ -264,7 +264,7 @@ export class MobileBuilderComponent implements OnInit {
   total = computed(() => this.cart().reduce((s, l) => s + l.quantity * l.unitPrice, 0));
 
   newCustomerPhone = computed(() => {
-    const q = this.custQuery.trim();
+    const q = this.custQuery().trim();
     const digits = q.replace(/\D/g, '');
     return digits.length >= 7 && !this.custResults().some((c) => c.phone.replace(/\D/g, '') === digits) ? q : null;
   });
@@ -290,10 +290,10 @@ export class MobileBuilderComponent implements OnInit {
     });
   }
 
-  onCustInput(_: string): void {
+  onCustInput(): void {
     this.custFocused.set(true);
     if (this.custTimer) clearTimeout(this.custTimer);
-    const q = this.custQuery.trim();
+    const q = this.custQuery().trim();
     this.custSearching.set(true);
     this.custTimer = setTimeout(() => {
       this.api.searchCustomers(q).subscribe({
@@ -304,8 +304,8 @@ export class MobileBuilderComponent implements OnInit {
   }
 
   selectCustomer(c: BuilderCustomer): void { this.selectedCustomer.set(c); this.custFocused.set(false); this.custResults.set([]); }
-  useNewCustomer(): void { this.selectedCustomer.set({ id: '', name: '', phone: this.custQuery.trim() }); this.custFocused.set(false); this.custResults.set([]); }
-  clearCustomer(): void { this.selectedCustomer.set(null); this.custQuery = ''; this.custResults.set([]); }
+  useNewCustomer(): void { this.selectedCustomer.set({ id: '', name: '', phone: this.custQuery().trim() }); this.custFocused.set(false); this.custResults.set([]); }
+  clearCustomer(): void { this.selectedCustomer.set(null); this.custQuery.set(''); this.custResults.set([]); }
 
   sym(): string {
     const c = this.products()[0]?.currency || 'INR';
@@ -364,9 +364,9 @@ export class MobileBuilderComponent implements OnInit {
       if (sel && sel.id) customerId = sel.id;
       else if (sel && sel.phone) customer = { phone: sel.phone, name: sel.name };
       else {
-        const digits = this.custQuery.replace(/\D/g, '');
+        const digits = this.custQuery().replace(/\D/g, '');
         if (digits.length < 7) { this.submitError.set('Select a customer or enter a valid phone number.'); return; }
-        customer = { phone: this.custQuery.trim() };
+        customer = { phone: this.custQuery().trim() };
       }
     }
 
