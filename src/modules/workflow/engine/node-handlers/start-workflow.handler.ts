@@ -24,16 +24,20 @@ export class StartWorkflowNodeHandler implements NodeHandler {
       return { action: 'error', message: 'start_workflow: no target workflow configured' };
     }
 
-    // Resolve workflow — try by ID first, then by name
+    // Resolve workflow — try by ID first (only when the identifier is actually a
+    // UUID; otherwise `WHERE id = $1` throws "invalid input syntax for type uuid"
+    // on a name like "View Cart" and aborts before the name fallback), then by name.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workflowIdentifier);
     const workflow = await this.connectionManager.executeInTenantContext(ctx.schema, async (qr) => {
-      // Try UUID match first
-      const byId = await qr.query(
-        `SELECT id FROM workflows WHERE id = $1 AND status = 'active'`,
-        [workflowIdentifier],
-      );
-      if (byId[0]) return byId[0];
+      if (isUuid) {
+        const byId = await qr.query(
+          `SELECT id FROM workflows WHERE id = $1 AND status = 'active'`,
+          [workflowIdentifier],
+        );
+        if (byId[0]) return byId[0];
+      }
 
-      // Fall back to name match
+      // Match by name (case-insensitive)
       const byName = await qr.query(
         `SELECT id FROM workflows WHERE LOWER(name) = LOWER($1) AND status = 'active' LIMIT 1`,
         [workflowIdentifier],

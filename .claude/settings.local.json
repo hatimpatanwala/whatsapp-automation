@@ -182,7 +182,8 @@
       "PowerShell(Head *)",
       "Bash(git pull *)",
       "Bash(git merge *)",
-      "Bash(grep -nE \"workflows = signal|editingWorkflow = signal|import \\\\{ Component|signal, computed|computed|loading = signal\" /d/whatsapp-automation/frontend/src/app/features/workflow-builder/workflow-builder.component.ts)"
+      "Bash(grep -nE \"workflows = signal|editingWorkflow = signal|import \\\\{ Component|signal, computed|computed|loading = signal\" /d/whatsapp-automation/frontend/src/app/features/workflow-builder/workflow-builder.component.ts)",
+      "Bash(grep -iE \"\\\\.ts$\")"
     ]
   }
 }
