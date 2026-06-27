@@ -8,7 +8,7 @@ import { buildWelcomeHub, buildDefaultSpokes, buildDefaultNotifications } from '
  * added spokes/notifications on their next workflow-list load (by-name dedupe
  * keeps any admin edits intact).
  */
-const DEFAULT_WORKFLOWS_VERSION = 5;
+const DEFAULT_WORKFLOWS_VERSION = 6;
 
 export interface CreateWorkflowDto {
   name: string;
@@ -96,6 +96,21 @@ export class WorkflowService {
           const dup = await qr.query(`SELECT id FROM workflows WHERE LOWER(name) = LOWER($1) LIMIT 1`, [note.name]);
           if (dup.length) continue;
           await insert(note, {});
+        }
+
+        // v6 upgrade: rewire the existing Browse Products + View Cart spokes to
+        // open the storefront webview (open_shop). Existing tenants kept their
+        // old chat-based definitions (by-name dedup skips them on re-seed), so
+        // replace those two spokes' nodes/edges in place.
+        if (seededVersion > 0 && seededVersion < 6) {
+          const rewire = buildDefaultSpokes().filter((s) => s.name === 'Browse Products' || s.name === 'View Cart');
+          for (const s of rewire) {
+            await qr.query(
+              `UPDATE workflows SET nodes = $1::jsonb, edges = $2::jsonb, description = $3, updated_at = NOW()
+                WHERE LOWER(name) = LOWER($4)`,
+              [JSON.stringify(s.nodes), JSON.stringify(s.edges), s.description, s.name],
+            );
+          }
         }
 
         await qr.query(

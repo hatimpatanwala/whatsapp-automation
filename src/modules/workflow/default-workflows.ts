@@ -64,36 +64,17 @@ export function buildDefaultSpokes(): DefaultWorkflowDef[] {
       edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
     },
 
-    // ── 1. Browse Products — All / By Category / By Brand → product card → cart ──
+    // ── 1. Browse Products — opens the storefront webview at the catalog ──
     {
       name: 'Browse Products',
-      description: 'Browse the catalog by all products, category, or brand, then add to cart.',
+      description: 'Opens the storefront webview to browse products, build a cart and checkout.',
       menuItem: { label: '🛍️ Browse Products', order: 1 },
       trigger: { type: 'trigger_message', keywords: 'browse,catalog,products,shop now', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Browse', x: 300, y: 40, config: { keywords: 'browse,catalog,products,shop now', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'send_buttons', label: 'How to Browse', x: 300, y: 180, config: { message: '🛍️ How would you like to browse?', buttons: [{ id: 'br_all', title: '🛍️ All Products' }, { id: 'br_cat', title: '📂 By Category' }, { id: 'br_brand', title: '🏷️ By Brand' }] }, outputs: ['n3', 'n5', 'n7'] },
-        { id: 'n3', type: 'show_catalog', label: 'All Products', x: 80, y: 340, config: { maxProducts: 10, sortBy: 'newest', header: 'Browse our products:' }, outputs: ['n4'] },
-        { id: 'n4', type: 'product_card', label: 'Product Card', x: 300, y: 500, config: {}, outputs: [] },
-        { id: 'n5', type: 'send_list', label: 'Pick Category', x: 300, y: 340, config: { message: '📂 Pick a category:', buttonText: 'Categories', source: 'categories' }, outputs: ['n6'] },
-        { id: 'n6', type: 'show_catalog', label: 'Category Products', x: 300, y: 420, config: { maxProducts: 10, sortBy: 'newest', useSelectedCategory: true, header: 'Products in this category:' }, outputs: ['n4'] },
-        { id: 'n7', type: 'send_list', label: 'Pick Brand', x: 520, y: 340, config: { message: '🏷️ Pick a brand:', buttonText: 'Brands', source: 'brands' }, outputs: ['n8'] },
-        { id: 'n8', type: 'show_catalog', label: 'Brand Products', x: 520, y: 420, config: { maxProducts: 10, sortBy: 'newest', useSelectedBrand: true, header: 'Products from this brand:' }, outputs: ['n4'] },
-        { id: 'n9', type: 'start_workflow', label: 'Open Cart', x: 520, y: 500, config: { workflowName: 'View Cart', passVariables: true }, outputs: [] },
+        { id: 'n2', type: 'open_shop', label: 'Open Store', x: 300, y: 200, config: { message: '🛍️ Tap below to browse our store — add items to your cart and checkout, all in one place.', buttonLabel: '🛒 Browse Store' }, outputs: [] },
       ],
-      edges: [
-        { id: 'e1', from: 'n1', to: 'n2' },
-        { id: 'e2', from: 'n2', to: 'n3' },   // br_all
-        { id: 'e3', from: 'n2', to: 'n5' },   // br_cat
-        { id: 'e4', from: 'n2', to: 'n7' },   // br_brand
-        { id: 'e5', from: 'n3', to: 'n4' },
-        { id: 'e6', from: 'n5', to: 'n6' },
-        { id: 'e7', from: 'n6', to: 'n4' },
-        { id: 'e8', from: 'n7', to: 'n8' },
-        { id: 'e9', from: 'n8', to: 'n4' },
-        { id: 'e10', from: 'n4', to: 'n9', label: 'view' },   // View Cart button
-        { id: 'e11', from: 'n4', to: 'n2', label: 'back' },   // Keep Shopping
-      ],
+      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
     },
 
     // ── 2. Search Products — type a name → results → product card → cart ──
@@ -119,25 +100,17 @@ export function buildDefaultSpokes(): DefaultWorkflowDef[] {
       ],
     },
 
-    // ── 3. View Cart & Checkout — cart → checkout (emits order event) → close ──
+    // ── 3. View Cart & Checkout — opens the storefront webview at the cart ──
     {
       name: 'View Cart',
-      description: 'Show the cart, checkout to place the order, or keep shopping.',
+      description: 'Opens the storefront webview at the cart to review items and checkout.',
       menuItem: { label: '🛒 View Cart & Checkout', order: 3 },
       trigger: { type: 'trigger_message', keywords: 'cart,my cart,view cart,checkout', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Cart', x: 300, y: 40, config: { keywords: 'cart,my cart,view cart,checkout', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'view_cart', label: 'View Cart', x: 300, y: 190, config: { header: '🛒 Your Cart', showCheckout: true, showClear: false, checkoutLabel: 'Checkout', continueLabel: 'Continue Shopping', emptyMessage: 'Your cart is empty. Send *browse* to add items!' }, outputs: ['n3', 'n5'] },
-        { id: 'n3', type: 'checkout', label: 'Place Order', x: 160, y: 360, config: {}, outputs: ['n4'] },
-        { id: 'n4', type: 'send_text', label: 'Order Placed', x: 160, y: 520, config: { message: '🎉 Thank you, {{customer_name}}! You’ll get order updates right here.\nReply *menu* anytime. 🛍️' }, outputs: [] },
-        { id: 'n5', type: 'start_workflow', label: 'Keep Shopping', x: 440, y: 360, config: { workflowName: 'Browse Products', passVariables: true }, outputs: [] },
+        { id: 'n2', type: 'open_shop', label: 'Open Cart', x: 300, y: 200, config: { startView: 'cart', message: '🛒 Tap below to review your cart and checkout.', buttonLabel: '🛒 View Cart' }, outputs: [] },
       ],
-      edges: [
-        { id: 'e1', from: 'n1', to: 'n2' },
-        { id: 'e2', from: 'n2', to: 'n3', label: 'Checkout' },
-        { id: 'e3', from: 'n2', to: 'n5', label: 'Continue Shopping' },
-        { id: 'e4', from: 'n3', to: 'n4' },
-      ],
+      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
     },
 
     // ── 4. My Orders ──

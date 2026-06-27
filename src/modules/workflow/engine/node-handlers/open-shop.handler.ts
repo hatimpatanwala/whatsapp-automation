@@ -44,13 +44,15 @@ export class OpenShopNodeHandler implements NodeHandler {
       }
       if (!tenantId) throw new Error('No tenant id for shop session');
 
-      const { url } = await this.builder.createShopSession({
+      const { url: baseUrl } = await this.builder.createShopSession({
         tenantId,
         schemaName: ctx.schema,
         customerId: customerId || null,
         customerPhone: ctx.customerPhone || null,
         customerName: ctx.customerName || null,
       });
+      // Deep-link to a specific view (e.g. 'cart') when configured.
+      const url = cfg.startView ? `${baseUrl}&view=${encodeURIComponent(cfg.startView)}` : baseUrl;
 
       const body = resolveTemplate(cfg.message || '🛍️ Tap below to browse our store, build your cart and checkout — all in one place.', ctx);
       const buttonText = (cfg.buttonLabel || '🛒 Open Store').slice(0, 20);

@@ -326,6 +326,8 @@ export class ShopWebviewComponent implements OnInit {
   ngOnInit(): void {
     const t = this.route.snapshot.queryParamMap.get('token') || '';
     this.token.set(t);
+    const startView = this.route.snapshot.queryParamMap.get('view');
+    if (startView === 'cart') this.view.set('cart');
     if (!t) { this.loading.set(false); return; }
     this.http.get<any>(`${this.base}/m/shop/bootstrap`, this.opts()).subscribe({
       next: (r) => {
