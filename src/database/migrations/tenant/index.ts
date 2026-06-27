@@ -1155,6 +1155,60 @@ const migration041Coupons: TenantMigration = {
   },
 };
 
+const migration042Loyalty: TenantMigration = {
+  name: '042_loyalty',
+  async up(qr, schema) {
+    // Per-customer accrual toward each cumulative (loyalty) scheme.
+    //  conditions: { metric:'spend'|'orders', target, period:'lifetime'|'monthly', minOrderValue? }
+    //  reward:     { type:'coupon', discountType, discountValue, maxDiscount?, validDays? }
+    //  period_key: 'lifetime' or 'YYYY-MM' — keeps monthly windows separate.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".loyalty_progress (
+        scheme_id UUID NOT NULL REFERENCES "${schema}".schemes(id) ON DELETE CASCADE,
+        customer_id UUID NOT NULL,
+        period_key VARCHAR(16) NOT NULL DEFAULT 'lifetime',
+        progress NUMERIC(14,2) NOT NULL DEFAULT 0,
+        awards INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (scheme_id, customer_id, period_key)
+      )
+    `);
+
+    // One order accrues at most once per scheme (idempotent re-delivery guard).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".loyalty_accruals (
+        scheme_id UUID NOT NULL REFERENCES "${schema}".schemes(id) ON DELETE CASCADE,
+        order_id UUID NOT NULL,
+        customer_id UUID NOT NULL,
+        amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (scheme_id, order_id)
+      )
+    `);
+
+    // Every reward granted to a customer (for history + the WhatsApp message).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".scheme_awards (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        scheme_id UUID NOT NULL REFERENCES "${schema}".schemes(id) ON DELETE CASCADE,
+        customer_id UUID NOT NULL,
+        order_id UUID,
+        period_key VARCHAR(16) NOT NULL DEFAULT 'lifetime',
+        reward JSONB NOT NULL DEFAULT '{}',
+        coupon_id UUID,
+        coupon_code VARCHAR(40),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_scheme_awards_customer ON "${schema}".scheme_awards (customer_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".scheme_awards CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".loyalty_accruals CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".loyalty_progress CASCADE`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1197,4 +1251,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration039ProductUom,
   migration040Schemes,
   migration041Coupons,
+  migration042Loyalty,
 ];

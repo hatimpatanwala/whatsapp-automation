@@ -77,10 +77,11 @@ interface Cust { id: string; name: string; phone: string; }
                     </div>
                     <p class="text-xs text-gray-500 mt-0.5">{{ describe(s) }}</p>
                     <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                      @if (s.type === 'cumulative') { <span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">⭐ Loyalty</span> }
                       @if (s.targetedCount > 0) {
                         <span class="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">👤 {{ s.targetedCount }} customer(s)</span>
                       }
-                      @if (!s.combinable) { <span class="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">exclusive</span> }
+                      @if (s.type !== 'cumulative' && !s.combinable) { <span class="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">exclusive</span> }
                       @if (s.weight) { <span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">priority {{ s.weight }}</span> }
                     </div>
                   </div>
@@ -151,13 +152,80 @@ interface Cust { id: string; name: string; phone: string; }
                 <input [(ngModel)]="form.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. Diwali 10% off" />
               </div>
               <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Offer kind *</label>
+                <select [(ngModel)]="form.kind" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="instant">Instant — applied at checkout</option>
+                  <option value="cumulative">⭐ Loyalty — earn a reward over time</option>
+                </select>
+              </div>
+
+              @if (!isLoyalty()) {
+              <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Offer type *</label>
                 <select [(ngModel)]="form.action" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
                   @for (a of actionTypes; track a.value) { <option [value]="a.value">{{ a.label }}</option> }
                 </select>
               </div>
+              }
 
-              @if (isDiscount()) {
+              <!-- ── Loyalty / cumulative fields ── -->
+              @if (isLoyalty()) {
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
+                  <p class="text-xs text-amber-800">⭐ Customers accrue toward a target as they order. When they reach it, they automatically get a personal coupon over WhatsApp.</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Track</label>
+                      <select [(ngModel)]="form.metric" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                        <option value="spend">Total spend (₹)</option>
+                        <option value="orders">Number of orders</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">{{ form.metric === 'orders' ? 'Orders target *' : 'Spend target (₹) *' }}</label>
+                      <input type="number" [(ngModel)]="form.target" inputmode="numeric" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Window</label>
+                      <select [(ngModel)]="form.period" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                        <option value="lifetime">Lifetime</option>
+                        <option value="monthly">Every month</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Min order to count <span class="text-gray-300">(opt)</span></label>
+                      <input type="number" [(ngModel)]="form.minOrderValue" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="₹" />
+                    </div>
+                  </div>
+                  <p class="text-xs font-semibold text-amber-800 pt-1">🎁 Reward coupon</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Type</label>
+                      <select [(ngModel)]="form.rDiscountType" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                        <option value="percent">Percent (%)</option>
+                        <option value="amount">Flat amount (₹)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Value *</label>
+                      <input type="number" [(ngModel)]="form.rDiscountValue" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Max discount cap <span class="text-gray-300">(opt)</span></label>
+                      <input type="number" [(ngModel)]="form.rMaxDiscount" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="₹" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-500 mb-1">Coupon valid for (days)</label>
+                      <input type="number" [(ngModel)]="form.rValidDays" inputmode="numeric" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                </div>
+              }
+
+              @if (!isLoyalty() && isDiscount()) {
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Discount type</label>
@@ -179,7 +247,7 @@ interface Cust { id: string; name: string; phone: string; }
                 }
               }
 
-              @if (isFree()) {
+              @if (!isLoyalty() && isFree()) {
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Buy quantity *</label>
@@ -201,6 +269,7 @@ interface Cust { id: string; name: string; phone: string; }
                 }
               }
 
+              @if (!isLoyalty()) {
               <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Applies to</label>
                 <select [(ngModel)]="form.scope" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
@@ -228,6 +297,7 @@ interface Cust { id: string; name: string; phone: string; }
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Minimum cart value <span class="text-gray-300">(optional)</span></label>
                 <input type="number" [(ngModel)]="form.minCartValue" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. 1000" />
               </div>
+              }
 
               <!-- Audience targeting -->
               <div>
@@ -269,10 +339,12 @@ interface Cust { id: string; name: string; phone: string; }
                   <label class="block text-xs font-semibold text-gray-500 mb-1">Priority <span class="text-gray-300">(higher wins)</span></label>
                   <input type="number" [(ngModel)]="form.weight" inputmode="numeric" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 </div>
-                <label class="flex items-center gap-2 text-sm pb-2">
-                  <input type="checkbox" [(ngModel)]="form.combinable" />
-                  <span>Can stack with other offers</span>
-                </label>
+                @if (!isLoyalty()) {
+                  <label class="flex items-center gap-2 text-sm pb-2">
+                    <input type="checkbox" [(ngModel)]="form.combinable" />
+                    <span>Can stack with other offers</span>
+                  </label>
+                }
               </div>
             </div>
             <div class="sticky bottom-0 bg-white px-4 py-3 border-t flex gap-2">
@@ -492,6 +564,7 @@ export class PromoWebviewComponent implements OnInit {
     customerIds: s.customerIds ?? s.customer_ids ?? [],
     targetedCount: s.targetedCount ?? s.targeted_count ?? 0,
     conditions: typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {}),
+    reward: typeof s.reward === 'string' ? JSON.parse(s.reward) : (s.reward || {}),
     validFrom: s.validFrom ?? s.valid_from ?? null,
     validUntil: s.validUntil ?? s.valid_until ?? null,
   });
@@ -512,19 +585,27 @@ export class PromoWebviewComponent implements OnInit {
   // ─── Scheme form ───────────────────────────────────────────────────────────
   blankForm() {
     return {
-      id: '', name: '', action: 'discount',
+      id: '', name: '', kind: 'instant', action: 'discount',
       discountType: 'percent', discountValue: 10,
       scope: 'all', scopeIds: [] as string[], minQty: null, minCartValue: null,
       buyQty: 2, getQty: 1, getProductId: '',
       audience: 'all', customerIds: [] as string[],
       weight: 0, combinable: false, validFrom: '', validUntil: '',
+      // Loyalty (cumulative) fields
+      metric: 'spend', target: 10000, period: 'lifetime', minOrderValue: null,
+      rDiscountType: 'percent', rDiscountValue: 10, rMaxDiscount: null, rValidDays: 30,
     };
   }
 
+  isLoyalty(): boolean { return this.form.kind === 'cumulative'; }
+
   valid(): boolean {
     if (!this.form.name?.trim()) return false;
-    if (this.form.scope !== 'all' && !this.form.scopeIds.length) return false;
     if (this.form.audience === 'specific' && !this.form.customerIds.length) return false;
+    if (this.isLoyalty()) {
+      return Number(this.form.target) > 0 && Number(this.form.rDiscountValue) > 0;
+    }
+    if (this.form.scope !== 'all' && !this.form.scopeIds.length) return false;
     if (this.isDiscount()) return Number(this.form.discountValue) > 0;
     if (this.form.action === 'buy_x_get_x_free') return Number(this.form.buyQty) > 0 && Number(this.form.getQty) > 0;
     if (this.form.action === 'buy_x_get_y_free') return Number(this.form.buyQty) > 0 && Number(this.form.getQty) > 0 && !!this.form.getProductId;
@@ -535,8 +616,10 @@ export class PromoWebviewComponent implements OnInit {
 
   openEdit(s: any) {
     const c = s.conditions || {};
+    const r = s.reward || {};
     this.form = {
-      id: s.id, name: s.name, action: s.action || 'discount',
+      id: s.id, name: s.name, kind: s.type === 'cumulative' ? 'cumulative' : 'instant',
+      action: s.action || 'discount',
       discountType: c.discountType || 'percent', discountValue: c.discountValue ?? 0,
       scope: s.scope, scopeIds: [...(s.scopeIds || [])],
       minQty: c.minQty ?? null, minCartValue: c.minCartValue ?? null,
@@ -544,12 +627,16 @@ export class PromoWebviewComponent implements OnInit {
       audience: s.audience || 'all', customerIds: [...(s.customerIds || [])],
       weight: s.weight ?? 0, combinable: !!s.combinable,
       validFrom: (s.validFrom || '').slice(0, 10), validUntil: (s.validUntil || '').slice(0, 10),
+      metric: c.metric || 'spend', target: c.target ?? 10000, period: c.period || 'lifetime', minOrderValue: c.minOrderValue ?? null,
+      rDiscountType: r.discountType || 'percent', rDiscountValue: r.discountValue ?? 10,
+      rMaxDiscount: r.maxDiscount ?? null, rValidDays: r.validDays ?? 30,
     };
     this.custFilter = '';
     this.dialogOpen = true;
   }
 
   save() {
+    if (this.isLoyalty()) return this.saveLoyalty();
     const conditions: any = {};
     if (this.isDiscount()) {
       conditions.discountType = this.form.discountType;
@@ -579,6 +666,31 @@ export class PromoWebviewComponent implements OnInit {
     });
   }
 
+  private saveLoyalty() {
+    const conditions: any = {
+      metric: this.form.metric, target: Number(this.form.target) || 0, period: this.form.period,
+    };
+    if (this.form.minOrderValue) conditions.minOrderValue = Number(this.form.minOrderValue);
+    const reward: any = {
+      type: 'coupon', discountType: this.form.rDiscountType, discountValue: Number(this.form.rDiscountValue) || 0,
+      validDays: Number(this.form.rValidDays) || 30,
+    };
+    if (this.form.rMaxDiscount) reward.maxDiscount = Number(this.form.rMaxDiscount);
+    const payload: any = {
+      name: this.form.name.trim(), type: 'cumulative', action: 'loyalty', scope: 'all', scopeIds: [],
+      conditions, reward, weight: Number(this.form.weight) || 0, combinable: false,
+      audience: this.form.audience, customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
+      validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null, status: 'active',
+    };
+    this.saving.set(true);
+    const url = `${this.base}/m/promotions/schemes${this.form.id ? '/' + this.form.id : ''}`;
+    const req = this.form.id ? this.http.put<any>(url, payload, this.opts()) : this.http.post<any>(url, payload, this.opts());
+    req.subscribe({
+      next: () => { this.saving.set(false); this.dialogOpen = false; this.reloadSchemes(); this.toast('Loyalty offer saved ✓'); },
+      error: (e) => { this.saving.set(false); this.toast(e?.error?.message || 'Could not save offer.'); },
+    });
+  }
+
   toggle(s: any) {
     this.http.patch<any>(`${this.base}/m/promotions/schemes/${s.id}/status`, { status: s.status === 'active' ? 'paused' : 'active' }, this.opts())
       .subscribe({ next: () => this.reloadSchemes() });
@@ -591,16 +703,25 @@ export class PromoWebviewComponent implements OnInit {
 
   badge(s: any): string {
     const c = s.conditions || {};
+    if (s.type === 'cumulative') {
+      const r = s.reward || {};
+      return r.discountType === 'amount' ? `₹${r.discountValue} reward` : `${r.discountValue || 0}% reward`;
+    }
     if (s.action === 'buy_x_get_x_free') return `Buy ${c.buyQty || 1} Get ${c.getQty || 1}`;
     if (s.action === 'buy_x_get_y_free') return `🎁 Free`;
     return c.discountType === 'amount' ? `₹${c.discountValue} OFF` : `${c.discountValue || 0}% OFF`;
   }
   describe(s: any): string {
+    const c = s.conditions || {};
+    if (s.type === 'cumulative') {
+      const tgt = c.metric === 'orders' ? `${c.target} orders` : `₹${c.target} spent`;
+      const win = c.period === 'monthly' ? '/month' : ' (lifetime)';
+      return `⭐ Loyalty · reach ${tgt}${win} → earn a coupon`;
+    }
     const scopeText = s.scope === 'all' ? 'all products'
       : s.scope === 'category' ? `${(s.scopeIds || []).length} category(ies)`
       : s.scope === 'brand' ? `${(s.scopeIds || []).length} brand(s)`
       : `${(s.scopeIds || []).length} product(s)`;
-    const c = s.conditions || {};
     let action = '';
     if (s.action === 'buy_x_get_x_free') action = `Buy ${c.buyQty || 1} get ${c.getQty || 1} free · `;
     else if (s.action === 'buy_x_get_y_free') action = `Buy ${c.buyQty || 1} → free gift · `;

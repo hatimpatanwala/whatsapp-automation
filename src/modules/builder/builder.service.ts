@@ -365,7 +365,7 @@ export class BuilderService implements OnModuleInit {
     return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
       const rows = await qr.query(
         `SELECT p.id, p.name, p.base_price, p.sale_price, p.currency, p.thumbnail, p.gst_rate,
-                p.uom, p.hsn_code, p.slug, p.category_id, p.brand_id,
+                p.uom, p.hsn_code, p.slug, p.category_id, p.brand_id, p.metadata,
                 b.name AS brand_name,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity
            FROM products p
@@ -374,23 +374,29 @@ export class BuilderService implements OnModuleInit {
           WHERE p.is_active = true
           ORDER BY p.sort_order ASC NULLS LAST, p.name ASC`,
       );
-      return rows.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        brand: r.brand_name || null,
-        sku: r.slug || null,
-        price: Number(r.sale_price ?? r.base_price ?? 0),
-        basePrice: Number(r.base_price ?? 0),
-        currency: r.currency || 'INR',
-        thumbnail: r.thumbnail || null,
-        stock: Number(r.stock_quantity ?? 0),
-        gstRate: Number(r.gst_rate ?? 0),
-        uom: r.uom || 'pcs',
-        hsnCode: r.hsn_code || null,
-        offer: badges
-          ? (badges.products[r.id] || badges.categories[r.category_id] || badges.brands[r.brand_id] || badges.all || null)
-          : null,
-      }));
+      return rows.map((r: any) => {
+        const meta = typeof r.metadata === 'string' ? safeJson(r.metadata) : (r.metadata || {});
+        const tags: string[] = Array.isArray(meta.tags) ? meta.tags : [];
+        return {
+          id: r.id,
+          name: r.name,
+          brand: r.brand_name || null,
+          sku: r.slug || null,
+          price: Number(r.sale_price ?? r.base_price ?? 0),
+          basePrice: Number(r.base_price ?? 0),
+          currency: r.currency || 'INR',
+          thumbnail: r.thumbnail || null,
+          stock: Number(r.stock_quantity ?? 0),
+          gstRate: Number(r.gst_rate ?? 0),
+          uom: r.uom || 'pcs',
+          hsnCode: r.hsn_code || null,
+          tags,
+          isNew: tags.some((t) => /^(new|new[\s-]?arrival)$/i.test(String(t).trim())),
+          offer: badges
+            ? (badges.products[r.id] || badges.categories[r.category_id] || badges.brands[r.brand_id] || badges.all || null)
+            : null,
+        };
+      });
     });
   }
 
@@ -575,4 +581,8 @@ export class BuilderService implements OnModuleInit {
       return created[0].id;
     });
   }
+}
+
+function safeJson(s: string): any {
+  try { return s ? JSON.parse(s) : {}; } catch { return {}; }
 }

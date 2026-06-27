@@ -32,6 +32,8 @@ export interface BuilderProduct {
   uom?: string;
   hsnCode?: string | null;
   offer?: string | null;
+  tags?: string[];
+  isNew?: boolean;
 }
 
 export interface BuilderFreeItem {

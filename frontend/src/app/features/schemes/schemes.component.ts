@@ -98,7 +98,8 @@ import { ApiService } from '../../core/services/api.service';
                   <div class="flex items-center gap-2 flex-wrap">
                     <h3 class="font-semibold text-gray-900 truncate">{{ s.name }}</h3>
                     <p-tag [value]="s.status" [severity]="s.status === 'active' ? 'success' : 'secondary'" styleClass="text-xs capitalize" />
-                    @if (s.combinable) { <span class="text-[10px] bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">combinable</span> }
+                    @if (s.type === 'cumulative') { <span class="text-[10px] bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 font-semibold">⭐ Loyalty</span> }
+                    @if (s.type !== 'cumulative' && s.combinable) { <span class="text-[10px] bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">combinable</span> }
                   </div>
                   <p class="text-sm text-gray-500 mt-1">{{ describe(s) }}</p>
                   <p class="text-xs text-gray-400 mt-2">Priority weight: {{ s.weight }}{{ s.audience === 'specific' ? ' · targeted' : '' }}</p>
@@ -128,11 +129,66 @@ import { ApiService } from '../../core/services/api.service';
           </div>
 
           <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Offer kind *</label>
+            <p-select [(ngModel)]="form.kind" [options]="kinds" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+          </div>
+
+          @if (!isLoyalty()) {
+          <div>
             <label class="block text-xs font-semibold text-gray-500 mb-1">Offer type *</label>
             <p-select [(ngModel)]="form.action" [options]="actionTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
           </div>
+          }
 
-          @if (isDiscount()) {
+          <!-- ── Loyalty / cumulative fields ── -->
+          @if (isLoyalty()) {
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+              <p class="text-xs text-amber-800">⭐ Customers accrue toward a target as they order. When reached, they automatically receive a personal coupon over WhatsApp.</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Track</label>
+                  <p-select [(ngModel)]="form.metric" [options]="metrics" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">{{ form.metric === 'orders' ? '# Orders target *' : 'Spend target ₹ *' }}</label>
+                  <p-inputNumber [(ngModel)]="form.target" [min]="1" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Window</label>
+                  <p-select [(ngModel)]="form.period" [options]="periods" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Min order to count ₹ <span class="text-gray-300">(opt)</span></label>
+                  <p-inputNumber [(ngModel)]="form.minOrderValue" [min]="0" styleClass="w-full" inputStyleClass="w-full" placeholder="0" />
+                </div>
+              </div>
+              <p class="text-xs font-semibold text-amber-800 pt-1">🎁 Reward coupon</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Type</label>
+                  <p-select [(ngModel)]="form.rDiscountType" [options]="discountTypes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">{{ form.rDiscountType === 'amount' ? 'Amount ₹ *' : 'Percent % *' }}</label>
+                  <p-inputNumber [(ngModel)]="form.rDiscountValue" [min]="0" [max]="form.rDiscountType === 'percent' ? 100 : 9999999" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Max discount cap ₹ <span class="text-gray-300">(opt)</span></label>
+                  <p-inputNumber [(ngModel)]="form.rMaxDiscount" [min]="0" styleClass="w-full" inputStyleClass="w-full" placeholder="no cap" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Coupon valid (days)</label>
+                  <p-inputNumber [(ngModel)]="form.rValidDays" [min]="1" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (!isLoyalty() && isDiscount()) {
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Discount type</label>
@@ -144,7 +200,7 @@ import { ApiService } from '../../core/services/api.service';
               </div>
             </div>
           }
-          @if (isFree()) {
+          @if (!isLoyalty() && isFree()) {
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Buy qty *</label>
@@ -156,13 +212,14 @@ import { ApiService } from '../../core/services/api.service';
               </div>
             </div>
           }
-          @if (form.action === 'buy_x_get_y_free') {
+          @if (!isLoyalty() && form.action === 'buy_x_get_y_free') {
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Free product (gift) *</label>
               <p-select [(ngModel)]="form.getProductId" [options]="products()" optionLabel="name" optionValue="id" placeholder="Choose the free product" styleClass="w-full" appendTo="body" [filter]="true" />
             </div>
           }
 
+          @if (!isLoyalty()) {
           <div>
             <label class="block text-xs font-semibold text-gray-500 mb-1">{{ isFree() ? 'Buy from' : 'Applies to' }}</label>
             <p-select [(ngModel)]="form.scope" [options]="scopes" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" (onChange)="form.scopeIds = []" />
@@ -185,6 +242,7 @@ import { ApiService } from '../../core/services/api.service';
               <p-inputNumber [(ngModel)]="form.minCartValue" [min]="0" styleClass="w-full" inputStyleClass="w-full" placeholder="0" />
             </div>
           </div>
+          }
 
           <div class="grid grid-cols-2 gap-3 items-end">
             <div>
@@ -192,10 +250,12 @@ import { ApiService } from '../../core/services/api.service';
               <p-inputNumber [(ngModel)]="form.weight" [min]="0" styleClass="w-full" inputStyleClass="w-full" />
               <p class="text-[10px] text-gray-400 mt-1">Higher wins when offers don't combine.</p>
             </div>
+            @if (!isLoyalty()) {
             <div class="flex items-center gap-2 pb-2">
               <p-toggleSwitch [(ngModel)]="form.combinable" />
               <span class="text-sm text-gray-600">Combine with other offers</span>
             </div>
+            }
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -321,6 +381,19 @@ export class SchemesComponent implements OnInit {
     { label: 'Buy X get another product free', value: 'buy_x_get_y_free' },
     { label: 'Buy N+ qty → discount', value: 'qty_discount' },
   ];
+  kinds = [
+    { label: 'Instant — applied at checkout', value: 'instant' },
+    { label: '⭐ Loyalty — earn a reward over time', value: 'cumulative' },
+  ];
+  metrics = [
+    { label: 'Total spend (₹)', value: 'spend' },
+    { label: 'Number of orders', value: 'orders' },
+  ];
+  periods = [
+    { label: 'Lifetime', value: 'lifetime' },
+    { label: 'Every month', value: 'monthly' },
+  ];
+  isLoyalty(): boolean { return this.form.kind === 'cumulative'; }
   isDiscount(): boolean { return ['discount', 'qty_discount'].includes(this.form.action); }
   isFree(): boolean { return ['buy_x_get_x_free', 'buy_x_get_y_free'].includes(this.form.action); }
   scopes = [
@@ -353,22 +426,26 @@ export class SchemesComponent implements OnInit {
     ...s,
     scopeIds: s.scopeIds ?? s.scope_ids ?? [],
     conditions: typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {}),
+    reward: typeof s.reward === 'string' ? JSON.parse(s.reward) : (s.reward || {}),
     validFrom: s.validFrom ?? s.valid_from ?? null,
     validUntil: s.validUntil ?? s.valid_until ?? null,
   });
 
   blankForm() {
     return {
-      id: '', name: '', description: '', action: 'discount',
+      id: '', name: '', description: '', kind: 'instant', action: 'discount',
       discountType: 'percent', discountValue: 10,
       scope: 'all', scopeIds: [] as string[], minQty: null, minCartValue: null,
       buyQty: 2, getQty: 1, getProductId: '',
       weight: 0, combinable: false, validFrom: '', validUntil: '',
+      metric: 'spend', target: 10000, period: 'lifetime', minOrderValue: null,
+      rDiscountType: 'percent', rDiscountValue: 10, rMaxDiscount: null, rValidDays: 30,
     };
   }
 
   valid(): boolean {
     if (!this.form.name?.trim()) return false;
+    if (this.isLoyalty()) return Number(this.form.target) > 0 && Number(this.form.rDiscountValue) > 0;
     if (this.form.scope !== 'all' && !(this.form.scopeIds && this.form.scopeIds.length > 0)) return false;
     if (this.isDiscount()) return Number(this.form.discountValue) > 0;
     if (this.form.action === 'buy_x_get_x_free') return Number(this.form.buyQty) > 0 && Number(this.form.getQty) > 0;
@@ -380,19 +457,25 @@ export class SchemesComponent implements OnInit {
 
   openEdit(s: Scheme) {
     const c = s.conditions || {};
+    const r = (s as any).reward || {};
     this.form = {
-      id: s.id, name: s.name, description: s.description || '', action: s.action || 'discount',
+      id: s.id, name: s.name, description: s.description || '',
+      kind: s.type === 'cumulative' ? 'cumulative' : 'instant', action: s.action || 'discount',
       discountType: c.discountType || 'percent', discountValue: c.discountValue ?? 0,
       scope: s.scope, scopeIds: [...(s.scopeIds || [])],
       minQty: c.minQty ?? null, minCartValue: c.minCartValue ?? null,
       buyQty: c.buyQty ?? 2, getQty: c.getQty ?? 1, getProductId: c.getProductId || '',
       weight: s.weight ?? 0, combinable: !!s.combinable,
       validFrom: (s.validFrom || '').slice(0, 10), validUntil: (s.validUntil || '').slice(0, 10),
+      metric: c.metric || 'spend', target: c.target ?? 10000, period: c.period || 'lifetime', minOrderValue: c.minOrderValue ?? null,
+      rDiscountType: r.discountType || 'percent', rDiscountValue: r.discountValue ?? 10,
+      rMaxDiscount: r.maxDiscount ?? null, rValidDays: r.validDays ?? 30,
     };
     this.dialogOpen = true;
   }
 
   save() {
+    if (this.isLoyalty()) return this.saveLoyalty();
     const conditions: any = {};
     if (this.isDiscount()) {
       conditions.discountType = this.form.discountType;
@@ -424,6 +507,30 @@ export class SchemesComponent implements OnInit {
     });
   }
 
+  private saveLoyalty() {
+    const conditions: any = {
+      metric: this.form.metric, target: Number(this.form.target) || 0, period: this.form.period,
+    };
+    if (this.form.minOrderValue) conditions.minOrderValue = Number(this.form.minOrderValue);
+    const reward: any = {
+      type: 'coupon', discountType: this.form.rDiscountType, discountValue: Number(this.form.rDiscountValue) || 0,
+      validDays: Number(this.form.rValidDays) || 30,
+    };
+    if (this.form.rMaxDiscount) reward.maxDiscount = Number(this.form.rMaxDiscount);
+    const payload: Partial<Scheme> = {
+      name: this.form.name.trim(), description: this.form.description?.trim() || undefined,
+      type: 'cumulative', action: 'loyalty', scope: 'all', scopeIds: [],
+      conditions, reward, weight: Number(this.form.weight) || 0, combinable: false, audience: 'all',
+      validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null, status: 'active',
+    };
+    this.saving.set(true);
+    const obs = this.form.id ? this.svc.update(this.form.id, payload) : this.svc.create(payload);
+    obs.subscribe({
+      next: () => { this.saving.set(false); this.dialogOpen = false; this.load(); this.toast.add({ severity: 'success', summary: 'Saved', detail: 'Loyalty scheme saved.' }); },
+      error: (e) => { this.saving.set(false); this.toast.add({ severity: 'error', summary: 'Error', detail: e?.error?.message || 'Could not save scheme.' }); },
+    });
+  }
+
   toggle(s: Scheme) {
     this.svc.setStatus(s.id, s.status === 'active' ? 'paused' : 'active').subscribe({ next: () => this.load() });
   }
@@ -434,17 +541,26 @@ export class SchemesComponent implements OnInit {
 
   badge(s: Scheme): string {
     const c = s.conditions || {};
+    if (s.type === 'cumulative') {
+      const r = (s as any).reward || {};
+      return r.discountType === 'amount' ? `₹${r.discountValue} reward` : `${r.discountValue || 0}% reward`;
+    }
     if (s.action === 'buy_x_get_x_free') return `Buy ${c.buyQty || 1} Get ${c.getQty || 1}`;
     if (s.action === 'buy_x_get_y_free') return `🎁 Free`;
     return c.discountType === 'amount' ? `₹${c.discountValue} OFF` : `${c.discountValue || 0}% OFF`;
   }
 
   describe(s: Scheme): string {
+    const c = s.conditions || {};
+    if (s.type === 'cumulative') {
+      const tgt = c.metric === 'orders' ? `${c.target} orders` : `₹${c.target} spent`;
+      const win = c.period === 'monthly' ? '/month' : ' (lifetime)';
+      return `⭐ Loyalty · reach ${tgt}${win} → earn a coupon`;
+    }
     const scopeText = s.scope === 'all' ? 'all products'
       : s.scope === 'category' ? `${(s.scopeIds || []).length} category(ies)`
       : s.scope === 'brand' ? `${(s.scopeIds || []).length} brand(s)`
       : `${(s.scopeIds || []).length} product(s)`;
-    const c = s.conditions || {};
     let action = '';
     if (s.action === 'buy_x_get_x_free') action = `Buy ${c.buyQty || 1} get ${c.getQty || 1} free · `;
     else if (s.action === 'buy_x_get_y_free') action = `Buy ${c.buyQty || 1} → free gift · `;

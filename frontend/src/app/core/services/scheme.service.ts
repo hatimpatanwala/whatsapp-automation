@@ -10,6 +10,11 @@ export interface SchemeConditions {
   buyQty?: number;
   getQty?: number;
   getProductId?: string;
+  // Loyalty / cumulative
+  metric?: 'spend' | 'orders';
+  target?: number;
+  period?: 'lifetime' | 'monthly';
+  minOrderValue?: number;
 }
 
 export interface Scheme {
@@ -22,6 +27,7 @@ export interface Scheme {
   scopeIds?: string[];
   scope_ids?: string[];
   conditions: SchemeConditions;
+  reward?: Record<string, any>;
   weight: number;
   combinable: boolean;
   audience: 'all' | 'specific';

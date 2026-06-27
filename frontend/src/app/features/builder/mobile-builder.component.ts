@@ -197,6 +197,7 @@ interface CartLine {
                         <span class="flex-1 min-w-0">
                           <span class="text-sm font-medium block truncate">
                             {{ p.name }}
+                            @if (p.isNew) { <span class="text-[9px] bg-blue-100 text-blue-700 font-bold rounded px-1 ml-1 align-middle">NEW</span> }
                             @if (p.offer) { <span class="text-[9px] bg-green-100 text-green-700 font-bold rounded px-1 ml-1 align-middle">{{ p.offer }}</span> }
                           </span>
                           <span class="block text-xs text-gray-500 truncate">{{ p.brand ? p.brand + ' · ' : '' }}{{ sym() }}{{ p.price | number:'1.0-2' }} / {{ p.uom || 'pcs' }} · <span [class.text-red-500]="p.stock <= 0">stock {{ p.stock }}</span></span>
