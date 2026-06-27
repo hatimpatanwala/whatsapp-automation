@@ -69,7 +69,8 @@ export class OrderService {
   }
 
   updateStatus(id: string, payload: UpdateOrderStatusPayload): Observable<Order> {
-    return this.api.patch<Order>(`/orders/${id}/status`, payload);
+    // Backend route is PUT /orders/:id/status (a PATCH here 404s).
+    return this.api.put<Order>(`/orders/${id}/status`, payload);
   }
 
   confirm(id: string): Observable<Order> {

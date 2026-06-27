@@ -108,8 +108,8 @@ import { OrderStatus } from '../../core/models';
                       <p class="text-xs text-gray-400">SKU: {{ item.sku }}</p>
                     </div>
                     <div class="text-right">
-                      <p class="text-sm font-medium text-gray-900">₦{{ item.unitPrice | number }} × {{ item.qty }}</p>
-                      <p class="font-bold text-gray-900">₦{{ item.total | number }}</p>
+                      <p class="text-sm font-medium text-gray-900">{{ cur }}{{ item.unitPrice | number }} × {{ item.qty }}</p>
+                      <p class="font-bold text-gray-900">{{ cur }}{{ item.total | number }}</p>
                     </div>
                   </div>
                 }
@@ -117,17 +117,17 @@ import { OrderStatus } from '../../core/models';
               <!-- Totals -->
               <div class="bg-gray-50 px-6 py-4 space-y-2">
                 <div class="flex justify-between text-sm text-gray-600">
-                  <span>Subtotal</span><span>₦{{ order().subtotal | number }}</span>
+                  <span>Subtotal</span><span>{{ cur }}{{ order().subtotal | number }}</span>
                 </div>
                 <div class="flex justify-between text-sm text-gray-600">
-                  <span>Shipping</span><span>₦{{ order().shipping | number }}</span>
+                  <span>Shipping</span><span>{{ cur }}{{ order().shipping | number }}</span>
                 </div>
                 <div class="flex justify-between text-sm text-gray-600">
-                  <span>Discount</span><span class="text-green-600">-₦{{ order().discount | number }}</span>
+                  <span>Discount</span><span class="text-green-600">-{{ cur }}{{ order().discount | number }}</span>
                 </div>
                 <p-divider styleClass="my-2" />
                 <div class="flex justify-between font-bold text-base text-gray-900">
-                  <span>Total</span><span>₦{{ order().total | number }}</span>
+                  <span>Total</span><span>{{ cur }}{{ order().total | number }}</span>
                 </div>
               </div>
             </div>
@@ -165,7 +165,7 @@ import { OrderStatus } from '../../core/models';
               </div>
               <div class="space-y-1 text-sm text-gray-600">
                 <p><span class="text-gray-400">Total orders:</span> {{ order().customer.totalOrders }}</p>
-                <p><span class="text-gray-400">Total spent:</span> ₦{{ order().customer.totalSpent | number }}</p>
+                <p><span class="text-gray-400">Total spent:</span> {{ cur }}{{ order().customer.totalSpent | number }}</p>
               </div>
               <button pButton label="View Customer" class="p-button-text p-button-sm w-full mt-3" icon="pi pi-external-link" iconPos="right"></button>
             </div>
@@ -228,14 +228,24 @@ export class OrderDetailComponent implements OnInit {
   statusDialog = false;
   newStatus = '';
 
+  // Currency symbol for the store/order (defaults to INR ₹).
+  private static readonly CURRENCY_SYMBOLS: Record<string, string> = {
+    INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'AED ', NGN: '₦',
+  };
+  get cur(): string {
+    const code = (this.order()?.currency || 'INR').toUpperCase();
+    return OrderDetailComponent.CURRENCY_SYMBOLS[code] || '₹';
+  }
+
+  // Status vocabulary aligned with the order events + notification workflows
+  // (created/confirmed/processing/out_for_delivery/delivered/cancelled).
   statusOptions = [
     { label: 'Pending', value: 'pending' },
     { label: 'Confirmed', value: 'confirmed' },
     { label: 'Processing', value: 'processing' },
-    { label: 'Shipped', value: 'shipped' },
+    { label: 'Out for Delivery', value: 'out_for_delivery' },
     { label: 'Delivered', value: 'delivered' },
-    { label: 'Completed', value: 'completed' },
-    { label: 'Canceled', value: 'canceled' },
+    { label: 'Cancelled', value: 'cancelled' },
   ];
 
   loading = signal(true);
@@ -249,7 +259,7 @@ export class OrderDetailComponent implements OnInit {
   ];
 
   order = signal<any>({
-    orderNumber: '', date: '', status: 'pending',
+    orderNumber: '', date: '', status: 'pending', currency: 'INR',
     paymentStatus: 'pending', paymentMethod: '', paymentRef: '',
     subtotal: 0, shipping: 0, discount: 0, total: 0,
     address: '', deliveryMethod: '', notes: '',
@@ -269,6 +279,7 @@ export class OrderDetailComponent implements OnInit {
             orderNumber: o.order_number || o.orderNumber || '',
             date: o.placed_at || o.created_at ? new Date(o.placed_at || o.created_at).toLocaleString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
             status: o.status || 'pending',
+            currency: o.currency || 'INR',
             paymentStatus: o.payment?.status || o.paymentStatus || 'pending',
             paymentMethod: o.payment?.method || o.paymentMethod || '',
             paymentRef: o.payment?.transaction_ref || o.paymentRef || '',
@@ -306,13 +317,13 @@ export class OrderDetailComponent implements OnInit {
   }
 
   private updateOrderSteps(status: string) {
-    const steps = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
+    const steps = ['pending', 'confirmed', 'processing', 'out_for_delivery', 'delivered'];
     const currentIdx = steps.indexOf(status);
     this.orderSteps = [
       { label: 'Pending', icon: 'pi-clock', completed: currentIdx > 0, active: currentIdx === 0 },
       { label: 'Confirmed', icon: 'pi-check-circle', completed: currentIdx > 1, active: currentIdx === 1 },
       { label: 'Processing', icon: 'pi-cog', completed: currentIdx > 2, active: currentIdx === 2 },
-      { label: 'Shipped', icon: 'pi-truck', completed: currentIdx > 3, active: currentIdx === 3 },
+      { label: 'Out for Delivery', icon: 'pi-truck', completed: currentIdx > 3, active: currentIdx === 3 },
       { label: 'Delivered', icon: 'pi-home', completed: currentIdx >= 4, active: currentIdx === 4 },
     ];
   }
@@ -320,7 +331,9 @@ export class OrderDetailComponent implements OnInit {
   getStatusSeverity(status: string): any {
     const map: Record<string, any> = {
       pending: 'warn', confirmed: 'info', processing: 'info',
-      shipped: 'secondary', completed: 'success', canceled: 'danger',
+      out_for_delivery: 'secondary', shipped: 'secondary',
+      delivered: 'success', completed: 'success',
+      cancelled: 'danger', canceled: 'danger',
     };
     return map[status] ?? 'secondary';
   }

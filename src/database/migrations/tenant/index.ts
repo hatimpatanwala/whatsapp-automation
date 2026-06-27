@@ -520,8 +520,8 @@ const migration021Settings: TenantMigration = {
         ('upi_ids', '[]'),
         ('business_hours', '{"start": "09:00", "end": "21:00", "timezone": "Asia/Kolkata"}'),
         ('commerce_catalog_enabled', 'false'),
-        ('commerce_cart_enabled', 'false'),
-        ('commerce_order_enabled', 'false'),
+        ('commerce_cart_enabled', 'true'),
+        ('commerce_order_enabled', 'true'),
         ('commerce_catalog_id', '""'),
         ('commerce_auto_checkout', 'false'),
         ('commerce_order_notification', 'true')
@@ -691,8 +691,8 @@ const migration028CommerceSettings: TenantMigration = {
     await qr.query(`
       INSERT INTO "${schema}".settings (key, value) VALUES
         ('commerce_catalog_enabled', 'false'),
-        ('commerce_cart_enabled', 'false'),
-        ('commerce_order_enabled', 'false'),
+        ('commerce_cart_enabled', 'true'),
+        ('commerce_order_enabled', 'true'),
         ('commerce_catalog_id', '""'),
         ('commerce_auto_checkout', 'false'),
         ('commerce_order_notification', 'true')
