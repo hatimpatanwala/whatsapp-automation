@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpBackend, HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
+import { returnToWhatsApp } from './webview-return';
 
 interface Taxon { id: string; name: string; }
 
@@ -38,7 +39,10 @@ interface Taxon { id: string; name: string; }
             <i class="pi pi-check-circle text-green-600 mb-2" style="font-size:2rem"></i>
             <p class="text-sm font-semibold text-green-900">Product added</p>
             <p class="text-lg font-bold text-green-700 mt-1">{{ d.name }}</p>
-            <button class="mt-4 text-sm text-green-700 underline" (click)="addAnother()">Add another</button>
+            <button class="mt-5 w-full bg-green-600 text-white font-semibold rounded-lg py-3 text-sm" (click)="backToChat()">
+              <i class="pi pi-whatsapp mr-1"></i>Back to chat
+            </button>
+            <button class="mt-3 text-sm text-green-700 underline" (click)="addAnother()">Add another</button>
           </div>
         </div>
       } @else {
@@ -165,6 +169,7 @@ export class ProductAddComponent implements OnInit {
   private readonly base = environment.apiUrl;
 
   token = signal('');
+  whatsappPhone = '';
   categories = signal<Taxon[]>([]);
   brands = signal<Taxon[]>([]);
   saving = signal(false);
@@ -200,11 +205,13 @@ export class ProductAddComponent implements OnInit {
     const t = this.route.snapshot.queryParamMap.get('token') || '';
     this.token.set(t);
     if (!t) return;
-    this.http.get<{ categories: Taxon[]; brands: Taxon[] }>(`${this.base}/m/products/taxonomy?token=${t}`).subscribe({
-      next: (r) => { this.categories.set(r.categories || []); this.brands.set(r.brands || []); },
+    this.http.get<{ categories: Taxon[]; brands: Taxon[]; whatsappPhone?: string }>(`${this.base}/m/products/taxonomy?token=${t}`).subscribe({
+      next: (r) => { this.categories.set(r.categories || []); this.brands.set(r.brands || []); this.whatsappPhone = r.whatsappPhone || ''; },
       error: () => {},
     });
   }
+
+  backToChat(): void { returnToWhatsApp(this.whatsappPhone); }
 
   uploadImage(event: Event): void {
     const input = event.target as HTMLInputElement;

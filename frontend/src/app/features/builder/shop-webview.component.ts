@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpBackend, HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
+import { returnToWhatsApp } from './webview-return';
 
 interface Taxon { id: string; name: string; }
 interface ShopProduct {
@@ -209,10 +210,17 @@ interface Cart {
               <p class="text-lg font-bold text-gray-900">Order placed!</p>
               <p class="text-sm text-gray-500 mt-1">Your order <span class="font-semibold">{{ o.orderNumber }}</span> has been received.</p>
               <p class="text-2xl font-extrabold text-green-700 mt-3">{{ sym() }}{{ o.total | number:'1.0-2' }}</p>
+
+              <button class="mt-5 w-full bg-green-600 text-white font-semibold rounded-lg py-3 text-sm" (click)="returnNow()">
+                <i class="pi pi-whatsapp mr-1"></i>Back to chat@if (returnIn() !== null) { <span> ({{ returnIn() }})</span> }
+              </button>
               @if (o.viewUrl) {
-                <a [href]="o.viewUrl" class="mt-5 block bg-green-600 text-white font-semibold rounded-lg py-3 text-sm">View order details</a>
+                <a [href]="o.viewUrl" (click)="cancelAutoReturn()" class="mt-3 block text-sm text-green-700 font-medium">View order details</a>
               }
-              <button class="mt-3 text-sm text-gray-600 font-medium" (click)="continueShopping()">Continue shopping</button>
+              <button class="mt-3 text-sm text-gray-500 font-medium" (click)="continueShopping()">Continue shopping</button>
+              @if (returnIn() !== null) {
+                <p class="text-[11px] text-gray-400 mt-3">Returning to WhatsApp automatically…</p>
+              }
             </div>
           </div>
         }
@@ -289,7 +297,9 @@ export class ShopWebviewComponent implements OnInit {
   placing = signal(false);
 
   view = signal<'catalog' | 'cart' | 'success'>('catalog');
-  store = signal<{ name: string; currency: string } | null>(null);
+  store = signal<{ name: string; currency: string; whatsappPhone?: string } | null>(null);
+  returnIn = signal<number | null>(null);
+  private returnTimer: any = null;
   categories = signal<Taxon[]>([]);
   brands = signal<Taxon[]>([]);
   products = signal<ShopProduct[]>([]);
@@ -391,12 +401,34 @@ export class ShopWebviewComponent implements OnInit {
         this.cart.set(this.empty());
         this.placing.set(false);
         this.view.set('success');
+        this.startAutoReturn();
       },
       error: (e) => { this.placing.set(false); this.couponMsg.set(e?.error?.message || 'Could not place the order.'); alert(e?.error?.message || 'Could not place the order.'); },
     });
   }
 
+  // ─── Return to WhatsApp once the order is placed ───────────────────────────
+  private startAutoReturn() {
+    this.cancelAutoReturn();
+    let n = 4;
+    this.returnIn.set(n);
+    this.returnTimer = setInterval(() => {
+      n -= 1;
+      this.returnIn.set(n);
+      if (n <= 0) { this.cancelAutoReturn(); this.returnNow(); }
+    }, 1000);
+  }
+  cancelAutoReturn() {
+    if (this.returnTimer) { clearInterval(this.returnTimer); this.returnTimer = null; }
+    this.returnIn.set(null);
+  }
+  returnNow() {
+    this.cancelAutoReturn();
+    returnToWhatsApp(this.store()?.whatsappPhone);
+  }
+
   continueShopping() {
+    this.cancelAutoReturn();
     this.order.set(null);
     this.notes = '';
     this.view.set('catalog');

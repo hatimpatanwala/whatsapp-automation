@@ -60,10 +60,14 @@ export class ShopService {
     };
   }
 
-  private async storeInfo(s: ShopSession): Promise<{ name: string; currency: string }> {
+  private async storeInfo(s: ShopSession): Promise<{ name: string; currency: string; whatsappPhone: string }> {
     const t = await this.conn.executeGlobal(async (qr) =>
-      (await qr.query(`SELECT business_name, name FROM tenants WHERE id = $1`, [s.tenant_id]))[0]);
-    return { name: t?.business_name || t?.name || 'Our Store', currency: 'INR' };
+      (await qr.query(`SELECT business_name, name, whatsapp_phone FROM tenants WHERE id = $1`, [s.tenant_id]))[0]);
+    return {
+      name: t?.business_name || t?.name || 'Our Store',
+      currency: 'INR',
+      whatsappPhone: String(t?.whatsapp_phone || '').replace(/[^0-9]/g, ''),
+    };
   }
 
   private async taxonomy(schema: string): Promise<{ categories: any[]; brands: any[] }> {

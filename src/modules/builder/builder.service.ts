@@ -389,7 +389,14 @@ export class BuilderService implements OnModuleInit {
       type: s.type as BuilderType,
       customer: { phone: s.customer_phone || null, name: s.customer_name || null },
       customerLocked: !!s.customer_id || !!s.customer_phone,
+      whatsappPhone: await this.tenantWhatsappPhone(s.tenant_id),
     };
+  }
+
+  /** The tenant's WhatsApp business number (digits only) for "return to chat" links. */
+  async tenantWhatsappPhone(tenantId: string): Promise<string> {
+    const t = await this.ds.query(`SELECT whatsapp_phone FROM public.tenants WHERE id = $1`, [tenantId]);
+    return String(t[0]?.whatsapp_phone || '').replace(/[^0-9]/g, '');
   }
 
   /** Active products with live stock for the token's tenant. */

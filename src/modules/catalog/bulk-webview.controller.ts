@@ -90,14 +90,16 @@ export class BulkWebviewController {
   /** Categories + brands for the single-product add web form. */
   @Get('taxonomy')
   async taxonomy(@Req() req: Request, @Query('token') token?: string) {
-    const { schemaName } = await this.builder.getBulkSchema(this.token(req, token));
-    const [categories, brands] = await Promise.all([
+    const { schemaName, tenantId } = await this.builder.getBulkSchema(this.token(req, token));
+    const [categories, brands, whatsappPhone] = await Promise.all([
       this.categories.findAll(schemaName).catch(() => []),
       this.brands.findAll(schemaName).catch(() => []),
+      this.builder.tenantWhatsappPhone(tenantId).catch(() => ''),
     ]);
     return {
       categories: categories.map((c: any) => ({ id: c.id, name: c.name })),
       brands: brands.map((b: any) => ({ id: b.id, name: b.name })),
+      whatsappPhone,
     };
   }
 

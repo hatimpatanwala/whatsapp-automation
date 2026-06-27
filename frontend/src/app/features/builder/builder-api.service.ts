@@ -16,6 +16,7 @@ export interface BuilderSessionInfo {
   type: 'order' | 'quote';
   customer: { phone: string | null; name: string | null };
   customerLocked: boolean;
+  whatsappPhone?: string;
 }
 
 export interface BuilderProduct {

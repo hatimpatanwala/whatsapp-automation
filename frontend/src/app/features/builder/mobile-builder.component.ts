@@ -10,6 +10,7 @@ import {
   BuilderFreeItem,
   BuilderSessionInfo,
 } from './builder-api.service';
+import { returnToWhatsApp } from './webview-return';
 
 interface CartLine {
   productId?: string;
@@ -67,7 +68,10 @@ interface CartLine {
             <i class="pi pi-check-circle text-green-600 mb-2" style="font-size:2rem"></i>
             <p class="text-sm font-semibold text-green-900">{{ d.type === 'quote' ? 'Quote created' : 'Order created' }}</p>
             <p class="text-xl font-bold text-green-700 mt-1">{{ d.number }}</p>
-            <p class="text-xs text-gray-500 mt-3">You can close this window and return to WhatsApp.</p>
+            <button class="mt-5 w-full bg-green-600 text-white font-semibold rounded-lg py-3 text-sm" (click)="returnNow()">
+              <i class="pi pi-whatsapp mr-1"></i>Back to chat@if (returnIn() !== null) { <span> ({{ returnIn() }})</span> }
+            </button>
+            @if (returnIn() !== null) { <p class="text-[11px] text-gray-400 mt-3">Returning to WhatsApp automatically…</p> }
           </div>
         </div>
       }
@@ -367,6 +371,27 @@ export class MobileBuilderComponent implements OnInit {
   submitting = signal(false);
   submitError = signal<string | null>(null);
   done = signal<{ type: string; number: string } | null>(null);
+  returnIn = signal<number | null>(null);
+  private returnTimer: any = null;
+
+  private startAutoReturn() {
+    this.cancelAutoReturn();
+    let n = 4;
+    this.returnIn.set(n);
+    this.returnTimer = setInterval(() => {
+      n -= 1;
+      this.returnIn.set(n);
+      if (n <= 0) { this.cancelAutoReturn(); this.returnNow(); }
+    }, 1000);
+  }
+  cancelAutoReturn() {
+    if (this.returnTimer) { clearInterval(this.returnTimer); this.returnTimer = null; }
+    this.returnIn.set(null);
+  }
+  returnNow() {
+    this.cancelAutoReturn();
+    returnToWhatsApp(this.session()?.whatsappPhone);
+  }
 
   // Customer picker
   custQuery = signal('');
@@ -604,7 +629,7 @@ export class MobileBuilderComponent implements OnInit {
         couponCode: this.appliedCoupon()?.code,
       })
       .subscribe({
-        next: (r) => { this.submitting.set(false); this.done.set({ type: r.type, number: r.number }); },
+        next: (r) => { this.submitting.set(false); this.done.set({ type: r.type, number: r.number }); this.startAutoReturn(); },
         error: (e) => { this.submitting.set(false); this.submitError.set(e?.error?.message || 'Could not submit. Please try again.'); },
       });
   }
