@@ -60,23 +60,29 @@ import { BuilderApiService } from './builder-api.service';
               </thead>
               <tbody class="divide-y divide-gray-100">
                 @for (it of d.items; track it.name) {
-                  <tr>
-                    <td class="px-4 py-2">{{ it.name }}</td>
+                  <tr [class.bg-amber-50]="it.free">
+                    <td class="px-4 py-2">{{ it.name }}@if (it.free) { <span class="ml-1 text-[10px] font-bold text-amber-600">FREE</span> }</td>
                     <td class="text-center px-2 py-2">{{ it.quantity }}</td>
-                    <td class="text-right px-2 py-2">{{ sym(d.currency) }}{{ it.unitPrice | number:'1.0-2' }}</td>
-                    <td class="text-right px-4 py-2 font-medium">{{ sym(d.currency) }}{{ it.total | number:'1.0-2' }}</td>
+                    <td class="text-right px-2 py-2">{{ it.free ? 'Free' : sym(d.currency) + (it.unitPrice | number:'1.0-2') }}</td>
+                    <td class="text-right px-4 py-2 font-medium">{{ it.free ? '—' : sym(d.currency) + (it.total | number:'1.0-2') }}</td>
                   </tr>
                 }
               </tbody>
             </table>
           </section>
 
-          <section class="bg-white rounded-xl border border-gray-200 p-4">
-            <div class="flex items-center justify-between text-lg font-bold">
+          <section class="bg-white rounded-xl border border-gray-200 p-4 space-y-1.5 text-sm">
+            <div class="flex justify-between text-gray-600"><span>Subtotal</span><span>{{ sym(d.currency) }}{{ d.subtotal | number:'1.0-2' }}</span></div>
+            @if (d.discount > 0) { <div class="flex justify-between text-green-700"><span>Discount</span><span>-{{ sym(d.currency) }}{{ d.discount | number:'1.0-2' }}</span></div> }
+            @if (d.taxAmount > 0) { <div class="flex justify-between text-gray-600"><span>Tax</span><span>{{ sym(d.currency) }}{{ d.taxAmount | number:'1.0-2' }}</span></div> }
+            @if (d.deliveryFee > 0) { <div class="flex justify-between text-gray-600"><span>Delivery</span><span>{{ sym(d.currency) }}{{ d.deliveryFee | number:'1.0-2' }}</span></div> }
+            <div class="flex items-center justify-between text-lg font-bold pt-2 border-t border-gray-100">
               <span>Total</span>
               <span>{{ sym(d.currency) }}{{ d.total | number:'1.0-2' }}</span>
             </div>
-            <p class="text-xs text-gray-400 mt-2">Reply in WhatsApp if you have any questions or to confirm.</p>
+            @if (d.validUntil) { <p class="text-xs text-gray-400 pt-1">Valid until {{ d.validUntil | date:'mediumDate' }}</p> }
+            @if (d.notes) { <p class="text-xs text-gray-500 pt-1 italic">{{ d.notes }}</p> }
+            <p class="text-xs text-gray-400 pt-1">Reply in WhatsApp if you have any questions or to confirm.</p>
           </section>
         </main>
       }

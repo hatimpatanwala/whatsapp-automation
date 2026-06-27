@@ -201,7 +201,7 @@ export class BuilderService implements OnModuleInit {
       const customer = { name: cust?.name || null, phone: cust?.phone || null };
       if (s.type === 'order') {
         const o = (await qr.query(
-          `SELECT order_number, status, subtotal, total, currency, created_at FROM orders WHERE id = $1`,
+          `SELECT order_number, status, subtotal, tax_amount, discount, delivery_fee, total, currency, notes, created_at FROM orders WHERE id = $1`,
           [s.result_id],
         ))[0];
         if (!o) throw new NotFoundException('Order not found.');
@@ -214,8 +214,12 @@ export class BuilderService implements OnModuleInit {
           number: o.order_number,
           status: o.status,
           subtotal: Number(o.subtotal),
+          taxAmount: Number(o.tax_amount) || 0,
+          discount: Number(o.discount) || 0,
+          deliveryFee: Number(o.delivery_fee) || 0,
           total: Number(o.total),
           currency: o.currency || 'INR',
+          notes: o.notes || null,
           createdAt: o.created_at,
           customer,
           items: items.map((i: any) => ({
@@ -223,11 +227,12 @@ export class BuilderService implements OnModuleInit {
             quantity: Number(i.quantity),
             unitPrice: Number(i.unit_price),
             total: Number(i.total_price),
+            free: Number(i.unit_price) === 0 || /^🎁\s*FREE/i.test(i.name || ''),
           })),
         };
       }
       const q = (await qr.query(
-        `SELECT quote_number, title, status, subtotal, total_amount, created_at FROM quotes WHERE id = $1`,
+        `SELECT quote_number, title, status, subtotal, tax_amount, total_amount, notes, valid_until, created_at FROM quotes WHERE id = $1`,
         [s.result_id],
       ))[0];
       if (!q) throw new NotFoundException('Quote not found.');
@@ -241,8 +246,11 @@ export class BuilderService implements OnModuleInit {
         title: q.title,
         status: q.status,
         subtotal: Number(q.subtotal),
+        taxAmount: Number(q.tax_amount) || 0,
         total: Number(q.total_amount),
         currency: 'INR',
+        notes: q.notes || null,
+        validUntil: q.valid_until || null,
         createdAt: q.created_at,
         customer,
         items: items.map((i: any) => ({
@@ -250,6 +258,7 @@ export class BuilderService implements OnModuleInit {
           quantity: Number(i.quantity),
           unitPrice: Number(i.unit_price),
           total: Number(i.line_total),
+          free: Number(i.unit_price) === 0,
         })),
       };
     });

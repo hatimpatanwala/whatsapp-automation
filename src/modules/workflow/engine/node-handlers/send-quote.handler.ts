@@ -1,17 +1,46 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { TenantConnectionManager } from '../../../../database/tenant-connection.manager';
 import { WhatsAppMessageService } from '../../../whatsapp/whatsapp-message.service';
+import { WhatsAppApiService } from '../../../whatsapp/whatsapp-api.service';
+import { BuilderService } from '../../../builder/builder.service';
 import { NodeHandler, WorkflowNode, WorkflowEdge, ExecutionContext, NodeExecutionResult, findNextEdge } from '../workflow-engine.types';
 import { resolveTemplate } from '../template-resolver';
 
 @Injectable()
 export class SendQuoteNodeHandler implements NodeHandler {
   readonly nodeType = 'send_quote';
+  private readonly logger = new Logger(SendQuoteNodeHandler.name);
 
   constructor(
     private readonly connectionManager: TenantConnectionManager,
     private readonly messageService: WhatsAppMessageService,
+    private readonly whatsappApi: WhatsAppApiService,
+    private readonly builder: BuilderService,
   ) {}
+
+  /** Mint a read-only quote webview link + send it as a CTA URL button. */
+  private async sendQuoteLink(ctx: ExecutionContext, quoteId: string, quoteNumber: string): Promise<void> {
+    try {
+      let tenantId = ctx.tenant?.id;
+      if (!tenantId) {
+        const t = await this.connectionManager.executeGlobal(async (qr) =>
+          (await qr.query(`SELECT id FROM tenants WHERE schema_name = $1`, [ctx.schema]))[0]);
+        tenantId = t?.id;
+      }
+      if (!tenantId) return;
+      const { url } = await this.builder.createViewSession({
+        tenantId, schemaName: ctx.schema, type: 'quote',
+        resultId: quoteId, resultNumber: quoteNumber,
+        customerId: ctx.customerId, customerPhone: ctx.customerPhone,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        ctx.tenant.phoneNumberId, ctx.tenant.accessToken, ctx.customerPhone,
+        `📋 Tap below to view quote *${quoteNumber}*.`, '📄 View Quote', url,
+      );
+    } catch (err: any) {
+      this.logger.warn(`quote webview link failed: ${err.message}`);
+    }
+  }
 
   async execute(node: WorkflowNode, ctx: ExecutionContext, edges: WorkflowEdge[]): Promise<NodeExecutionResult> {
     const quoteId = node.config.quoteId || ctx.variables.quote_id;
@@ -80,6 +109,8 @@ export class SendQuoteNodeHandler implements NodeHandler {
         [quoteId],
       );
     });
+
+    if (node.config.webview !== false) await this.sendQuoteLink(ctx, quoteId, quote.quote_number);
 
     ctx.variables.quote_id = quoteId;
     ctx.variables.quote_number = quote.quote_number;
