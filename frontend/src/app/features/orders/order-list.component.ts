@@ -299,7 +299,7 @@ export class OrderListComponent implements OnInit {
       orderNumber: order.orderNumber,
       customer: customerName,
       phone: customerPhone,
-      items: order.itemCount ?? order.items?.length ?? 0,
+      items: (order as any).itemCount ?? order.items?.length ?? 0,
       total: order.totalAmount,
       status: order.status,
       paymentStatus: order.paymentStatus,
