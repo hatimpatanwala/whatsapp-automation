@@ -1,6 +1,8 @@
 // ─── Business Categories, Subcategories, Features & Workflow Templates ─────
 // Used by PersonalizationService to auto-create workflows during onboarding
 
+import { buildInteractiveOrderNote, buildInteractivePayNote } from '../workflow/default-workflows';
+
 export interface SubCategory {
   value: string;
   label: string;
@@ -659,63 +661,18 @@ export function getWorkflowTemplates(category: string, subcategory: string): Rec
 
     order_confirmation: {
       key: 'order_confirmation',
-      name: 'Order Confirmation',
-      description: 'Auto-confirm new orders with details',
-      trigger: { type: 'trigger_order', event: 'created' },
-      nodes: [
-        {
-          id: 'n1', type: 'trigger_order', label: 'New Order',
-          x: 300, y: 50,
-          config: { event: 'created' },
-          outputs: ['n2'],
-        },
-        {
-          id: 'n2', type: 'send_text', label: 'Confirmation Message',
-          x: 300, y: 200,
-          config: { message: '✅ *Order Confirmed!*\n\n📋 Order: #{{order_number}}\n💰 Total: ₹{{order_total}}\n📅 Date: {{order_date}}\n\nYour order is being processed. We\'ll notify you when it ships!\n\n📦 Track: Reply *track {{order_number}}*\n❌ Cancel: Reply *cancel {{order_number}}*' },
-          outputs: ['n3'],
-        },
-        {
-          id: 'n3', type: 'tag_customer', label: 'Tag as Buyer',
-          x: 300, y: 380,
-          config: { action: 'add', tag: 'buyer' },
-          outputs: [],
-        },
-      ],
-      edges: [
-        { id: 'e1', from: 'n1', to: 'n2' },
-        { id: 'e2', from: 'n2', to: 'n3' },
-      ],
+      ...buildInteractiveOrderNote(
+        'Order Confirmation', 'Confirms a new order, with an Order Details button.', 'created',
+        '🧾 Hi {{customer_name}}, we’ve received your order *#{{order_number}}* — total {{currency}}{{order_total}}.\nWe’ll keep you posted!',
+      ),
     },
 
     order_shipped: {
       key: 'order_shipped',
-      name: 'Order Shipped Notification',
-      description: 'Notify customer when order is shipped',
-      trigger: { type: 'trigger_order', event: 'confirmed' },
-      nodes: [
-        {
-          id: 'n1', type: 'trigger_order', label: 'Order Confirmed/Shipped',
-          x: 300, y: 50,
-          config: { event: 'confirmed' },
-          outputs: ['n2'],
-        },
-        {
-          id: 'n2', type: 'send_buttons', label: 'Shipping Notification',
-          x: 300, y: 200,
-          config: {
-            message: '🚚 *Your order is on the way!*\n\nOrder: #{{order_number}}\nExpected delivery: 2-5 business days\n\nWe\'ll send updates as your order progresses.',
-            buttons: [
-              { id: 'track', title: '📍 Track Order' },
-              { id: 'help', title: '💬 Need Help' },
-            ],
-          },
-          outputs: [],
-        },
-      ],
-      edges: [
-        { id: 'e1', from: 'n1', to: 'n2' },
-      ],
+      ...buildInteractiveOrderNote(
+        'Order Confirmed Notification', 'Confirms/ships the order, with an Order Details button.', 'confirmed',
+        '✅ Your order *#{{order_number}}* is confirmed and on its way! Expected delivery in 2-5 business days.',
+      ),
     },
 
     delivery_tracking: {
@@ -876,33 +833,11 @@ export function getWorkflowTemplates(category: string, subcategory: string): Rec
 
     payment_confirmation: {
       key: 'payment_confirmation',
-      name: 'Payment Confirmation',
-      description: 'Confirm payment received and update order',
-      trigger: { type: 'trigger_payment', event: 'verified' },
-      nodes: [
-        {
-          id: 'n1', type: 'trigger_payment', label: 'Payment Verified',
-          x: 300, y: 50,
-          config: { event: 'verified' },
-          outputs: ['n2'],
-        },
-        {
-          id: 'n2', type: 'send_text', label: 'Payment Confirmed',
-          x: 300, y: 200,
-          config: { message: '✅ *Payment Received!*\n\n💰 Amount: ₹{{payment_amount}}\n📋 Order: #{{order_number}}\n🔖 Transaction ID: {{transaction_id}}\n\nYour order is now being prepared. We\'ll notify you when it ships! 📦' },
-          outputs: ['n3'],
-        },
-        {
-          id: 'n3', type: 'update_order', label: 'Confirm Order',
-          x: 300, y: 380,
-          config: { status: 'confirmed' },
-          outputs: [],
-        },
-      ],
-      edges: [
-        { id: 'e1', from: 'n1', to: 'n2' },
-        { id: 'e2', from: 'n2', to: 'n3' },
-      ],
+      ...buildInteractivePayNote(
+        'Payment Confirmation', 'Confirms a payment, with a View Receipt button.', 'verified',
+        '✅ Payment of {{currency}}{{payment_amount}} received for order *#{{order_number}}*. Thank you, {{customer_name}}!',
+        '🧾 View Receipt',
+      ),
     },
 
     payment_reminder: {

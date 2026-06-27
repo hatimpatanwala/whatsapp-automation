@@ -77,6 +77,16 @@ export class PersonalizationService {
       const template = templates[feature.workflowTemplateKey];
       if (!template) continue;
 
+      // Event-driven notifications (order/payment/quote) are provided by the
+      // shared INTERACTIVE default set (ensureDefaultWorkflows, called below) —
+      // skip the per-feature templates so we don't create duplicate/simpler
+      // notifications on the same trigger. Customer-initiated (trigger_message)
+      // workflows are still created from their templates.
+      const trigType = String(template.trigger?.type || '');
+      if (trigType === 'trigger_order' || trigType === 'trigger_payment' || trigType === 'trigger_quote') {
+        continue;
+      }
+
       try {
         const workflow = await this.workflowService.create(schema, {
           name: template.name,
