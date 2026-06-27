@@ -150,6 +150,11 @@ interface EditItem {
                   <div class="flex justify-between text-sm text-gray-600">
                     <span>Subtotal</span><span>{{ cur }}{{ order().subtotal | number }}</span>
                   </div>
+                  @if (order().tax > 0) {
+                    <div class="flex justify-between text-sm text-gray-600">
+                      <span>Tax (GST)</span><span>{{ cur }}{{ order().tax | number }}</span>
+                    </div>
+                  }
                   <div class="flex justify-between text-sm text-gray-600">
                     <span>Shipping</span><span>{{ cur }}{{ order().shipping | number }}</span>
                   </div>
@@ -393,7 +398,7 @@ export class OrderDetailComponent implements OnInit {
   order = signal<any>({
     orderNumber: '', date: '', status: 'pending', currency: 'INR',
     paymentStatus: 'pending', paymentMethod: '', paymentRef: '',
-    subtotal: 0, shipping: 0, discount: 0, total: 0,
+    subtotal: 0, shipping: 0, tax: 0, discount: 0, total: 0,
     address: '', deliveryMethod: '', notes: '',
     customer: { name: '', initials: '', phone: '', totalOrders: 0, totalSpent: 0 },
     items: [],
@@ -430,6 +435,7 @@ export class OrderDetailComponent implements OnInit {
           paymentRef: pay.transactionRef || pay.transaction_ref || o.paymentRef || '',
           subtotal: Number(o.subtotal) || 0,
           shipping: Number(o.deliveryFee ?? o.delivery_fee ?? o.shipping) || 0,
+          tax: Number(o.taxAmount ?? o.tax_amount) || 0,
           discount: Number(o.discount) || 0,
           total: Number(o.totalAmount ?? o.total_amount ?? o.total) || 0,
           address: addressStr,

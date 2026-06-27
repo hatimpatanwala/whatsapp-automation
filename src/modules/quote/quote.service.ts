@@ -78,13 +78,16 @@ export class QuoteService {
     title?: string;
     notes?: string;
     validUntil?: string;
+    discount?: number;
+    taxAmount?: number;
     items: { productId?: string; description: string; quantity: number; unitPrice: number }[];
   }) {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      const taxRate = 0;
-      const taxAmount = subtotal * taxRate;
-      const totalAmount = subtotal + taxAmount;
+      const taxAmount = Math.max(0, Number(data.taxAmount) || 0);
+      const discount = Math.max(0, Number(data.discount) || 0);
+      const taxRate = subtotal > 0 ? taxAmount / subtotal : 0;
+      const totalAmount = Math.max(0, subtotal + taxAmount - discount);
 
       // Generate quote number
       const seqResult = await qr.query(

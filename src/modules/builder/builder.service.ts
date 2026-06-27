@@ -35,6 +35,7 @@ interface BuilderItemInput {
   name: string;
   quantity: number;
   unitPrice: number;
+  gstRate?: number;
 }
 
 /**
@@ -317,7 +318,7 @@ export class BuilderService implements OnModuleInit {
     const s = await this.resolveSession(token);
     return this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
       const rows = await qr.query(
-        `SELECT p.id, p.name, p.base_price, p.sale_price, p.currency, p.thumbnail,
+        `SELECT p.id, p.name, p.base_price, p.sale_price, p.currency, p.thumbnail, p.gst_rate,
                 b.name AS brand_name,
                 COALESCE(inv.stock_quantity, 0) AS stock_quantity
            FROM products p
@@ -335,6 +336,7 @@ export class BuilderService implements OnModuleInit {
         currency: r.currency || 'INR',
         thumbnail: r.thumbnail || null,
         stock: Number(r.stock_quantity ?? 0),
+        gstRate: Number(r.gst_rate ?? 0),
       }));
     });
   }
@@ -370,6 +372,8 @@ export class BuilderService implements OnModuleInit {
       customer?: { phone?: string; name?: string };
       title?: string;
       notes?: string;
+      discount?: number;
+      deliveryFee?: number;
     },
   ): Promise<{ type: BuilderType; id: string; number: string }> {
     const s = await this.resolveSession(token);
@@ -380,6 +384,15 @@ export class BuilderService implements OnModuleInit {
         throw new BadRequestException(`Set a valid price for "${it.name}".`);
       }
     }
+
+    // Tax is computed server-side from each item's GST rate (never trusted from
+    // the client). Discount + delivery are admin-entered.
+    const taxAmount = items.reduce(
+      (sum, it) => sum + Number(it.quantity) * Number(it.unitPrice) * (Number(it.gstRate) || 0) / 100,
+      0,
+    );
+    const discount = Math.max(0, Number(payload.discount) || 0);
+    const deliveryFee = Math.max(0, Number(payload.deliveryFee) || 0);
 
     const schema = s.schema_name;
     let customerId: string | null = s.customer_id;
@@ -414,6 +427,9 @@ export class BuilderService implements OnModuleInit {
       const order = await this.orderService.createDirect(schema, {
         customerId: customerId!,
         notes: payload.notes,
+        discount,
+        deliveryFee,
+        taxAmount,
         items: items.map((i) => ({
           productId: i.productId,
           productName: i.name,
@@ -428,6 +444,8 @@ export class BuilderService implements OnModuleInit {
         customerId: customerId!,
         title: payload.title,
         notes: payload.notes,
+        discount,
+        taxAmount,
         items: items.map((i) => ({
           productId: i.productId,
           description: i.name,

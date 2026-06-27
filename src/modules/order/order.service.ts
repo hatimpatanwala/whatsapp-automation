@@ -79,7 +79,7 @@ export class OrderService {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const order = await qr.query(
         `SELECT o.id, o.order_number, o.status, o.subtotal, o.discount,
-                o.delivery_fee, o.total as total_amount, o.currency, o.notes,
+                o.delivery_fee, o.tax_amount, o.total as total_amount, o.currency, o.notes,
                 o.cancelled_reason as cancel_reason,
                 o.placed_at, o.confirmed_at, o.delivered_at,
                 o.created_at, o.updated_at,
@@ -208,6 +208,9 @@ export class OrderService {
       customerId: string;
       items: { productId?: string; productName?: string; quantity: number; unitPrice: number }[];
       notes?: string;
+      discount?: number;
+      deliveryFee?: number;
+      taxAmount?: number;
     },
   ): Promise<any> {
     return this.connectionManager.executeInTransaction(schema, async (qr) => {
@@ -216,12 +219,17 @@ export class OrderService {
         subtotal += Number(it.quantity) * Number(it.unitPrice);
       });
 
+      const discount = Math.max(0, Number(data.discount) || 0);
+      const deliveryFee = Math.max(0, Number(data.deliveryFee) || 0);
+      const taxAmount = Math.max(0, Number(data.taxAmount) || 0);
+      const total = Math.max(0, subtotal + taxAmount - discount + deliveryFee);
+
       const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
 
       const order = await qr.query(
-        `INSERT INTO orders (order_number, customer_id, status, subtotal, total, notes)
-         VALUES ($1, $2, 'pending', $3, $3, $4) RETURNING *`,
-        [orderNumber, data.customerId, subtotal, data.notes || null],
+        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes)
+         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null],
       );
 
       for (const it of data.items) {
@@ -234,10 +242,10 @@ export class OrderService {
 
       await qr.query(
         `UPDATE customers SET total_orders = total_orders + 1, total_spent = total_spent + $1, last_order_at = NOW() WHERE id = $2`,
-        [subtotal, data.customerId],
+        [total, data.customerId],
       );
 
-      this.eventBus.emit(new OrderCreatedEvent(schema, order[0].id, data.customerId, orderNumber, subtotal));
+      this.eventBus.emit(new OrderCreatedEvent(schema, order[0].id, data.customerId, orderNumber, total));
       return order[0];
     });
   }

@@ -1027,6 +1027,18 @@ const migration037WorkflowMenuItem: TenantMigration = {
   },
 };
 
+const migration038OrderTax: TenantMigration = {
+  name: '038_order_tax_amount',
+  async up(qr, schema) {
+    // Tax (GST) total for an order — so the order summary can show Subtotal,
+    // Tax, Discount, Delivery, Total consistently (quotes already have tax_amount).
+    await qr.query(`ALTER TABLE "${schema}".orders ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(12,2) DEFAULT 0`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".orders DROP COLUMN IF EXISTS tax_amount`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1065,4 +1077,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration035ProductBrand,
   migration036SystemWorkflows,
   migration037WorkflowMenuItem,
+  migration038OrderTax,
 ];

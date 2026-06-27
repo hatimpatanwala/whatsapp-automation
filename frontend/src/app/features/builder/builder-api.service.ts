@@ -27,6 +27,7 @@ export interface BuilderProduct {
   currency: string;
   thumbnail: string | null;
   stock: number;
+  gstRate?: number;
 }
 
 export interface BuilderCustomer {
@@ -36,11 +37,13 @@ export interface BuilderCustomer {
 }
 
 export interface BuilderSubmitPayload {
-  items: { productId?: string; name: string; quantity: number; unitPrice: number }[];
+  items: { productId?: string; name: string; quantity: number; unitPrice: number; gstRate?: number }[];
   customerId?: string;
   customer?: { phone?: string; name?: string };
   title?: string;
   notes?: string;
+  discount?: number;
+  deliveryFee?: number;
 }
 
 /**
