@@ -51,7 +51,8 @@ export class PromoWebviewController {
 
   @Post('schemes')
   async createScheme(@Req() req: Request, @Body() body: any, @Query('token') token?: string) {
-    return this.schemes.create(await this.schema(req, token), body, this.token(req, token).slice(0, 12));
+    // No logged-in user on a token session → leave created_by NULL (it's a UUID column).
+    return this.schemes.create(await this.schema(req, token), body);
   }
 
   @Put('schemes/:id')
