@@ -52,10 +52,10 @@ export class PromotionsEngine {
           WHERE s.status = 'active' AND s.type = 'instant' AND s.action = 'discount'
             AND (s.valid_from IS NULL OR s.valid_from <= NOW())
             AND (s.valid_until IS NULL OR s.valid_until >= NOW())
-            AND (s.audience = 'all' OR ($2::uuid IS NOT NULL AND EXISTS (
-                  SELECT 1 FROM scheme_customers sc WHERE sc.scheme_id = s.id AND sc.customer_id = $2)))
+            AND (s.audience = 'all' OR ($1::uuid IS NOT NULL AND EXISTS (
+                  SELECT 1 FROM scheme_customers sc WHERE sc.scheme_id = s.id AND sc.customer_id = $1)))
           ORDER BY s.weight DESC`,
-        [null, customerId || null],
+        [customerId || null],
       );
 
       const applicable: ApplicableScheme[] = [];
