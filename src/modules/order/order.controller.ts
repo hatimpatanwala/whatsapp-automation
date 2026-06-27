@@ -55,4 +55,20 @@ export class OrderController {
   ) {
     return this.orderService.updateStatus(req.tenantContext.schemaName, id, body.status, body.reason);
   }
+
+  @Put(':id')
+  @Roles('owner', 'seller')
+  async update(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: {
+      items?: { productId?: string; productName?: string; quantity: number; unitPrice: number }[];
+      discount?: number;
+      deliveryFee?: number;
+      notes?: string;
+      status?: string;
+    },
+  ) {
+    return this.orderService.updateOrder(req.tenantContext.schemaName, id, body);
+  }
 }

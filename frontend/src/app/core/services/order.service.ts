@@ -73,6 +73,17 @@ export class OrderService {
     return this.api.put<Order>(`/orders/${id}/status`, payload);
   }
 
+  /** Full order edit: replace items / adjust discount, delivery fee, notes, status. */
+  updateOrder(id: string, payload: {
+    items?: Array<{ productId?: string; productName?: string; quantity: number; unitPrice: number }>;
+    discount?: number;
+    deliveryFee?: number;
+    notes?: string;
+    status?: string;
+  }): Observable<Order> {
+    return this.api.put<Order>(`/orders/${id}`, payload);
+  }
+
   confirm(id: string): Observable<Order> {
     return this.updateStatus(id, { status: 'confirmed' });
   }

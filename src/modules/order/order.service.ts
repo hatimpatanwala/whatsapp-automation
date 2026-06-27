@@ -47,6 +47,7 @@ export class OrderService {
                 o.delivery_fee, o.total as total_amount, o.currency, o.notes,
                 o.placed_at, o.confirmed_at, o.delivered_at,
                 o.created_at, o.updated_at,
+                (SELECT COUNT(*)::int FROM order_items oi WHERE oi.order_id = o.id) as item_count,
                 COALESCE(p.status, 'pending') as payment_status,
                 json_build_object(
                   'id', c.id,
@@ -87,7 +88,9 @@ export class OrderService {
                   'whatsapp_phone', c.phone,
                   'whatsapp_name', c.name,
                   'first_name', NULL,
-                  'last_name', NULL
+                  'last_name', NULL,
+                  'total_orders', COALESCE(c.total_orders, 0),
+                  'total_spent', COALESCE(c.total_spent, 0)
                 ) as customer,
                 json_build_object(
                   'street', COALESCE(a.full_address, ''),
@@ -273,6 +276,66 @@ export class OrderService {
 
       return { ...order[0], status: newStatus };
     });
+  }
+
+  /**
+   * Full order edit: replace line items and/or adjust discount, delivery fee,
+   * notes, and status. Recomputes subtotal/total from the items. Used by the
+   * admin order-detail edit screen.
+   */
+  async updateOrder(
+    schema: string,
+    orderId: string,
+    data: {
+      items?: { productId?: string; productName?: string; quantity: number; unitPrice: number }[];
+      discount?: number;
+      deliveryFee?: number;
+      notes?: string;
+      status?: string;
+    },
+  ): Promise<any> {
+    await this.connectionManager.executeInTransaction(schema, async (qr) => {
+      const existing = await qr.query(`SELECT * FROM orders WHERE id = $1 FOR UPDATE`, [orderId]);
+      if (!existing[0]) throw new NotFoundException('Order not found');
+
+      let subtotal = Number(existing[0].subtotal) || 0;
+
+      if (Array.isArray(data.items)) {
+        if (data.items.length === 0) throw new Error('An order must have at least one item');
+        subtotal = data.items.reduce((s, it) => s + Number(it.quantity) * Number(it.unitPrice), 0);
+
+        await qr.query(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
+        for (const it of data.items) {
+          await qr.query(
+            `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, total_price)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [orderId, it.productId || null, it.productName || 'Item', it.quantity, it.unitPrice, Number(it.quantity) * Number(it.unitPrice)],
+          );
+        }
+      }
+
+      const discount = data.discount != null ? Number(data.discount) : Number(existing[0].discount) || 0;
+      const deliveryFee = data.deliveryFee != null ? Number(data.deliveryFee) : Number(existing[0].delivery_fee) || 0;
+      const total = Math.max(0, subtotal - discount + deliveryFee);
+
+      await qr.query(
+        `UPDATE orders
+            SET subtotal = $1, discount = $2, delivery_fee = $3, total = $4,
+                notes = COALESCE($5, notes),
+                status = COALESCE($6, status),
+                updated_at = NOW()
+          WHERE id = $7`,
+        [subtotal, discount, deliveryFee, total, data.notes ?? null, data.status ?? null, orderId],
+      );
+
+      if (data.status && data.status !== existing[0].status) {
+        this.eventBus.emit(new OrderStatusChangedEvent(
+          schema, orderId, existing[0].customer_id, existing[0].status, data.status,
+        ));
+      }
+    });
+
+    return this.findById(schema, orderId);
   }
 
   async getStats(schema: string): Promise<any> {
