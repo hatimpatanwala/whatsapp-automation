@@ -385,44 +385,49 @@ export class OrderDetailComponent implements OnInit {
     this.loading.set(true);
     this.orderService.getById(id).subscribe({
       next: (o: any) => {
-        const custName = o.customer?.whatsapp_name || o.customer?.name || o.customer?.whatsapp_phone || o.customer?.phone || 'Customer';
+        // NOTE: the API response interceptor camelCases all keys (totalAmount,
+        // whatsappName, imageUrls, …); snake_case kept only as a fallback.
+        const c = o.customer || {};
+        const custName = c.whatsappName || c.whatsapp_name || c.name || c.whatsappPhone || c.whatsapp_phone || c.phone || 'Customer';
         const initials = custName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
-        const addr = o.shipping_address || o.address;
+        const addr = o.shippingAddress || o.shipping_address || o.address;
         const addressStr = typeof addr === 'string'
           ? addr
-          : addr ? [addr.street, addr.city, addr.postal_code].filter(Boolean).join(', ') : '';
+          : addr ? [addr.street, addr.city, addr.postalCode || addr.postal_code].filter(Boolean).join(', ') : '';
+        const placed = o.placedAt || o.placed_at || o.createdAt || o.created_at;
+        const pay = o.payment || {};
         this.order.set({
-          orderNumber: o.order_number || o.orderNumber || '',
-          date: o.placed_at || o.created_at ? new Date(o.placed_at || o.created_at).toLocaleString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
+          orderNumber: o.orderNumber || o.order_number || '',
+          date: placed ? new Date(placed).toLocaleString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
           status: o.status || 'pending',
           currency: o.currency || 'INR',
-          paymentStatus: o.payment?.status || o.payment_status || 'pending',
-          paymentMethod: o.payment?.method || o.paymentMethod || '',
-          paymentRef: o.payment?.transaction_ref || o.paymentRef || '',
+          paymentStatus: pay.status || o.paymentStatus || o.payment_status || 'pending',
+          paymentMethod: pay.method || o.paymentMethod || '',
+          paymentRef: pay.transactionRef || pay.transaction_ref || o.paymentRef || '',
           subtotal: Number(o.subtotal) || 0,
-          shipping: Number(o.delivery_fee ?? o.shipping) || 0,
+          shipping: Number(o.deliveryFee ?? o.delivery_fee ?? o.shipping) || 0,
           discount: Number(o.discount) || 0,
-          total: Number(o.total_amount ?? o.total) || 0,
+          total: Number(o.totalAmount ?? o.total_amount ?? o.total) || 0,
           address: addressStr,
-          deliveryMethod: o.delivery?.provider_name || 'Standard Delivery',
+          deliveryMethod: o.delivery?.providerName || o.delivery?.provider_name || 'Standard Delivery',
           notes: o.notes || '',
           customer: {
             name: custName,
             initials,
-            phone: o.customer?.whatsapp_phone || o.customer?.phone || '',
-            totalOrders: o.customer?.total_orders ?? o.customer?.totalOrders ?? 0,
-            totalSpent: Number(o.customer?.total_spent ?? o.customer?.totalSpent ?? 0),
+            phone: c.whatsappPhone || c.whatsapp_phone || c.phone || '',
+            totalOrders: c.totalOrders ?? c.total_orders ?? 0,
+            totalSpent: Number(c.totalSpent ?? c.total_spent ?? 0),
           },
-          items: (o.items || o.order_items || []).map((item: any) => ({
+          items: (o.items || o.orderItems || o.order_items || []).map((item: any) => ({
             id: item.id,
-            productId: item.product_id || item.productId || null,
-            name: item.product_name || item.productName || item.name || 'Item',
+            productId: item.productId || item.product_id || null,
+            name: item.productName || item.product_name || item.name || 'Item',
             sku: item.sku || '',
-            variant: item.variant_name || item.variantName || null,
+            variant: item.variantName || item.variant_name || null,
             qty: Number(item.quantity) || 1,
-            unitPrice: Number(item.unit_price ?? item.unitPrice) || 0,
-            total: Number(item.total_price ?? item.totalPrice) || (Number(item.unit_price ?? item.unitPrice) || 0) * (Number(item.quantity) || 1),
-            image: (Array.isArray(item.image_urls) && item.image_urls[0]) || item.image || 'https://placehold.co/80x80/f3f4f6/9ca3af?text=No+Image',
+            unitPrice: Number(item.unitPrice ?? item.unit_price) || 0,
+            total: Number(item.totalPrice ?? item.total_price) || (Number(item.unitPrice ?? item.unit_price) || 0) * (Number(item.quantity) || 1),
+            image: (Array.isArray(item.imageUrls) && item.imageUrls[0]) || (Array.isArray(item.image_urls) && item.image_urls[0]) || item.image || 'https://placehold.co/80x80/f3f4f6/9ca3af?text=No+Image',
           })),
         });
         this.updateOrderSteps(o.status);
