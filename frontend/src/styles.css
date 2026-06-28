@@ -627,4 +627,20 @@ textarea.p-textarea:focus, textarea[pTextarea]:focus {
 @media (max-width: 1024px) {
   .p-datatable-table-container { -webkit-overflow-scrolling: touch; }
   .p-datatable-table { min-width: 640px; }
+  /* Keep cells single-line so squished columns don't wrap into very tall rows;
+     the table widens and scrolls horizontally instead. Long secondary text
+     (e.g. SKUs) truncates with an ellipsis to bound column width. */
+  .p-datatable-table td, .p-datatable-table th { white-space: nowrap; }
+  .p-datatable-table td p { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* On phones, drop the table's fixed-height internal vertical scroll
+   (scrollHeight) so the page scrolls naturally — a cramped two-axis scroll in
+   a short box is awkward on touch. Horizontal scroll for the wide columns is
+   kept; the sticky header simply rides with the page. */
+@media (max-width: 640px) {
+  .p-datatable-scrollable .p-datatable-table-container,
+  .p-datatable-scrollable-table .p-datatable-table-container {
+    max-height: none !important;
+  }
 }
