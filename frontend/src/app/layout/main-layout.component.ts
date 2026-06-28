@@ -6,6 +6,7 @@ import { AvatarModule } from 'primeng/avatar';
 import { BadgeModule } from 'primeng/badge';
 import { TooltipModule } from 'primeng/tooltip';
 import { DividerModule } from 'primeng/divider';
+import { PopoverModule } from 'primeng/popover';
 import { AuthService } from '../core/services/auth.service';
 import { ApiService } from '../core/services/api.service';
 import { FeatureService } from '../core/services/feature.service';
@@ -31,6 +32,7 @@ interface NavItem {
     BadgeModule,
     TooltipModule,
     DividerModule,
+    PopoverModule,
   ],
   template: `
     <div class="flex min-h-screen bg-gray-50">
@@ -157,9 +159,42 @@ interface NavItem {
               icon="pi pi-bell"
               class="p-button-text p-button-sm p-button-rounded text-gray-600 relative"
               pBadge
-              value="3"
+              [value]="notifTotal().toString()"
+              [badgeDisabled]="notifTotal() === 0"
+              (click)="notifPanel.toggle($event)"
               pTooltip="Notifications"
+              tooltipPosition="bottom"
             ></button>
+            <p-popover #notifPanel>
+              <div class="w-72">
+                <div class="flex items-center justify-between px-1 pb-2 mb-1 border-b border-gray-100">
+                  <span class="text-sm font-semibold text-gray-900">Notifications</span>
+                  @if (notifTotal() > 0) {
+                    <span class="text-xs text-gray-400">{{ notifTotal() }} pending</span>
+                  }
+                </div>
+                @if (notifications().length) {
+                  @for (n of notifications(); track n.route) {
+                    <a
+                      [routerLink]="n.route"
+                      (click)="notifPanel.hide()"
+                      class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 no-underline transition-colors"
+                    >
+                      <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-primary-50 text-primary-600 shrink-0">
+                        <i [class]="'pi ' + n.icon"></i>
+                      </span>
+                      <span class="flex-1 text-sm text-gray-700">{{ n.label }}</span>
+                      <span class="text-xs font-semibold bg-gray-100 text-gray-700 rounded-full px-2 py-0.5 tabular-nums">{{ n.count }}</span>
+                    </a>
+                  }
+                } @else {
+                  <div class="py-8 text-center">
+                    <i class="pi pi-check-circle text-green-400" style="font-size:1.75rem"></i>
+                    <p class="text-sm text-gray-500 mt-2">You're all caught up</p>
+                  </div>
+                }
+              </div>
+            </p-popover>
             <button
               pButton
               icon="pi pi-cog"
@@ -240,6 +275,9 @@ export class MainLayoutComponent implements OnInit {
 
   tenantName = signal('My Store');
 
+  notifications = signal<{ label: string; icon: string; route: string; count: number }[]>([]);
+  notifTotal = computed(() => this.notifications().reduce((sum, n) => sum + n.count, 0));
+
   currentPageTitle = computed(() => {
     const url = this.router.url;
     const item = this.navItems.find(n => url.startsWith(n.route));
@@ -258,6 +296,12 @@ export class MainLayoutComponent implements OnInit {
           if (item.route === '/deliveries') return { ...item, badge: counts.pendingDeliveries || undefined };
           return item;
         });
+        this.notifications.set([
+          { label: 'Pending orders', icon: 'pi-shopping-cart', route: '/orders', count: counts.pendingOrders || 0 },
+          { label: 'Open conversations', icon: 'pi-comments', route: '/conversations', count: counts.openConversations || 0 },
+          { label: 'Payments to verify', icon: 'pi-credit-card', route: '/payments', count: counts.pendingPayments || 0 },
+          { label: 'Pending deliveries', icon: 'pi-truck', route: '/deliveries', count: counts.pendingDeliveries || 0 },
+        ].filter(n => n.count > 0));
       },
     });
   }
