@@ -82,7 +82,8 @@ interface DeliveryRow {
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table [value]="filteredDeliveries()" [loading]="loading()" dataKey="id" styleClass="text-sm"
-          [paginator]="filteredDeliveries().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+          [scrollable]="true" scrollHeight="58vh"
+          [paginator]="filteredDeliveries().length > 25" [rows]="25" [rowsPerPageOptions]="[25, 50, 100]"
           [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>

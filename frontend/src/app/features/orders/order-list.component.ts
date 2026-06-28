@@ -97,6 +97,8 @@ interface OrderRow {
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table
           [value]="orders()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [paginator]="true"
           [rows]="rows"
           [totalRecords]="totalRecords()"

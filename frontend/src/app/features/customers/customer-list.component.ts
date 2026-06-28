@@ -92,6 +92,8 @@ interface CustomerRow {
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table
           [value]="customers()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [paginator]="true"
           [rows]="rows"
           [totalRecords]="totalRecords()"

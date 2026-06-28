@@ -97,6 +97,8 @@ interface Quote {
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <p-table
           [value]="filteredQuotes()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [rows]="15"
           [paginator]="true"
           [rowsPerPageOptions]="[10, 15, 25, 50]"

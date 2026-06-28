@@ -91,7 +91,8 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table [value]="filteredItems()" [loading]="loading()" dataKey="id" styleClass="text-sm"
-          [paginator]="filteredItems().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+          [scrollable]="true" scrollHeight="58vh"
+          [paginator]="filteredItems().length > 10" [rows]="25" [rowsPerPageOptions]="[25, 50, 100]"
           [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>

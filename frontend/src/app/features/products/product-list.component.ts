@@ -185,6 +185,8 @@ interface BulkUploadStatus {
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" [class.opacity-60]="isUploading()" [class.pointer-events-none]="isUploading()">
         <p-table
           [value]="products()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [paginator]="true"
           [rows]="rows"
           [rowsPerPageOptions]="[10, 25, 50]"

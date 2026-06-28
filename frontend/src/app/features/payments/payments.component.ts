@@ -93,7 +93,8 @@ interface PaymentRow {
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table [value]="filteredPayments()" [loading]="loading()" dataKey="id" styleClass="text-sm"
-          [paginator]="filteredPayments().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+          [scrollable]="true" scrollHeight="58vh"
+          [paginator]="filteredPayments().length > 25" [rows]="25" [rowsPerPageOptions]="[25, 50, 100]"
           [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>
