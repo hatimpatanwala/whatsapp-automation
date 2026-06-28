@@ -168,8 +168,10 @@ export class OrderFormComponent implements OnInit {
   items: OrderItem[] = [];
 
   customers = signal<{ label: string; value: string }[]>([]);
-  products = signal<{ label: string; value: string; price?: number }[]>([]);
+  products = signal<{ label: string; value: string; price?: number; name?: string }[]>([]);
   subtotal = signal(0);
+
+  private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
 
   statuses = [
     { label: 'Pending', value: 'pending' },
@@ -189,13 +191,16 @@ export class OrderFormComponent implements OnInit {
 
   loadCustomers() {
     this.api.get<any>('/customers', { limit: 500 }).subscribe({
-      next: (res) => this.customers.set((res.data || res || []).map((c: any) => ({ label: `${c.name || 'Unknown'} (${c.phone})`, value: c.id }))),
+      next: (r) => this.customers.set(this.arr(r).map((c: any) => ({
+        label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || 'Customer'}${c.whatsappPhone ? ' · ' + c.whatsappPhone : ''}`,
+        value: c.id,
+      }))),
     });
   }
 
   loadProducts() {
     this.api.get<any>('/products', { limit: 500 }).subscribe({
-      next: (res) => this.products.set((res.data || res || []).map((p: any) => ({ label: `${p.name} - ₹${p.price}`, value: p.id, price: parseFloat(p.price) }))),
+      next: (r) => this.products.set(this.arr(r).map((p: any) => ({ label: `${p.name} — ₹${Number(p.price) || 0}`, value: p.id, price: Number(p.price) || 0, name: p.name }))),
     });
   }
 
@@ -207,7 +212,7 @@ export class OrderFormComponent implements OnInit {
     if (item.productId) {
       const product = this.products().find(p => p.value === item.productId);
       if (product) {
-        if (!item.description) item.description = product.label.split(' - ')[0];
+        if (!item.description) item.description = product.name || '';
         if (!item.unitPrice && product.price) item.unitPrice = product.price;
         this.recalc();
       }
