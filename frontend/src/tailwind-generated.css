@@ -865,6 +865,9 @@
   .min-w-64 {
     min-width: calc(var(--spacing) * 64);
   }
+  .min-w-\[10rem\] {
+    min-width: 10rem;
+  }
   .min-w-\[17px\] {
     min-width: 17px;
   }
@@ -1201,6 +1204,9 @@
   .border-blue-200 {
     border-color: var(--color-blue-200);
   }
+  .border-emerald-100 {
+    border-color: var(--color-emerald-100);
+  }
   .border-gray-50 {
     border-color: var(--color-gray-50);
   }
@@ -1341,6 +1347,9 @@
   }
   .bg-blue-600 {
     background-color: var(--color-blue-600);
+  }
+  .bg-emerald-50 {
+    background-color: var(--color-emerald-50);
   }
   .bg-emerald-100 {
     background-color: var(--color-emerald-100);
@@ -2524,11 +2533,6 @@
   .disabled\:opacity-50 {
     &:disabled {
       opacity: 50%;
-    }
-  }
-  .sm\:col-span-2 {
-    @media (width >= 40rem) {
-      grid-column: span 2 / span 2;
     }
   }
   .sm\:flex {

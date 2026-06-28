@@ -778,47 +778,15 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                     <p-toggleswitch [(ngModel)]="commerce.forceMarketingTemplate" />
                   </div>
 
-                  <!-- Invoicing & GST -->
+                  <!-- Invoicing & GST → moved to the Invoices page -->
                   <div class="pt-4 mt-2">
-                    <p class="text-sm font-semibold text-gray-800 mb-1">🧾 Invoicing & GST</p>
-                    <p class="text-xs text-gray-500 mb-3">Used on Tax Invoices, Bills of Supply and Delivery Memos. When an admin confirms an order on WhatsApp, they can issue any of these documents and it's sent to the customer.</p>
-                    <div class="bg-gray-50 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div class="flex flex-col gap-1 sm:col-span-2">
-                        <label class="text-xs font-medium text-gray-600">Legal / Business Name</label>
-                        <input pInputText [(ngModel)]="invoice.legalName" placeholder="As registered (e.g. Acme Traders)" class="w-full" />
-                      </div>
-                      <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-gray-600">GSTIN</label>
-                        <input pInputText [(ngModel)]="invoice.gstin" placeholder="e.g. 27ABCDE1234F1Z5" class="w-full" />
-                      </div>
-                      <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-gray-600">State Code</label>
-                        <input pInputText [(ngModel)]="invoice.stateCode" placeholder="e.g. 27" class="w-full" />
-                      </div>
-                      <div class="flex flex-col gap-1 sm:col-span-2">
-                        <label class="text-xs font-medium text-gray-600">Business Address</label>
-                        <input pInputText [(ngModel)]="invoice.address" placeholder="Registered place of business" class="w-full" />
-                      </div>
-                      <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-gray-600">State (Place of Supply)</label>
-                        <input pInputText [(ngModel)]="invoice.state" placeholder="e.g. Maharashtra" class="w-full" />
-                      </div>
-                      <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-gray-600">Invoice Prefix</label>
-                        <input pInputText [(ngModel)]="invoice.prefix" placeholder="INV" class="w-full" />
-                      </div>
-                      <div class="flex flex-col gap-1">
-                        <label class="text-xs font-medium text-gray-600">Next Invoice Number</label>
-                        <p-inputnumber [(ngModel)]="invoice.nextNumber" [min]="1" [useGrouping]="false" placeholder="Auto" inputStyleClass="w-full" styleClass="w-full" />
-                        <small class="text-[11px] text-gray-400">Set this to continue your ERP series. Leave empty to auto-number.</small>
-                      </div>
-                      <div class="flex flex-col gap-1 sm:col-span-2">
-                        <label class="text-xs font-medium text-gray-600">Number Format</label>
-                        <input pInputText [(ngModel)]="invoice.numberFormat" placeholder="{{ '{prefix}' }}/{{ '{code}' }}/{{ '{year}' }}/{{ '{seq}' }}" class="w-full" />
-                        <small class="text-[11px] text-gray-400">Placeholders: {{ '{prefix}' }} {{ '{code}' }} (INV/BOS/DC) {{ '{year}' }} {{ '{fy}' }} (e.g. 2025-26) {{ '{seq}' }}</small>
+                    <div class="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                      <i class="pi pi-receipt text-emerald-600" style="font-size:1.35rem"></i>
+                      <div>
+                        <p class="text-sm font-semibold text-gray-900">Invoicing &amp; GST has moved</p>
+                        <p class="text-xs text-gray-500">Manage your business identity, GSTIN &amp; numbering — and create invoices straight to customers — on the <span class="font-semibold text-emerald-700">Invoices</span> page in the sidebar.</p>
                       </div>
                     </div>
-                    <p class="text-[11px] text-gray-400 mt-2">GSTIN is required to issue a GST (Tax) Invoice. Bills of Supply and Delivery Memos don't need it. You can also set a custom invoice number per order from the order page to match your ERP exactly.</p>
                   </div>
 
                   <!-- Advanced: Meta Catalog (collapsible) -->
@@ -1447,14 +1415,7 @@ export class SettingsComponent implements OnInit {
       commerce_abandoned_cart_hours: Number(this.commerce.abandonedCartHours),
       notification_batch_minutes: Number(this.commerce.batchMinutes),
       marketing_template_mode: this.commerce.forceMarketingTemplate ? 'template' : 'efficient',
-      invoice_legal_name: this.invoice.legalName,
-      invoice_gstin: this.invoice.gstin,
-      invoice_state_code: this.invoice.stateCode,
-      invoice_address: this.invoice.address,
-      invoice_state: this.invoice.state,
-      invoice_prefix: this.invoice.prefix || 'INV',
-      invoice_number_format: this.invoice.numberFormat || '{prefix}/{code}/{year}/{seq}',
-      ...(this.invoice.nextNumber ? { invoice_next_number: Number(this.invoice.nextNumber) } : {}),
+      // Invoicing & GST settings now live on the Invoices page (not saved here).
       // WhatsApp config
       wa_phone: this.wa.phone,
       wa_account_id: this.wa.accountId,
