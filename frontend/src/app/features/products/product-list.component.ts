@@ -199,17 +199,11 @@ interface BulkUploadStatus {
           <ng-template pTemplate="header">
             <tr>
               <th style="width:3rem"><p-tableHeaderCheckbox /></th>
-              <th pSortableColumn="name" class="text-xs text-gray-500 font-medium">
-                Product <p-sortIcon field="name" />
-              </th>
+              <th class="text-xs text-gray-500 font-medium">Product</th>
               <th class="text-xs text-gray-500 font-medium">Category</th>
               <th class="text-xs text-gray-500 font-medium">Brand</th>
-              <th pSortableColumn="price" class="text-xs text-gray-500 font-medium">
-                Price <p-sortIcon field="price" />
-              </th>
-              <th pSortableColumn="stock" class="text-xs text-gray-500 font-medium">
-                Stock <p-sortIcon field="stock" />
-              </th>
+              <th class="text-xs text-gray-500 font-medium">Price</th>
+              <th class="text-xs text-gray-500 font-medium">Stock</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>

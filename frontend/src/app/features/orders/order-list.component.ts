@@ -108,13 +108,13 @@ interface OrderRow {
         >
           <ng-template pTemplate="header">
             <tr>
-              <th pSortableColumn="orderNumber" class="text-xs text-gray-500 font-medium">Order <p-sortIcon field="orderNumber" /></th>
+              <th class="text-xs text-gray-500 font-medium">Order</th>
               <th class="text-xs text-gray-500 font-medium">Customer</th>
               <th class="text-xs text-gray-500 font-medium">Items</th>
-              <th pSortableColumn="total" class="text-xs text-gray-500 font-medium">Total <p-sortIcon field="total" /></th>
+              <th class="text-xs text-gray-500 font-medium">Total</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
               <th class="text-xs text-gray-500 font-medium">Payment</th>
-              <th pSortableColumn="date" class="text-xs text-gray-500 font-medium">Date <p-sortIcon field="date" /></th>
+              <th class="text-xs text-gray-500 font-medium">Date</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>

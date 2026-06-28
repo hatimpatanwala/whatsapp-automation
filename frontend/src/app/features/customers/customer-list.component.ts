@@ -106,8 +106,8 @@ interface CustomerRow {
               <th class="text-xs text-gray-500 font-medium">Customer</th>
               <th class="text-xs text-gray-500 font-medium">Contact</th>
               <th class="text-xs text-gray-500 font-medium">Tags</th>
-              <th pSortableColumn="totalOrders" class="text-xs text-gray-500 font-medium">Orders <p-sortIcon field="totalOrders" /></th>
-              <th pSortableColumn="totalSpent" class="text-xs text-gray-500 font-medium">Total Spent <p-sortIcon field="totalSpent" /></th>
+              <th class="text-xs text-gray-500 font-medium">Orders</th>
+              <th class="text-xs text-gray-500 font-medium">Total Spent</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
               <th class="text-xs text-gray-500 font-medium">Last Active</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
