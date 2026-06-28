@@ -164,7 +164,7 @@ export class QuoteFormComponent implements OnInit {
   today = new Date();
 
   customers = signal<{ label: string; value: string }[]>([]);
-  products = signal<{ label: string; value: string; price?: number }[]>([]);
+  products = signal<{ label: string; value: string; price?: number; name?: string }[]>([]);
 
   subtotal = signal(0);
 
@@ -182,28 +182,25 @@ export class QuoteFormComponent implements OnInit {
     }
   }
 
+  private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
+
   loadCustomers() {
     this.api.get<any>('/customers', { limit: 500 }).subscribe({
-      next: (res) => {
-        const list = (res.data || res || []).map((c: any) => ({
-          label: `${c.name || 'Unknown'} (${c.phone})`,
-          value: c.id,
-        }));
-        this.customers.set(list);
-      },
+      next: (r) => this.customers.set(this.arr(r).map((c: any) => ({
+        label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || 'Customer'}${c.whatsappPhone ? ' \u00B7 ' + c.whatsappPhone : ''}`,
+        value: c.id,
+      }))),
     });
   }
 
   loadProducts() {
     this.api.get<any>('/products', { limit: 500 }).subscribe({
-      next: (res) => {
-        const list = (res.data || res || []).map((p: any) => ({
-          label: `${p.name} - \u20B9${p.price}`,
-          value: p.id,
-          price: parseFloat(p.price),
-        }));
-        this.products.set(list);
-      },
+      next: (r) => this.products.set(this.arr(r).map((p: any) => ({
+        label: `${p.name} \u2014 \u20B9${Number(p.price) || 0}`,
+        value: p.id,
+        price: Number(p.price) || 0,
+        name: p.name,
+      }))),
     });
   }
 
@@ -242,7 +239,7 @@ export class QuoteFormComponent implements OnInit {
     if (item.productId) {
       const product = this.products().find(p => p.value === item.productId);
       if (product) {
-        if (!item.description) item.description = product.label.split(' - ')[0];
+        if (!item.description) item.description = product.name || '';
         if (!item.unitPrice && product.price) item.unitPrice = product.price;
         this.recalculate();
       }
