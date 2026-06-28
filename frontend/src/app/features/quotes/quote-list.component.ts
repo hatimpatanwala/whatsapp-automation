@@ -7,6 +7,8 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { SelectModule } from 'primeng/select';
 import { InputTextModule } from 'primeng/inputtext';
+import { IconFieldModule } from 'primeng/iconfield';
+import { InputIconModule } from 'primeng/inputicon';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
@@ -34,7 +36,7 @@ interface Quote {
   imports: [
     CommonModule, RouterLink, FormsModule,
     ButtonModule, TableModule, TagModule, SelectModule,
-    InputTextModule, ToastModule, ConfirmDialogModule, TooltipModule, CardModule,
+    InputTextModule, IconFieldModule, InputIconModule, ToastModule, ConfirmDialogModule, TooltipModule, CardModule,
   ],
   providers: [MessageService, ConfirmationService],
   template: `
@@ -54,9 +56,14 @@ interface Quote {
       <!-- Stats cards -->
       <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         @for (stat of statsCards(); track stat.label) {
-          <div class="bg-white rounded-xl border border-gray-200 p-4">
-            <p class="text-xs font-semibold text-gray-400 uppercase">{{ stat.label }}</p>
-            <p class="text-2xl font-bold mt-1" [style.color]="stat.color">{{ stat.value }}</p>
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
+            <div [class]="'flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ' + stat.iconBg">
+              <i [class]="'pi ' + stat.icon" style="font-size:1rem"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-xl font-bold text-gray-900 tabular-nums leading-none">{{ stat.value }}</p>
+              <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mt-1 truncate">{{ stat.label }}</p>
+            </div>
           </div>
         }
       </div>
@@ -64,17 +71,17 @@ interface Quote {
       <!-- Filters -->
       <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <div class="flex flex-wrap gap-3 items-center">
-          <span class="p-input-icon-left">
-            <i class="pi pi-search"></i>
+          <p-iconfield class="min-w-64">
+            <p-inputicon styleClass="pi pi-search" />
             <input
               pInputText
               type="text"
               placeholder="Search quotes..."
               [(ngModel)]="searchTerm"
               (input)="onSearch()"
-              class="w-64"
+              class="w-full"
             />
-          </span>
+          </p-iconfield>
           <p-select
             [options]="statusOptions"
             [(ngModel)]="selectedStatus"
@@ -90,6 +97,8 @@ interface Quote {
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <p-table
           [value]="filteredQuotes()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [rows]="15"
           [paginator]="true"
           [rowsPerPageOptions]="[10, 15, 25, 50]"
@@ -99,13 +108,13 @@ interface Quote {
         >
           <ng-template pTemplate="header">
             <tr>
-              <th>Quote #</th>
-              <th>Title</th>
-              <th>Customer</th>
+              <th pSortableColumn="quote_number">Quote # <p-sortIcon field="quote_number" /></th>
+              <th pSortableColumn="title">Title <p-sortIcon field="title" /></th>
+              <th pSortableColumn="customer_name">Customer <p-sortIcon field="customer_name" /></th>
               <th>Amount</th>
-              <th>Status</th>
-              <th>Valid Until</th>
-              <th>Created</th>
+              <th pSortableColumn="status">Status <p-sortIcon field="status" /></th>
+              <th pSortableColumn="valid_until">Valid Until <p-sortIcon field="valid_until" /></th>
+              <th pSortableColumn="created_at">Created <p-sortIcon field="created_at" /></th>
               <th class="text-right">Actions</th>
             </tr>
           </ng-template>
@@ -191,11 +200,11 @@ export class QuoteListComponent implements OnInit {
   statsCards = computed(() => {
     const s = this.stats();
     return [
-      { label: 'Total', value: s.total || 0, color: '#374151' },
-      { label: 'Draft', value: s.draft || 0, color: '#6b7280' },
-      { label: 'Sent', value: s.sent || 0, color: '#3b82f6' },
-      { label: 'Accepted', value: s.accepted || 0, color: '#22c55e' },
-      { label: 'Converted Value', value: '\u20B9' + this.formatAmount(s.converted_value || 0), color: '#8b5cf6' },
+      { label: 'Total', value: s.total || 0, icon: 'pi-file-edit', iconBg: 'bg-slate-100 text-slate-600' },
+      { label: 'Draft', value: s.draft || 0, icon: 'pi-pencil', iconBg: 'bg-gray-100 text-gray-500' },
+      { label: 'Sent', value: s.sent || 0, icon: 'pi-send', iconBg: 'bg-blue-50 text-blue-600' },
+      { label: 'Accepted', value: s.accepted || 0, icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+      { label: 'Converted Value', value: '\u20B9' + this.formatAmount(s.converted_value || 0), icon: 'pi-wallet', iconBg: 'bg-purple-50 text-purple-600' },
     ];
   });
 
@@ -219,7 +228,16 @@ export class QuoteListComponent implements OnInit {
 
     this.api.get<any>('/quotes', params).subscribe({
       next: (res) => {
-        this.quotes.set(res.data || []);
+        // API returns camelCase; the table reads snake_case — map both ways.
+        this.quotes.set((res.data || []).map((q: any) => ({
+          ...q,
+          quote_number: q.quote_number ?? q.quoteNumber,
+          customer_name: q.customer_name ?? q.customerName,
+          customer_phone: q.customer_phone ?? q.customerPhone,
+          total_amount: q.total_amount ?? q.totalAmount,
+          valid_until: q.valid_until ?? q.validUntil,
+          created_at: q.created_at ?? q.createdAt,
+        })));
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

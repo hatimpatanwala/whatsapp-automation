@@ -6,6 +6,7 @@ import { AvatarModule } from 'primeng/avatar';
 import { BadgeModule } from 'primeng/badge';
 import { TooltipModule } from 'primeng/tooltip';
 import { DividerModule } from 'primeng/divider';
+import { PopoverModule } from 'primeng/popover';
 import { AuthService } from '../core/services/auth.service';
 import { ApiService } from '../core/services/api.service';
 import { FeatureService } from '../core/services/feature.service';
@@ -31,9 +32,10 @@ interface NavItem {
     BadgeModule,
     TooltipModule,
     DividerModule,
+    PopoverModule,
   ],
   template: `
-    <div class="flex h-screen overflow-hidden bg-gray-50">
+    <div class="flex min-h-screen bg-gray-50">
 
       <!-- Mobile overlay -->
       @if (sidebarOpen() && isMobile()) {
@@ -43,14 +45,14 @@ interface NavItem {
         ></div>
       }
 
-      <!-- Sidebar -->
+      <!-- Sidebar (sticky on desktop so content scrolls at the document level) -->
       <aside
-        class="fixed lg:relative z-30 h-full flex flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out"
-        [class.w-64]="sidebarOpen()"
-        [class.w-0]="!sidebarOpen() && isMobile()"
+        class="fixed lg:sticky lg:top-0 self-start z-30 h-screen flex flex-col overflow-hidden bg-white border-r border-gray-200 transition-all duration-300 ease-in-out"
+        [class.w-64]="sidebarOpen() || isMobile()"
         [class.w-16]="!sidebarOpen() && !isMobile()"
         [class.-translate-x-full]="!sidebarOpen() && isMobile()"
         [class.translate-x-0]="sidebarOpen() || !isMobile()"
+        [class.shadow-2xl]="sidebarOpen() && isMobile()"
       >
         <!-- Logo area -->
         <div class="flex items-center gap-3 px-4 py-5 border-b border-gray-100">
@@ -72,9 +74,9 @@ interface NavItem {
               <!-- Unlocked feature -->
               <a
                 [routerLink]="item.route"
-                routerLinkActive="bg-primary-50 text-primary-700"
+                routerLinkActive="bg-primary-50 text-primary-700 font-semibold shadow-sm"
                 [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
-                class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-gray-600 hover:bg-gray-100 transition-colors duration-150 no-underline group"
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-gray-500 font-medium hover:bg-gray-100 hover:text-gray-900 transition-all duration-150 no-underline group"
                 [pTooltip]="!sidebarOpen() ? item.label : ''"
                 tooltipPosition="right"
                 (click)="onNavClick()"
@@ -132,16 +134,18 @@ interface NavItem {
         </div>
       </aside>
 
-      <!-- Main content -->
-      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <!-- Main content column (plain block flow so the document grows with the
+           page content and scrolls fully — no inner flex height constraint) -->
+      <div class="flex-1 min-w-0">
 
-        <!-- Top header -->
-        <header class="flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
+        <!-- Top header (sticky) -->
+        <header class="sticky top-0 z-20 flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
           <button
             pButton
-            [icon]="sidebarOpen() ? 'pi pi-times' : 'pi pi-bars'"
-            class="p-button-text p-button-sm p-button-rounded text-gray-600"
+            icon="pi pi-bars"
+            class="p-button-text p-button-sm p-button-rounded text-gray-500"
             (click)="toggleSidebar()"
+            pTooltip="Toggle menu"
           ></button>
 
           <div class="flex-1">
@@ -155,9 +159,42 @@ interface NavItem {
               icon="pi pi-bell"
               class="p-button-text p-button-sm p-button-rounded text-gray-600 relative"
               pBadge
-              value="3"
+              [value]="notifTotal().toString()"
+              [badgeDisabled]="notifTotal() === 0"
+              (click)="notifPanel.toggle($event)"
               pTooltip="Notifications"
+              tooltipPosition="bottom"
             ></button>
+            <p-popover #notifPanel>
+              <div class="w-72">
+                <div class="flex items-center justify-between px-1 pb-2 mb-1 border-b border-gray-100">
+                  <span class="text-sm font-semibold text-gray-900">Notifications</span>
+                  @if (notifTotal() > 0) {
+                    <span class="text-xs text-gray-400">{{ notifTotal() }} pending</span>
+                  }
+                </div>
+                @if (notifications().length) {
+                  @for (n of notifications(); track n.route) {
+                    <a
+                      [routerLink]="n.route"
+                      (click)="notifPanel.hide()"
+                      class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 no-underline transition-colors"
+                    >
+                      <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-primary-50 text-primary-600 shrink-0">
+                        <i [class]="'pi ' + n.icon"></i>
+                      </span>
+                      <span class="flex-1 text-sm text-gray-700">{{ n.label }}</span>
+                      <span class="text-xs font-semibold bg-gray-100 text-gray-700 rounded-full px-2 py-0.5 tabular-nums">{{ n.count }}</span>
+                    </a>
+                  }
+                } @else {
+                  <div class="py-8 text-center">
+                    <i class="pi pi-check-circle text-green-400" style="font-size:1.75rem"></i>
+                    <p class="text-sm text-gray-500 mt-2">You're all caught up</p>
+                  </div>
+                }
+              </div>
+            </p-popover>
             <button
               pButton
               icon="pi pi-cog"
@@ -170,13 +207,39 @@ interface NavItem {
               styleClass="bg-primary-500 text-white font-semibold cursor-pointer"
               size="normal"
               shape="circle"
+              (click)="userMenu.toggle($event)"
               pTooltip="{{ userName() }}"
+              tooltipPosition="bottom"
             />
+            <p-popover #userMenu>
+              <div class="w-56">
+                <div class="flex items-center gap-3 px-1 pb-3 mb-2 border-b border-gray-100">
+                  <p-avatar [label]="userInitials()" styleClass="bg-primary-100 text-primary-700 font-semibold" shape="circle" />
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-gray-900 truncate">{{ userName() }}</div>
+                    <div class="text-xs text-gray-400 truncate">{{ userRole() }}</div>
+                  </div>
+                </div>
+                <a
+                  routerLink="/settings"
+                  (click)="userMenu.hide()"
+                  class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 no-underline text-gray-700 transition-colors"
+                >
+                  <i class="pi pi-cog text-gray-400"></i><span class="text-sm">Settings</span>
+                </a>
+                <button
+                  (click)="userMenu.hide(); logout()"
+                  class="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors border-0 bg-transparent cursor-pointer"
+                >
+                  <i class="pi pi-sign-out"></i><span class="text-sm">Sign out</span>
+                </button>
+              </div>
+            </p-popover>
           </div>
         </header>
 
-        <!-- Page content -->
-        <main class="flex-1 overflow-y-auto bg-gray-50">
+        <!-- Page content (block flow; scrolls with the document) -->
+        <main class="bg-gray-50">
           <router-outlet />
         </main>
       </div>
@@ -238,6 +301,9 @@ export class MainLayoutComponent implements OnInit {
 
   tenantName = signal('My Store');
 
+  notifications = signal<{ label: string; icon: string; route: string; count: number }[]>([]);
+  notifTotal = computed(() => this.notifications().reduce((sum, n) => sum + n.count, 0));
+
   currentPageTitle = computed(() => {
     const url = this.router.url;
     const item = this.navItems.find(n => url.startsWith(n.route));
@@ -256,6 +322,12 @@ export class MainLayoutComponent implements OnInit {
           if (item.route === '/deliveries') return { ...item, badge: counts.pendingDeliveries || undefined };
           return item;
         });
+        this.notifications.set([
+          { label: 'Pending orders', icon: 'pi-shopping-cart', route: '/orders', count: counts.pendingOrders || 0 },
+          { label: 'Open conversations', icon: 'pi-comments', route: '/conversations', count: counts.openConversations || 0 },
+          { label: 'Payments to verify', icon: 'pi-credit-card', route: '/payments', count: counts.pendingPayments || 0 },
+          { label: 'Pending deliveries', icon: 'pi-truck', route: '/deliveries', count: counts.pendingDeliveries || 0 },
+        ].filter(n => n.count > 0));
       },
     });
   }

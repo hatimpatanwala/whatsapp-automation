@@ -15,6 +15,7 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OrderService } from '../../core/services/order.service';
+import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
 import { Order, OrderStats } from '../../core/models';
 
@@ -60,22 +61,27 @@ interface OrderRow {
         </div>
         <div class="flex gap-2">
           <button pButton label="New Order" icon="pi pi-bolt" class="p-button-sm" (click)="openBuilder()"></button>
-          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
         </div>
       </div>
 
       <!-- Stats row -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         @for (stat of orderStats; track stat.label) {
-          <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-            <p class="text-2xl font-bold" [class]="stat.color">{{ stat.value }}</p>
-            <p class="text-xs text-gray-500 mt-1">{{ stat.label }}</p>
+          <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+            <div [class]="'flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ' + stat.iconBg">
+              <i [class]="'pi ' + stat.icon" style="font-size:1.1rem"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ stat.value }}</p>
+              <p class="text-xs text-gray-500 mt-1 truncate">{{ stat.label }}</p>
+            </div>
           </div>
         }
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search orders or customers..." class="w-full" (input)="onSearchInput()" />
@@ -88,9 +94,11 @@ interface OrderRow {
       </div>
 
       <!-- Orders table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table
           [value]="orders()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [paginator]="true"
           [rows]="rows"
           [totalRecords]="totalRecords()"
@@ -102,13 +110,13 @@ interface OrderRow {
         >
           <ng-template pTemplate="header">
             <tr>
-              <th pSortableColumn="orderNumber" class="text-xs text-gray-500 font-medium">Order <p-sortIcon field="orderNumber" /></th>
+              <th class="text-xs text-gray-500 font-medium">Order</th>
               <th class="text-xs text-gray-500 font-medium">Customer</th>
               <th class="text-xs text-gray-500 font-medium">Items</th>
-              <th pSortableColumn="total" class="text-xs text-gray-500 font-medium">Total <p-sortIcon field="total" /></th>
+              <th class="text-xs text-gray-500 font-medium">Total</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
               <th class="text-xs text-gray-500 font-medium">Payment</th>
-              <th pSortableColumn="date" class="text-xs text-gray-500 font-medium">Date <p-sortIcon field="date" /></th>
+              <th class="text-xs text-gray-500 font-medium">Date</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>
@@ -168,6 +176,28 @@ export class OrderListComponent implements OnInit {
     });
   }
 
+  exportCsv() {
+    const ok = exportToCsv(
+      'orders',
+      this.orders(),
+      [
+        { key: 'orderNumber', header: 'Order #' },
+        { key: 'customer', header: 'Customer' },
+        { key: 'phone', header: 'Phone' },
+        { key: 'items', header: 'Items' },
+        { key: 'total', header: 'Total' },
+        { key: 'status', header: 'Status' },
+        { key: 'paymentStatus', header: 'Payment' },
+        { key: 'date', header: 'Date' },
+      ],
+    );
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${this.orders().length} orders exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No orders match the current filters.' },
+    );
+  }
+
   private readonly searchSubject = new Subject<string>();
 
   loading = signal(true);
@@ -181,10 +211,10 @@ export class OrderListComponent implements OnInit {
   rows = 10;
 
   orderStats = [
-    { label: 'Pending', value: '0', color: 'text-orange-500' },
-    { label: 'Processing', value: '0', color: 'text-blue-500' },
-    { label: 'Completed Today', value: '0', color: 'text-green-600' },
-    { label: 'Canceled', value: '0', color: 'text-red-500' },
+    { label: 'Pending', value: '0', icon: 'pi-clock', iconBg: 'bg-amber-50 text-amber-600' },
+    { label: 'Processing', value: '0', icon: 'pi-sync', iconBg: 'bg-blue-50 text-blue-600' },
+    { label: 'Completed Today', value: '0', icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+    { label: 'Canceled', value: '0', icon: 'pi-times-circle', iconBg: 'bg-red-50 text-red-600' },
   ];
 
   statusOptions = [
@@ -276,10 +306,10 @@ export class OrderListComponent implements OnInit {
     this.orderService.getStats().subscribe({
       next: (stats: OrderStats) => {
         this.orderStats = [
-          { label: 'Pending', value: String(stats.pendingOrders), color: 'text-orange-500' },
-          { label: 'Processing', value: String(stats.processingOrders), color: 'text-blue-500' },
-          { label: 'Completed Today', value: String(stats.completedOrders), color: 'text-green-600' },
-          { label: 'Canceled', value: String(stats.canceledOrders), color: 'text-red-500' },
+          { label: 'Pending', value: String(stats.pendingOrders), icon: 'pi-clock', iconBg: 'bg-amber-50 text-amber-600' },
+          { label: 'Processing', value: String(stats.processingOrders), icon: 'pi-sync', iconBg: 'bg-blue-50 text-blue-600' },
+          { label: 'Completed Today', value: String(stats.completedOrders), icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+          { label: 'Canceled', value: String(stats.canceledOrders), icon: 'pi-times-circle', iconBg: 'bg-red-50 text-red-600' },
         ];
       },
       error: () => {

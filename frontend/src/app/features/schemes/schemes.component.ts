@@ -59,7 +59,7 @@ import { ApiService } from '../../core/services/api.service';
         } @else {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             @for (c of coupons(); track c.id) {
-              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md hover:border-gray-200 transition-all duration-200">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
@@ -69,7 +69,7 @@ import { ApiService } from '../../core/services/api.service';
                     <p class="text-sm text-gray-500 mt-1">{{ couponDesc(c) }}</p>
                     <p class="text-xs text-gray-400 mt-2">Used {{ c.usedCount ?? c.used_count ?? 0 }}{{ (c.usageLimit ?? c.usage_limit) ? ' / ' + (c.usageLimit ?? c.usage_limit) : '' }} · {{ (c.perCustomerLimit ?? c.per_customer_limit) || 1 }}/customer</p>
                   </div>
-                  <span class="text-lg font-extrabold text-green-700 whitespace-nowrap">{{ couponBadge(c) }}</span>
+                  <span class="inline-flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-lg text-sm font-bold whitespace-nowrap">{{ couponBadge(c) }}</span>
                 </div>
                 <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50">
                   <button pButton [label]="c.status === 'active' ? 'Pause' : 'Activate'" [icon]="c.status === 'active' ? 'pi pi-pause' : 'pi pi-play'" class="p-button-text p-button-sm" (click)="toggleCoupon(c)"></button>
@@ -92,7 +92,7 @@ import { ApiService } from '../../core/services/api.service';
       } @else {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           @for (s of schemes(); track s.id) {
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md hover:border-gray-200 transition-all duration-200">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
@@ -104,7 +104,7 @@ import { ApiService } from '../../core/services/api.service';
                   <p class="text-sm text-gray-500 mt-1">{{ describe(s) }}</p>
                   <p class="text-xs text-gray-400 mt-2">Priority weight: {{ s.weight }}{{ s.audience === 'specific' ? ' · targeted' : '' }}</p>
                 </div>
-                <span class="text-lg font-extrabold text-green-700 whitespace-nowrap">{{ badge(s) }}</span>
+                <span class="inline-flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-lg text-sm font-bold whitespace-nowrap">{{ badge(s) }}</span>
               </div>
               <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50">
                 <button pButton [label]="s.status === 'active' ? 'Pause' : 'Activate'" [icon]="s.status === 'active' ? 'pi pi-pause' : 'pi pi-play'" class="p-button-text p-button-sm" (click)="toggle(s)"></button>

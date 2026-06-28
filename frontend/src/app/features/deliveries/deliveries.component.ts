@@ -13,6 +13,7 @@ import { TextareaModule } from 'primeng/textarea';
 import { MessageService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { DeliveryService } from '../../core/services/delivery.service';
+import { exportToCsv } from '../../core/utils/csv-export';
 
 interface DeliveryRow {
   id: string;
@@ -55,21 +56,21 @@ interface DeliveryRow {
           <h1 class="text-2xl font-bold text-gray-900">Deliveries</h1>
           <p class="text-gray-500 text-sm">Track and manage all deliveries</p>
         </div>
-        <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+        <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!filteredDeliveries().length" (click)="exportCsv()"></button>
       </div>
 
       <!-- Status summary -->
       <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
         @for (stat of deliveryStats(); track stat.label) {
-          <div class="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-center">
-            <p class="text-lg font-bold" [class]="stat.color">{{ stat.value }}</p>
-            <p class="text-xs text-gray-500 mt-0.5">{{ stat.label }}</p>
+          <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow">
+            <p class="text-xl font-bold tabular-nums" [class]="stat.color">{{ stat.value }}</p>
+            <p class="text-xs text-gray-500 mt-0.5 truncate">{{ stat.label }}</p>
           </div>
         }
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search by order or customer..." class="w-full" (input)="filter()" />
@@ -79,16 +80,19 @@ interface DeliveryRow {
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <p-table [value]="filteredDeliveries()" [loading]="loading()" dataKey="id" styleClass="text-sm">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <p-table [value]="filteredDeliveries()" [loading]="loading()" dataKey="id" styleClass="text-sm"
+          [scrollable]="true" scrollHeight="58vh"
+          [paginator]="filteredDeliveries().length > 25" [rows]="25" [rowsPerPageOptions]="[25, 50, 100]"
+          [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>
-              <th class="text-xs text-gray-500 font-medium">Order</th>
-              <th class="text-xs text-gray-500 font-medium">Customer & Address</th>
-              <th class="text-xs text-gray-500 font-medium">Courier</th>
+              <th pSortableColumn="orderNumber" class="text-xs text-gray-500 font-medium">Order <p-sortIcon field="orderNumber" /></th>
+              <th pSortableColumn="customer" class="text-xs text-gray-500 font-medium">Customer & Address <p-sortIcon field="customer" /></th>
+              <th pSortableColumn="courier" class="text-xs text-gray-500 font-medium">Courier <p-sortIcon field="courier" /></th>
               <th class="text-xs text-gray-500 font-medium">Tracking #</th>
               <th class="text-xs text-gray-500 font-medium">Est. Delivery</th>
-              <th class="text-xs text-gray-500 font-medium">Status</th>
+              <th pSortableColumn="status" class="text-xs text-gray-500 font-medium">Status <p-sortIcon field="status" /></th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>
@@ -225,6 +229,34 @@ export class DeliveriesComponent implements OnInit {
 
   ngOnInit() {
     this.loadDeliveries();
+  }
+
+  exportCsv() {
+    const rows = this.filteredDeliveries().map((d) => ({
+      orderNumber: d.orderNumber,
+      customer: d.customer,
+      address: d.address,
+      courier: d.courier || '',
+      courierPhone: d.courierPhone || '',
+      trackingNumber: d.trackingNumber || '',
+      estimatedDelivery: d.estimatedDelivery || '',
+      status: (d.status || '').replace('_', ' '),
+    }));
+    const ok = exportToCsv('deliveries', rows, [
+      { key: 'orderNumber', header: 'Order #' },
+      { key: 'customer', header: 'Customer' },
+      { key: 'address', header: 'Address' },
+      { key: 'courier', header: 'Courier' },
+      { key: 'courierPhone', header: 'Courier Phone' },
+      { key: 'trackingNumber', header: 'Tracking #' },
+      { key: 'estimatedDelivery', header: 'Est. Delivery' },
+      { key: 'status', header: 'Status' },
+    ]);
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${rows.length} deliveries exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No deliveries to export.' },
+    );
   }
 
   private loadDeliveries() {

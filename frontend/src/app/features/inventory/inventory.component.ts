@@ -12,6 +12,7 @@ import { InputIconModule } from 'primeng/inputicon';
 import { ToastModule } from 'primeng/toast';
 import { TextareaModule } from 'primeng/textarea';
 import { MessageService } from 'primeng/api';
+import { exportToCsv } from '../../core/utils/csv-export';
 import { FormsModule } from '@angular/forms';
 import { InventoryService } from '../../core/services/inventory.service';
 import { InventoryItem, InventoryMovementType } from '../../core/models';
@@ -46,33 +47,33 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
           <p class="text-gray-500 text-sm">Monitor and manage stock levels</p>
         </div>
         <div class="flex gap-2">
-          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!filteredItems().length" (click)="exportCsv()"></button>
           <button pButton label="Stock Movement" icon="pi pi-list" class="p-button-sm" severity="secondary"></button>
         </div>
       </div>
 
       <!-- Summary cards -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Total SKUs</p>
-          <p class="text-2xl font-bold text-gray-900 mt-1">{{ items().length }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-slate-100 text-slate-600"><i class="pi pi-box" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ items().length }}</p><p class="text-xs text-gray-500 mt-1 truncate">Total SKUs</p></div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Low Stock</p>
-          <p class="text-2xl font-bold text-red-500 mt-1">{{ lowStockCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-red-50 text-red-600"><i class="pi pi-exclamation-triangle" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ lowStockCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Low Stock</p></div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Out of Stock</p>
-          <p class="text-2xl font-bold text-orange-500 mt-1">{{ outOfStockCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-amber-50 text-amber-600"><i class="pi pi-ban" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ outOfStockCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Out of Stock</p></div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Total Units</p>
-          <p class="text-2xl font-bold text-gray-900 mt-1">{{ totalUnits() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-primary-50 text-primary-600"><i class="pi pi-database" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ totalUnits() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Total Units</p></div>
         </div>
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search products..." class="w-full" (input)="filter()" />
@@ -88,17 +89,20 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <p-table [value]="filteredItems()" [loading]="loading()" dataKey="id" styleClass="text-sm">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <p-table [value]="filteredItems()" [loading]="loading()" dataKey="id" styleClass="text-sm"
+          [scrollable]="true" scrollHeight="58vh"
+          [paginator]="filteredItems().length > 10" [rows]="25" [rowsPerPageOptions]="[25, 50, 100]"
+          [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>
-              <th class="text-xs text-gray-500 font-medium">Product</th>
-              <th class="text-xs text-gray-500 font-medium">Current Stock</th>
-              <th class="text-xs text-gray-500 font-medium">Reserved</th>
-              <th class="text-xs text-gray-500 font-medium">Available</th>
-              <th class="text-xs text-gray-500 font-medium">Threshold</th>
+              <th pSortableColumn="product.name" class="text-xs text-gray-500 font-medium">Product <p-sortIcon field="product.name" /></th>
+              <th pSortableColumn="currentStock" class="text-xs text-gray-500 font-medium">Current Stock <p-sortIcon field="currentStock" /></th>
+              <th pSortableColumn="reservedStock" class="text-xs text-gray-500 font-medium">Reserved <p-sortIcon field="reservedStock" /></th>
+              <th pSortableColumn="availableStock" class="text-xs text-gray-500 font-medium">Available <p-sortIcon field="availableStock" /></th>
+              <th pSortableColumn="lowStockThreshold" class="text-xs text-gray-500 font-medium">Threshold <p-sortIcon field="lowStockThreshold" /></th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
-              <th class="text-xs text-gray-500 font-medium">Location</th>
+              <th pSortableColumn="warehouseLocation" class="text-xs text-gray-500 font-medium">Location <p-sortIcon field="warehouseLocation" /></th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>
@@ -232,6 +236,34 @@ export class InventoryComponent implements OnInit {
 
   ngOnInit() {
     this.loadInventory();
+  }
+
+  exportCsv() {
+    const rows = this.filteredItems().map((i) => ({
+      product: i.product?.name || 'Unknown Product',
+      sku: i.product?.sku || i.variantName || i.id,
+      currentStock: i.currentStock,
+      reserved: i.reservedStock,
+      available: i.availableStock,
+      threshold: i.lowStockThreshold,
+      status: i.currentStock === 0 ? 'Out of stock' : i.isLowStock ? 'Low stock' : 'In stock',
+      location: i.warehouseLocation || '',
+    }));
+    const ok = exportToCsv('inventory', rows, [
+      { key: 'product', header: 'Product' },
+      { key: 'sku', header: 'SKU' },
+      { key: 'currentStock', header: 'Current Stock' },
+      { key: 'reserved', header: 'Reserved' },
+      { key: 'available', header: 'Available' },
+      { key: 'threshold', header: 'Threshold' },
+      { key: 'status', header: 'Status' },
+      { key: 'location', header: 'Location' },
+    ]);
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${rows.length} items exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No inventory items to export.' },
+    );
   }
 
   private loadInventory() {

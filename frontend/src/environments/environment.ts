@@ -1,4 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://localhost:3001/api',
+  // Local dev proxies /api → staging (see proxy.conf.json) so the app runs
+  // locally against the deployed staging backend with cookies intact.
+  apiUrl: '/api',
 };

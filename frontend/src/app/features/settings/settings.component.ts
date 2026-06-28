@@ -69,7 +69,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
           <!-- Business settings -->
           <p-tabpanel value="business">
             <div class="space-y-6 mt-4">
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-5">Business Information</h3>
                 <div class="space-y-4">
                   <div class="grid grid-cols-2 gap-4">
@@ -89,7 +89,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                     <label class="text-sm font-medium text-gray-700">Business Description</label>
                     <textarea pTextarea [(ngModel)]="biz.description" rows="2" class="w-full" placeholder="Brief description of your business..."></textarea>
                   </div>
-                  <div class="grid grid-cols-3 gap-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div class="flex flex-col gap-1">
                       <label class="text-sm font-medium text-gray-700">Currency</label>
                       <p-select [(ngModel)]="biz.currency" [options]="currencies" optionLabel="label" optionValue="value" styleClass="w-full" />
@@ -111,11 +111,11 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
               </div>
 
               <!-- Business hours -->
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-5">Business Hours</h3>
                 <div class="space-y-3">
                   @for (day of businessHours; track day.day) {
-                    <div class="flex items-center gap-4">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                       <div class="w-20 flex items-center gap-2">
                         <p-toggleswitch [(ngModel)]="day.enabled" />
                         <span class="text-sm font-medium text-gray-700">{{ day.day }}</span>
@@ -146,7 +146,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
               <!-- Connection Status -->
               @if (waConnected()) {
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-green-200">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-green-200">
                   <div class="flex items-center gap-3 mb-4">
                     <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
                       <i class="pi pi-check-circle text-green-600" style="font-size:1.2rem"></i>
@@ -169,7 +169,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                 </div>
               } @else {
                 <!-- Not connected — prompt to register a phone number -->
-                <div class="bg-white rounded-xl p-6 shadow-sm border border-amber-200">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-amber-200">
                   <div class="flex items-center gap-3 mb-4">
                     <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
                       <i class="pi pi-exclamation-triangle text-amber-600" style="font-size:1.1rem"></i>
@@ -218,7 +218,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
               }
 
               <!-- Phone Number Management -->
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div class="flex items-center justify-between mb-4">
                   <div>
                     <h3 class="text-base font-semibold text-gray-900">Phone Numbers</h3>
@@ -438,7 +438,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
               </div>
 
               <!-- Admin WhatsApp Number -->
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div class="flex items-center gap-3 mb-4">
                   <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
                     <i class="pi pi-user text-indigo-600" style="font-size:1.1rem"></i>
@@ -537,7 +537,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
               <!-- Manual config (hidden read-only reference) -->
               <!-- TODO: Re-enable manual WhatsApp config later
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-1">WhatsApp Business API</h3>
                 <p class="text-sm text-gray-500 mb-5">Configure your WhatsApp Business API credentials</p>
                 <div class="space-y-4">
@@ -575,7 +575,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
           <!-- Payment settings -->
           <p-tabpanel value="payments">
             <div class="space-y-6 mt-4">
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-5">Bank Accounts / UPI</h3>
                 <div class="space-y-4">
                   @for (account of paymentAccounts; track account.id; let i = $index) {
@@ -607,7 +607,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                 </div>
               </div>
 
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-4">Order Settings</h3>
                 <div class="space-y-3">
                   <div class="flex items-center justify-between py-2">
@@ -645,7 +645,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
           <!-- Notifications -->
           <p-tabpanel value="notifications">
             <div class="space-y-6 mt-4">
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-5">Notification Preferences</h3>
                 <div class="space-y-4">
                   @for (notif of notifications; track notif.key) {
@@ -679,7 +679,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
             <div class="space-y-6 mt-4">
 
               <!-- WhatsApp Commerce Overview -->
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div class="flex items-center gap-3 mb-4">
                   <div class="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
                     <i class="pi pi-shop text-emerald-600" style="font-size:1.2rem"></i>
@@ -699,7 +699,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
               </div>
 
               <!-- Feature Toggles -->
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h3 class="text-base font-semibold text-gray-900 mb-5">Commerce Features</h3>
                 <div class="space-y-1">
 
@@ -889,7 +889,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
           <!-- Subscription -->
           <p-tabpanel value="subscription">
             <div class="space-y-6 mt-4">
-              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <div class="flex items-start justify-between">
                   <div>
                     <h3 class="text-base font-semibold text-gray-900">Current Plan</h3>

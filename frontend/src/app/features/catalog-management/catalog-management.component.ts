@@ -57,7 +57,7 @@ import {
 
       <!-- Not Provisioned State -->
       @if (catalogStatus()?.status === 'not_provisioned') {
-        <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-100 text-center">
+        <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 text-center">
           <i class="pi pi-shopping-bag text-5xl text-gray-300 mb-4"></i>
           <h2 class="text-xl font-semibold text-gray-900 mb-2">No Catalog Provisioned</h2>
           <p class="text-gray-500 mb-6 max-w-md mx-auto">
@@ -77,22 +77,22 @@ import {
       @if (catalogStatus()?.status === 'active' && catalogStatus()?.catalog) {
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p class="text-xs text-gray-500 font-medium">Status</p>
             <p-tag class="mt-2" [value]="catalogStatus()!.catalog!.isLinkedToPhone ? 'Linked' : 'Not Linked'"
               [severity]="catalogStatus()!.catalog!.isLinkedToPhone ? 'success' : 'warn'" />
           </div>
-          <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p class="text-xs text-gray-500 font-medium">Products Synced</p>
             <p class="text-2xl font-bold text-gray-900 mt-1">{{ catalogStatus()!.catalog!.productCount }}</p>
           </div>
-          <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p class="text-xs text-gray-500 font-medium">Last Sync</p>
             <p class="text-sm font-medium text-gray-900 mt-1">
               {{ catalogStatus()!.catalog!.lastSyncAt ? (catalogStatus()!.catalog!.lastSyncAt | date:'medium') : 'Never' }}
             </p>
           </div>
-          <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p class="text-xs text-gray-500 font-medium">Sync Status</p>
             <p-tag class="mt-2"
               [value]="catalogStatus()!.catalog!.lastSyncStatus || 'pending'"
@@ -101,7 +101,7 @@ import {
         </div>
 
         <!-- Catalog Details -->
-        <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
           <h3 class="text-lg font-semibold text-gray-900">Catalog Details</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -144,7 +144,7 @@ import {
 
         <!-- Product Sync Stats -->
         @if (catalogStatus()!.productSyncStats?.length) {
-          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Product Sync Breakdown</h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
               @for (stat of catalogStatus()!.productSyncStats; track stat.sync_status) {
@@ -159,9 +159,9 @@ import {
 
         <!-- Recent Sync Jobs -->
         @if (catalogStatus()!.syncJobs?.length) {
-          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Sync Jobs</h3>
-            <p-table [value]="catalogStatus()!.syncJobs" [rows]="10" styleClass="p-datatable-sm">
+            <p-table [value]="catalogStatus()!.syncJobs" [rows]="10" [paginator]="catalogStatus()!.syncJobs.length > 10" styleClass="p-datatable-sm">
               <ng-template #header>
                 <tr>
                   <th>Type</th>

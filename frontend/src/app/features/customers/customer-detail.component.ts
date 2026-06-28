@@ -44,7 +44,7 @@ import { SchemeService } from '../../core/services/scheme.service';
 
           <!-- Left: profile card -->
           <div class="space-y-5">
-            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center relative">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center relative">
               <button pButton icon="pi pi-pencil" class="p-button-text p-button-rounded p-button-sm absolute top-3 right-3" pTooltip="Edit profile" (click)="openEdit()"></button>
               <div class="flex justify-center mb-4">
                 <p-avatar [label]="initials()" styleClass="bg-primary-500 text-white font-bold" size="xlarge" shape="circle" />
@@ -84,7 +84,7 @@ import { SchemeService } from '../../core/services/scheme.service';
 
             <!-- Active cart -->
             @if (cart() && cart().items.length) {
-              <div class="bg-white rounded-xl p-5 shadow-sm border border-amber-200">
+              <div class="bg-white rounded-2xl p-5 shadow-sm border border-amber-200">
                 <div class="flex items-center justify-between mb-2">
                   <h3 class="text-sm font-semibold text-gray-900">🛒 Active Cart</h3>
                   <span class="text-xs font-bold text-amber-600">{{ cur }}{{ cart().total | number:'1.0-2' }}</span>
@@ -97,7 +97,7 @@ import { SchemeService } from '../../core/services/scheme.service';
             }
 
             <!-- Tags -->
-            <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-900">Tags</h3>
                 <button pButton icon="pi pi-plus" class="p-button-text p-button-sm p-button-rounded" pTooltip="Add tag" (click)="tagDialog = true"></button>
@@ -116,7 +116,7 @@ import { SchemeService } from '../../core/services/scheme.service';
 
           <!-- Right: tabs -->
           <div class="lg:col-span-2">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <p-tabs value="0">
                 <p-tablist>
                   <p-tab value="0">Orders ({{ orders().length }})</p-tab>

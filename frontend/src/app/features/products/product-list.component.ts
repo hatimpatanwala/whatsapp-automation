@@ -124,12 +124,12 @@ interface BulkUploadStatus {
       }
 
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Products</h1>
           <p class="text-gray-500 text-sm">Manage your product catalog</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button pButton label="Export Products" icon="pi pi-file-export" class="p-button-outlined p-button-sm" (click)="exportProducts()" [disabled]="isUploading()" [loading]="exporting()" pTooltip="Download all products to edit & re-upload"></button>
           <button pButton label="Template" icon="pi pi-download" class="p-button-outlined p-button-sm" (click)="downloadTemplate()" [disabled]="isUploading()"></button>
           <button pButton label="Upload / Update" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()" pTooltip="Upload to add new or update existing products"></button>
@@ -185,6 +185,8 @@ interface BulkUploadStatus {
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" [class.opacity-60]="isUploading()" [class.pointer-events-none]="isUploading()">
         <p-table
           [value]="products()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [paginator]="true"
           [rows]="rows"
           [rowsPerPageOptions]="[10, 25, 50]"
@@ -199,17 +201,11 @@ interface BulkUploadStatus {
           <ng-template pTemplate="header">
             <tr>
               <th style="width:3rem"><p-tableHeaderCheckbox /></th>
-              <th pSortableColumn="name" class="text-xs text-gray-500 font-medium">
-                Product <p-sortIcon field="name" />
-              </th>
+              <th class="text-xs text-gray-500 font-medium">Product</th>
               <th class="text-xs text-gray-500 font-medium">Category</th>
               <th class="text-xs text-gray-500 font-medium">Brand</th>
-              <th pSortableColumn="price" class="text-xs text-gray-500 font-medium">
-                Price <p-sortIcon field="price" />
-              </th>
-              <th pSortableColumn="stock" class="text-xs text-gray-500 font-medium">
-                Stock <p-sortIcon field="stock" />
-              </th>
+              <th class="text-xs text-gray-500 font-medium">Price</th>
+              <th class="text-xs text-gray-500 font-medium">Stock</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>

@@ -16,6 +16,7 @@ import { ChipModule } from 'primeng/chip';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { CustomerService } from '../../core/services/customer.service';
+import { exportToCsv } from '../../core/utils/csv-export';
 import { Customer } from '../../core/models';
 
 interface CustomerRow {
@@ -61,8 +62,7 @@ interface CustomerRow {
           <p class="text-gray-500 text-sm">{{ totalRecords() }} total customers</p>
         </div>
         <div class="flex gap-2">
-          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
-          <button pButton label="Import" icon="pi pi-upload" class="p-button-sm" severity="secondary"></button>
+          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!customers().length" (click)="exportCsv()"></button>
         </div>
       </div>
 
@@ -92,6 +92,8 @@ interface CustomerRow {
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table
           [value]="customers()"
+          [scrollable]="true"
+          scrollHeight="58vh"
           [paginator]="true"
           [rows]="rows"
           [totalRecords]="totalRecords()"
@@ -106,8 +108,8 @@ interface CustomerRow {
               <th class="text-xs text-gray-500 font-medium">Customer</th>
               <th class="text-xs text-gray-500 font-medium">Contact</th>
               <th class="text-xs text-gray-500 font-medium">Tags</th>
-              <th pSortableColumn="totalOrders" class="text-xs text-gray-500 font-medium">Orders <p-sortIcon field="totalOrders" /></th>
-              <th pSortableColumn="totalSpent" class="text-xs text-gray-500 font-medium">Total Spent <p-sortIcon field="totalSpent" /></th>
+              <th class="text-xs text-gray-500 font-medium">Orders</th>
+              <th class="text-xs text-gray-500 font-medium">Total Spent</th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
               <th class="text-xs text-gray-500 font-medium">Last Active</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
@@ -292,6 +294,36 @@ export class CustomerListComponent implements OnInit {
 
   getInitials(name: string): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  }
+
+  exportCsv() {
+    const rows = this.customers().map((c) => ({
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      tags: (c.tags || []).join('; '),
+      totalOrders: c.totalOrders,
+      totalSpent: c.totalSpent,
+      status: c.status,
+      lastActive: c.lastActive || 'Never',
+      joinedAt: c.joinedAt,
+    }));
+    const ok = exportToCsv('customers', rows, [
+      { key: 'name', header: 'Name' },
+      { key: 'phone', header: 'Phone' },
+      { key: 'email', header: 'Email' },
+      { key: 'tags', header: 'Tags' },
+      { key: 'totalOrders', header: 'Total Orders' },
+      { key: 'totalSpent', header: 'Total Spent' },
+      { key: 'status', header: 'Status' },
+      { key: 'lastActive', header: 'Last Active' },
+      { key: 'joinedAt', header: 'Joined' },
+    ]);
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${rows.length} customers exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No customers match the current filters.' },
+    );
   }
 
   getStatusSeverity(status: string): any {

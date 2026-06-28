@@ -26,7 +26,7 @@ interface Taxon { id: string; name: string; }
 
       <div class="grid gap-6 md:grid-cols-2">
         <!-- Categories -->
-        <section class="bg-white rounded-xl border border-gray-200 p-5">
+        <section class="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="pi pi-tag mr-2 text-green-600"></i>Categories</h2>
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newCategory" (keyup.enter)="addCategory()" placeholder="New category name"
@@ -35,11 +35,11 @@ interface Taxon { id: string; name: string; }
               [disabled]="!newCategory.trim() || savingCat()" (click)="addCategory()">Add</button>
           </div>
           @if (categories().length) {
-            <ul class="divide-y divide-gray-100">
+            <ul class="divide-y divide-gray-100 max-h-[26rem] overflow-y-auto -mr-2 pr-2">
               @for (c of categories(); track c.id) {
-                <li class="flex items-center justify-between py-2">
-                  <span class="text-sm">{{ c.name }}</span>
-                  <button class="text-gray-300 hover:text-red-500" (click)="remove('categories', c)"><i class="pi pi-trash"></i></button>
+                <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span class="text-sm text-gray-700">{{ c.name }}</span>
+                  <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('categories', c)"><i class="pi pi-trash"></i></button>
                 </li>
               }
             </ul>
@@ -47,20 +47,20 @@ interface Taxon { id: string; name: string; }
         </section>
 
         <!-- Brands -->
-        <section class="bg-white rounded-xl border border-gray-200 p-5">
+        <section class="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="pi pi-bookmark mr-2 text-blue-600"></i>Brands</h2>
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newBrand" (keyup.enter)="addBrand()" placeholder="New brand name"
               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-            <button class="bg-blue-600 text-white text-sm font-semibold rounded-lg px-4 hover:bg-blue-700 disabled:opacity-50"
+            <button class="bg-green-600 text-white text-sm font-semibold rounded-lg px-4 hover:bg-green-700 disabled:opacity-50"
               [disabled]="!newBrand.trim() || savingBrand()" (click)="addBrand()">Add</button>
           </div>
           @if (brands().length) {
-            <ul class="divide-y divide-gray-100">
+            <ul class="divide-y divide-gray-100 max-h-[26rem] overflow-y-auto -mr-2 pr-2">
               @for (b of brands(); track b.id) {
-                <li class="flex items-center justify-between py-2">
-                  <span class="text-sm">{{ b.name }}</span>
-                  <button class="text-gray-300 hover:text-red-500" (click)="remove('brands', b)"><i class="pi pi-trash"></i></button>
+                <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span class="text-sm text-gray-700">{{ b.name }}</span>
+                  <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('brands', b)"><i class="pi pi-trash"></i></button>
                 </li>
               }
             </ul>

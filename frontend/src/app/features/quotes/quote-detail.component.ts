@@ -32,8 +32,8 @@ import { ApiService } from '../../core/services/api.service';
         </div>
       } @else if (quote()) {
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div class="flex items-center gap-3 min-w-0">
             <button pButton icon="pi pi-arrow-left" class="p-button-text p-button-rounded" routerLink="/quotes"></button>
             <div>
               <div class="flex items-center gap-3">
@@ -43,7 +43,7 @@ import { ApiService } from '../../core/services/api.service';
               <p class="text-sm text-gray-500 mt-0.5">{{ quote()!.title }}</p>
             </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             @if (quote()!.status === 'draft') {
               <p-button label="Send" icon="pi pi-send" severity="success" (onClick)="updateStatus('sent')" />
               <p-button label="Edit" icon="pi pi-pencil" [outlined]="true" [routerLink]="['/quotes', quoteId, 'edit']" />
@@ -65,7 +65,7 @@ import { ApiService } from '../../core/services/api.service';
           <div class="lg:col-span-2 space-y-6">
 
             <!-- Line Items -->
-            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div class="p-4 border-b border-gray-100">
                 <h3 class="text-lg font-semibold">Line Items</h3>
               </div>
@@ -111,7 +111,7 @@ import { ApiService } from '../../core/services/api.service';
 
             <!-- Notes -->
             @if (quote()!.notes) {
-              <div class="bg-white rounded-xl border border-gray-200 p-6">
+              <div class="bg-white rounded-2xl border border-gray-200 p-6">
                 <h3 class="text-lg font-semibold mb-2">Notes</h3>
                 <p class="text-sm text-gray-600 whitespace-pre-wrap">{{ quote()!.notes }}</p>
               </div>
@@ -121,7 +121,7 @@ import { ApiService } from '../../core/services/api.service';
           <!-- Sidebar -->
           <div class="space-y-6">
             <!-- Customer -->
-            <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <div class="bg-white rounded-2xl border border-gray-200 p-6">
               <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Customer</h3>
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold">
@@ -135,7 +135,7 @@ import { ApiService } from '../../core/services/api.service';
             </div>
 
             <!-- Timeline -->
-            <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <div class="bg-white rounded-2xl border border-gray-200 p-6">
               <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Timeline</h3>
               <div class="space-y-3">
                 <div class="flex items-center gap-3 text-sm">
@@ -177,7 +177,7 @@ import { ApiService } from '../../core/services/api.service';
 
             <!-- Valid until -->
             @if (quote()!.valid_until) {
-              <div class="bg-white rounded-xl border border-gray-200 p-6">
+              <div class="bg-white rounded-2xl border border-gray-200 p-6">
                 <h3 class="text-sm font-semibold text-gray-400 uppercase mb-2">Valid Until</h3>
                 <p class="text-lg font-semibold" [class.text-red-500]="isExpired()">
                   {{ quote()!.valid_until | date:'mediumDate' }}
@@ -217,11 +217,32 @@ export class QuoteDetailComponent implements OnInit {
     this.loadQuote();
   }
 
+  /** API returns camelCase; the template reads snake_case — map both ways. */
+  private normalizeQuote(q: any): any {
+    if (!q) return q;
+    return {
+      ...q,
+      quote_number: q.quote_number ?? q.quoteNumber,
+      customer_name: q.customer_name ?? q.customerName,
+      customer_phone: q.customer_phone ?? q.customerPhone,
+      tax_amount: q.tax_amount ?? q.taxAmount,
+      total_amount: q.total_amount ?? q.totalAmount,
+      valid_until: q.valid_until ?? q.validUntil,
+      created_at: q.created_at ?? q.createdAt,
+      items: (q.items ?? []).map((it: any) => ({
+        ...it,
+        product_name: it.product_name ?? it.productName,
+        unit_price: it.unit_price ?? it.unitPrice,
+        line_total: it.line_total ?? it.lineTotal,
+      })),
+    };
+  }
+
   loadQuote() {
     this.loading.set(true);
     this.api.get<any>(`/quotes/${this.quoteId}`).subscribe({
       next: (q) => {
-        this.quote.set(q);
+        this.quote.set(this.normalizeQuote(q));
         this.loading.set(false);
       },
       error: () => {
@@ -234,7 +255,7 @@ export class QuoteDetailComponent implements OnInit {
   updateStatus(status: string) {
     this.api.patch<any>(`/quotes/${this.quoteId}/status`, { status }).subscribe({
       next: (q) => {
-        this.quote.set(q);
+        this.quote.set(this.normalizeQuote(q));
         this.messageService.add({ severity: 'success', summary: 'Updated', detail: `Quote marked as ${status}` });
       },
       error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update' }),

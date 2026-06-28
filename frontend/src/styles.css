@@ -492,3 +492,163 @@ p-password {
 .p-datatable .p-datatable-loading-overlay {
   background: rgba(255, 255, 255, 0.7) !important;
 }
+
+/* ============================================================
+   PREMIUM UI POLISH — world-class SaaS refinement
+   (Shopify Admin / Stripe Dashboard reference). Purely visual:
+   colour, radius, shadow, spacing, typography, transitions.
+   Appended last so it refines the base rules above.
+   ============================================================ */
+
+/* --- Foundations --- */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.006em;
+}
+::selection { background: rgba(37, 211, 102, 0.18); }
+
+/* Tighter, more confident headings */
+h1, h2, h3 { letter-spacing: -0.02em; }
+
+/* Thin, premium scrollbars */
+* { scrollbar-width: thin; scrollbar-color: #cdd3da transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb {
+  background: #cdd3da; border-radius: 9999px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: #aeb6bf; background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Clean, visible keyboard focus */
+:focus-visible { outline: 2px solid rgba(37, 211, 102, 0.55); outline-offset: 2px; }
+
+/* --- Premium layered shadows — refine Tailwind's flat shadows app-wide --- */
+.shadow-sm { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.05) !important; }
+.shadow    { box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.05) !important; }
+.shadow-md { box-shadow: 0 2px 6px rgba(16, 24, 40, 0.06), 0 10px 24px rgba(16, 24, 40, 0.06) !important; }
+.shadow-lg { box-shadow: 0 6px 14px rgba(16, 24, 40, 0.07), 0 18px 40px rgba(16, 24, 40, 0.08) !important; }
+
+/* --- Inputs / selects — rounder, softer borders, refined focus ring --- */
+.p-inputtext, .p-select, .p-inputnumber .p-inputtext,
+textarea.p-textarea, textarea[pTextarea], textarea.p-inputtextarea {
+  border-radius: 8px !important;
+  border-color: #e3e8ee !important;
+}
+.p-inputtext:focus, .p-select.p-focus, .p-select:focus-within,
+textarea.p-textarea:focus, textarea[pTextarea]:focus {
+  border-color: var(--wa-primary) !important;
+  box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.12) !important;
+}
+.p-select-overlay { border-radius: 10px !important; box-shadow: 0 12px 32px rgba(16, 24, 40, 0.14) !important; }
+.p-multiselect { border-radius: 8px !important; border-color: #e3e8ee !important; }
+
+/* --- Buttons — modern radius + tactile primary --- */
+.p-button { border-radius: 8px !important; font-weight: 600 !important; letter-spacing: -0.01em !important; }
+.p-button:not(.p-button-text):not(.p-button-outlined):not(.p-button-rounded) {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+.p-button:not(.p-button-text):not(.p-button-outlined):active { transform: translateY(0.5px); }
+.p-button.p-button-text:hover { background: rgba(15, 23, 42, 0.045) !important; }
+.p-button.p-button-rounded:hover { background: rgba(15, 23, 42, 0.05) !important; }
+
+/* --- Data table — Stripe-like header, density & hover; tabular figures --- */
+.p-datatable .p-datatable-thead > tr > th {
+  background: #fbfcfd !important;
+  color: #8a93a3 !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.045em !important;
+  padding: 0.7rem 1.1rem !important;
+  border-bottom: 1px solid #eef1f4 !important;
+}
+.p-datatable .p-datatable-tbody > tr > td {
+  padding: 0.85rem 1.1rem !important;
+  border-bottom: 1px solid #f2f4f7 !important;
+  color: #334155 !important;
+  font-variant-numeric: tabular-nums;
+}
+.p-datatable .p-datatable-tbody > tr { transition: background 0.12s ease !important; }
+.p-datatable .p-datatable-tbody > tr:hover > td { background: #f8fafc !important; }
+
+/* --- Status tags / pills — refined weight & shape --- */
+.p-tag { padding: 0.22rem 0.62rem !important; font-weight: 600 !important; letter-spacing: 0.01em !important; }
+
+/* --- Dialogs — premium radius + soft elevation --- */
+.p-dialog { border-radius: 16px !important; box-shadow: 0 24px 64px rgba(16, 24, 40, 0.18) !important; border-color: #eef1f4 !important; }
+.p-dialog .p-dialog-header { padding: 1.15rem 1.4rem !important; }
+.p-dialog .p-dialog-content { padding: 1.15rem 1.4rem !important; }
+.p-dialog .p-dialog-footer { background: #fafbfc !important; }
+
+/* --- Paginator selected pill gets a soft shadow --- */
+.p-paginator .p-paginator-page.p-paginator-page-selected {
+  box-shadow: 0 1px 3px rgba(37, 211, 102, 0.45) !important;
+}
+
+/* --- Toast: crisper elevation --- */
+.p-toast .p-toast-message { box-shadow: 0 10px 30px rgba(16, 24, 40, 0.16) !important; border-radius: 12px !important; }
+
+/* --- KPI / stat numbers use tabular figures for clean alignment --- */
+.tabular-nums, [class*="text-2xl"], [class*="text-3xl"] { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   RESPONSIVE — mobile / small-screen safeguards
+   ============================================================ */
+
+/* Dialogs never exceed the viewport on phones; content area scrolls
+   instead of pushing the footer off-screen. */
+@media (max-width: 640px) {
+  .p-dialog {
+    width: 94vw !important;
+    max-width: 94vw !important;
+    max-height: 92vh !important;
+    margin: 0.5rem !important;
+  }
+  .p-dialog .p-dialog-content { max-height: 70vh; overflow-y: auto; }
+  .p-dialog .p-dialog-header,
+  .p-dialog .p-dialog-content,
+  .p-dialog .p-dialog-footer { padding-left: 1rem !important; padding-right: 1rem !important; }
+  /* Dialog footer buttons stack full-width so they're easy to tap */
+  .p-dialog .p-dialog-footer { display: flex; flex-direction: column-reverse; gap: 0.5rem; }
+  .p-dialog .p-dialog-footer .p-button { width: 100%; justify-content: center; }
+}
+
+/* Overlay panels (dropdowns, multiselects, date pickers) stay within
+   the viewport width on small screens. */
+@media (max-width: 640px) {
+  .p-select-overlay, .p-multiselect-overlay, .p-datepicker-panel, .p-popover {
+    max-width: 94vw !important;
+  }
+  /* Toasts span the screen width (minus a gutter) instead of a fixed 25rem
+     that would overflow a narrow phone. */
+  .p-toast {
+    width: calc(100vw - 2rem) !important;
+    max-width: calc(100vw - 2rem) !important;
+    right: 1rem !important;
+    left: 1rem !important;
+  }
+}
+
+/* Data tables: keep a sensible minimum so columns don't crush into
+   unreadable slivers — the card's container scrolls horizontally. */
+@media (max-width: 1024px) {
+  .p-datatable-table-container { -webkit-overflow-scrolling: touch; }
+  .p-datatable-table { min-width: 640px; }
+  /* Keep cells single-line so squished columns don't wrap into very tall rows;
+     the table widens and scrolls horizontally instead. Long secondary text
+     (e.g. SKUs) truncates with an ellipsis to bound column width. */
+  .p-datatable-table td, .p-datatable-table th { white-space: nowrap; }
+  .p-datatable-table td p { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* On phones, drop the table's fixed-height internal vertical scroll
+   (scrollHeight) so the page scrolls naturally — a cramped two-axis scroll in
+   a short box is awkward on touch. Horizontal scroll for the wide columns is
+   kept; the sticky header simply rides with the page. */
+@media (max-width: 640px) {
+  .p-datatable-scrollable .p-datatable-table-container,
+  .p-datatable-scrollable-table .p-datatable-table-container {
+    max-height: none !important;
+  }
+}
