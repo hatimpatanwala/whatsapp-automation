@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "https://staging.whatsappdemo.duckdns.org",
+    "target": "https://staging-whatsappdemo.duckdns.org",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "warn"
