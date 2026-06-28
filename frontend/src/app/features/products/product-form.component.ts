@@ -14,6 +14,8 @@ import { FileUploadModule } from 'primeng/fileupload';
 import { ChipModule } from 'primeng/chip';
 import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { ProductService, CreateProductPayload, UpdateProductPayload } from '../../core/services/product.service';
 
 @Component({
@@ -326,14 +328,22 @@ export class ProductFormComponent implements OnInit {
   get f() { return this.productForm.controls; }
 
   ngOnInit() {
-    this.loadCategories();
-    this.loadBrands();
-
     this.productId = this.route.snapshot.paramMap.get('id');
-    if (this.productId) {
-      this.isEditMode.set(true);
-      this.loadProduct(this.productId);
-    }
+    // Load category + brand options BEFORE patching the product. PrimeNG's
+    // p-select won't display a value that was set before its options exist,
+    // so loading these in parallel with the product made the saved
+    // category/brand render blank on the edit form.
+    forkJoin({
+      categories: this.productService.getCategories().pipe(catchError(() => of([]))),
+      brands: this.productService.getBrands().pipe(catchError(() => of([]))),
+    }).subscribe(({ categories, brands }) => {
+      this.categoryOptions = (categories || []).map((c) => ({ label: c.name, value: c.id }));
+      this.brandOptions = (brands || []).map((b) => ({ label: b.name, value: b.id }));
+      if (this.productId) {
+        this.isEditMode.set(true);
+        this.loadProduct(this.productId);
+      }
+    });
   }
 
   onImageSelect(event: any) {
@@ -486,31 +496,6 @@ export class ProductFormComponent implements OnInit {
         },
       });
     }
-  }
-
-  private loadCategories() {
-    this.productService.getCategories().subscribe({
-      next: (categories) => {
-        this.categoryOptions = categories.map((c) => ({
-          label: c.name,
-          value: c.id,
-        }));
-      },
-      error: () => {
-        this.categoryOptions = [];
-      },
-    });
-  }
-
-  private loadBrands() {
-    this.productService.getBrands().subscribe({
-      next: (brands) => {
-        this.brandOptions = (brands || []).map((b) => ({ label: b.name, value: b.id }));
-      },
-      error: () => {
-        this.brandOptions = [];
-      },
-    });
   }
 
   private loadProduct(id: string) {
