@@ -33,7 +33,7 @@ interface NavItem {
     DividerModule,
   ],
   template: `
-    <div class="flex h-screen overflow-hidden bg-gray-50">
+    <div class="flex min-h-screen bg-gray-50">
 
       <!-- Mobile overlay -->
       @if (sidebarOpen() && isMobile()) {
@@ -43,9 +43,9 @@ interface NavItem {
         ></div>
       }
 
-      <!-- Sidebar -->
+      <!-- Sidebar (sticky on desktop so content scrolls at the document level) -->
       <aside
-        class="fixed lg:relative z-30 h-full flex flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out"
+        class="fixed lg:sticky lg:top-0 self-start z-30 h-screen flex flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out"
         [class.w-64]="sidebarOpen()"
         [class.w-0]="!sidebarOpen() && isMobile()"
         [class.w-16]="!sidebarOpen() && !isMobile()"
@@ -133,10 +133,10 @@ interface NavItem {
       </aside>
 
       <!-- Main content -->
-      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div class="flex-1 flex flex-col min-w-0">
 
-        <!-- Top header -->
-        <header class="flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
+        <!-- Top header (sticky) -->
+        <header class="sticky top-0 z-10 flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
           <button
             pButton
             icon="pi pi-bars"
@@ -176,8 +176,8 @@ interface NavItem {
           </div>
         </header>
 
-        <!-- Page content -->
-        <main class="flex-1 overflow-y-auto bg-gray-50">
+        <!-- Page content (scrolls with the document) -->
+        <main class="flex-1 bg-gray-50">
           <router-outlet />
         </main>
       </div>
