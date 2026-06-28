@@ -61,7 +61,7 @@ export class QuoteService {
       if (!result[0]) return null;
 
       const items = await qr.query(
-        `SELECT qi.*, p.name as product_name, p.image_url as product_image
+        `SELECT qi.*, p.name as product_name, p.thumbnail as product_image
          FROM quote_items qi
          LEFT JOIN products p ON p.id = qi.product_id
          WHERE qi.quote_id = $1
