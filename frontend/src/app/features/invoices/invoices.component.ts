@@ -414,7 +414,23 @@ export class InvoicesComponent implements OnInit {
   loadInvoices() {
     this.loading.set(true);
     this.api.get<any>('/invoices').subscribe({
-      next: (r) => { this.invoices.set(this.arr(r)); this.loading.set(false); },
+      next: (r) => {
+        // API returns camelCase; the table reads snake_case — normalise both.
+        this.invoices.set(this.arr(r).map((i: any) => ({
+          id: i.id,
+          order_id: i.order_id ?? i.orderId,
+          invoice_number: i.invoice_number ?? i.invoiceNumber,
+          doc_type: i.doc_type ?? i.docType,
+          customer_name: i.customer_name ?? i.customerName,
+          customer_phone: i.customer_phone ?? i.customerPhone,
+          total: Number(i.total ?? 0),
+          total_tax: Number(i.total_tax ?? i.totalTax ?? 0),
+          currency: i.currency || 'INR',
+          issued_at: i.issued_at ?? i.issuedAt,
+          status: i.status,
+        })));
+        this.loading.set(false);
+      },
       error: () => this.loading.set(false),
     });
   }
