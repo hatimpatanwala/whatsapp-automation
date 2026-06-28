@@ -60,7 +60,8 @@ interface OrderRow {
           <p class="text-gray-500 text-sm">Track and manage customer orders</p>
         </div>
         <div class="flex gap-2">
-          <button pButton label="New Order" icon="pi pi-bolt" class="p-button-sm" (click)="openBuilder()"></button>
+          <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined p-button-sm" [loading]="openingBuilder()" (click)="openBuilder()"></button>
+          <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" routerLink="/orders/new"></button>
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
         </div>
       </div>
@@ -168,11 +169,15 @@ export class OrderListComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
 
-  /** Mint a token-secured Builder session and open the order builder. */
+  openingBuilder = signal(false);
+
+  /** Mint a token-secured Builder session and open the order builder (WhatsApp webview). */
   openBuilder() {
+    if (this.openingBuilder()) return;
+    this.openingBuilder.set(true);
     this.api.post<{ token: string }>('/builder/sessions', { type: 'order' }).subscribe({
-      next: (r) => this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }),
-      error: () => this.messageService.add({ severity: 'error', summary: 'Could not open builder' }),
+      next: (r) => { this.openingBuilder.set(false); this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }); },
+      error: () => { this.openingBuilder.set(false); this.messageService.add({ severity: 'error', summary: 'Could not open builder' }); },
     });
   }
 
