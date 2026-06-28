@@ -43,7 +43,10 @@ interface Line { productId: string | null; description: string; quantity: number
           <p class="text-gray-500 text-sm">Issue GST invoices, bills of supply & delivery challans — straight to the customer.</p>
         </div>
         @if (view() === 'list') {
-          <button pButton label="New Invoice" icon="pi pi-plus" severity="success" (click)="startCreate()"></button>
+          <div class="flex items-center gap-2">
+            <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined" [loading]="mintingLink()" (click)="createOnWhatsApp()"></button>
+            <button pButton label="New Invoice" icon="pi pi-plus" severity="success" (click)="startCreate()"></button>
+          </div>
         } @else {
           <button pButton label="Back to invoices" icon="pi pi-arrow-left" class="p-button-outlined p-button-sm" (click)="view.set('list')"></button>
         }
@@ -348,6 +351,7 @@ export class InvoicesComponent implements OnInit {
   loading = signal(false);
   submitting = signal(false);
   savingCfg = signal(false);
+  mintingLink = signal(false);
 
   tabs = [
     { label: 'All invoices', value: 'list' as const },
@@ -474,6 +478,21 @@ export class InvoicesComponent implements OnInit {
   }
 
   startCreate() { this.mode.set('new'); this.view.set('create'); }
+
+  /** Mint a token-secured invoice webview and open it (admin bills a customer from WhatsApp). */
+  createOnWhatsApp() {
+    if (this.mintingLink()) return;
+    this.mintingLink.set(true);
+    this.api.post<any>('/invoices/webview-session', {}).subscribe({
+      next: (r) => {
+        this.mintingLink.set(false);
+        const url = r?.url || (r?.token ? `/m/invoice-builder?token=${r.token}` : null);
+        if (url) window.open(url, '_blank');
+        else this.toast.add({ severity: 'error', summary: 'Could not create link' });
+      },
+      error: (e) => { this.mintingLink.set(false); this.toast.add({ severity: 'error', summary: 'Could not create link', detail: e?.error?.message }); },
+    });
+  }
 
   addLine() { this.lines.update(l => [...l, { productId: null, description: '', quantity: 1, unitPrice: 0 }]); }
   removeLine(i: number) { this.lines.update(l => l.filter((_, idx) => idx !== i)); }

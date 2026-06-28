@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Body, Req, Res, UseGuards, NotFoundExcept
 import { Request, Response } from 'express';
 import { InvoiceService, DocType } from '../whatsapp/invoice.service';
 import { OrderService } from '../order/order.service';
+import { BuilderService } from '../builder/builder.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
@@ -24,7 +25,17 @@ export class InvoiceController {
   constructor(
     private readonly invoiceService: InvoiceService,
     private readonly orderService: OrderService,
+    private readonly builder: BuilderService,
   ) {}
+
+  /** Mint a WhatsApp webview session so the admin can bill a customer from chat. */
+  @Post('invoices/webview-session')
+  @Roles('owner', 'seller')
+  async webviewSession(@Req() req: Request, @Body() body: { customerId?: string }) {
+    const t = req.tenantContext;
+    const session = await this.builder.createInvoiceSession({ tenantId: t.id, schemaName: t.schemaName, customerId: body?.customerId });
+    return { token: session.token, url: session.url };
+  }
 
   /**
    * Quick-create: build an order from line items, set its status, then issue
