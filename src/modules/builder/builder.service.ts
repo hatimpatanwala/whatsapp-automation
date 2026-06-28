@@ -376,6 +376,28 @@ export class BuilderService implements OnModuleInit {
     return this.resolveSession(token, 'shop');
   }
 
+  /** Mint an INVOICE session — an admin webview to bill a customer from WhatsApp. */
+  async createInvoiceSession(input: {
+    tenantId: string; schemaName: string;
+    customerId?: string | null; customerPhone?: string | null; customerName?: string | null;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2h — admin tool
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions
+         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, customer_name, status, mode, expires_at)
+       VALUES ($1,$2,$3,'invoice',$4,$5,$6,'open','invoice',$7)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.customerId || null, input.customerPhone || null, input.customerName || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/invoice-builder?token=${token}` };
+  }
+
+  /** Resolve + validate an INVOICE token → its session row. */
+  async getInvoiceSession(token: string): Promise<any> {
+    return this.resolveSession(token, 'invoice');
+  }
+
   /** Categories / brands / products / customers for the promo scope & audience pickers. */
   async promoTaxonomy(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
@@ -399,7 +421,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

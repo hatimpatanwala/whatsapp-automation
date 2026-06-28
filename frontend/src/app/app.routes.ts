@@ -153,5 +153,10 @@ export const routes: Routes = [
     path: 'm/customers',
     loadComponent: () => import('./features/builder/customers-webview.component').then(m => m.CustomersWebviewComponent),
   },
+  {
+    // Token-secured invoice builder webview (admin bills a customer from WhatsApp).
+    path: 'm/invoice-builder',
+    loadComponent: () => import('./features/builder/invoice-builder.component').then(m => m.InvoiceBuilderComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
