@@ -1209,6 +1209,21 @@ const migration042Loyalty: TenantMigration = {
   },
 };
 
+const migration043CustomerProfile: TenantMigration = {
+  name: '043_customer_profile',
+  async up(qr, schema) {
+    // Editable profile fields: a friendly display name / nickname, email, notes.
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)`);
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS notes TEXT`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".customers DROP COLUMN IF EXISTS display_name`);
+    await qr.query(`ALTER TABLE "${schema}".customers DROP COLUMN IF EXISTS email`);
+    await qr.query(`ALTER TABLE "${schema}".customers DROP COLUMN IF EXISTS notes`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1252,4 +1267,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration040Schemes,
   migration041Coupons,
   migration042Loyalty,
+  migration043CustomerProfile,
 ];

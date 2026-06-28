@@ -17,6 +17,9 @@ export interface CustomerListParams extends QueryParams {
 }
 
 export interface UpdateCustomerPayload {
+  name?: string;
+  displayName?: string;
+  optedIn?: boolean;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -104,6 +107,16 @@ export class CustomerService {
 
   getStats(): Observable<CustomerStats> {
     return this.api.get<CustomerStats>('/customers/stats');
+  }
+
+  /** The customer's current active cart (items + total + updatedAt). */
+  getCart(id: string): Observable<any> {
+    return this.api.get<any>(`/customers/${id}/cart`);
+  }
+
+  /** Counts per quick-segment for the filter chips. */
+  segmentSummary(): Observable<Record<string, number>> {
+    return this.api.get<Record<string, number>>('/customers/segment-summary');
   }
 
   /**

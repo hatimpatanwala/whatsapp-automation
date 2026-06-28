@@ -27,7 +27,8 @@ interface CustomerRow {
   totalOrders: number;
   totalSpent: number;
   status: 'active' | 'blocked' | 'unsubscribed';
-  lastOrderAt: string;
+  lastActive: string;
+  cartItems: number;
   joinedAt: string;
 }
 
@@ -66,14 +67,25 @@ interface CustomerRow {
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
-        <p-iconfield class="flex-1 min-w-48">
-          <p-inputicon styleClass="pi pi-search" />
-          <input pInputText [(ngModel)]="searchQuery" placeholder="Search by name, phone, email..." class="w-full" (input)="onSearchInput()" />
-        </p-iconfield>
-        <p-select [(ngModel)]="statusFilter" [options]="statusOptions" optionLabel="label" optionValue="value"
-          placeholder="All statuses" styleClass="min-w-36" (onChange)="onFilterChange()" />
-        <button pButton label="Reset" icon="pi pi-filter-slash" class="p-button-outlined p-button-sm" (click)="resetFilters()"></button>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
+        <div class="flex gap-3 flex-wrap">
+          <p-iconfield class="flex-1 min-w-48">
+            <p-inputicon styleClass="pi pi-search" />
+            <input pInputText [(ngModel)]="searchQuery" placeholder="Search by name, phone, email..." class="w-full" (input)="onSearchInput()" />
+          </p-iconfield>
+          <button pButton label="Reset" icon="pi pi-filter-slash" class="p-button-outlined p-button-sm" (click)="resetFilters()"></button>
+        </div>
+        <!-- Quick segments -->
+        <div class="flex gap-2 overflow-x-auto pb-1">
+          @for (s of segments; track s.key) {
+            <button class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors"
+              [class]="segment() === s.key ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'"
+              (click)="selectSegment(s.key)">
+              {{ s.label }}
+              @if (counts()[s.countKey] !== undefined) { <span class="ml-1 opacity-70">{{ counts()[s.countKey] }}</span> }
+            </button>
+          }
+        </div>
       </div>
 
       <!-- Table -->
@@ -97,7 +109,7 @@ interface CustomerRow {
               <th pSortableColumn="totalOrders" class="text-xs text-gray-500 font-medium">Orders <p-sortIcon field="totalOrders" /></th>
               <th pSortableColumn="totalSpent" class="text-xs text-gray-500 font-medium">Total Spent <p-sortIcon field="totalSpent" /></th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
-              <th class="text-xs text-gray-500 font-medium">Last Order</th>
+              <th class="text-xs text-gray-500 font-medium">Last Active</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>
@@ -134,12 +146,13 @@ interface CustomerRow {
               <td class="font-semibold text-gray-900">₹{{ customer.totalSpent | number }}</td>
               <td>
                 <p-tag [value]="customer.status" [severity]="getStatusSeverity(customer.status)" styleClass="text-xs capitalize" />
+                @if (customer.cartItems > 0) { <span class="ml-1 text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">🛒 {{ customer.cartItems }}</span> }
               </td>
-              <td class="text-gray-500 text-xs">{{ customer.lastOrderAt || 'Never' }}</td>
+              <td class="text-gray-500 text-xs">{{ customer.lastActive || 'Never' }}</td>
               <td>
                 <div class="flex gap-1">
                   <button pButton icon="pi pi-eye" class="p-button-text p-button-sm p-button-rounded" pTooltip="View profile" [routerLink]="[customer.id]"></button>
-                  <button pButton icon="pi pi-comments" class="p-button-text p-button-sm p-button-rounded" pTooltip="Start conversation"></button>
+                  <a pButton icon="pi pi-whatsapp" class="p-button-text p-button-sm p-button-rounded" pTooltip="Message on WhatsApp" [href]="'https://wa.me/' + customer.phone.replace(/[^0-9]/g,'')" target="_blank"></a>
                 </div>
               </td>
             </tr>
@@ -169,15 +182,21 @@ export class CustomerListComponent implements OnInit {
   totalRecords = signal(0);
 
   searchQuery = '';
-  statusFilter = '';
+  segment = signal('');
+  counts = signal<Record<string, number>>({});
   currentPage = 1;
   rows = 10;
 
-  statusOptions = [
-    { label: 'All Statuses', value: '' },
-    { label: 'Active', value: 'active' },
-    { label: 'Blocked', value: 'blocked' },
-    { label: 'Unsubscribed', value: 'unsubscribed' },
+  segments = [
+    { key: '', label: 'All', countKey: 'all' },
+    { key: 'top', label: '⭐ Top Spenders', countKey: 'top' },
+    { key: 'high_orders', label: '🔥 High Orders', countKey: 'highOrders' },
+    { key: 'low_orders', label: '🌱 Low Orders', countKey: 'lowOrders' },
+    { key: 'pending_cart', label: '🛒 Pending Cart', countKey: 'pendingCart' },
+    { key: 'repeat', label: '🔁 Repeat', countKey: 'repeat' },
+    { key: 'new', label: '✨ New', countKey: 'new' },
+    { key: 'inactive', label: '💤 Inactive', countKey: 'inactive' },
+    { key: 'blocked', label: '🚫 Blocked', countKey: 'blocked' },
   ];
 
   ngOnInit() {
@@ -189,6 +208,13 @@ export class CustomerListComponent implements OnInit {
       this.loadCustomers();
     });
 
+    this.loadCustomers();
+    this.customerService.segmentSummary().subscribe({ next: (r) => this.counts.set(r || {}) });
+  }
+
+  selectSegment(key: string) {
+    this.segment.set(key);
+    this.currentPage = 1;
     this.loadCustomers();
   }
 
@@ -211,7 +237,7 @@ export class CustomerListComponent implements OnInit {
 
   resetFilters() {
     this.searchQuery = '';
-    this.statusFilter = '';
+    this.segment.set('');
     this.currentPage = 1;
     this.loadCustomers();
   }
@@ -224,7 +250,7 @@ export class CustomerListComponent implements OnInit {
       limit: this.rows,
     };
     if (this.searchQuery) params.search = this.searchQuery;
-    if (this.statusFilter) params.status = this.statusFilter;
+    if (this.segment()) params.segment = this.segment();
 
     this.customerService.getAll(params).subscribe({
       next: (res) => {
@@ -244,8 +270,10 @@ export class CustomerListComponent implements OnInit {
     });
   }
 
-  private mapCustomerToRow(customer: Customer): CustomerRow {
-    const name = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.whatsappName || 'Unknown';
+  private mapCustomerToRow(customer: any): CustomerRow {
+    const name = customer.displayName || customer.whatsappName
+      || [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.whatsappPhone || 'Customer';
+    const lastActive = customer.lastActivity || customer.lastOrderAt;
 
     return {
       id: customer.id,
@@ -256,9 +284,8 @@ export class CustomerListComponent implements OnInit {
       totalOrders: customer.totalOrders,
       totalSpent: customer.totalSpent,
       status: customer.status,
-      lastOrderAt: customer.lastOrderAt
-        ? this.datePipe.transform(customer.lastOrderAt, 'MMM d, y') || customer.lastOrderAt
-        : '',
+      cartItems: Number(customer.activeCartItems) || 0,
+      lastActive: lastActive ? this.datePipe.transform(lastActive, 'MMM d, y') || '' : '',
       joinedAt: this.datePipe.transform(customer.createdAt, 'MMM y') || customer.createdAt,
     };
   }
