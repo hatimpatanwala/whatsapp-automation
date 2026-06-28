@@ -51,7 +51,7 @@ interface EditItem {
       <p-toast />
 
       <!-- Back + header -->
-      <div class="flex items-center gap-4 mb-6">
+      <div class="flex flex-wrap items-center gap-4 mb-6">
         <button pButton icon="pi pi-arrow-left" class="p-button-text p-button-rounded" routerLink="/orders"></button>
         <div class="flex-1">
           <div class="flex items-center gap-3">
@@ -60,7 +60,7 @@ interface EditItem {
           </div>
           <p class="text-gray-500 text-sm mt-1">{{ order().date ? 'Placed on ' + order().date : '' }}</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           @if (!editing()) {
             <button pButton label="Message Customer" icon="pi pi-whatsapp" class="p-button-outlined" severity="success"></button>
             <button pButton label="Edit Order" icon="pi pi-pencil" class="p-button-outlined" (click)="startEdit()"></button>
