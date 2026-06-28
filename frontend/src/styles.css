@@ -591,3 +591,40 @@ textarea.p-textarea:focus, textarea[pTextarea]:focus {
 
 /* --- KPI / stat numbers use tabular figures for clean alignment --- */
 .tabular-nums, [class*="text-2xl"], [class*="text-3xl"] { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   RESPONSIVE — mobile / small-screen safeguards
+   ============================================================ */
+
+/* Dialogs never exceed the viewport on phones; content area scrolls
+   instead of pushing the footer off-screen. */
+@media (max-width: 640px) {
+  .p-dialog {
+    width: 94vw !important;
+    max-width: 94vw !important;
+    max-height: 92vh !important;
+    margin: 0.5rem !important;
+  }
+  .p-dialog .p-dialog-content { max-height: 70vh; overflow-y: auto; }
+  .p-dialog .p-dialog-header,
+  .p-dialog .p-dialog-content,
+  .p-dialog .p-dialog-footer { padding-left: 1rem !important; padding-right: 1rem !important; }
+  /* Dialog footer buttons stack full-width so they're easy to tap */
+  .p-dialog .p-dialog-footer { display: flex; flex-direction: column-reverse; gap: 0.5rem; }
+  .p-dialog .p-dialog-footer .p-button { width: 100%; justify-content: center; }
+}
+
+/* Overlay panels (dropdowns, multiselects, date pickers) stay within
+   the viewport width on small screens. */
+@media (max-width: 640px) {
+  .p-select-overlay, .p-multiselect-overlay, .p-datepicker-panel, .p-popover {
+    max-width: 94vw !important;
+  }
+}
+
+/* Data tables: keep a sensible minimum so columns don't crush into
+   unreadable slivers — the card's container scrolls horizontally. */
+@media (max-width: 1024px) {
+  .p-datatable-table-container { -webkit-overflow-scrolling: touch; }
+  .p-datatable-table { min-width: 640px; }
+}

@@ -45,12 +45,12 @@ interface NavItem {
 
       <!-- Sidebar (sticky on desktop so content scrolls at the document level) -->
       <aside
-        class="fixed lg:sticky lg:top-0 self-start z-30 h-screen flex flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out"
-        [class.w-64]="sidebarOpen()"
-        [class.w-0]="!sidebarOpen() && isMobile()"
+        class="fixed lg:sticky lg:top-0 self-start z-30 h-screen flex flex-col overflow-hidden bg-white border-r border-gray-200 transition-all duration-300 ease-in-out"
+        [class.w-64]="sidebarOpen() || isMobile()"
         [class.w-16]="!sidebarOpen() && !isMobile()"
         [class.-translate-x-full]="!sidebarOpen() && isMobile()"
         [class.translate-x-0]="sidebarOpen() || !isMobile()"
+        [class.shadow-2xl]="sidebarOpen() && isMobile()"
       >
         <!-- Logo area -->
         <div class="flex items-center gap-3 px-4 py-5 border-b border-gray-100">
