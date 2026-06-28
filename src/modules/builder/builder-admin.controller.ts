@@ -32,4 +32,13 @@ export class BuilderAdminController {
     });
     return { token: session.token, path: session.path, url: session.url, type };
   }
+
+  /** Mint a SHOP session so the merchant can preview their own storefront. */
+  @Post('shop-preview')
+  @Roles('owner', 'seller')
+  async shopPreview(@Req() req: Request) {
+    const t = req.tenantContext;
+    const session = await this.builder.createShopPreview(t.id, t.schemaName);
+    return { token: session.token, url: session.url };
+  }
 }
