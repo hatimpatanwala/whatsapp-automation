@@ -228,7 +228,16 @@ export class QuoteListComponent implements OnInit {
 
     this.api.get<any>('/quotes', params).subscribe({
       next: (res) => {
-        this.quotes.set(res.data || []);
+        // API returns camelCase; the table reads snake_case — map both ways.
+        this.quotes.set((res.data || []).map((q: any) => ({
+          ...q,
+          quote_number: q.quote_number ?? q.quoteNumber,
+          customer_name: q.customer_name ?? q.customerName,
+          customer_phone: q.customer_phone ?? q.customerPhone,
+          total_amount: q.total_amount ?? q.totalAmount,
+          valid_until: q.valid_until ?? q.validUntil,
+          created_at: q.created_at ?? q.createdAt,
+        })));
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

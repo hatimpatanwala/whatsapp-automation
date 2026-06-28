@@ -217,11 +217,32 @@ export class QuoteDetailComponent implements OnInit {
     this.loadQuote();
   }
 
+  /** API returns camelCase; the template reads snake_case — map both ways. */
+  private normalizeQuote(q: any): any {
+    if (!q) return q;
+    return {
+      ...q,
+      quote_number: q.quote_number ?? q.quoteNumber,
+      customer_name: q.customer_name ?? q.customerName,
+      customer_phone: q.customer_phone ?? q.customerPhone,
+      tax_amount: q.tax_amount ?? q.taxAmount,
+      total_amount: q.total_amount ?? q.totalAmount,
+      valid_until: q.valid_until ?? q.validUntil,
+      created_at: q.created_at ?? q.createdAt,
+      items: (q.items ?? []).map((it: any) => ({
+        ...it,
+        product_name: it.product_name ?? it.productName,
+        unit_price: it.unit_price ?? it.unitPrice,
+        line_total: it.line_total ?? it.lineTotal,
+      })),
+    };
+  }
+
   loadQuote() {
     this.loading.set(true);
     this.api.get<any>(`/quotes/${this.quoteId}`).subscribe({
       next: (q) => {
-        this.quote.set(q);
+        this.quote.set(this.normalizeQuote(q));
         this.loading.set(false);
       },
       error: () => {
@@ -234,7 +255,7 @@ export class QuoteDetailComponent implements OnInit {
   updateStatus(status: string) {
     this.api.patch<any>(`/quotes/${this.quoteId}/status`, { status }).subscribe({
       next: (q) => {
-        this.quote.set(q);
+        this.quote.set(this.normalizeQuote(q));
         this.messageService.add({ severity: 'success', summary: 'Updated', detail: `Quote marked as ${status}` });
       },
       error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to update' }),
