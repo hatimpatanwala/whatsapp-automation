@@ -45,44 +45,28 @@ interface QuoteItem {
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <!-- Main form -->
-        <div class="lg:col-span-2 space-y-6">
+        <div class="lg:col-span-2 space-y-5">
 
-          <!-- Quote details -->
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 class="text-base font-semibold text-gray-900 mb-4">Quote details</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input pInputText [(ngModel)]="title" class="w-full" placeholder="e.g. Website Redesign Package" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
-                <p-select
-                  [options]="customers()"
-                  [(ngModel)]="customerId"
-                  optionLabel="label"
-                  optionValue="value"
-                  placeholder="Select customer"
-                  [filter]="true"
-                  filterPlaceholder="Search customers..."
-                  styleClass="w-full"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Valid Until</label>
-                <p-datepicker [(ngModel)]="validUntil" [showIcon]="true" dateFormat="yy-mm-dd" styleClass="w-full" [minDate]="today" />
-              </div>
-              <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea pTextarea [(ngModel)]="notes" [rows]="3" class="w-full" placeholder="Additional notes for the customer..."></textarea>
-              </div>
-            </div>
+          <!-- Customer -->
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <h3 class="text-base font-semibold text-gray-900">Quote for</h3>
+            <p-select
+              [options]="customers()"
+              [(ngModel)]="customerId"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select a customer"
+              [filter]="true"
+              filterPlaceholder="Search customers..."
+              styleClass="w-full"
+              appendTo="body"
+            />
           </div>
 
           <!-- Line items -->
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-base font-semibold text-gray-900">Line items</h3>
               <button pButton label="Add item" icon="pi pi-plus" class="p-button-text p-button-sm" (click)="addItem()"></button>
@@ -128,48 +112,33 @@ interface QuoteItem {
                 </div>
               }
             </div>
+
+            <textarea pTextarea [(ngModel)]="notes" rows="2" class="w-full mt-4" placeholder="Notes for this quote (optional)"></textarea>
           </div>
         </div>
 
-        <!-- Summary sidebar -->
-        <div class="space-y-6">
-          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-4">
-            <h3 class="text-base font-semibold text-gray-900 mb-4">Summary</h3>
-
-            <div class="space-y-2.5 text-sm">
-              <div class="flex justify-between text-gray-600">
-                <span>Items</span>
-                <span class="font-medium tabular-nums">{{ items.length }}</span>
-              </div>
-              <div class="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span class="font-medium tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span>
-              </div>
-              <div class="flex justify-between font-bold text-base pt-2 border-t border-gray-100">
-                <span>Total</span>
-                <span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span>
-              </div>
+        <!-- Right: quote options + summary -->
+        <div class="space-y-5">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <h3 class="text-base font-semibold text-gray-900">Quote details</h3>
+            <div>
+              <label class="text-xs font-medium text-gray-500">Title <span class="text-gray-300">(optional)</span></label>
+              <input pInputText [(ngModel)]="title" class="w-full" placeholder="e.g. Website Redesign Package" />
             </div>
-
-            <div class="mt-6 space-y-2">
-              <p-button
-                label="{{ isEdit() ? 'Update quote' : 'Create quote' }}"
-                icon="pi pi-check"
-                severity="success"
-                styleClass="w-full"
-                [loading]="saving()"
-                (onClick)="save()"
-                [disabled]="!canSave()"
-              />
-              <p-button
-                label="Cancel"
-                icon="pi pi-times"
-                styleClass="w-full"
-                severity="secondary"
-                [outlined]="true"
-                routerLink="/quotes"
-              />
+            <div>
+              <label class="text-xs font-medium text-gray-500">Valid until</label>
+              <p-datepicker [(ngModel)]="validUntil" [showIcon]="true" dateFormat="yy-mm-dd" styleClass="w-full" [minDate]="today" appendTo="body" />
             </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-1.5 text-sm">
+            <h3 class="text-base font-semibold text-gray-900 mb-2">Summary</h3>
+            <div class="flex justify-between text-gray-600"><span>Items</span><span class="tabular-nums">{{ items.length }}</span></div>
+            <div class="flex justify-between text-gray-600"><span>Subtotal</span><span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span></div>
+            <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span></div>
+            <button pButton class="w-full mt-3" [label]="saving() ? 'Saving\u2026' : (isEdit() ? 'Update quote' : 'Create quote')"
+              icon="pi pi-check" severity="success" [disabled]="!canSave() || saving()" (click)="save()"></button>
+            <button pButton class="w-full" label="Cancel" icon="pi pi-times" severity="secondary" [outlined]="true" routerLink="/quotes"></button>
           </div>
         </div>
       </div>
