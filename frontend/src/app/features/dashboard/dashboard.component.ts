@@ -72,7 +72,7 @@ interface LowStockItem {
       <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         @if (loading()) {
           @for (i of [1, 2, 3, 4]; track i) {
-            <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <p-skeleton width="60%" height="1rem" styleClass="mb-2" />
               <p-skeleton width="40%" height="2rem" styleClass="mb-2" />
               <p-skeleton width="50%" height="0.75rem" />
@@ -80,27 +80,25 @@ interface LowStockItem {
           }
         } @else {
           @for (stat of stats; track stat.label) {
-            <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-              <div class="flex items-start justify-between">
-                <div>
-                  <p class="text-sm text-gray-500 font-medium">{{ stat.label }}</p>
-                  <p class="text-2xl font-bold text-gray-900 mt-1">{{ stat.value }}</p>
-                  <div class="flex items-center gap-1 mt-2">
-                    <i
-                      [class]="'pi ' + (stat.changeType === 'up' ? 'pi-arrow-up text-green-500' : stat.changeType === 'down' ? 'pi-arrow-down text-red-500' : 'pi-minus text-gray-400')"
-                      style="font-size:0.75rem"
-                    ></i>
-                    <span
-                      class="text-xs font-medium"
-                      [class.text-green-600]="stat.changeType === 'up'"
-                      [class.text-red-600]="stat.changeType === 'down'"
-                      [class.text-gray-500]="stat.changeType === 'neutral'"
-                    >{{ stat.change }} vs yesterday</span>
-                  </div>
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">{{ stat.label }}</p>
+                <div [class]="'flex items-center justify-center w-10 h-10 rounded-xl shadow-sm ' + stat.iconBg">
+                  <i [class]="'pi ' + stat.icon + ' text-white'" style="font-size:1.05rem"></i>
                 </div>
-                <div [class]="'flex items-center justify-center w-12 h-12 rounded-xl ' + stat.iconBg">
-                  <i [class]="'pi ' + stat.icon + ' text-white'" style="font-size:1.25rem"></i>
-                </div>
+              </div>
+              <p class="text-[1.75rem] leading-none font-bold text-gray-900 mt-4 tabular-nums">{{ stat.value }}</p>
+              <div class="flex items-center gap-1.5 mt-3">
+                <span
+                  class="inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-md"
+                  [class.bg-green-50]="stat.changeType === 'up'" [class.text-green-700]="stat.changeType === 'up'"
+                  [class.bg-red-50]="stat.changeType === 'down'" [class.text-red-600]="stat.changeType === 'down'"
+                  [class.bg-gray-100]="stat.changeType === 'neutral'" [class.text-gray-500]="stat.changeType === 'neutral'"
+                >
+                  <i [class]="'pi ' + (stat.changeType === 'up' ? 'pi-arrow-up-right' : stat.changeType === 'down' ? 'pi-arrow-down-right' : 'pi-minus')" style="font-size:0.6rem"></i>
+                  {{ stat.change }}
+                </span>
+                <span class="text-xs text-gray-400">vs yesterday</span>
               </div>
             </div>
           }
@@ -111,7 +109,7 @@ interface LowStockItem {
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
         <!-- Revenue chart -->
-        <div class="xl:col-span-2 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="xl:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="text-base font-semibold text-gray-900">Revenue Overview</h3>
@@ -126,7 +124,7 @@ interface LowStockItem {
         </div>
 
         <!-- Low stock alerts -->
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-base font-semibold text-gray-900">Low Stock Alerts</h3>
             <span class="bg-red-100 text-red-600 text-xs font-semibold px-2 py-0.5 rounded-full">{{ lowStockItems.length }}</span>
@@ -164,7 +162,7 @@ interface LowStockItem {
       </div>
 
       <!-- Recent orders table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 class="text-base font-semibold text-gray-900">Recent Orders</h3>
           <button pButton label="View all" class="p-button-text p-button-sm" icon="pi pi-arrow-right" iconPos="right" routerLink="/orders"></button>
@@ -367,23 +365,42 @@ export class DashboardComponent implements OnInit {
     this.revenueChartOptions = {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 11 } } },
-        tooltip: { mode: 'index', intersect: false },
+        legend: {
+          position: 'top', align: 'end',
+          labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 16, font: { size: 11, weight: '600' }, color: '#64748b' },
+        },
+        tooltip: {
+          mode: 'index', intersect: false,
+          backgroundColor: '#0f172a', padding: 12, cornerRadius: 10,
+          titleColor: '#fff', titleFont: { size: 12, weight: '600' },
+          bodyColor: '#cbd5e1', bodyFont: { size: 12 },
+          boxPadding: 6, usePointStyle: true, displayColors: true,
+        },
       },
       scales: {
         y: {
-          type: 'linear', position: 'left',
-          ticks: { callback: (v: number) => '\u20B9' + (v / 1000).toFixed(0) + 'k', font: { size: 10 } },
-          grid: { color: 'rgba(0,0,0,0.05)' },
+          type: 'linear', position: 'left', border: { display: false },
+          ticks: { callback: (v: number) => '\u20B9' + (v / 1000).toFixed(0) + 'k', font: { size: 11 }, color: '#94a3b8', padding: 8 },
+          grid: { color: 'rgba(148,163,184,0.14)', drawTicks: false },
         },
         y1: {
-          type: 'linear', position: 'right',
+          type: 'linear', position: 'right', border: { display: false },
           grid: { drawOnChartArea: false },
-          ticks: { font: { size: 10 } },
+          ticks: { font: { size: 11 }, color: '#94a3b8', padding: 8 },
         },
-        x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+        x: { border: { display: false }, ticks: { font: { size: 11 }, color: '#94a3b8', padding: 6 }, grid: { display: false } },
       },
+    };
+
+    const greenGradient = (context: any) => {
+      const { ctx, chartArea } = context.chart;
+      if (!chartArea) return 'rgba(37,211,102,0.14)';
+      const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+      g.addColorStop(0, 'rgba(37,211,102,0.28)');
+      g.addColorStop(1, 'rgba(37,211,102,0.00)');
+      return g;
     };
 
     this.apiService.get<any>('/orders/dashboard/chart', { days: 7 }).subscribe({
@@ -398,14 +415,16 @@ export class DashboardComponent implements OnInit {
             {
               label: 'Revenue (\u20B9)',
               data: data.revenue || [],
-              borderColor: '#25D366', backgroundColor: 'rgba(37,211,102,0.1)',
-              fill: true, tension: 0.4, pointBackgroundColor: '#25D366', pointRadius: 4, yAxisID: 'y',
+              borderColor: '#16a34a', backgroundColor: greenGradient, borderWidth: 2.5,
+              fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5,
+              pointBackgroundColor: '#16a34a', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, yAxisID: 'y',
             },
             {
               label: 'Orders',
               data: data.orders || [],
-              borderColor: '#34B7F1', backgroundColor: 'transparent',
-              tension: 0.4, borderDash: [5, 5], pointBackgroundColor: '#34B7F1', pointRadius: 4, yAxisID: 'y1',
+              borderColor: '#3b82f6', backgroundColor: 'transparent', borderWidth: 2,
+              tension: 0.4, borderDash: [5, 5], pointRadius: 0, pointHoverRadius: 5,
+              pointBackgroundColor: '#3b82f6', pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2, yAxisID: 'y1',
             },
           ],
         };
@@ -415,8 +434,8 @@ export class DashboardComponent implements OnInit {
         this.revenueChartData = {
           labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
           datasets: [
-            { label: 'Revenue (\u20B9)', data: [0, 0, 0, 0, 0, 0, 0], borderColor: '#25D366', backgroundColor: 'rgba(37,211,102,0.1)', fill: true, tension: 0.4, yAxisID: 'y' },
-            { label: 'Orders', data: [0, 0, 0, 0, 0, 0, 0], borderColor: '#34B7F1', backgroundColor: 'transparent', tension: 0.4, borderDash: [5, 5], yAxisID: 'y1' },
+            { label: 'Revenue (\u20B9)', data: [0, 0, 0, 0, 0, 0, 0], borderColor: '#16a34a', backgroundColor: greenGradient, borderWidth: 2.5, fill: true, tension: 0.4, pointRadius: 0, yAxisID: 'y' },
+            { label: 'Orders', data: [0, 0, 0, 0, 0, 0, 0], borderColor: '#3b82f6', backgroundColor: 'transparent', borderWidth: 2, tension: 0.4, borderDash: [5, 5], pointRadius: 0, yAxisID: 'y1' },
           ],
         };
       },
