@@ -207,8 +207,34 @@ interface NavItem {
               styleClass="bg-primary-500 text-white font-semibold cursor-pointer"
               size="normal"
               shape="circle"
+              (click)="userMenu.toggle($event)"
               pTooltip="{{ userName() }}"
+              tooltipPosition="bottom"
             />
+            <p-popover #userMenu>
+              <div class="w-56">
+                <div class="flex items-center gap-3 px-1 pb-3 mb-2 border-b border-gray-100">
+                  <p-avatar [label]="userInitials()" styleClass="bg-primary-100 text-primary-700 font-semibold" shape="circle" />
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-gray-900 truncate">{{ userName() }}</div>
+                    <div class="text-xs text-gray-400 truncate">{{ userRole() }}</div>
+                  </div>
+                </div>
+                <a
+                  routerLink="/settings"
+                  (click)="userMenu.hide()"
+                  class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 no-underline text-gray-700 transition-colors"
+                >
+                  <i class="pi pi-cog text-gray-400"></i><span class="text-sm">Settings</span>
+                </a>
+                <button
+                  (click)="userMenu.hide(); logout()"
+                  class="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors border-0 bg-transparent cursor-pointer"
+                >
+                  <i class="pi pi-sign-out"></i><span class="text-sm">Sign out</span>
+                </button>
+              </div>
+            </p-popover>
           </div>
         </header>
 
