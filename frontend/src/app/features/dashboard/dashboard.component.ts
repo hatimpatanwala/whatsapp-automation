@@ -114,11 +114,11 @@ interface LowStockItem {
           <div class="flex items-center justify-between mb-4">
             <div>
               <h3 class="text-base font-semibold text-gray-900">Revenue Overview</h3>
-              <p class="text-sm text-gray-500">Last 7 days</p>
+              <p class="text-sm text-gray-500">Last {{ chartDays }} days</p>
             </div>
             <div class="flex gap-1">
-              <button pButton label="7D" class="p-button-sm p-button-outlined text-xs" severity="success"></button>
-              <button pButton label="30D" class="p-button-sm p-button-text text-xs"></button>
+              <button pButton label="7D" class="p-button-sm text-xs" [outlined]="chartDays === 7" [text]="chartDays !== 7" [severity]="chartDays === 7 ? 'success' : 'secondary'" (click)="setChartPeriod(7)"></button>
+              <button pButton label="30D" class="p-button-sm text-xs" [outlined]="chartDays === 30" [text]="chartDays !== 30" [severity]="chartDays === 30 ? 'success' : 'secondary'" (click)="setChartPeriod(30)"></button>
             </div>
           </div>
           <p-chart type="line" [data]="revenueChartData" [options]="revenueChartOptions" height="260px" />
@@ -230,6 +230,7 @@ export class DashboardComponent implements OnInit {
   recentOrders: RecentOrder[] = [];
   revenueChartData: any = {};
   revenueChartOptions: any = {};
+  chartDays = 7;
 
   ngOnInit() {
     this.initChart();
@@ -372,6 +373,12 @@ export class DashboardComponent implements OnInit {
     return value.toLocaleString('en-IN');
   }
 
+  setChartPeriod(days: number) {
+    if (this.chartDays === days) return;
+    this.chartDays = days;
+    this.initChart();
+  }
+
   private initChart() {
     this.revenueChartOptions = {
       responsive: true,
@@ -414,11 +421,13 @@ export class DashboardComponent implements OnInit {
       return g;
     };
 
-    this.apiService.get<any>('/orders/dashboard/chart', { days: 7 }).subscribe({
+    this.apiService.get<any>('/orders/dashboard/chart', { days: this.chartDays }).subscribe({
       next: (data) => {
         const labels = (data.labels || []).map((d: string) => {
           const date = new Date(d);
-          return date.toLocaleDateString('en-IN', { weekday: 'short' });
+          return this.chartDays <= 7
+            ? date.toLocaleDateString('en-IN', { weekday: 'short' })
+            : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
         });
         this.revenueChartData = {
           labels: labels.length ? labels : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
