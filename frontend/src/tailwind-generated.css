@@ -420,6 +420,9 @@
   .-mx-1 {
     margin-inline: calc(var(--spacing) * -1);
   }
+  .-mx-2 {
+    margin-inline: calc(var(--spacing) * -2);
+  }
   .mx-0 {
     margin-inline: calc(var(--spacing) * 0);
   }
@@ -830,6 +833,9 @@
   }
   .min-w-48 {
     min-width: calc(var(--spacing) * 48);
+  }
+  .min-w-64 {
+    min-width: calc(var(--spacing) * 64);
   }
   .min-w-\[18px\] {
     min-width: 18px;

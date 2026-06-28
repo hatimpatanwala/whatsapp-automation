@@ -7,6 +7,8 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { SelectModule } from 'primeng/select';
 import { InputTextModule } from 'primeng/inputtext';
+import { IconFieldModule } from 'primeng/iconfield';
+import { InputIconModule } from 'primeng/inputicon';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { TooltipModule } from 'primeng/tooltip';
@@ -34,7 +36,7 @@ interface Quote {
   imports: [
     CommonModule, RouterLink, FormsModule,
     ButtonModule, TableModule, TagModule, SelectModule,
-    InputTextModule, ToastModule, ConfirmDialogModule, TooltipModule, CardModule,
+    InputTextModule, IconFieldModule, InputIconModule, ToastModule, ConfirmDialogModule, TooltipModule, CardModule,
   ],
   providers: [MessageService, ConfirmationService],
   template: `
@@ -69,17 +71,17 @@ interface Quote {
       <!-- Filters -->
       <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <div class="flex flex-wrap gap-3 items-center">
-          <span class="p-input-icon-left">
-            <i class="pi pi-search"></i>
+          <p-iconfield class="min-w-64">
+            <p-inputicon styleClass="pi pi-search" />
             <input
               pInputText
               type="text"
               placeholder="Search quotes..."
               [(ngModel)]="searchTerm"
               (input)="onSearch()"
-              class="w-64"
+              class="w-full"
             />
-          </span>
+          </p-iconfield>
           <p-select
             [options]="statusOptions"
             [(ngModel)]="selectedStatus"

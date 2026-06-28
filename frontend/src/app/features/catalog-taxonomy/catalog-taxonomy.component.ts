@@ -37,9 +37,9 @@ interface Taxon { id: string; name: string; }
           @if (categories().length) {
             <ul class="divide-y divide-gray-100">
               @for (c of categories(); track c.id) {
-                <li class="flex items-center justify-between py-2">
-                  <span class="text-sm">{{ c.name }}</span>
-                  <button class="text-gray-300 hover:text-red-500" (click)="remove('categories', c)"><i class="pi pi-trash"></i></button>
+                <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span class="text-sm text-gray-700">{{ c.name }}</span>
+                  <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('categories', c)"><i class="pi pi-trash"></i></button>
                 </li>
               }
             </ul>
@@ -52,15 +52,15 @@ interface Taxon { id: string; name: string; }
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newBrand" (keyup.enter)="addBrand()" placeholder="New brand name"
               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-            <button class="bg-blue-600 text-white text-sm font-semibold rounded-lg px-4 hover:bg-blue-700 disabled:opacity-50"
+            <button class="bg-green-600 text-white text-sm font-semibold rounded-lg px-4 hover:bg-green-700 disabled:opacity-50"
               [disabled]="!newBrand.trim() || savingBrand()" (click)="addBrand()">Add</button>
           </div>
           @if (brands().length) {
             <ul class="divide-y divide-gray-100">
               @for (b of brands(); track b.id) {
-                <li class="flex items-center justify-between py-2">
-                  <span class="text-sm">{{ b.name }}</span>
-                  <button class="text-gray-300 hover:text-red-500" (click)="remove('brands', b)"><i class="pi pi-trash"></i></button>
+                <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span class="text-sm text-gray-700">{{ b.name }}</span>
+                  <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('brands', b)"><i class="pi pi-trash"></i></button>
                 </li>
               }
             </ul>
