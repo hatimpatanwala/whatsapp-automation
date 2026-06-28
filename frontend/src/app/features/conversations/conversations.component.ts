@@ -55,8 +55,9 @@ interface MessageView {
   template: `
     <div class="flex h-full" style="height: calc(100vh - 65px)">
 
-      <!-- Conversation list -->
-      <div class="w-80 flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
+      <!-- Conversation list (full-width on mobile; hidden once a chat is open) -->
+      <div class="w-full lg:w-80 flex-shrink-0 flex-col bg-white border-r border-gray-200 lg:flex"
+        [class.hidden]="selectedConv()" [class.flex]="!selectedConv()">
 
         <!-- List header -->
         <div class="px-4 py-3 border-b border-gray-100">
@@ -130,16 +131,17 @@ interface MessageView {
 
       <!-- Chat area -->
       @if (selectedConv()) {
-        <div class="flex-1 flex flex-col">
+        <div class="flex-1 flex flex-col min-w-0">
 
           <!-- Chat header -->
           <div class="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 shadow-sm">
-            <div class="w-9 h-9 rounded-full bg-primary-200 flex items-center justify-center text-primary-800 font-bold text-sm">
+            <button pButton icon="pi pi-arrow-left" class="p-button-text p-button-rounded p-button-sm lg:hidden -ml-2" (click)="selectedConv.set(null)" pTooltip="Back to conversations"></button>
+            <div class="w-9 h-9 rounded-full bg-primary-200 flex items-center justify-center text-primary-800 font-bold text-sm flex-shrink-0">
               {{ getInitials(selectedConv()!.customer) }}
             </div>
-            <div class="flex-1">
-              <p class="font-semibold text-gray-900">{{ selectedConv()!.customer }}</p>
-              <p class="text-xs text-gray-500">{{ selectedConv()!.phone }}</p>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-gray-900 truncate">{{ selectedConv()!.customer }}</p>
+              <p class="text-xs text-gray-500 truncate">{{ selectedConv()!.phone }}</p>
             </div>
             <div class="flex items-center gap-2">
               @if (selectedConv()!.withinWindow) {
@@ -150,10 +152,12 @@ interface MessageView {
               } @else {
                 <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Window expired</span>
               }
-              <button pButton icon="pi pi-phone" class="p-button-text p-button-sm p-button-rounded" pTooltip="Call customer"></button>
-              <button pButton icon="pi pi-tag" class="p-button-text p-button-sm p-button-rounded" pTooltip="Add tag"></button>
-              <button pButton icon="pi pi-check-circle" class="p-button-text p-button-sm p-button-rounded" pTooltip="Resolve" severity="success"></button>
-              <button pButton icon="pi pi-ellipsis-v" class="p-button-text p-button-sm p-button-rounded" pTooltip="More options"></button>
+              <div class="hidden sm:flex items-center gap-2">
+                <button pButton icon="pi pi-phone" class="p-button-text p-button-sm p-button-rounded" pTooltip="Call customer"></button>
+                <button pButton icon="pi pi-tag" class="p-button-text p-button-sm p-button-rounded" pTooltip="Add tag"></button>
+                <button pButton icon="pi pi-check-circle" class="p-button-text p-button-sm p-button-rounded" pTooltip="Resolve" severity="success"></button>
+                <button pButton icon="pi pi-ellipsis-v" class="p-button-text p-button-sm p-button-rounded" pTooltip="More options"></button>
+              </div>
             </div>
           </div>
 
@@ -225,7 +229,7 @@ interface MessageView {
                   (click)="sendMessage(null)"
                 ></button>
               </div>
-              <div class="flex gap-2 mt-2">
+              <div class="flex flex-wrap gap-2 mt-2">
                 @for (quick of quickReplies; track quick) {
                   <button
                     class="text-xs bg-gray-100 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 border border-gray-200 px-3 py-1 rounded-full text-gray-600 transition-colors"
@@ -242,8 +246,8 @@ interface MessageView {
           }
         </div>
       } @else {
-        <!-- No conversation selected -->
-        <div class="flex-1 flex items-center justify-center bg-gray-50">
+        <!-- No conversation selected (desktop only; mobile shows the list) -->
+        <div class="flex-1 hidden lg:flex items-center justify-center bg-gray-50">
           <div class="text-center">
             <div class="w-24 h-24 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <i class="pi pi-comments text-primary-400" style="font-size:3rem"></i>
