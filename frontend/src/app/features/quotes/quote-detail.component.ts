@@ -65,7 +65,7 @@ import { ApiService } from '../../core/services/api.service';
           <div class="lg:col-span-2 space-y-6">
 
             <!-- Line Items -->
-            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div class="p-4 border-b border-gray-100">
                 <h3 class="text-lg font-semibold">Line Items</h3>
               </div>
@@ -111,7 +111,7 @@ import { ApiService } from '../../core/services/api.service';
 
             <!-- Notes -->
             @if (quote()!.notes) {
-              <div class="bg-white rounded-xl border border-gray-200 p-6">
+              <div class="bg-white rounded-2xl border border-gray-200 p-6">
                 <h3 class="text-lg font-semibold mb-2">Notes</h3>
                 <p class="text-sm text-gray-600 whitespace-pre-wrap">{{ quote()!.notes }}</p>
               </div>
@@ -121,7 +121,7 @@ import { ApiService } from '../../core/services/api.service';
           <!-- Sidebar -->
           <div class="space-y-6">
             <!-- Customer -->
-            <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <div class="bg-white rounded-2xl border border-gray-200 p-6">
               <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Customer</h3>
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold">
@@ -135,7 +135,7 @@ import { ApiService } from '../../core/services/api.service';
             </div>
 
             <!-- Timeline -->
-            <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <div class="bg-white rounded-2xl border border-gray-200 p-6">
               <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Timeline</h3>
               <div class="space-y-3">
                 <div class="flex items-center gap-3 text-sm">
@@ -177,7 +177,7 @@ import { ApiService } from '../../core/services/api.service';
 
             <!-- Valid until -->
             @if (quote()!.valid_until) {
-              <div class="bg-white rounded-xl border border-gray-200 p-6">
+              <div class="bg-white rounded-2xl border border-gray-200 p-6">
                 <h3 class="text-sm font-semibold text-gray-400 uppercase mb-2">Valid Until</h3>
                 <p class="text-lg font-semibold" [class.text-red-500]="isExpired()">
                   {{ quote()!.valid_until | date:'mediumDate' }}

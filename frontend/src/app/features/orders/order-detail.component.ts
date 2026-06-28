@@ -77,7 +77,7 @@ interface EditItem {
       } @else {
         <!-- Order progress (hidden while editing) -->
         @if (!editing()) {
-          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
+          <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
             <h3 class="text-base font-semibold text-gray-900 mb-5">Order Progress</h3>
             <div class="flex items-center gap-0">
               @for (step of orderSteps; track step.label; let i = $index; let last = $last) {
@@ -115,7 +115,7 @@ interface EditItem {
 
           <!-- Order items -->
           <div class="lg:col-span-2 space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h3 class="text-base font-semibold text-gray-900">
                   Order Items ({{ editing() ? editItems().length : order().items.length }})
@@ -245,7 +245,7 @@ interface EditItem {
             </div>
 
             <!-- Delivery info -->
-            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-4">Delivery Information</h3>
               <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -264,7 +264,7 @@ interface EditItem {
           <div class="space-y-5">
 
             <!-- Customer -->
-            <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-3">Customer</h3>
               <div class="flex items-center gap-3 mb-3">
                 <div class="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm">
@@ -282,7 +282,7 @@ interface EditItem {
             </div>
 
             <!-- Payment -->
-            <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-3">Payment</h3>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
@@ -303,7 +303,7 @@ interface EditItem {
             </div>
 
             <!-- Notes -->
-            <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-3">Order Notes</h3>
               @if (editing()) {
                 <textarea pTextarea [(ngModel)]="editNotes" rows="3" class="w-full text-sm" placeholder="Add a note for this order..."></textarea>
