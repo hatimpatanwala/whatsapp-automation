@@ -26,7 +26,7 @@ interface Taxon { id: string; name: string; }
 
       <div class="grid gap-6 md:grid-cols-2">
         <!-- Categories -->
-        <section class="bg-white rounded-xl border border-gray-200 p-5">
+        <section class="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="pi pi-tag mr-2 text-green-600"></i>Categories</h2>
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newCategory" (keyup.enter)="addCategory()" placeholder="New category name"
@@ -47,7 +47,7 @@ interface Taxon { id: string; name: string; }
         </section>
 
         <!-- Brands -->
-        <section class="bg-white rounded-xl border border-gray-200 p-5">
+        <section class="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="pi pi-bookmark mr-2 text-blue-600"></i>Brands</h2>
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newBrand" (keyup.enter)="addBrand()" placeholder="New brand name"

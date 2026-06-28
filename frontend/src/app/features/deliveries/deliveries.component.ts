@@ -61,15 +61,15 @@ interface DeliveryRow {
       <!-- Status summary -->
       <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
         @for (stat of deliveryStats(); track stat.label) {
-          <div class="bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-center">
-            <p class="text-lg font-bold" [class]="stat.color">{{ stat.value }}</p>
-            <p class="text-xs text-gray-500 mt-0.5">{{ stat.label }}</p>
+          <div class="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow">
+            <p class="text-xl font-bold tabular-nums" [class]="stat.color">{{ stat.value }}</p>
+            <p class="text-xs text-gray-500 mt-0.5 truncate">{{ stat.label }}</p>
           </div>
         }
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search by order or customer..." class="w-full" (input)="filter()" />
@@ -79,7 +79,7 @@ interface DeliveryRow {
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table [value]="filteredDeliveries()" [loading]="loading()" dataKey="id" styleClass="text-sm">
           <ng-template pTemplate="header">
             <tr>

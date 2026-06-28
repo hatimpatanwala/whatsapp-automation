@@ -54,9 +54,14 @@ interface Quote {
       <!-- Stats cards -->
       <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         @for (stat of statsCards(); track stat.label) {
-          <div class="bg-white rounded-xl border border-gray-200 p-4">
-            <p class="text-xs font-semibold text-gray-400 uppercase">{{ stat.label }}</p>
-            <p class="text-2xl font-bold mt-1" [style.color]="stat.color">{{ stat.value }}</p>
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
+            <div [class]="'flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ' + stat.iconBg">
+              <i [class]="'pi ' + stat.icon" style="font-size:1rem"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-xl font-bold text-gray-900 tabular-nums leading-none">{{ stat.value }}</p>
+              <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mt-1 truncate">{{ stat.label }}</p>
+            </div>
           </div>
         }
       </div>
@@ -191,11 +196,11 @@ export class QuoteListComponent implements OnInit {
   statsCards = computed(() => {
     const s = this.stats();
     return [
-      { label: 'Total', value: s.total || 0, color: '#374151' },
-      { label: 'Draft', value: s.draft || 0, color: '#6b7280' },
-      { label: 'Sent', value: s.sent || 0, color: '#3b82f6' },
-      { label: 'Accepted', value: s.accepted || 0, color: '#22c55e' },
-      { label: 'Converted Value', value: '\u20B9' + this.formatAmount(s.converted_value || 0), color: '#8b5cf6' },
+      { label: 'Total', value: s.total || 0, icon: 'pi-file-edit', iconBg: 'bg-slate-100 text-slate-600' },
+      { label: 'Draft', value: s.draft || 0, icon: 'pi-pencil', iconBg: 'bg-gray-100 text-gray-500' },
+      { label: 'Sent', value: s.sent || 0, icon: 'pi-send', iconBg: 'bg-blue-50 text-blue-600' },
+      { label: 'Accepted', value: s.accepted || 0, icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+      { label: 'Converted Value', value: '\u20B9' + this.formatAmount(s.converted_value || 0), icon: 'pi-wallet', iconBg: 'bg-purple-50 text-purple-600' },
     ];
   });
 

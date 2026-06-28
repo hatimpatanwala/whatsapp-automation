@@ -65,15 +65,20 @@ interface CampaignRow {
       <!-- Summary stats -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         @for (stat of summaryStats(); track stat.label) {
-          <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <p class="text-xs text-gray-500 font-medium">{{ stat.label }}</p>
-            <p class="text-2xl font-bold mt-1" [class]="stat.color">{{ stat.value }}</p>
+          <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+            <div [class]="'flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ' + stat.iconBg">
+              <i [class]="'pi ' + stat.icon" style="font-size:1.1rem"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ stat.value }}</p>
+              <p class="text-xs text-gray-500 mt-1 truncate">{{ stat.label }}</p>
+            </div>
           </div>
         }
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-3 flex-wrap">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search campaigns..." class="w-full" (input)="filter()" />
@@ -92,7 +97,7 @@ interface CampaignRow {
           </div>
         }
         @for (campaign of filteredCampaigns(); track campaign.id) {
-          <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-primary-200 transition-colors">
+          <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-primary-200 transition-colors">
             <div class="flex items-start justify-between gap-4">
               <div class="flex-1">
                 <div class="flex items-center gap-3 mb-2">
@@ -153,7 +158,7 @@ interface CampaignRow {
         }
 
         @if (!loadingCampaigns() && filteredCampaigns().length === 0) {
-          <div class="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
+          <div class="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
             <i class="pi pi-megaphone text-gray-300" style="font-size:3rem"></i>
             <p class="text-base font-medium text-gray-600 mt-4">No campaigns found</p>
             <p class="text-sm text-gray-400">Create your first campaign to reach your customers</p>
@@ -177,10 +182,10 @@ export class CampaignListComponent implements OnInit {
   pausingId = signal<string | null>(null);
 
   summaryStats = signal([
-    { label: 'Total Campaigns', value: '0', color: 'text-gray-900' },
-    { label: 'Running', value: '0', color: 'text-primary-600' },
-    { label: 'Avg Delivery Rate', value: 'N/A', color: 'text-green-600' },
-    { label: 'Avg Read Rate', value: 'N/A', color: 'text-blue-600' },
+    { label: 'Total Campaigns', value: '0', icon: 'pi-megaphone', iconBg: 'bg-slate-100 text-slate-600' },
+    { label: 'Running', value: '0', icon: 'pi-send', iconBg: 'bg-primary-50 text-primary-600' },
+    { label: 'Avg Delivery Rate', value: 'N/A', icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+    { label: 'Avg Read Rate', value: 'N/A', icon: 'pi-eye', iconBg: 'bg-blue-50 text-blue-600' },
   ]);
 
   statusOptions = [
@@ -271,10 +276,10 @@ export class CampaignListComponent implements OnInit {
       : 0;
 
     this.summaryStats.set([
-      { label: 'Total Campaigns', value: String(total), color: 'text-gray-900' },
-      { label: 'Running', value: String(running), color: 'text-primary-600' },
-      { label: 'Avg Delivery Rate', value: withDelivery.length > 0 ? `${avgDelivery}%` : 'N/A', color: 'text-green-600' },
-      { label: 'Avg Read Rate', value: withRead.length > 0 ? `${avgRead}%` : 'N/A', color: 'text-blue-600' },
+      { label: 'Total Campaigns', value: String(total), icon: 'pi-megaphone', iconBg: 'bg-slate-100 text-slate-600' },
+      { label: 'Running', value: String(running), icon: 'pi-send', iconBg: 'bg-primary-50 text-primary-600' },
+      { label: 'Avg Delivery Rate', value: withDelivery.length > 0 ? `${avgDelivery}%` : 'N/A', icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+      { label: 'Avg Read Rate', value: withRead.length > 0 ? `${avgRead}%` : 'N/A', icon: 'pi-eye', iconBg: 'bg-blue-50 text-blue-600' },
     ]);
   }
 

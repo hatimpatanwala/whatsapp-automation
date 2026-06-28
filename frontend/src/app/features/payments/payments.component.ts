@@ -64,22 +64,22 @@ interface PaymentRow {
 
       <!-- Stats -->
       <div class="grid grid-cols-3 gap-4">
-        <div class="bg-orange-50 rounded-xl p-4 border border-orange-100">
-          <p class="text-xs text-orange-600 font-medium">Pending Verification</p>
-          <p class="text-2xl font-bold text-orange-600 mt-1">{{ pendingCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-amber-50 text-amber-600"><i class="pi pi-clock" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ pendingCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Pending Verification</p></div>
         </div>
-        <div class="bg-green-50 rounded-xl p-4 border border-green-100">
-          <p class="text-xs text-green-600 font-medium">Verified Today</p>
-          <p class="text-2xl font-bold text-green-600 mt-1">{{ verifiedCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-green-50 text-green-600"><i class="pi pi-check-circle" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ verifiedCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Verified Today</p></div>
         </div>
-        <div class="bg-red-50 rounded-xl p-4 border border-red-100">
-          <p class="text-xs text-red-600 font-medium">Rejected</p>
-          <p class="text-2xl font-bold text-red-600 mt-1">{{ rejectedCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-red-50 text-red-600"><i class="pi pi-times-circle" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ rejectedCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Rejected</p></div>
         </div>
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex gap-3">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-3">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search by order or customer..." class="w-full" (input)="filter()" />
@@ -91,7 +91,7 @@ interface PaymentRow {
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table [value]="filteredPayments()" [loading]="loading()" dataKey="id" styleClass="text-sm">
           <ng-template pTemplate="header">
             <tr>
