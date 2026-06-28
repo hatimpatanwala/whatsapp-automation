@@ -721,6 +721,14 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
                   <div class="flex items-center justify-between py-3 border-b border-gray-100">
                     <div>
+                      <p class="text-sm font-medium text-gray-900">Show Prices to Customers</p>
+                      <p class="text-xs text-gray-500">Display product prices, cart totals and offers in your storefront. Turn off for an enquiry-style catalog where customers can still order without seeing prices.</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.showPrices" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
                       <p class="text-sm font-medium text-gray-900">Enable Ordering</p>
                       <p class="text-xs text-gray-500">Customers can checkout their cart, select a delivery address, and place orders directly from WhatsApp. Orders appear in your Orders dashboard.</p>
                     </div>
@@ -880,7 +888,8 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                 </div>
               </div>
 
-              <div class="flex justify-end">
+              <div class="flex flex-wrap justify-end gap-2">
+                <button pButton label="Preview Storefront" icon="pi pi-external-link" class="p-button-outlined" [loading]="previewingStore()" (click)="previewStorefront()"></button>
                 <button pButton label="Save Commerce Settings" icon="pi pi-check" severity="success" (click)="save()"></button>
               </div>
             </div>
@@ -1053,6 +1062,7 @@ export class SettingsComponent implements OnInit {
     catalogEnabled: false,
     cartEnabled: false,
     orderEnabled: false,
+    showPrices: true,
     catalogId: '',
     autoCheckout: false,
     orderNotification: true,
@@ -1060,6 +1070,7 @@ export class SettingsComponent implements OnInit {
     batchMinutes: 60,
     forceMarketingTemplate: false,
   };
+  previewingStore = signal(false);
 
   invoice = {
     legalName: '',
@@ -1273,6 +1284,7 @@ export class SettingsComponent implements OnInit {
         // Commerce settings
         if (settings.commerceCatalogEnabled !== undefined) this.commerce.catalogEnabled = this.parseBool(settings.commerceCatalogEnabled);
         if (settings.commerceCartEnabled !== undefined) this.commerce.cartEnabled = this.parseBool(settings.commerceCartEnabled);
+        if (settings.commerceShowPrices !== undefined) this.commerce.showPrices = this.parseBool(settings.commerceShowPrices);
         if (settings.commerceOrderEnabled !== undefined) this.commerce.orderEnabled = this.parseBool(settings.commerceOrderEnabled);
         if (settings.commerceCatalogId) this.commerce.catalogId = settings.commerceCatalogId;
         if (settings.commerceAutoCheckout !== undefined) this.commerce.autoCheckout = this.parseBool(settings.commerceAutoCheckout);
@@ -1389,6 +1401,20 @@ export class SettingsComponent implements OnInit {
     return !!val;
   }
 
+  /** Open the customer-facing storefront in a new tab (mints a shop session). */
+  previewStorefront() {
+    if (this.previewingStore()) return;
+    this.previewingStore.set(true);
+    this.apiService.post<{ url: string; token: string }>('/builder/shop-preview', {}).subscribe({
+      next: (r) => {
+        this.previewingStore.set(false);
+        if (r?.token) window.open(`/m/shop?token=${r.token}`, '_blank');
+        else this.messageService.add({ severity: 'warn', summary: 'No preview', detail: 'Add at least one product and customer first.' });
+      },
+      error: () => { this.previewingStore.set(false); this.messageService.add({ severity: 'error', summary: 'Preview failed', detail: 'Could not open the storefront preview.' }); },
+    });
+  }
+
   save() {
     // Build notifications map
     const notifsMap: Record<string, { email: boolean; whatsapp: boolean }> = {};
@@ -1413,6 +1439,7 @@ export class SettingsComponent implements OnInit {
       // Commerce settings
       commerce_catalog_enabled: this.commerce.catalogEnabled,
       commerce_cart_enabled: this.commerce.cartEnabled,
+      commerce_show_prices: this.commerce.showPrices,
       commerce_order_enabled: this.commerce.orderEnabled,
       commerce_catalog_id: this.commerce.catalogId,
       commerce_auto_checkout: this.commerce.autoCheckout,

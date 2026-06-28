@@ -354,6 +354,23 @@ export class BuilderService implements OnModuleInit {
     return { token, url: `${base}/m/shop?token=${token}` };
   }
 
+  /** Mint a SHOP session for the MERCHANT to preview their own storefront. Binds
+   *  to the most recently active customer so the cart works during preview. */
+  async createShopPreview(tenantId: string, schemaName: string): Promise<{ token: string; url: string }> {
+    const cust = await this.connectionManager.executeInTenantContext(schemaName, async (qr) =>
+      (await qr.query(
+        `SELECT id, name, phone FROM customers ORDER BY (last_order_at IS NULL), last_order_at DESC NULLS LAST, created_at DESC LIMIT 1`,
+      ))[0],
+    ).catch(() => null);
+    return this.createShopSession({
+      tenantId,
+      schemaName,
+      customerId: cust?.id || null,
+      customerPhone: cust?.phone || null,
+      customerName: cust?.name || null,
+    });
+  }
+
   /** Resolve + validate a SHOP token → its session row (tenant, schema, customer). */
   async getShopSession(token: string): Promise<any> {
     return this.resolveSession(token, 'shop');

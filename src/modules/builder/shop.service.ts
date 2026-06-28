@@ -60,14 +60,33 @@ export class ShopService {
     };
   }
 
-  private async storeInfo(s: ShopSession): Promise<{ name: string; currency: string; whatsappPhone: string }> {
+  private async storeInfo(s: ShopSession): Promise<{ name: string; currency: string; whatsappPhone: string; showPrices: boolean; cartEnabled: boolean }> {
     const t = await this.conn.executeGlobal(async (qr) =>
       (await qr.query(`SELECT business_name, name, whatsapp_phone FROM tenants WHERE id = $1`, [s.tenant_id]))[0]);
+    const flags = await this.storefrontFlags(s.schema_name);
     return {
       name: t?.business_name || t?.name || 'Our Store',
       currency: 'INR',
       whatsappPhone: String(t?.whatsapp_phone || '').replace(/[^0-9]/g, ''),
+      showPrices: flags.showPrices,
+      cartEnabled: flags.cartEnabled,
     };
+  }
+
+  /** Storefront display toggles from tenant settings (both default ON). */
+  private async storefrontFlags(schema: string): Promise<{ showPrices: boolean; cartEnabled: boolean }> {
+    try {
+      const rows = await this.conn.executeInTenantContext(schema, async (qr) =>
+        qr.query(`SELECT key, value FROM "${schema}".settings WHERE key IN ('commerce_show_prices','commerce_cart_enabled')`));
+      const m: Record<string, any> = {};
+      for (const r of rows) m[r.key] = safeJson(r.value);
+      return {
+        showPrices: m['commerce_show_prices'] !== false,
+        cartEnabled: m['commerce_cart_enabled'] !== false,
+      };
+    } catch {
+      return { showPrices: true, cartEnabled: true };
+    }
   }
 
   private async taxonomy(schema: string): Promise<{ categories: any[]; brands: any[] }> {

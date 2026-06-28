@@ -34,20 +34,24 @@ interface Cart {
   imports: [CommonModule, FormsModule],
   template: `
     <div class="min-h-screen bg-gray-50 text-gray-900 pb-28">
-      <header class="sticky top-0 z-20 bg-green-600 text-white shadow">
-        <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+      <header class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-100 shadow-sm">
+        <div class="max-w-2xl mx-auto px-4 py-2.5 flex items-center gap-3">
           @if (view() !== 'catalog') {
-            <button class="text-white/90" (click)="view.set('catalog')"><i class="pi pi-arrow-left"></i></button>
+            <button class="w-9 h-9 -ml-1.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-700" (click)="view.set('catalog')"><i class="pi pi-arrow-left"></i></button>
           }
-          <div class="flex items-center gap-2 min-w-0">
-            <i class="pi pi-shop" style="font-size:1.1rem"></i>
-            <h1 class="text-base font-semibold truncate">{{ store()?.name || 'Store' }}</h1>
+          <div class="w-9 h-9 rounded-xl bg-green-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <i class="pi pi-shop" style="font-size:1.05rem"></i>
           </div>
-          @if (view() === 'catalog') {
-            <button class="ml-auto relative" (click)="view.set('cart')">
-              <i class="pi pi-shopping-cart" style="font-size:1.25rem"></i>
+          <div class="min-w-0 flex-1">
+            <h1 class="text-[15px] font-bold text-gray-900 truncate leading-tight">{{ store()?.name || 'Store' }}</h1>
+            @if (view() === 'catalog') { <p class="text-[11px] text-gray-400 leading-tight">{{ filteredProducts().length }} item{{ filteredProducts().length === 1 ? '' : 's' }}</p> }
+            @else if (view() === 'cart') { <p class="text-[11px] text-gray-400 leading-tight">Your cart</p> }
+          </div>
+          @if (view() === 'catalog' && cartEnabled()) {
+            <button class="relative w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-800" (click)="view.set('cart')" aria-label="Cart">
+              <i class="pi pi-shopping-cart" style="font-size:1.2rem"></i>
               @if (cart().count > 0) {
-                <span class="absolute -top-2 -right-2 bg-white text-green-700 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">{{ cart().count }}</span>
+                <span class="absolute top-0.5 right-0.5 bg-green-600 text-white text-[10px] font-bold rounded-full min-w-[17px] h-[17px] px-1 flex items-center justify-center ring-2 ring-white">{{ cart().count }}</span>
               }
             </button>
           }
@@ -69,8 +73,9 @@ interface Cart {
         @if (view() === 'catalog') {
           <div class="max-w-2xl mx-auto p-3 space-y-3">
             <div class="relative">
-              <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-              <input [ngModel]="search()" (ngModelChange)="search.set($event)" class="w-full border border-gray-300 rounded-full pl-9 pr-3 py-2 text-sm" placeholder="Search products…" />
+              <i class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input [ngModel]="search()" (ngModelChange)="search.set($event)" class="w-full bg-white border border-gray-200 rounded-full pl-10 pr-9 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400 transition" placeholder="Search products…" />
+              @if (search()) { <button class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500" (click)="search.set('')" aria-label="Clear"><i class="pi pi-times-circle"></i></button> }
             </div>
             @if (categories().length) {
               <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 items-center">
@@ -104,33 +109,49 @@ interface Cart {
             }
             <div class="grid grid-cols-2 gap-3">
               @for (p of filteredProducts(); track p.id) {
-                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                  <button class="relative aspect-square bg-gray-50 flex items-center justify-center" (click)="openProduct(p)">
-                    @if (p.image) { <img [src]="p.image" class="w-full h-full object-cover" loading="lazy" /> }
-                    @else { <i class="pi pi-image text-gray-200" style="font-size:2rem"></i> }
-                    <div class="absolute top-1.5 left-1.5 flex flex-col gap-1 items-start">
-                      @if (p.isNew) { <span class="text-[9px] font-bold bg-blue-600 text-white rounded px-1.5 py-0.5">NEW</span> }
-                      @if (p.offer) { <span class="text-[9px] font-bold bg-green-600 text-white rounded px-1.5 py-0.5">{{ p.offer }}</span> }
+                <div class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
+                  <div class="relative">
+                    <button class="block w-full aspect-square bg-gray-100 overflow-hidden" (click)="openProduct(p)">
+                      @if (p.image) { <img [src]="p.image" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" /> }
+                      @else { <span class="w-full h-full flex items-center justify-center"><i class="pi pi-image text-gray-300" style="font-size:2rem"></i></span> }
+                    </button>
+                    <div class="absolute top-2 left-2 flex flex-col gap-1 items-start">
+                      @if (p.isNew) { <span class="text-[9px] font-bold tracking-wide bg-blue-600 text-white rounded-full px-2 py-0.5 shadow-sm">NEW</span> }
+                      @if (p.offer) { <span class="text-[9px] font-bold tracking-wide bg-rose-500 text-white rounded-full px-2 py-0.5 shadow-sm">{{ p.offer }}</span> }
                     </div>
-                  </button>
-                  <div class="p-2.5 flex flex-col flex-1">
-                    <p class="text-xs font-semibold leading-tight line-clamp-2 min-h-[2rem]" (click)="openProduct(p)">{{ p.name }}</p>
-                    @if (p.brand) { <p class="text-[10px] text-gray-400 mt-0.5">{{ p.brand }}</p> }
-                    <div class="flex items-baseline gap-1.5 mt-1">
-                      <span class="text-sm font-bold text-gray-900">{{ sym() }}{{ p.price | number:'1.0-2' }}</span>
-                      @if (p.onSale) { <span class="text-[10px] text-gray-400 line-through">{{ sym() }}{{ p.basePrice | number:'1.0-2' }}</span> }
-                    </div>
-                    <span class="text-[10px] text-gray-400">/ {{ p.uom }}</span>
-                    <div class="mt-2">
-                      @if (qtyOf(p.id) === 0) {
-                        <button class="w-full bg-green-600 text-white text-xs font-semibold rounded-lg py-1.5 disabled:opacity-40"
-                          [disabled]="p.stock <= 0 || busy()" (click)="setQty(p, 1)">{{ p.stock <= 0 ? 'Out of stock' : 'Add' }}</button>
-                      } @else {
-                        <div class="flex items-center justify-between border border-green-600 rounded-lg overflow-hidden">
-                          <button class="px-2.5 py-1 text-green-700 font-bold" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) - 1)">−</button>
-                          <span class="text-sm font-semibold">{{ qtyOf(p.id) }}</span>
-                          <button class="px-2.5 py-1 text-green-700 font-bold" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) + 1)">+</button>
+                    @if (p.stock <= 0) {
+                      <div class="absolute inset-0 bg-white/55 flex items-center justify-center">
+                        <span class="text-[11px] font-bold text-gray-700 bg-white rounded-full px-3 py-1 shadow">Out of stock</span>
+                      </div>
+                    }
+                    @if (cartEnabled() && p.stock > 0) {
+                      <div class="absolute bottom-2 right-2">
+                        @if (qtyOf(p.id) === 0) {
+                          <button class="w-9 h-9 rounded-full bg-green-600 text-white shadow-lg flex items-center justify-center active:scale-90 transition disabled:opacity-50" [disabled]="busy()" (click)="setQty(p, 1)" aria-label="Add to cart">
+                            <i class="pi pi-plus" style="font-size:0.8rem"></i>
+                          </button>
+                        } @else {
+                          <div class="flex items-center bg-green-600 text-white rounded-full shadow-lg h-9 px-1">
+                            <button class="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center font-bold text-base" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) - 1)">−</button>
+                            <span class="text-sm font-bold w-5 text-center tabular-nums">{{ qtyOf(p.id) }}</span>
+                            <button class="w-7 h-7 rounded-full hover:bg-white/20 flex items-center justify-center font-bold text-base" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) + 1)">+</button>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                  <div class="p-2.5 flex flex-col flex-1 cursor-pointer" (click)="openProduct(p)">
+                    @if (p.brand) { <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wide truncate">{{ p.brand }}</p> }
+                    <p class="text-[13px] font-semibold text-gray-900 leading-snug line-clamp-2 min-h-[2.1rem]">{{ p.name }}</p>
+                    <div class="mt-auto pt-1.5">
+                      @if (showPrices()) {
+                        <div class="flex items-baseline gap-1.5">
+                          <span class="text-[15px] font-extrabold text-gray-900">{{ sym() }}{{ p.price | number:'1.0-2' }}</span>
+                          @if (p.onSale) { <span class="text-[11px] text-gray-400 line-through">{{ sym() }}{{ p.basePrice | number:'1.0-2' }}</span> }
                         </div>
+                        <span class="text-[10px] text-gray-400">per {{ p.uom }}</span>
+                      } @else {
+                        <span class="text-[11px] text-gray-400">per {{ p.uom }}</span>
                       }
                     </div>
                   </div>
@@ -151,21 +172,25 @@ interface Cart {
               </div>
             } @else {
               @for (l of cart().items; track l.productId) {
-                <div class="bg-white rounded-xl border border-gray-100 p-2.5 flex gap-3 items-center">
-                  <div class="w-14 h-14 rounded-lg bg-gray-50 shrink-0 overflow-hidden flex items-center justify-center">
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-2.5 flex gap-3 items-center">
+                  <div class="w-16 h-16 rounded-xl bg-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
                     @if (l.image) { <img [src]="l.image" class="w-full h-full object-cover" /> }
-                    @else { <i class="pi pi-image text-gray-200"></i> }
+                    @else { <i class="pi pi-image text-gray-300"></i> }
                   </div>
                   <div class="min-w-0 flex-1">
-                    <p class="text-sm font-medium leading-tight line-clamp-2">{{ l.name }}</p>
-                    <p class="text-xs text-gray-500 mt-0.5">{{ sym() }}{{ l.unitPrice | number:'1.0-2' }} / {{ l.uom }}</p>
-                  </div>
-                  <div class="flex flex-col items-end gap-1.5">
-                    <span class="text-sm font-bold">{{ sym() }}{{ l.lineTotal | number:'1.0-2' }}</span>
-                    <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                      <button class="px-2 py-0.5 text-gray-600 font-bold" [disabled]="busy()" (click)="setQtyId(l.productId, l.quantity - 1)">−</button>
-                      <span class="text-xs font-semibold w-6 text-center">{{ l.quantity }}</span>
-                      <button class="px-2 py-0.5 text-gray-600 font-bold" [disabled]="busy()" (click)="setQtyId(l.productId, l.quantity + 1)">+</button>
+                    <p class="text-sm font-semibold text-gray-900 leading-tight line-clamp-2">{{ l.name }}</p>
+                    @if (showPrices()) {
+                      <p class="text-xs text-gray-500 mt-0.5">{{ sym() }}{{ l.unitPrice | number:'1.0-2' }} <span class="text-gray-400">/ {{ l.uom }}</span></p>
+                    } @else {
+                      <p class="text-xs text-gray-400 mt-0.5">{{ l.uom }}</p>
+                    }
+                    <div class="flex items-center mt-1.5 gap-3">
+                      <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full h-8 px-1">
+                        <button class="w-6 h-6 rounded-full hover:bg-white flex items-center justify-center text-gray-600 font-bold" [disabled]="busy()" (click)="setQtyId(l.productId, l.quantity - 1)">−</button>
+                        <span class="text-xs font-bold w-6 text-center tabular-nums">{{ l.quantity }}</span>
+                        <button class="w-6 h-6 rounded-full hover:bg-white flex items-center justify-center text-green-700 font-bold" [disabled]="busy()" (click)="setQtyId(l.productId, l.quantity + 1)">+</button>
+                      </div>
+                      @if (showPrices()) { <span class="ml-auto text-sm font-extrabold text-gray-900">{{ sym() }}{{ l.lineTotal | number:'1.0-2' }}</span> }
                     </div>
                   </div>
                 </div>
@@ -180,8 +205,9 @@ interface Cart {
                 </div>
               }
 
+              @if (showPrices()) {
               <!-- Coupon -->
-              <div class="bg-white rounded-xl border border-gray-100 p-3">
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
                 @if (cart().coupon) {
                   <div class="flex items-center justify-between">
                     <span class="text-sm"><span class="font-mono font-bold">{{ cart().coupon!.code }}</span> <span class="text-green-700">applied</span></span>
@@ -197,7 +223,7 @@ interface Cart {
               </div>
 
               <!-- Summary -->
-              <div class="bg-white rounded-xl border border-gray-100 p-3 space-y-1.5 text-sm">
+              <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 space-y-1.5 text-sm">
                 @if (cart().appliedOffers.length) {
                   <div class="flex flex-wrap gap-1 mb-1">
                     @for (o of cart().appliedOffers; track o.name) {
@@ -210,8 +236,9 @@ interface Cart {
                 @if (cart().couponDiscount > 0) { <div class="flex justify-between text-green-700"><span>Coupon</span><span>-{{ sym() }}{{ cart().couponDiscount | number:'1.0-2' }}</span></div> }
                 <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span>{{ sym() }}{{ cart().total | number:'1.0-2' }}</span></div>
               </div>
+              }
 
-              <textarea [(ngModel)]="notes" rows="2" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm" placeholder="Delivery notes (optional)"></textarea>
+              <textarea [(ngModel)]="notes" rows="2" class="w-full border border-gray-200 rounded-2xl px-3.5 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400" placeholder="Add delivery notes (optional)…"></textarea>
             }
           </div>
         }
@@ -242,14 +269,16 @@ interface Cart {
 
       <!-- Sticky checkout bar (cart view) -->
       @if (view() === 'cart' && cart().items.length) {
-        <div class="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-gray-200 p-3">
+        <div class="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div class="max-w-2xl mx-auto flex items-center gap-3">
-            <div class="text-sm">
-              <p class="text-gray-400 text-[11px] leading-none">Total</p>
-              <p class="font-bold">{{ sym() }}{{ cart().total | number:'1.0-2' }}</p>
-            </div>
-            <button class="flex-1 bg-green-600 text-white font-semibold rounded-lg py-3 text-sm disabled:opacity-40" [disabled]="placing()" (click)="checkout()">
-              {{ placing() ? 'Placing order…' : 'Place Order' }}
+            @if (showPrices()) {
+              <div class="shrink-0">
+                <p class="text-gray-400 text-[11px] leading-none">Total</p>
+                <p class="text-lg font-extrabold text-gray-900 leading-tight">{{ sym() }}{{ cart().total | number:'1.0-2' }}</p>
+              </div>
+            }
+            <button class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="placing()" (click)="checkout()">
+              @if (placing()) { <i class="pi pi-spin pi-spinner"></i> Placing order… } @else { <i class="pi pi-check-circle"></i> Place Order }
             </button>
           </div>
         </div>
@@ -269,28 +298,37 @@ interface Cart {
               </div>
             </div>
             <div class="p-4 space-y-2">
-              <h2 class="text-base font-bold">{{ p.name }}</h2>
-              @if (p.brand) { <p class="text-xs text-gray-400">{{ p.brand }}</p> }
-              <div class="flex items-baseline gap-2">
-                <span class="text-xl font-extrabold text-gray-900">{{ sym() }}{{ p.price | number:'1.0-2' }}</span>
-                @if (p.onSale) { <span class="text-sm text-gray-400 line-through">{{ sym() }}{{ p.basePrice | number:'1.0-2' }}</span> }
-                <span class="text-xs text-gray-400">/ {{ p.uom }}</span>
+              @if (p.brand) { <p class="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{{ p.brand }}</p> }
+              <h2 class="text-lg font-bold text-gray-900 leading-snug">{{ p.name }}</h2>
+              <div class="flex items-baseline gap-2 flex-wrap">
+                @if (showPrices()) {
+                  <span class="text-2xl font-extrabold text-gray-900">{{ sym() }}{{ p.price | number:'1.0-2' }}</span>
+                  @if (p.onSale) { <span class="text-sm text-gray-400 line-through">{{ sym() }}{{ p.basePrice | number:'1.0-2' }}</span> }
+                  @if (p.offer) { <span class="text-[10px] font-bold bg-rose-500 text-white rounded-full px-2 py-0.5">{{ p.offer }}</span> }
+                }
+                <span class="text-xs text-gray-400">per {{ p.uom }}</span>
               </div>
               @if (p.description) { <p class="text-sm text-gray-600 whitespace-pre-line">{{ p.description }}</p> }
               <p class="text-xs" [class.text-red-500]="p.stock <= 0" [class.text-gray-400]="p.stock > 0">{{ p.stock > 0 ? 'In stock' : 'Out of stock' }}</p>
             </div>
             <div class="sticky bottom-0 bg-white p-4 border-t border-gray-100">
-              @if (qtyOf(p.id) === 0) {
-                <button class="w-full bg-green-600 text-white font-semibold rounded-lg py-3 text-sm disabled:opacity-40" [disabled]="p.stock <= 0 || busy()" (click)="setQty(p, 1)">Add to cart</button>
-              } @else {
-                <div class="flex items-center gap-3">
-                  <div class="flex items-center border border-green-600 rounded-lg overflow-hidden">
-                    <button class="px-4 py-2 text-green-700 font-bold" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) - 1)">−</button>
-                    <span class="text-sm font-semibold w-8 text-center">{{ qtyOf(p.id) }}</span>
-                    <button class="px-4 py-2 text-green-700 font-bold" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) + 1)">+</button>
+              @if (cartEnabled()) {
+                @if (p.stock <= 0) {
+                  <button class="w-full bg-gray-100 text-gray-400 font-semibold rounded-xl py-3.5 text-sm" disabled>Out of stock</button>
+                } @else if (qtyOf(p.id) === 0) {
+                  <button class="w-full bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="busy()" (click)="setQty(p, 1)"><i class="pi pi-shopping-cart"></i>Add to cart</button>
+                } @else {
+                  <div class="flex items-center gap-3">
+                    <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full h-12 px-1.5">
+                      <button class="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center text-gray-600 font-bold text-lg" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) - 1)">−</button>
+                      <span class="text-base font-bold w-8 text-center tabular-nums">{{ qtyOf(p.id) }}</span>
+                      <button class="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center text-green-700 font-bold text-lg" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) + 1)">+</button>
+                    </div>
+                    <button class="flex-1 bg-green-600 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm" (click)="detail.set(null); view.set('cart')">View cart</button>
                   </div>
-                  <button class="flex-1 bg-green-600 text-white font-semibold rounded-lg py-3 text-sm" (click)="detail.set(null); view.set('cart')">View cart</button>
-                </div>
+                }
+              } @else if (waLink()) {
+                <a [href]="waLink()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm flex items-center justify-center gap-2 no-underline"><i class="pi pi-whatsapp"></i>Order on WhatsApp</a>
               }
             </div>
           </div>
@@ -311,7 +349,7 @@ export class ShopWebviewComponent implements OnInit {
   placing = signal(false);
 
   view = signal<'catalog' | 'cart' | 'success'>('catalog');
-  store = signal<{ name: string; currency: string; whatsappPhone?: string } | null>(null);
+  store = signal<{ name: string; currency: string; whatsappPhone?: string; showPrices?: boolean; cartEnabled?: boolean } | null>(null);
   returnIn = signal<number | null>(null);
   private returnTimer: any = null;
   categories = signal<Taxon[]>([]);
@@ -348,6 +386,11 @@ export class ShopWebviewComponent implements OnInit {
   private opts() { return { headers: { 'X-Builder-Token': this.token() } }; }
   sym(): string { const c = this.store()?.currency; return c === 'USD' ? '$' : c === 'EUR' ? '€' : '₹'; }
   qtyOf(id: string): number { return this.cart().items.find((l) => l.productId === id)?.quantity || 0; }
+
+  /** Merchant storefront toggles (default ON when the store hasn't set them). */
+  showPrices = computed(() => this.store()?.showPrices !== false);
+  cartEnabled = computed(() => this.store()?.cartEnabled !== false);
+  waLink = computed(() => { const p = (this.store()?.whatsappPhone || '').replace(/[^0-9]/g, ''); return p ? `https://wa.me/${p}` : null; });
 
   ngOnInit(): void {
     const t = this.route.snapshot.queryParamMap.get('token') || '';
