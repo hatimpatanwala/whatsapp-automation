@@ -132,11 +132,12 @@ interface NavItem {
         </div>
       </aside>
 
-      <!-- Main content -->
-      <div class="flex-1 flex flex-col min-w-0">
+      <!-- Main content column (plain block flow so the document grows with the
+           page content and scrolls fully — no inner flex height constraint) -->
+      <div class="flex-1 min-w-0">
 
         <!-- Top header (sticky) -->
-        <header class="sticky top-0 z-10 flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
+        <header class="sticky top-0 z-20 flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
           <button
             pButton
             icon="pi pi-bars"
@@ -176,8 +177,8 @@ interface NavItem {
           </div>
         </header>
 
-        <!-- Page content (scrolls with the document) -->
-        <main class="flex-1 bg-gray-50">
+        <!-- Page content (block flow; scrolls with the document) -->
+        <main class="bg-gray-50">
           <router-outlet />
         </main>
       </div>
