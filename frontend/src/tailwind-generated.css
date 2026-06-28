@@ -480,6 +480,9 @@
   .-mr-1 {
     margin-right: calc(var(--spacing) * -1);
   }
+  .-mr-2 {
+    margin-right: calc(var(--spacing) * -2);
+  }
   .mr-1 {
     margin-right: calc(var(--spacing) * 1);
   }
@@ -659,6 +662,9 @@
   }
   .max-h-80 {
     max-height: calc(var(--spacing) * 80);
+  }
+  .max-h-\[26rem\] {
+    max-height: 26rem;
   }
   .max-h-\[90vh\] {
     max-height: 90vh;
@@ -1615,6 +1621,9 @@
   }
   .pr-0\.5 {
     padding-right: calc(var(--spacing) * 0.5);
+  }
+  .pr-2 {
+    padding-right: calc(var(--spacing) * 2);
   }
   .pr-3 {
     padding-right: calc(var(--spacing) * 3);

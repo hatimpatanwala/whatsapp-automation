@@ -81,15 +81,17 @@ interface DeliveryRow {
 
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <p-table [value]="filteredDeliveries()" [loading]="loading()" dataKey="id" styleClass="text-sm">
+        <p-table [value]="filteredDeliveries()" [loading]="loading()" dataKey="id" styleClass="text-sm"
+          [paginator]="filteredDeliveries().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+          [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>
-              <th class="text-xs text-gray-500 font-medium">Order</th>
-              <th class="text-xs text-gray-500 font-medium">Customer & Address</th>
-              <th class="text-xs text-gray-500 font-medium">Courier</th>
+              <th pSortableColumn="orderNumber" class="text-xs text-gray-500 font-medium">Order <p-sortIcon field="orderNumber" /></th>
+              <th pSortableColumn="customer" class="text-xs text-gray-500 font-medium">Customer & Address <p-sortIcon field="customer" /></th>
+              <th pSortableColumn="courier" class="text-xs text-gray-500 font-medium">Courier <p-sortIcon field="courier" /></th>
               <th class="text-xs text-gray-500 font-medium">Tracking #</th>
               <th class="text-xs text-gray-500 font-medium">Est. Delivery</th>
-              <th class="text-xs text-gray-500 font-medium">Status</th>
+              <th pSortableColumn="status" class="text-xs text-gray-500 font-medium">Status <p-sortIcon field="status" /></th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>

@@ -35,7 +35,7 @@ interface Taxon { id: string; name: string; }
               [disabled]="!newCategory.trim() || savingCat()" (click)="addCategory()">Add</button>
           </div>
           @if (categories().length) {
-            <ul class="divide-y divide-gray-100">
+            <ul class="divide-y divide-gray-100 max-h-[26rem] overflow-y-auto -mr-2 pr-2">
               @for (c of categories(); track c.id) {
                 <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <span class="text-sm text-gray-700">{{ c.name }}</span>
@@ -56,7 +56,7 @@ interface Taxon { id: string; name: string; }
               [disabled]="!newBrand.trim() || savingBrand()" (click)="addBrand()">Add</button>
           </div>
           @if (brands().length) {
-            <ul class="divide-y divide-gray-100">
+            <ul class="divide-y divide-gray-100 max-h-[26rem] overflow-y-auto -mr-2 pr-2">
               @for (b of brands(); track b.id) {
                 <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <span class="text-sm text-gray-700">{{ b.name }}</span>

@@ -90,16 +90,18 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
 
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <p-table [value]="filteredItems()" [loading]="loading()" dataKey="id" styleClass="text-sm">
+        <p-table [value]="filteredItems()" [loading]="loading()" dataKey="id" styleClass="text-sm"
+          [paginator]="filteredItems().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+          [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>
-              <th class="text-xs text-gray-500 font-medium">Product</th>
-              <th class="text-xs text-gray-500 font-medium">Current Stock</th>
-              <th class="text-xs text-gray-500 font-medium">Reserved</th>
-              <th class="text-xs text-gray-500 font-medium">Available</th>
-              <th class="text-xs text-gray-500 font-medium">Threshold</th>
+              <th pSortableColumn="product.name" class="text-xs text-gray-500 font-medium">Product <p-sortIcon field="product.name" /></th>
+              <th pSortableColumn="currentStock" class="text-xs text-gray-500 font-medium">Current Stock <p-sortIcon field="currentStock" /></th>
+              <th pSortableColumn="reservedStock" class="text-xs text-gray-500 font-medium">Reserved <p-sortIcon field="reservedStock" /></th>
+              <th pSortableColumn="availableStock" class="text-xs text-gray-500 font-medium">Available <p-sortIcon field="availableStock" /></th>
+              <th pSortableColumn="lowStockThreshold" class="text-xs text-gray-500 font-medium">Threshold <p-sortIcon field="lowStockThreshold" /></th>
               <th class="text-xs text-gray-500 font-medium">Status</th>
-              <th class="text-xs text-gray-500 font-medium">Location</th>
+              <th pSortableColumn="warehouseLocation" class="text-xs text-gray-500 font-medium">Location <p-sortIcon field="warehouseLocation" /></th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>
           </ng-template>

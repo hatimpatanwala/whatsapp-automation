@@ -92,16 +92,18 @@ interface PaymentRow {
 
       <!-- Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <p-table [value]="filteredPayments()" [loading]="loading()" dataKey="id" styleClass="text-sm">
+        <p-table [value]="filteredPayments()" [loading]="loading()" dataKey="id" styleClass="text-sm"
+          [paginator]="filteredPayments().length > 10" [rows]="10" [rowsPerPageOptions]="[10, 25, 50]"
+          [showCurrentPageReport]="true" currentPageReportTemplate="Showing {first}–{last} of {totalRecords}">
           <ng-template pTemplate="header">
             <tr>
-              <th class="text-xs text-gray-500 font-medium">Order</th>
-              <th class="text-xs text-gray-500 font-medium">Customer</th>
-              <th class="text-xs text-gray-500 font-medium">Amount</th>
-              <th class="text-xs text-gray-500 font-medium">Method</th>
+              <th pSortableColumn="orderNumber" class="text-xs text-gray-500 font-medium">Order <p-sortIcon field="orderNumber" /></th>
+              <th pSortableColumn="customer" class="text-xs text-gray-500 font-medium">Customer <p-sortIcon field="customer" /></th>
+              <th pSortableColumn="amount" class="text-xs text-gray-500 font-medium">Amount <p-sortIcon field="amount" /></th>
+              <th pSortableColumn="method" class="text-xs text-gray-500 font-medium">Method <p-sortIcon field="method" /></th>
               <th class="text-xs text-gray-500 font-medium">Reference</th>
               <th class="text-xs text-gray-500 font-medium">Proof</th>
-              <th class="text-xs text-gray-500 font-medium">Status</th>
+              <th pSortableColumn="status" class="text-xs text-gray-500 font-medium">Status <p-sortIcon field="status" /></th>
               <th class="text-xs text-gray-500 font-medium">Submitted</th>
               <th class="text-xs text-gray-500 font-medium">Actions</th>
             </tr>

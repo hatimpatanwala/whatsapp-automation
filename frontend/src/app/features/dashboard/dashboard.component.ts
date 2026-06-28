@@ -144,18 +144,20 @@ interface LowStockItem {
                 <p class="text-sm text-gray-500">All items are well stocked</p>
               </div>
             } @else {
-              @for (item of lowStockItems; track item.sku) {
-                <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900 truncate">{{ item.name }}</p>
-                    <p class="text-xs text-gray-500">SKU: {{ item.sku }}</p>
+              <div class="space-y-3 max-h-80 overflow-y-auto -mr-2 pr-2">
+                @for (item of lowStockItems; track item.sku) {
+                  <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium text-gray-900 truncate">{{ item.name }}</p>
+                      <p class="text-xs text-gray-500">SKU: {{ item.sku }}</p>
+                    </div>
+                    <div class="text-right ml-3">
+                      <span class="text-sm font-bold text-red-600">{{ item.stock }}</span>
+                      <p class="text-xs text-gray-400">/ {{ item.threshold }} min</p>
+                    </div>
                   </div>
-                  <div class="text-right ml-3">
-                    <span class="text-sm font-bold text-red-600">{{ item.stock }}</span>
-                    <p class="text-xs text-gray-400">/ {{ item.threshold }} min</p>
-                  </div>
-                </div>
-              }
+                }
+              </div>
             }
             <button pButton label="View Inventory" class="p-button-text p-button-sm w-full mt-2" icon="pi pi-arrow-right" iconPos="right" routerLink="/inventory"></button>
           </div>

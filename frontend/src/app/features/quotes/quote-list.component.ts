@@ -106,13 +106,13 @@ interface Quote {
         >
           <ng-template pTemplate="header">
             <tr>
-              <th>Quote #</th>
-              <th>Title</th>
-              <th>Customer</th>
+              <th pSortableColumn="quote_number">Quote # <p-sortIcon field="quote_number" /></th>
+              <th pSortableColumn="title">Title <p-sortIcon field="title" /></th>
+              <th pSortableColumn="customer_name">Customer <p-sortIcon field="customer_name" /></th>
               <th>Amount</th>
-              <th>Status</th>
-              <th>Valid Until</th>
-              <th>Created</th>
+              <th pSortableColumn="status">Status <p-sortIcon field="status" /></th>
+              <th pSortableColumn="valid_until">Valid Until <p-sortIcon field="valid_until" /></th>
+              <th pSortableColumn="created_at">Created <p-sortIcon field="created_at" /></th>
               <th class="text-right">Actions</th>
             </tr>
           </ng-template>
