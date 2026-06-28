@@ -39,7 +39,7 @@ interface QuoteItem {
         <div class="flex items-center gap-3">
           <button pButton icon="pi pi-arrow-left" class="p-button-text p-button-rounded" routerLink="/quotes"></button>
           <div>
-            <h2 class="text-2xl font-bold text-gray-900">{{ isEdit() ? 'Edit Quote' : 'New Quote' }}</h2>
+            <h2 class="text-2xl font-bold text-gray-900">{{ isEdit() ? 'Edit quote' : 'New quote' }}</h2>
             <p class="text-sm text-gray-500 mt-0.5">{{ isEdit() ? 'Update quote details' : 'Create a new quote for a customer' }}</p>
           </div>
         </div>
@@ -51,7 +51,7 @@ interface QuoteItem {
 
           <!-- Quote details -->
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 class="text-lg font-semibold mb-4">Quote Details</h3>
+            <h3 class="text-base font-semibold text-gray-900 mb-4">Quote details</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="md:col-span-2">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
@@ -83,84 +83,79 @@ interface QuoteItem {
 
           <!-- Line items -->
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold">Line Items</h3>
-              <p-button label="Add Item" icon="pi pi-plus" size="small" [outlined]="true" (onClick)="addItem()" />
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-base font-semibold text-gray-900">Line items</h3>
+              <button pButton label="Add item" icon="pi pi-plus" class="p-button-text p-button-sm" (click)="addItem()"></button>
             </div>
 
             @if (items.length === 0) {
               <div class="text-center py-8 text-gray-400">
                 <i class="pi pi-list text-3xl mb-2 block"></i>
-                <p>No items yet. Add your first line item.</p>
+                <p class="text-sm">No items yet \u2014 add your first line item.</p>
               </div>
             }
 
-            @for (item of items; track $index; let i = $index) {
-              <div class="flex gap-3 items-start mb-3 p-3 bg-gray-50 rounded-lg">
-                <div class="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3">
-                  <div class="md:col-span-5">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Description</label>
-                    <input pInputText [(ngModel)]="item.description" class="w-full" placeholder="Item description" />
-                  </div>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Product</label>
+            <div class="space-y-2.5">
+              @for (item of items; track $index; let i = $index) {
+                <div class="flex flex-wrap items-start gap-2 p-2.5 bg-gray-50 rounded-xl">
+                  <div class="flex-1 min-w-[10rem]">
                     <p-select
                       [options]="products()"
                       [(ngModel)]="item.productId"
                       optionLabel="label"
                       optionValue="value"
-                      placeholder="Optional"
+                      placeholder="Pick a product (optional)"
                       [showClear]="true"
                       [filter]="true"
                       styleClass="w-full"
+                      appendTo="body"
                       (onChange)="onProductSelect(i)"
                     />
+                    <input pInputText [(ngModel)]="item.description" class="w-full mt-1.5 text-sm" placeholder="Description" />
                   </div>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Qty</label>
-                    <p-inputNumber [(ngModel)]="item.quantity" [min]="1" [showButtons]="true" styleClass="w-full" (onInput)="recalculate()" />
+                  <div class="w-16">
+                    <label class="text-[10px] text-gray-400 font-medium">Qty</label>
+                    <p-inputNumber [(ngModel)]="item.quantity" [min]="1" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full text-center" />
                   </div>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">Unit Price</label>
-                    <p-inputNumber [(ngModel)]="item.unitPrice" mode="currency" currency="INR" locale="en-IN" styleClass="w-full" (onInput)="recalculate()" />
+                  <div class="w-28">
+                    <label class="text-[10px] text-gray-400 font-medium">Unit price</label>
+                    <p-inputNumber [(ngModel)]="item.unitPrice" [min]="0" mode="currency" currency="INR" locale="en-IN" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" />
                   </div>
-                  <div class="md:col-span-1 flex items-end">
-                    <button pButton icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm" (click)="removeItem(i)"></button>
+                  <div class="flex flex-col items-end pt-4">
+                    <span class="text-sm font-semibold tabular-nums">\u20B9{{ (item.quantity * item.unitPrice) | number:'1.0-2' }}</span>
+                    <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger -mr-1" (click)="removeItem(i)"></button>
                   </div>
                 </div>
-              </div>
-              <div class="text-right text-sm text-gray-500 mb-2 pr-12">
-                Line total: <span class="font-semibold">\u20B9{{ (item.quantity * item.unitPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 }) }}</span>
-              </div>
-            }
+              }
+            </div>
           </div>
         </div>
 
         <!-- Summary sidebar -->
         <div class="space-y-6">
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-4">
-            <h3 class="text-lg font-semibold mb-4">Summary</h3>
+            <h3 class="text-base font-semibold text-gray-900 mb-4">Summary</h3>
 
-            <div class="space-y-3">
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-500">Items</span>
-                <span class="font-medium">{{ items.length }}</span>
+            <div class="space-y-2.5 text-sm">
+              <div class="flex justify-between text-gray-600">
+                <span>Items</span>
+                <span class="font-medium tabular-nums">{{ items.length }}</span>
               </div>
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-500">Subtotal</span>
-                <span class="font-medium">\u20B9{{ subtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 }) }}</span>
+              <div class="flex justify-between text-gray-600">
+                <span>Subtotal</span>
+                <span class="font-medium tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span>
               </div>
-              <p-divider />
-              <div class="flex justify-between text-lg font-bold">
+              <div class="flex justify-between font-bold text-base pt-2 border-t border-gray-100">
                 <span>Total</span>
-                <span class="text-primary-600">\u20B9{{ subtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 }) }}</span>
+                <span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span>
               </div>
             </div>
 
             <div class="mt-6 space-y-2">
               <p-button
-                label="{{ isEdit() ? 'Update Quote' : 'Create Quote' }}"
+                label="{{ isEdit() ? 'Update quote' : 'Create quote' }}"
                 icon="pi pi-check"
+                severity="success"
                 styleClass="w-full"
                 [loading]="saving()"
                 (onClick)="save()"

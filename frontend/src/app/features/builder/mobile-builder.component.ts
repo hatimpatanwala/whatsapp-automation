@@ -340,14 +340,20 @@ interface CartLine {
           </section>
         </main>
 
-        <footer class="fixed inset-x-0 bottom-0 w-full bg-white border-t border-gray-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-          <div class="max-w-2xl mx-auto px-4 py-3">
+        <footer class="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div class="max-w-2xl mx-auto">
             @if (submitError()) { <p class="text-xs text-red-600 mb-2"><i class="pi pi-exclamation-circle mr-1"></i>{{ submitError() }}</p> }
-            <button class="w-full bg-green-600 text-white font-semibold rounded-xl py-3.5 hover:bg-green-700 active:bg-green-800 disabled:opacity-40 flex items-center justify-center gap-2 transition-colors"
-              [disabled]="!cart().length || submitting()" (click)="submit()">
-              <span>{{ submitting() ? 'Submitting…' : (session()!.type === 'quote' ? 'Create Quote' : 'Create Order') }}</span>
-              @if (cart().length && !submitting()) { <span class="opacity-90">· {{ sym() }}{{ total() | number:'1.0-2' }}</span> }
-            </button>
+            <div class="flex items-center gap-3">
+              <div class="shrink-0">
+                <p class="text-gray-400 text-[11px] leading-none">Total</p>
+                <p class="text-lg font-extrabold text-gray-900 leading-tight">{{ sym() }}{{ total() | number:'1.0-2' }}</p>
+              </div>
+              <button class="flex-1 bg-green-600 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm hover:bg-green-700 active:bg-green-800 disabled:opacity-40 flex items-center justify-center gap-2 transition-colors"
+                [disabled]="!cart().length || submitting()" (click)="submit()">
+                @if (submitting()) { <i class="pi pi-spin pi-spinner"></i> Submitting… }
+                @else { <i class="pi pi-check-circle"></i> {{ session()!.type === 'quote' ? 'Create quote' : 'Create order' }} }
+              </button>
+            </div>
           </div>
         </footer>
       }
