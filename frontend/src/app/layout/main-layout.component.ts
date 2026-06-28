@@ -260,6 +260,7 @@ export class MainLayoutComponent implements OnInit {
     { label: 'Products', icon: 'pi-box', route: '/products' },
     { label: 'Categories & Brands', icon: 'pi-tags', route: '/catalog-taxonomy' },
     { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders' },
+    { label: 'Invoices', icon: 'pi-receipt', route: '/invoices' },
     { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory' },
     { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },
     { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries', featureKey: 'deliveries' },
