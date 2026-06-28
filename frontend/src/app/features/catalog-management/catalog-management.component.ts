@@ -161,7 +161,7 @@ import {
         @if (catalogStatus()!.syncJobs?.length) {
           <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Sync Jobs</h3>
-            <p-table [value]="catalogStatus()!.syncJobs" [rows]="10" styleClass="p-datatable-sm">
+            <p-table [value]="catalogStatus()!.syncJobs" [rows]="10" [paginator]="catalogStatus()!.syncJobs.length > 10" styleClass="p-datatable-sm">
               <ng-template #header>
                 <tr>
                   <th>Type</th>
