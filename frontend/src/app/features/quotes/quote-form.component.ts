@@ -50,7 +50,7 @@ interface QuoteItem {
         <div class="lg:col-span-2 space-y-6">
 
           <!-- Quote details -->
-          <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h3 class="text-lg font-semibold mb-4">Quote Details</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="md:col-span-2">
@@ -82,7 +82,7 @@ interface QuoteItem {
           </div>
 
           <!-- Line items -->
-          <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div class="flex items-center justify-between mb-4">
               <h3 class="text-lg font-semibold">Line Items</h3>
               <p-button label="Add Item" icon="pi pi-plus" size="small" [outlined]="true" (onClick)="addItem()" />
@@ -138,7 +138,7 @@ interface QuoteItem {
 
         <!-- Summary sidebar -->
         <div class="space-y-6">
-          <div class="bg-white rounded-xl border border-gray-200 p-6 sticky top-4">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-4">
             <h3 class="text-lg font-semibold mb-4">Summary</h3>
 
             <div class="space-y-3">
