@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { CartItemInput } from './promotions-engine.service';
+import { customerSegmentFlags } from './customer-segments';
 
 export interface CouponInput {
   code: string;
@@ -13,7 +14,8 @@ export interface CouponInput {
   scopeIds?: string[];
   usageLimit?: number | null;
   perCustomerLimit?: number;
-  audience?: 'all' | 'specific';
+  audience?: 'all' | 'specific' | 'segment';
+  audienceSegment?: string;
   customerIds?: string[];
   validFrom?: string | null;
   validUntil?: string | null;
@@ -54,13 +56,14 @@ export class CouponService {
       if (dup.length) throw new BadRequestException('A coupon with this code already exists.');
       const r = await qr.query(
         `INSERT INTO coupons
-           (code, description, discount_type, discount_value, min_cart_value, max_discount, scope, scope_ids, usage_limit, per_customer_limit, audience, valid_from, valid_until, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+           (code, description, discount_type, discount_value, min_cart_value, max_discount, scope, scope_ids, usage_limit, per_customer_limit, audience, audience_segment, valid_from, valid_until, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
         [
           code, data.description || null, data.discountType || 'percent', Number(data.discountValue) || 0,
           Number(data.minCartValue) || 0, data.maxDiscount != null ? Number(data.maxDiscount) : null,
           data.scope || 'all', data.scopeIds || [], data.usageLimit != null ? Number(data.usageLimit) : null,
-          Number(data.perCustomerLimit) || 1, data.audience || 'all', data.validFrom || null, data.validUntil || null, data.status || 'active',
+          Number(data.perCustomerLimit) || 1, data.audience || 'all', data.audience === 'segment' ? (data.audienceSegment || null) : null,
+          data.validFrom || null, data.validUntil || null, data.status || 'active',
         ],
       );
       const coupon = r[0];
@@ -80,6 +83,7 @@ export class CouponService {
         description: data.description, discount_type: data.discountType, discount_value: data.discountValue,
         min_cart_value: data.minCartValue, max_discount: data.maxDiscount, scope: data.scope, scope_ids: data.scopeIds,
         usage_limit: data.usageLimit, per_customer_limit: data.perCustomerLimit, audience: data.audience,
+        audience_segment: data.audience === 'segment' ? (data.audienceSegment ?? null) : (data.audience !== undefined ? null : undefined),
         valid_from: data.validFrom, valid_until: data.validUntil, status: data.status,
       };
       const fields: string[] = []; const p: any[] = [];
@@ -135,6 +139,11 @@ export class CouponService {
         if (!customerId) return { valid: false, reason: 'This coupon is not available for you.', discount: 0 };
         const tgt = await qr.query(`SELECT 1 FROM coupon_customers WHERE coupon_id = $1 AND customer_id = $2 LIMIT 1`, [coupon.id, customerId]);
         if (!tgt.length) return { valid: false, reason: 'This coupon is not available for you.', discount: 0 };
+      }
+      if (coupon.audience === 'segment') {
+        if (!customerId) return { valid: false, reason: 'This coupon is not available for you.', discount: 0 };
+        const flags = await customerSegmentFlags(qr, customerId);
+        if (!(flags as any)[coupon.audience_segment]) return { valid: false, reason: 'This coupon is not available for you.', discount: 0 };
       }
       if (customerId && coupon.per_customer_limit != null) {
         const used = (await qr.query(`SELECT COUNT(*)::int n FROM coupon_redemptions WHERE coupon_id = $1 AND customer_id = $2`, [coupon.id, customerId]))[0].n;

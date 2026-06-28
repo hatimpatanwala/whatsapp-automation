@@ -1224,6 +1224,19 @@ const migration043CustomerProfile: TenantMigration = {
   },
 };
 
+const migration044AudienceSegment: TenantMigration = {
+  name: '044_audience_segment',
+  async up(qr, schema) {
+    // Schemes/coupons can target a dynamic customer segment (audience='segment').
+    await qr.query(`ALTER TABLE "${schema}".schemes ADD COLUMN IF NOT EXISTS audience_segment VARCHAR(30)`);
+    await qr.query(`ALTER TABLE "${schema}".coupons ADD COLUMN IF NOT EXISTS audience_segment VARCHAR(30)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".schemes DROP COLUMN IF EXISTS audience_segment`);
+    await qr.query(`ALTER TABLE "${schema}".coupons DROP COLUMN IF EXISTS audience_segment`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1268,4 +1281,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration041Coupons,
   migration042Loyalty,
   migration043CustomerProfile,
+  migration044AudienceSegment,
 ];

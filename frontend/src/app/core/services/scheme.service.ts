@@ -30,7 +30,8 @@ export interface Scheme {
   reward?: Record<string, any>;
   weight: number;
   combinable: boolean;
-  audience: 'all' | 'specific';
+  audience: 'all' | 'specific' | 'segment';
+  audienceSegment?: string | null;
   customerIds?: string[];
   validFrom?: string | null;
   validUntil?: string | null;
@@ -88,6 +89,7 @@ export interface Coupon {
   used_count?: number;
   usedCount?: number;
   audience?: string;
+  audienceSegment?: string | null;
   validFrom?: string | null;
   validUntil?: string | null;
   valid_from?: string | null;

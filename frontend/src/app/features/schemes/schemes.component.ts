@@ -260,6 +260,19 @@ import { ApiService } from '../../core/services/api.service';
 
           <div class="grid grid-cols-2 gap-3">
             <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Who gets this</label>
+              <p-select [(ngModel)]="form.audience" [options]="audiences" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+            @if (form.audience === 'segment') {
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Segment</label>
+                <p-select [(ngModel)]="form.audienceSegment" [options]="segmentOptions" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+              </div>
+            }
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Valid from <span class="text-gray-300">(optional)</span></label>
               <input type="date" [(ngModel)]="form.validFrom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
             </div>
@@ -336,6 +349,18 @@ import { ApiService } from '../../core/services/api.service';
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Who can use this</label>
+              <p-select [(ngModel)]="cForm.audience" [options]="audiences" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+            </div>
+            @if (cForm.audience === 'segment') {
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Segment</label>
+                <p-select [(ngModel)]="cForm.audienceSegment" [options]="segmentOptions" optionLabel="label" optionValue="value" styleClass="w-full" appendTo="body" />
+              </div>
+            }
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Valid from <span class="text-gray-300">(optional)</span></label>
               <input type="date" [(ngModel)]="cForm.validFrom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
             </div>
@@ -393,6 +418,19 @@ export class SchemesComponent implements OnInit {
     { label: 'Lifetime', value: 'lifetime' },
     { label: 'Every month', value: 'monthly' },
   ];
+  audiences = [
+    { label: 'Everyone', value: 'all' },
+    { label: 'Customer segment', value: 'segment' },
+  ];
+  segmentOptions = [
+    { label: 'High-order customers (3+)', value: 'high_orders' },
+    { label: 'Low-order customers (1–2)', value: 'low_orders' },
+    { label: 'Repeat customers', value: 'repeat' },
+    { label: 'New customers (30 days)', value: 'new' },
+    { label: 'Inactive customers (60+ days)', value: 'inactive' },
+    { label: 'Pending-cart customers', value: 'pending_cart' },
+  ];
+  segmentLabel(key: string): string { return this.segmentOptions.find((s) => s.value === key)?.label || key; }
   isLoyalty(): boolean { return this.form.kind === 'cumulative'; }
   isDiscount(): boolean { return ['discount', 'qty_discount'].includes(this.form.action); }
   isFree(): boolean { return ['buy_x_get_x_free', 'buy_x_get_y_free'].includes(this.form.action); }
@@ -438,6 +476,7 @@ export class SchemesComponent implements OnInit {
       scope: 'all', scopeIds: [] as string[], minQty: null, minCartValue: null,
       buyQty: 2, getQty: 1, getProductId: '',
       weight: 0, combinable: false, validFrom: '', validUntil: '',
+      audience: 'all', audienceSegment: 'repeat',
       metric: 'spend', target: 10000, period: 'lifetime', minOrderValue: null,
       rDiscountType: 'percent', rDiscountValue: 10, rMaxDiscount: null, rValidDays: 30,
     };
@@ -467,6 +506,7 @@ export class SchemesComponent implements OnInit {
       buyQty: c.buyQty ?? 2, getQty: c.getQty ?? 1, getProductId: c.getProductId || '',
       weight: s.weight ?? 0, combinable: !!s.combinable,
       validFrom: (s.validFrom || '').slice(0, 10), validUntil: (s.validUntil || '').slice(0, 10),
+      audience: (s as any).audience || 'all', audienceSegment: (s as any).audienceSegment ?? (s as any).audience_segment ?? 'repeat',
       metric: c.metric || 'spend', target: c.target ?? 10000, period: c.period || 'lifetime', minOrderValue: c.minOrderValue ?? null,
       rDiscountType: r.discountType || 'percent', rDiscountValue: r.discountValue ?? 10,
       rMaxDiscount: r.maxDiscount ?? null, rValidDays: r.validDays ?? 30,
@@ -495,7 +535,8 @@ export class SchemesComponent implements OnInit {
       type: 'instant', action: this.form.action, scope: this.form.scope,
       scopeIds: this.form.scope === 'all' ? [] : this.form.scopeIds,
       conditions,
-      weight: Number(this.form.weight) || 0, combinable: !!this.form.combinable, audience: 'all',
+      weight: Number(this.form.weight) || 0, combinable: !!this.form.combinable,
+      audience: this.form.audience, audienceSegment: this.form.audience === 'segment' ? this.form.audienceSegment : null,
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null,
       status: 'active',
     };
@@ -520,7 +561,8 @@ export class SchemesComponent implements OnInit {
     const payload: Partial<Scheme> = {
       name: this.form.name.trim(), description: this.form.description?.trim() || undefined,
       type: 'cumulative', action: 'loyalty', scope: 'all', scopeIds: [],
-      conditions, reward, weight: Number(this.form.weight) || 0, combinable: false, audience: 'all',
+      conditions, reward, weight: Number(this.form.weight) || 0, combinable: false,
+      audience: this.form.audience, audienceSegment: this.form.audience === 'segment' ? this.form.audienceSegment : null,
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null, status: 'active',
     };
     this.saving.set(true);
@@ -575,7 +617,8 @@ export class SchemesComponent implements OnInit {
     return {
       id: '', code: '', description: '', discountType: 'percent', discountValue: 10,
       minCartValue: null, maxDiscount: null, scope: 'all', scopeIds: [] as string[],
-      usageLimit: null, perCustomerLimit: 1, validFrom: '', validUntil: '', status: 'active',
+      usageLimit: null, perCustomerLimit: 1, audience: 'all', audienceSegment: 'repeat',
+      validFrom: '', validUntil: '', status: 'active',
     };
   }
 
@@ -604,6 +647,7 @@ export class SchemesComponent implements OnInit {
       scope: c.scope || 'all', scopeIds: [...((c.scopeIds ?? c.scope_ids) || [])],
       usageLimit: (c.usageLimit ?? c.usage_limit) ?? null,
       perCustomerLimit: (c.perCustomerLimit ?? c.per_customer_limit) || 1,
+      audience: (c as any).audience || 'all', audienceSegment: (c as any).audienceSegment ?? (c as any).audience_segment ?? 'repeat',
       validFrom: ((c.validFrom ?? c.valid_from) || '').slice(0, 10),
       validUntil: ((c.validUntil ?? c.valid_until) || '').slice(0, 10),
       status: c.status || 'active',
@@ -619,9 +663,10 @@ export class SchemesComponent implements OnInit {
       maxDiscount: this.cForm.maxDiscount ? Number(this.cForm.maxDiscount) : null,
       scope: this.cForm.scope, scopeIds: this.cForm.scope === 'all' ? [] : this.cForm.scopeIds,
       usageLimit: this.cForm.usageLimit ? Number(this.cForm.usageLimit) : null,
-      perCustomerLimit: Number(this.cForm.perCustomerLimit) || 1, audience: 'all',
+      perCustomerLimit: Number(this.cForm.perCustomerLimit) || 1,
+      audience: this.cForm.audience, audienceSegment: this.cForm.audience === 'segment' ? this.cForm.audienceSegment : null,
       validFrom: this.cForm.validFrom || null, validUntil: this.cForm.validUntil || null, status: this.cForm.status,
-    };
+    } as any;
     this.savingCoupon.set(true);
     const obs = this.cForm.id ? this.svc.updateCoupon(this.cForm.id, payload) : this.svc.createCoupon(payload);
     obs.subscribe({

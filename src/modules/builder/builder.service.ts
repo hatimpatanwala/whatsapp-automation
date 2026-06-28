@@ -315,6 +315,25 @@ export class BuilderService implements OnModuleInit {
     return { schemaName: s.schema_name, tenantId: s.tenant_id };
   }
 
+  /** Mint a CUSTOMERS session (admin views customer segments over the web from WhatsApp). */
+  async createCustomersSession(input: { tenantId: string; schemaName: string; createdBy?: string }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + this.ttlMs);
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions (token_hash, tenant_id, schema_name, type, status, mode, expires_at)
+       VALUES ($1,$2,$3,'customers','open','customers',$4)`,
+      [this.hash(token), input.tenantId, input.schemaName, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/customers?token=${token}` };
+  }
+
+  /** Validate a CUSTOMERS token → the tenant schema it operates on. */
+  async getCustomersSchema(token: string): Promise<{ schemaName: string; tenantId: string }> {
+    const s = await this.resolveSession(token, 'customers');
+    return { schemaName: s.schema_name, tenantId: s.tenant_id };
+  }
+
   /** Mint a SHOP session — a customer-facing ecommerce webview bound to a customer. */
   async createShopSession(input: {
     tenantId: string;
@@ -363,7 +382,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

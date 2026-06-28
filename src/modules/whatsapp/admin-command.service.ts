@@ -275,7 +275,8 @@ export class AdminCommandService {
     if (id === 'menu_qpending') return this.listQuotes(tenant, to, true);
     if (id === 'menu_summary') return this.showSummary(tenant, to);
     if (id === 'menu_payments') return this.listPayments(tenant, to);
-    if (id === 'menu_customers') return this.listCustomers(tenant, to);
+    if (id === 'menu_customers') return this.createCustomersLink(tenant, to);
+    if (id === 'menu_customers_text') return this.listCustomers(tenant, to);
     if (id === 'menu_lowstock') return this.listLowStock(tenant, to);
     if (id === 'menu_help') return this.showHelp(tenant, to);
     if (id === 'prod_list') return this.listProducts(tenant, to);
@@ -813,6 +814,28 @@ export class AdminCommandService {
     } catch (err: any) {
       this.logger.error(`createProductLink failed: ${err.message}`);
       await this.send(tenant, to, '⚠️ Could not open the add-product form. Send *menu* and try again.');
+    }
+  }
+
+  /** Mint a customer-insights session and send the admin a CTA URL button. */
+  private async createCustomersLink(tenant: any, to: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createCustomersSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        '👥 *Customers*\n\nTap below to browse your customers by segment — top spenders, pending carts, high/low order counts and more — with each customer’s last activity and cart. This link works for 2 hours.',
+        '👥 Open Customers',
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createCustomersLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open customers right now. Send *menu* and try again.');
     }
   }
 

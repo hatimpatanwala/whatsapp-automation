@@ -81,6 +81,9 @@ interface Cust { id: string; name: string; phone: string; }
                       @if (s.targetedCount > 0) {
                         <span class="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">👤 {{ s.targetedCount }} customer(s)</span>
                       }
+                      @if (s.audience === 'segment') {
+                        <span class="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">👥 {{ segmentLabel(s.audienceSegment) }}</span>
+                      }
                       @if (s.type !== 'cumulative' && !s.combinable) { <span class="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">exclusive</span> }
                       @if (s.weight) { <span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">priority {{ s.weight }}</span> }
                     </div>
@@ -305,8 +308,17 @@ interface Cust { id: string; name: string; phone: string; }
                 <select [(ngModel)]="form.audience" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
                   <option value="all">Everyone</option>
                   <option value="specific">Specific customers</option>
+                  <option value="segment">Customer segment</option>
                 </select>
               </div>
+              @if (form.audience === 'segment') {
+                <div>
+                  <label class="block text-xs font-semibold text-gray-500 mb-1">Segment *</label>
+                  <select [(ngModel)]="form.audienceSegment" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                    @for (s of segmentOptions; track s.value) { <option [value]="s.value">{{ s.label }}</option> }
+                  </select>
+                </div>
+              }
               @if (form.audience === 'specific') {
                 <div>
                   <input [(ngModel)]="custFilter" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-1.5" placeholder="Search customers…" />
@@ -583,13 +595,22 @@ export class PromoWebviewComponent implements OnInit {
   });
 
   // ─── Scheme form ───────────────────────────────────────────────────────────
+  segmentOptions = [
+    { value: 'high_orders', label: 'High-order customers (3+)' },
+    { value: 'low_orders', label: 'Low-order customers (1–2)' },
+    { value: 'repeat', label: 'Repeat customers' },
+    { value: 'new', label: 'New customers (30 days)' },
+    { value: 'inactive', label: 'Inactive customers (60+ days)' },
+    { value: 'pending_cart', label: 'Pending-cart customers' },
+  ];
+
   blankForm() {
     return {
       id: '', name: '', kind: 'instant', action: 'discount',
       discountType: 'percent', discountValue: 10,
       scope: 'all', scopeIds: [] as string[], minQty: null, minCartValue: null,
       buyQty: 2, getQty: 1, getProductId: '',
-      audience: 'all', customerIds: [] as string[],
+      audience: 'all', audienceSegment: 'repeat', customerIds: [] as string[],
       weight: 0, combinable: false, validFrom: '', validUntil: '',
       // Loyalty (cumulative) fields
       metric: 'spend', target: 10000, period: 'lifetime', minOrderValue: null,
@@ -598,10 +619,12 @@ export class PromoWebviewComponent implements OnInit {
   }
 
   isLoyalty(): boolean { return this.form.kind === 'cumulative'; }
+  segmentLabel(key: string): string { return this.segmentOptions.find((s) => s.value === key)?.label || key; }
 
   valid(): boolean {
     if (!this.form.name?.trim()) return false;
     if (this.form.audience === 'specific' && !this.form.customerIds.length) return false;
+    if (this.form.audience === 'segment' && !this.form.audienceSegment) return false;
     if (this.isLoyalty()) {
       return Number(this.form.target) > 0 && Number(this.form.rDiscountValue) > 0;
     }
@@ -624,7 +647,7 @@ export class PromoWebviewComponent implements OnInit {
       scope: s.scope, scopeIds: [...(s.scopeIds || [])],
       minQty: c.minQty ?? null, minCartValue: c.minCartValue ?? null,
       buyQty: c.buyQty ?? 2, getQty: c.getQty ?? 1, getProductId: c.getProductId || '',
-      audience: s.audience || 'all', customerIds: [...(s.customerIds || [])],
+      audience: s.audience || 'all', audienceSegment: s.audienceSegment ?? s.audience_segment ?? 'repeat', customerIds: [...(s.customerIds || [])],
       weight: s.weight ?? 0, combinable: !!s.combinable,
       validFrom: (s.validFrom || '').slice(0, 10), validUntil: (s.validUntil || '').slice(0, 10),
       metric: c.metric || 'spend', target: c.target ?? 10000, period: c.period || 'lifetime', minOrderValue: c.minOrderValue ?? null,
@@ -654,7 +677,7 @@ export class PromoWebviewComponent implements OnInit {
       name: this.form.name.trim(), type: 'instant', action: this.form.action, scope: this.form.scope,
       scopeIds: this.form.scope === 'all' ? [] : this.form.scopeIds, conditions,
       weight: Number(this.form.weight) || 0, combinable: !!this.form.combinable,
-      audience: this.form.audience, customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
+      audience: this.form.audience, audienceSegment: this.form.audience === 'segment' ? this.form.audienceSegment : null, customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null, status: 'active',
     };
     this.saving.set(true);
@@ -679,7 +702,7 @@ export class PromoWebviewComponent implements OnInit {
     const payload: any = {
       name: this.form.name.trim(), type: 'cumulative', action: 'loyalty', scope: 'all', scopeIds: [],
       conditions, reward, weight: Number(this.form.weight) || 0, combinable: false,
-      audience: this.form.audience, customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
+      audience: this.form.audience, audienceSegment: this.form.audience === 'segment' ? this.form.audienceSegment : null, customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null, status: 'active',
     };
     this.saving.set(true);

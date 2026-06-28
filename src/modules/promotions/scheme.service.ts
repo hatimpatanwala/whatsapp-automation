@@ -12,7 +12,8 @@ export interface SchemeInput {
   reward?: Record<string, any>;
   weight?: number;
   combinable?: boolean;
-  audience?: 'all' | 'specific';
+  audience?: 'all' | 'specific' | 'segment';
+  audienceSegment?: string;
   customerIds?: string[];
   validFrom?: string | null;
   validUntil?: string | null;
@@ -52,13 +53,14 @@ export class SchemeService {
     return this.conn.executeInTransaction(schema, async (qr) => {
       const r = await qr.query(
         `INSERT INTO schemes
-           (name, description, type, action, scope, scope_ids, conditions, reward, weight, combinable, audience, valid_from, valid_until, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+           (name, description, type, action, scope, scope_ids, conditions, reward, weight, combinable, audience, audience_segment, valid_from, valid_until, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
         [
           data.name, data.description || null, data.type || 'instant', data.action || 'discount',
           data.scope || 'all', data.scopeIds || [], JSON.stringify(data.conditions || {}),
           JSON.stringify(data.reward || {}), Number(data.weight) || 0, !!data.combinable,
-          data.audience || 'all', data.validFrom || null, data.validUntil || null,
+          data.audience || 'all', data.audience === 'segment' ? (data.audienceSegment || null) : null,
+          data.validFrom || null, data.validUntil || null,
           data.status || 'active', userId || null,
         ],
       );
@@ -83,6 +85,7 @@ export class SchemeService {
         conditions: data.conditions !== undefined ? JSON.stringify(data.conditions) : undefined,
         reward: data.reward !== undefined ? JSON.stringify(data.reward) : undefined,
         weight: data.weight, combinable: data.combinable, audience: data.audience,
+        audience_segment: data.audience === 'segment' ? (data.audienceSegment ?? null) : (data.audience !== undefined ? null : undefined),
         valid_from: data.validFrom, valid_until: data.validUntil, status: data.status,
       };
       const fields: string[] = [];

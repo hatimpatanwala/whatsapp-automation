@@ -144,5 +144,10 @@ export const routes: Routes = [
     path: 'm/shop',
     loadComponent: () => import('./features/builder/shop-webview.component').then(m => m.ShopWebviewComponent),
   },
+  {
+    // Token-secured customer-insights webview (opened from WhatsApp admin).
+    path: 'm/customers',
+    loadComponent: () => import('./features/builder/customers-webview.component').then(m => m.CustomersWebviewComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

@@ -58,6 +58,28 @@ export class CustomerService {
     });
   }
 
+  /** Customers in a segment for the WhatsApp webview (with last activity + cart). */
+  async segmentList(schema: string, segment: string, page = 1, limit = 50, search?: string): Promise<{ data: any[]; total: number }> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const seg = this.segmentClause(segment);
+      const where: string[] = [seg.where];
+      const params: any[] = [];
+      if (search) {
+        params.push(`%${search}%`);
+        where.push(`(c.phone LIKE $${params.length} OR c.name ILIKE $${params.length} OR c.display_name ILIKE $${params.length})`);
+      }
+      const whereClause = where.join(' AND ');
+      const total = parseInt((await qr.query(`SELECT COUNT(*) total FROM customers c WHERE ${whereClause}`, params))[0].total);
+      params.push(limit, (page - 1) * limit);
+      const data = await qr.query(
+        `SELECT ${this.customerCols} FROM customers c WHERE ${whereClause}
+          ORDER BY ${seg.orderBy} LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params,
+      );
+      return { data, total };
+    });
+  }
+
   /** Counts per quick-segment for the filter chips. */
   async segmentSummary(schema: string): Promise<Record<string, number>> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {

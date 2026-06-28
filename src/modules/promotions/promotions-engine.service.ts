@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
+import { customerSegmentFlags } from './customer-segments';
 
 export interface CartItemInput {
   productId?: string;
@@ -61,11 +62,16 @@ export class PromotionsEngine {
           WHERE s.status = 'active' AND s.type = 'instant'
             AND (s.valid_from IS NULL OR s.valid_from <= NOW())
             AND (s.valid_until IS NULL OR s.valid_until >= NOW())
-            AND (s.audience = 'all' OR ($1::uuid IS NOT NULL AND EXISTS (
-                  SELECT 1 FROM scheme_customers sc WHERE sc.scheme_id = s.id AND sc.customer_id = $1)))
+            AND (s.audience = 'all'
+                 OR ($1::uuid IS NOT NULL AND s.audience = 'specific' AND EXISTS (
+                       SELECT 1 FROM scheme_customers sc WHERE sc.scheme_id = s.id AND sc.customer_id = $1))
+                 OR ($1::uuid IS NOT NULL AND s.audience = 'segment'))
           ORDER BY s.weight DESC`,
         [customerId || null],
       );
+
+      // Segment-targeted schemes apply only if the customer is in that segment.
+      const segFlags = customerId ? await customerSegmentFlags(qr, customerId) : {};
 
       // Resolve "get free" products referenced by buy_x_get_y schemes.
       const getIds = [...new Set(schemes.map((s: any) => (typeof s.conditions === 'string' ? JSON.parse(s.conditions) : s.conditions || {}).getProductId).filter(Boolean))] as string[];
@@ -77,6 +83,7 @@ export class PromotionsEngine {
 
       const applicable: ApplicableScheme[] = [];
       for (const s of schemes) {
+        if (s.audience === 'segment' && !(segFlags as any)[s.audience_segment]) continue;
         const cfg = typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {});
         const scopeIds: string[] = s.scope_ids || [];
 
