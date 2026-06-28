@@ -12,6 +12,7 @@ import { InputIconModule } from 'primeng/inputicon';
 import { ToastModule } from 'primeng/toast';
 import { TextareaModule } from 'primeng/textarea';
 import { MessageService } from 'primeng/api';
+import { exportToCsv } from '../../core/utils/csv-export';
 import { FormsModule } from '@angular/forms';
 import { InventoryService } from '../../core/services/inventory.service';
 import { InventoryItem, InventoryMovementType } from '../../core/models';
@@ -46,7 +47,7 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
           <p class="text-gray-500 text-sm">Monitor and manage stock levels</p>
         </div>
         <div class="flex gap-2">
-          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!filteredItems().length" (click)="exportCsv()"></button>
           <button pButton label="Stock Movement" icon="pi pi-list" class="p-button-sm" severity="secondary"></button>
         </div>
       </div>
@@ -232,6 +233,34 @@ export class InventoryComponent implements OnInit {
 
   ngOnInit() {
     this.loadInventory();
+  }
+
+  exportCsv() {
+    const rows = this.filteredItems().map((i) => ({
+      product: i.product?.name || 'Unknown Product',
+      sku: i.product?.sku || i.variantName || i.id,
+      currentStock: i.currentStock,
+      reserved: i.reservedStock,
+      available: i.availableStock,
+      threshold: i.lowStockThreshold,
+      status: i.currentStock === 0 ? 'Out of stock' : i.isLowStock ? 'Low stock' : 'In stock',
+      location: i.warehouseLocation || '',
+    }));
+    const ok = exportToCsv('inventory', rows, [
+      { key: 'product', header: 'Product' },
+      { key: 'sku', header: 'SKU' },
+      { key: 'currentStock', header: 'Current Stock' },
+      { key: 'reserved', header: 'Reserved' },
+      { key: 'available', header: 'Available' },
+      { key: 'threshold', header: 'Threshold' },
+      { key: 'status', header: 'Status' },
+      { key: 'location', header: 'Location' },
+    ]);
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${rows.length} items exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No inventory items to export.' },
+    );
   }
 
   private loadInventory() {

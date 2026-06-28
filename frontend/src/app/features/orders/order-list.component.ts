@@ -15,6 +15,7 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OrderService } from '../../core/services/order.service';
+import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
 import { Order, OrderStats } from '../../core/models';
 
@@ -60,7 +61,7 @@ interface OrderRow {
         </div>
         <div class="flex gap-2">
           <button pButton label="New Order" icon="pi pi-bolt" class="p-button-sm" (click)="openBuilder()"></button>
-          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
         </div>
       </div>
 
@@ -171,6 +172,28 @@ export class OrderListComponent implements OnInit {
       next: (r) => this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }),
       error: () => this.messageService.add({ severity: 'error', summary: 'Could not open builder' }),
     });
+  }
+
+  exportCsv() {
+    const ok = exportToCsv(
+      'orders',
+      this.orders(),
+      [
+        { key: 'orderNumber', header: 'Order #' },
+        { key: 'customer', header: 'Customer' },
+        { key: 'phone', header: 'Phone' },
+        { key: 'items', header: 'Items' },
+        { key: 'total', header: 'Total' },
+        { key: 'status', header: 'Status' },
+        { key: 'paymentStatus', header: 'Payment' },
+        { key: 'date', header: 'Date' },
+      ],
+    );
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${this.orders().length} orders exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No orders match the current filters.' },
+    );
   }
 
   private readonly searchSubject = new Subject<string>();

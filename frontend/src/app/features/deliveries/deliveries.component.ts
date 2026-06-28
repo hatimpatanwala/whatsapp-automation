@@ -13,6 +13,7 @@ import { TextareaModule } from 'primeng/textarea';
 import { MessageService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { DeliveryService } from '../../core/services/delivery.service';
+import { exportToCsv } from '../../core/utils/csv-export';
 
 interface DeliveryRow {
   id: string;
@@ -55,7 +56,7 @@ interface DeliveryRow {
           <h1 class="text-2xl font-bold text-gray-900">Deliveries</h1>
           <p class="text-gray-500 text-sm">Track and manage all deliveries</p>
         </div>
-        <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+        <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!filteredDeliveries().length" (click)="exportCsv()"></button>
       </div>
 
       <!-- Status summary -->
@@ -225,6 +226,34 @@ export class DeliveriesComponent implements OnInit {
 
   ngOnInit() {
     this.loadDeliveries();
+  }
+
+  exportCsv() {
+    const rows = this.filteredDeliveries().map((d) => ({
+      orderNumber: d.orderNumber,
+      customer: d.customer,
+      address: d.address,
+      courier: d.courier || '',
+      courierPhone: d.courierPhone || '',
+      trackingNumber: d.trackingNumber || '',
+      estimatedDelivery: d.estimatedDelivery || '',
+      status: (d.status || '').replace('_', ' '),
+    }));
+    const ok = exportToCsv('deliveries', rows, [
+      { key: 'orderNumber', header: 'Order #' },
+      { key: 'customer', header: 'Customer' },
+      { key: 'address', header: 'Address' },
+      { key: 'courier', header: 'Courier' },
+      { key: 'courierPhone', header: 'Courier Phone' },
+      { key: 'trackingNumber', header: 'Tracking #' },
+      { key: 'estimatedDelivery', header: 'Est. Delivery' },
+      { key: 'status', header: 'Status' },
+    ]);
+    this.messageService.add(
+      ok
+        ? { severity: 'success', summary: 'Exported', detail: `${rows.length} deliveries exported to CSV.` }
+        : { severity: 'info', summary: 'Nothing to export', detail: 'No deliveries to export.' },
+    );
   }
 
   private loadDeliveries() {

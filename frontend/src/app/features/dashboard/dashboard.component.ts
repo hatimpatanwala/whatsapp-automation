@@ -11,6 +11,7 @@ import { BadgeModule } from 'primeng/badge';
 import { forkJoin } from 'rxjs';
 
 import { OrderService } from '../../core/services/order.service';
+import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
 import { Order, OrderStats, InventoryItem } from '../../core/models';
 
@@ -63,7 +64,7 @@ interface LowStockItem {
           <p class="text-gray-500 text-sm mt-1">Welcome back! Here's what's happening today.</p>
         </div>
         <div class="flex gap-2">
-          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm"></button>
+          <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!recentOrders.length" (click)="exportCsv()"></button>
           <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" severity="success" routerLink="/orders"></button>
         </div>
       </div>
@@ -235,6 +236,16 @@ export class DashboardComponent implements OnInit {
     this.loadStats();
     this.loadRecentOrders();
     this.loadLowStock();
+  }
+
+  exportCsv() {
+    exportToCsv('dashboard-recent-orders', this.recentOrders, [
+      { key: 'orderNumber', header: 'Order #' },
+      { key: 'customer', header: 'Customer' },
+      { key: 'amount', header: 'Amount' },
+      { key: 'status', header: 'Status' },
+      { key: 'date', header: 'Date' },
+    ]);
   }
 
   private loadStats(): void {
