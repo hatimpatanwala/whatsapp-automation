@@ -50,7 +50,10 @@ interface Quote {
           <h2 class="text-2xl font-bold text-gray-900">Quotes</h2>
           <p class="text-sm text-gray-500 mt-1">Create and manage customer quotes</p>
         </div>
-        <p-button label="Create Quote" icon="pi pi-plus" (onClick)="openBuilder()" />
+        <div class="flex gap-2">
+          <p-button label="Create on WhatsApp" icon="pi pi-whatsapp" [outlined]="true" [loading]="openingBuilder()" (onClick)="openBuilder()" />
+          <p-button label="New Quote" icon="pi pi-plus" routerLink="/quotes/new" />
+        </div>
       </div>
 
       <!-- Stats cards -->
@@ -208,11 +211,15 @@ export class QuoteListComponent implements OnInit {
     ];
   });
 
-  /** Mint a token-secured Builder session and open the quote builder. */
+  openingBuilder = signal(false);
+
+  /** Mint a token-secured Builder session and open the quote builder (WhatsApp webview). */
   openBuilder() {
+    if (this.openingBuilder()) return;
+    this.openingBuilder.set(true);
     this.api.post<{ token: string }>('/builder/sessions', { type: 'quote' }).subscribe({
-      next: (r) => this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }),
-      error: () => this.messageService.add({ severity: 'error', summary: 'Could not open builder' }),
+      next: (r) => { this.openingBuilder.set(false); this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }); },
+      error: () => { this.openingBuilder.set(false); this.messageService.add({ severity: 'error', summary: 'Could not open builder' }); },
     });
   }
 

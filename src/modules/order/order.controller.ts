@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { Request } from 'express';
 import { OrderService } from './order.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -20,6 +20,38 @@ export class OrderController {
     @Query('paymentStatus') paymentStatus?: string,
   ) {
     return this.orderService.findAll(req.tenantContext.schemaName, pagination, status, search, paymentStatus);
+  }
+
+  /** Create an order from the in-portal "New order" page. */
+  @Post()
+  @Roles('owner', 'seller')
+  async create(
+    @Req() req: Request,
+    @Body() body: {
+      customerId: string;
+      items: { productId?: string; productName?: string; quantity: number; unitPrice: number }[];
+      notes?: string;
+      discount?: number;
+      deliveryFee?: number;
+      taxAmount?: number;
+      status?: string;
+    },
+  ) {
+    const schema = req.tenantContext.schemaName;
+    if (!body?.customerId) throw new BadRequestException('A customer is required.');
+    if (!body?.items?.length) throw new BadRequestException('Add at least one line item.');
+    const order = await this.orderService.createDirect(schema, {
+      customerId: body.customerId,
+      items: body.items,
+      notes: body.notes,
+      discount: body.discount,
+      deliveryFee: body.deliveryFee,
+      taxAmount: body.taxAmount,
+    });
+    if (body.status && body.status !== 'pending') {
+      await this.orderService.updateStatus(schema, order.id, body.status).catch(() => undefined);
+    }
+    return order;
   }
 
   @Get('stats')
