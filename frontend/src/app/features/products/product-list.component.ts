@@ -124,12 +124,12 @@ interface BulkUploadStatus {
       }
 
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Products</h1>
           <p class="text-gray-500 text-sm">Manage your product catalog</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button pButton label="Export Products" icon="pi pi-file-export" class="p-button-outlined p-button-sm" (click)="exportProducts()" [disabled]="isUploading()" [loading]="exporting()" pTooltip="Download all products to edit & re-upload"></button>
           <button pButton label="Template" icon="pi pi-download" class="p-button-outlined p-button-sm" (click)="downloadTemplate()" [disabled]="isUploading()"></button>
           <button pButton label="Upload / Update" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()" pTooltip="Upload to add new or update existing products"></button>
