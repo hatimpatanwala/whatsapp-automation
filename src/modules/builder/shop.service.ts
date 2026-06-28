@@ -73,16 +73,21 @@ export class ShopService {
     };
   }
 
-  /** Storefront display toggles from tenant settings (both default ON). */
+  /** Storefront display toggles from tenant settings (both default ON; only an
+   *  explicit false disables). Settings values may be raw booleans or JSON strings. */
   private async storefrontFlags(schema: string): Promise<{ showPrices: boolean; cartEnabled: boolean }> {
+    const isOn = (v: any): boolean => {
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch { /* keep string */ } }
+      return v !== false; // undefined/null/true → ON; only explicit false → OFF
+    };
     try {
       const rows = await this.conn.executeInTenantContext(schema, async (qr) =>
         qr.query(`SELECT key, value FROM "${schema}".settings WHERE key IN ('commerce_show_prices','commerce_cart_enabled')`));
       const m: Record<string, any> = {};
-      for (const r of rows) m[r.key] = safeJson(r.value);
+      for (const r of rows) m[r.key] = r.value;
       return {
-        showPrices: m['commerce_show_prices'] !== false,
-        cartEnabled: m['commerce_cart_enabled'] !== false,
+        showPrices: isOn(m['commerce_show_prices']),
+        cartEnabled: isOn(m['commerce_cart_enabled']),
       };
     } catch {
       return { showPrices: true, cartEnabled: true };
