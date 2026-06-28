@@ -27,6 +27,10 @@ export class PaginationDto {
   @IsString()
   search?: string;
 
+  @IsOptional()
+  @IsString()
+  segment?: string;
+
   get skip(): number {
     return (this.page - 1) * this.limit;
   }
