@@ -51,52 +51,48 @@ export function buildWelcomeHub(storeName: string): DefaultWorkflowDef {
 /** The modular customer-facing spoke workflows (each standalone + a Welcome menu item). */
 export function buildDefaultSpokes(): DefaultWorkflowDef[] {
   return [
-    // ── 0. Shop Online — opens the full ecommerce webview (grid → cart → checkout) ──
-    {
-      name: 'Shop Online',
-      description: 'Opens the ecommerce storefront webview where the customer browses products, builds a cart and checks out.',
-      menuItem: { label: '🛍️ Shop Online', order: 0 },
-      trigger: { type: 'trigger_message', keywords: 'shop,store,buy,order online,shop online', matchType: 'contains' },
-      nodes: [
-        { id: 'n1', type: 'trigger_message', label: 'Shop', x: 300, y: 40, config: { keywords: 'shop,store,buy,order online,shop online', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'open_shop', label: 'Open Store', x: 300, y: 200, config: { message: '🛍️ Tap below to open our store — browse products, add to your cart and checkout, all in one place.', buttonLabel: '🛒 Open Store' }, outputs: [] },
-      ],
-      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
-    },
-
-    // ── 1. Browse Products — opens the storefront webview at the catalog ──
+    // ── 1. Browse Products — pick All / By Category / By Brand, then open the
+    //      storefront webview pre-filtered to the chosen category/brand. ──
     {
       name: 'Browse Products',
-      description: 'Opens the storefront webview to browse products, build a cart and checkout.',
+      description: 'Choose All Products, By Category or By Brand, then open the storefront webview with that filter applied.',
       menuItem: { label: '🛍️ Browse Products', order: 1 },
-      trigger: { type: 'trigger_message', keywords: 'browse,catalog,products,shop now', matchType: 'contains' },
+      trigger: { type: 'trigger_message', keywords: 'browse,catalog,products,shop now,shop,store', matchType: 'contains' },
       nodes: [
-        { id: 'n1', type: 'trigger_message', label: 'Browse', x: 300, y: 40, config: { keywords: 'browse,catalog,products,shop now', matchType: 'contains' }, outputs: ['n2'] },
-        { id: 'n2', type: 'open_shop', label: 'Open Store', x: 300, y: 200, config: { message: '🛍️ Tap below to browse our store — add items to your cart and checkout, all in one place.', buttonLabel: '🛒 Browse Store' }, outputs: [] },
+        { id: 'n1', type: 'trigger_message', label: 'Browse', x: 300, y: 40, config: { keywords: 'browse,catalog,products,shop now,shop,store', matchType: 'contains' }, outputs: ['n2'] },
+        { id: 'n2', type: 'send_buttons', label: 'How to Browse', x: 300, y: 180, config: { message: '🛍️ How would you like to browse?', buttons: [{ id: 'br_all', title: '🛍️ All Products' }, { id: 'br_cat', title: '📂 By Category' }, { id: 'br_brand', title: '🏷️ By Brand' }] }, outputs: ['n3', 'n4', 'n6'] },
+        { id: 'n3', type: 'open_shop', label: 'All Products', x: 80, y: 340, config: { message: '🛍️ Tap below to browse all our products, add to your cart and checkout.', buttonLabel: '🛒 Open Store' }, outputs: [] },
+        { id: 'n4', type: 'send_list', label: 'Pick Category', x: 300, y: 340, config: { message: '📂 Pick a category:', buttonText: 'Categories', source: 'categories' }, outputs: ['n5'] },
+        { id: 'n5', type: 'open_shop', label: 'Category Store', x: 300, y: 480, config: { filterFrom: 'category', message: '🛍️ Tap below to browse this category.', buttonLabel: '🛒 Open Store' }, outputs: [] },
+        { id: 'n6', type: 'send_list', label: 'Pick Brand', x: 520, y: 340, config: { message: '🏷️ Pick a brand:', buttonText: 'Brands', source: 'brands' }, outputs: ['n7'] },
+        { id: 'n7', type: 'open_shop', label: 'Brand Store', x: 520, y: 480, config: { filterFrom: 'brand', message: '🛍️ Tap below to browse this brand.', buttonLabel: '🛒 Open Store' }, outputs: [] },
       ],
-      edges: [{ id: 'e1', from: 'n1', to: 'n2' }],
+      edges: [
+        { id: 'e1', from: 'n1', to: 'n2' },
+        { id: 'e2', from: 'n2', to: 'n3' },   // br_all
+        { id: 'e3', from: 'n2', to: 'n4' },   // br_cat
+        { id: 'e4', from: 'n2', to: 'n6' },   // br_brand
+        { id: 'e5', from: 'n4', to: 'n5' },
+        { id: 'e6', from: 'n6', to: 'n7' },
+      ],
     },
 
     // ── 2. Search Products — type a name → results → product card → cart ──
     {
       name: 'Search Products',
-      description: 'Let customers search products by name and add to cart.',
+      description: 'Type what you are looking for, then open the storefront webview filtered to your search.',
       menuItem: { label: '🔎 Search Products', order: 2 },
       trigger: { type: 'trigger_message', keywords: 'search,find,looking for', matchType: 'contains' },
       nodes: [
         { id: 'n1', type: 'trigger_message', label: 'Search', x: 300, y: 40, config: { keywords: 'search,find,looking for', matchType: 'contains' }, outputs: ['n2'] },
         { id: 'n2', type: 'send_text', label: 'Ask Query', x: 300, y: 180, config: { message: '🔎 What are you looking for? Type a product name to search.' }, outputs: ['n3'] },
         { id: 'n3', type: 'wait_for_reply', label: 'Wait', x: 300, y: 320, config: { timeoutMinutes: 10, timeoutMessage: 'No problem — send *menu* whenever you’re ready.' }, outputs: ['n4'] },
-        { id: 'n4', type: 'search_products', label: 'Search Products', x: 300, y: 460, config: { maxResults: 8, noResultsMessage: 'No products found for "{{last_input}}". Send *menu* to browse instead.' }, outputs: ['n5'] },
-        { id: 'n5', type: 'product_card', label: 'Product Card', x: 300, y: 600, config: {}, outputs: [] },
-        { id: 'n6', type: 'start_workflow', label: 'Open Cart', x: 520, y: 600, config: { workflowName: 'View Cart', passVariables: true }, outputs: [] },
+        { id: 'n4', type: 'open_shop', label: 'Open Search', x: 300, y: 460, config: { searchFromInput: true, message: '🔎 Tap below to see matching products in our store.', buttonLabel: '🛒 Open Store' }, outputs: [] },
       ],
       edges: [
         { id: 'e1', from: 'n1', to: 'n2' },
         { id: 'e2', from: 'n2', to: 'n3' },
         { id: 'e3', from: 'n3', to: 'n4' },
-        { id: 'e4', from: 'n4', to: 'n5' },
-        { id: 'e5', from: 'n5', to: 'n6', label: 'view' },
       ],
     },
 

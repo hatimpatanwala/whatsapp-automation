@@ -8,7 +8,7 @@ import { buildWelcomeHub, buildDefaultSpokes, buildDefaultNotifications } from '
  * added spokes/notifications on their next workflow-list load (by-name dedupe
  * keeps any admin edits intact).
  */
-const DEFAULT_WORKFLOWS_VERSION = 6;
+const DEFAULT_WORKFLOWS_VERSION = 7;
 
 export interface CreateWorkflowDto {
   name: string;
@@ -98,17 +98,23 @@ export class WorkflowService {
           await insert(note, {});
         }
 
-        // v6 upgrade: rewire the existing Browse Products + View Cart spokes to
-        // open the storefront webview (open_shop). Existing tenants kept their
-        // old chat-based definitions (by-name dedup skips them on re-seed), so
-        // replace those two spokes' nodes/edges in place.
-        if (seededVersion > 0 && seededVersion < 6) {
-          const rewire = buildDefaultSpokes().filter((s) => s.name === 'Browse Products' || s.name === 'View Cart');
+        // v7 upgrade: the customer shopping spokes now open the storefront
+        // webview. Existing tenants kept their older definitions (by-name dedup
+        // skips them on re-seed), so for them: drop the standalone "Shop Online"
+        // spoke (folded into Browse Products) and rewrite Browse Products,
+        // Search Products and View Cart in place.
+        if (seededVersion > 0 && seededVersion < 7) {
+          await qr.query(`DELETE FROM workflows WHERE LOWER(name) = LOWER('Shop Online')`);
+          const rewire = buildDefaultSpokes().filter((s) => ['Browse Products', 'Search Products', 'View Cart'].includes(s.name));
           for (const s of rewire) {
             await qr.query(
-              `UPDATE workflows SET nodes = $1::jsonb, edges = $2::jsonb, description = $3, updated_at = NOW()
-                WHERE LOWER(name) = LOWER($4)`,
-              [JSON.stringify(s.nodes), JSON.stringify(s.edges), s.description, s.name],
+              `UPDATE workflows SET nodes = $1::jsonb, edges = $2::jsonb, trigger = $3::jsonb,
+                      description = $4, menu_item = $5::jsonb, updated_at = NOW()
+                WHERE LOWER(name) = LOWER($6)`,
+              [
+                JSON.stringify(s.nodes), JSON.stringify(s.edges), JSON.stringify(s.trigger),
+                s.description, s.menuItem ? JSON.stringify(s.menuItem) : null, s.name,
+              ],
             );
           }
         }

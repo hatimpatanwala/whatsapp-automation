@@ -72,15 +72,29 @@ interface Cart {
               <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
               <input [ngModel]="search()" (ngModelChange)="search.set($event)" class="w-full border border-gray-300 rounded-full pl-9 pr-3 py-2 text-sm" placeholder="Search products…" />
             </div>
-            @if (categories().length || brands().length) {
-              <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            @if (categories().length) {
+              <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 items-center">
+                <span class="shrink-0 text-[10px] font-bold text-gray-400 uppercase pr-0.5">Category</span>
                 <button class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border"
-                  [class]="!catFilter() && !brandFilter() ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'"
-                  (click)="clearFilters()">All</button>
+                  [class]="!catFilter() ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'"
+                  (click)="catFilter.set('')">All</button>
                 @for (c of categories(); track c.id) {
                   <button class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border"
                     [class]="catFilter() === c.id ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'"
                     (click)="toggleCat(c.id)">{{ c.name }}</button>
+                }
+              </div>
+            }
+            @if (brands().length) {
+              <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 items-center">
+                <span class="shrink-0 text-[10px] font-bold text-gray-400 uppercase pr-0.5">Brand</span>
+                <button class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border"
+                  [class]="!brandFilter() ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'"
+                  (click)="brandFilter.set('')">All</button>
+                @for (b of brands(); track b.id) {
+                  <button class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border"
+                    [class]="brandFilter() === b.id ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300'"
+                    (click)="toggleBrand(b.id)">{{ b.name }}</button>
                 }
               </div>
             }
@@ -317,8 +331,10 @@ export class ShopWebviewComponent implements OnInit {
   filteredProducts = computed(() => {
     const q = this.search().trim().toLowerCase();
     const cat = this.catFilter();
+    const brand = this.brandFilter();
     return this.products().filter((p) =>
       (!cat || p.categoryId === cat) &&
+      (!brand || p.brandId === brand) &&
       (!q || p.name.toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q)),
     );
   });
@@ -336,8 +352,11 @@ export class ShopWebviewComponent implements OnInit {
   ngOnInit(): void {
     const t = this.route.snapshot.queryParamMap.get('token') || '';
     this.token.set(t);
-    const startView = this.route.snapshot.queryParamMap.get('view');
-    if (startView === 'cart') this.view.set('cart');
+    const qp = this.route.snapshot.queryParamMap;
+    if (qp.get('view') === 'cart') this.view.set('cart');
+    if (qp.get('category')) this.catFilter.set(qp.get('category')!);
+    if (qp.get('brand')) this.brandFilter.set(qp.get('brand')!);
+    if (qp.get('q')) this.search.set(qp.get('q')!);
     if (!t) { this.loading.set(false); return; }
     this.http.get<any>(`${this.base}/m/shop/bootstrap`, this.opts()).subscribe({
       next: (r) => {
@@ -355,6 +374,7 @@ export class ShopWebviewComponent implements OnInit {
 
   clearFilters() { this.catFilter.set(''); this.brandFilter.set(''); }
   toggleCat(id: string) { this.catFilter.set(this.catFilter() === id ? '' : id); }
+  toggleBrand(id: string) { this.brandFilter.set(this.brandFilter() === id ? '' : id); }
   openProduct(p: ShopProduct) { this.detail.set(p); }
 
   setQty(p: ShopProduct, qty: number) { this.setQtyId(p.id, qty); }

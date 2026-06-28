@@ -51,8 +51,14 @@ export class OpenShopNodeHandler implements NodeHandler {
         customerPhone: ctx.customerPhone || null,
         customerName: ctx.customerName || null,
       });
-      // Deep-link to a specific view (e.g. 'cart') when configured.
-      const url = cfg.startView ? `${baseUrl}&view=${encodeURIComponent(cfg.startView)}` : baseUrl;
+      // Deep-link to a specific view (e.g. 'cart') and/or a pre-applied filter
+      // (the category/brand the customer just picked from a list).
+      const params: string[] = [];
+      if (cfg.startView) params.push(`view=${encodeURIComponent(cfg.startView)}`);
+      if (cfg.filterFrom === 'category' && ctx.variables.selected_category_id) params.push(`category=${encodeURIComponent(ctx.variables.selected_category_id)}`);
+      if (cfg.filterFrom === 'brand' && ctx.variables.selected_brand_id) params.push(`brand=${encodeURIComponent(ctx.variables.selected_brand_id)}`);
+      if (cfg.searchFromInput && ctx.variables.last_input) params.push(`q=${encodeURIComponent(String(ctx.variables.last_input).slice(0, 80))}`);
+      const url = params.length ? `${baseUrl}&${params.join('&')}` : baseUrl;
 
       const body = resolveTemplate(cfg.message || '🛍️ Tap below to browse our store, build your cart and checkout — all in one place.', ctx);
       const buttonText = (cfg.buttonLabel || '🛒 Open Store').slice(0, 20);
