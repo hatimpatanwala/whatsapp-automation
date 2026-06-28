@@ -70,6 +70,7 @@ interface Segment {
         <p-step-panels>
           <!-- Step 1: Setup -->
           <p-step-panel [value]="1">
+            <ng-template #content>
             <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4 mt-4">
               <h3 class="text-base font-semibold text-gray-900">Campaign Details</h3>
               <div class="flex flex-col gap-1">
@@ -90,10 +91,12 @@ interface Segment {
             <div class="flex justify-end mt-4">
               <button pButton label="Next: Audience" icon="pi pi-arrow-right" iconPos="right" severity="success" (click)="activeStep.set(2)"></button>
             </div>
+            </ng-template>
           </p-step-panel>
 
           <!-- Step 2: Audience -->
           <p-step-panel [value]="2">
+            <ng-template #content>
             <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-5 mt-4">
               <h3 class="text-base font-semibold text-gray-900">Target Audience</h3>
 
@@ -157,10 +160,12 @@ interface Segment {
               <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-outlined" (click)="activeStep.set(1)"></button>
               <button pButton label="Next: Message" icon="pi pi-arrow-right" iconPos="right" severity="success" (click)="activeStep.set(3)"></button>
             </div>
+            </ng-template>
           </p-step-panel>
 
           <!-- Step 3: Message -->
           <p-step-panel [value]="3">
+            <ng-template #content>
             <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-5 mt-4">
               <h3 class="text-base font-semibold text-gray-900">Campaign Message</h3>
 
@@ -203,10 +208,12 @@ interface Segment {
               <button pButton label="Back" icon="pi pi-arrow-left" class="p-button-outlined" (click)="activeStep.set(2)"></button>
               <button pButton label="Next: Schedule" icon="pi pi-arrow-right" iconPos="right" severity="success" (click)="activeStep.set(4)"></button>
             </div>
+            </ng-template>
           </p-step-panel>
 
           <!-- Step 4: Schedule -->
           <p-step-panel [value]="4">
+            <ng-template #content>
             <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-5 mt-4">
               <h3 class="text-base font-semibold text-gray-900">Schedule Campaign</h3>
 
@@ -273,6 +280,7 @@ interface Segment {
                 <button pButton [label]="scheduleType === 'immediate' ? 'Launch Campaign' : 'Schedule Campaign'" icon="pi pi-send" severity="success" [loading]="saving()" (click)="launch()"></button>
               </div>
             </div>
+            </ng-template>
           </p-step-panel>
         </p-step-panels>
       </p-stepper>
