@@ -89,7 +89,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                     <label class="text-sm font-medium text-gray-700">Business Description</label>
                     <textarea pTextarea [(ngModel)]="biz.description" rows="2" class="w-full" placeholder="Brief description of your business..."></textarea>
                   </div>
-                  <div class="grid grid-cols-3 gap-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div class="flex flex-col gap-1">
                       <label class="text-sm font-medium text-gray-700">Currency</label>
                       <p-select [(ngModel)]="biz.currency" [options]="currencies" optionLabel="label" optionValue="value" styleClass="w-full" />
@@ -115,7 +115,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                 <h3 class="text-base font-semibold text-gray-900 mb-5">Business Hours</h3>
                 <div class="space-y-3">
                   @for (day of businessHours; track day.day) {
-                    <div class="flex items-center gap-4">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                       <div class="w-20 flex items-center gap-2">
                         <p-toggleswitch [(ngModel)]="day.enabled" />
                         <span class="text-sm font-medium text-gray-700">{{ day.day }}</span>

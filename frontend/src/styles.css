@@ -620,6 +620,14 @@ textarea.p-textarea:focus, textarea[pTextarea]:focus {
   .p-select-overlay, .p-multiselect-overlay, .p-datepicker-panel, .p-popover {
     max-width: 94vw !important;
   }
+  /* Toasts span the screen width (minus a gutter) instead of a fixed 25rem
+     that would overflow a narrow phone. */
+  .p-toast {
+    width: calc(100vw - 2rem) !important;
+    max-width: calc(100vw - 2rem) !important;
+    right: 1rem !important;
+    left: 1rem !important;
+  }
 }
 
 /* Data tables: keep a sensible minimum so columns don't crush into
