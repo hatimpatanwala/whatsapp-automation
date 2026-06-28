@@ -72,9 +72,9 @@ interface NavItem {
               <!-- Unlocked feature -->
               <a
                 [routerLink]="item.route"
-                routerLinkActive="bg-primary-50 text-primary-700"
+                routerLinkActive="bg-primary-50 text-primary-700 font-semibold shadow-sm"
                 [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
-                class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 text-gray-600 hover:bg-gray-100 transition-colors duration-150 no-underline group"
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-gray-500 font-medium hover:bg-gray-100 hover:text-gray-900 transition-all duration-150 no-underline group"
                 [pTooltip]="!sidebarOpen() ? item.label : ''"
                 tooltipPosition="right"
                 (click)="onNavClick()"
@@ -139,9 +139,10 @@ interface NavItem {
         <header class="flex items-center gap-4 px-4 py-3 bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
           <button
             pButton
-            [icon]="sidebarOpen() ? 'pi pi-times' : 'pi pi-bars'"
-            class="p-button-text p-button-sm p-button-rounded text-gray-600"
+            icon="pi pi-bars"
+            class="p-button-text p-button-sm p-button-rounded text-gray-500"
             (click)="toggleSidebar()"
+            pTooltip="Toggle menu"
           ></button>
 
           <div class="flex-1">
