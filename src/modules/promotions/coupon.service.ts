@@ -35,7 +35,11 @@ export class CouponService {
 
   async findAll(schema: string): Promise<any[]> {
     return this.conn.executeInTenantContext(schema, async (qr) =>
-      qr.query(`SELECT * FROM coupons ORDER BY created_at DESC`),
+      qr.query(
+        `SELECT c.*,
+                COALESCE((SELECT array_agg(cc.customer_id) FROM coupon_customers cc WHERE cc.coupon_id = c.id), '{}') AS customer_ids
+           FROM coupons c ORDER BY c.created_at DESC`,
+      ),
     );
   }
 

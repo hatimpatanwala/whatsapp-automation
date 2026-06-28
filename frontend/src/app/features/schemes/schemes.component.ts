@@ -270,6 +270,12 @@ import { ApiService } from '../../core/services/api.service';
               </div>
             }
           </div>
+          @if (form.audience === 'specific') {
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Customers *</label>
+              <p-multiSelect [(ngModel)]="form.customerIds" [options]="customers()" optionLabel="name" optionValue="id" placeholder="Select customers" styleClass="w-full" appendTo="body" [filter]="true" />
+            </div>
+          }
 
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -359,6 +365,12 @@ import { ApiService } from '../../core/services/api.service';
               </div>
             }
           </div>
+          @if (cForm.audience === 'specific') {
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Customers *</label>
+              <p-multiSelect [(ngModel)]="cForm.customerIds" [options]="customers()" optionLabel="name" optionValue="id" placeholder="Select customers" styleClass="w-full" appendTo="body" [filter]="true" />
+            </div>
+          }
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Valid from <span class="text-gray-300">(optional)</span></label>
@@ -389,6 +401,7 @@ export class SchemesComponent implements OnInit {
   categories = signal<any[]>([]);
   brands = signal<any[]>([]);
   products = signal<any[]>([]);
+  customers = signal<any[]>([]);
 
   tab = signal<'schemes' | 'coupons'>('schemes');
   coupons = signal<Coupon[]>([]);
@@ -420,6 +433,7 @@ export class SchemesComponent implements OnInit {
   ];
   audiences = [
     { label: 'Everyone', value: 'all' },
+    { label: 'Specific customers', value: 'specific' },
     { label: 'Customer segment', value: 'segment' },
   ];
   segmentOptions = [
@@ -448,6 +462,7 @@ export class SchemesComponent implements OnInit {
     this.api.get<any>('/categories').subscribe({ next: (r) => this.categories.set(this.arr(r)) });
     this.api.get<any>('/brands').subscribe({ next: (r) => this.brands.set(this.arr(r)) });
     this.api.get<any>('/products', { limit: 500 } as any).subscribe({ next: (r) => this.products.set(this.arr(r).map((p: any) => ({ id: p.id, name: p.name }))) });
+    this.api.get<any>('/customers', { limit: 500 } as any).subscribe({ next: (r) => this.customers.set(this.arr(r).map((c: any) => ({ id: c.id, name: `${c.displayName || c.whatsappName || c.whatsappPhone} · ${c.whatsappPhone}` }))) });
   }
 
   private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
@@ -463,6 +478,7 @@ export class SchemesComponent implements OnInit {
   private normalize = (s: any): Scheme => ({
     ...s,
     scopeIds: s.scopeIds ?? s.scope_ids ?? [],
+    customerIds: s.customerIds ?? s.customer_ids ?? [],
     conditions: typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {}),
     reward: typeof s.reward === 'string' ? JSON.parse(s.reward) : (s.reward || {}),
     validFrom: s.validFrom ?? s.valid_from ?? null,
@@ -476,7 +492,7 @@ export class SchemesComponent implements OnInit {
       scope: 'all', scopeIds: [] as string[], minQty: null, minCartValue: null,
       buyQty: 2, getQty: 1, getProductId: '',
       weight: 0, combinable: false, validFrom: '', validUntil: '',
-      audience: 'all', audienceSegment: 'repeat',
+      audience: 'all', audienceSegment: 'repeat', customerIds: [] as string[],
       metric: 'spend', target: 10000, period: 'lifetime', minOrderValue: null,
       rDiscountType: 'percent', rDiscountValue: 10, rMaxDiscount: null, rValidDays: 30,
     };
@@ -484,6 +500,7 @@ export class SchemesComponent implements OnInit {
 
   valid(): boolean {
     if (!this.form.name?.trim()) return false;
+    if (this.form.audience === 'specific' && !this.form.customerIds?.length) return false;
     if (this.isLoyalty()) return Number(this.form.target) > 0 && Number(this.form.rDiscountValue) > 0;
     if (this.form.scope !== 'all' && !(this.form.scopeIds && this.form.scopeIds.length > 0)) return false;
     if (this.isDiscount()) return Number(this.form.discountValue) > 0;
@@ -507,6 +524,7 @@ export class SchemesComponent implements OnInit {
       weight: s.weight ?? 0, combinable: !!s.combinable,
       validFrom: (s.validFrom || '').slice(0, 10), validUntil: (s.validUntil || '').slice(0, 10),
       audience: (s as any).audience || 'all', audienceSegment: (s as any).audienceSegment ?? (s as any).audience_segment ?? 'repeat',
+      customerIds: [...((s as any).customerIds ?? (s as any).customer_ids ?? [])],
       metric: c.metric || 'spend', target: c.target ?? 10000, period: c.period || 'lifetime', minOrderValue: c.minOrderValue ?? null,
       rDiscountType: r.discountType || 'percent', rDiscountValue: r.discountValue ?? 10,
       rMaxDiscount: r.maxDiscount ?? null, rValidDays: r.validDays ?? 30,
@@ -537,6 +555,7 @@ export class SchemesComponent implements OnInit {
       conditions,
       weight: Number(this.form.weight) || 0, combinable: !!this.form.combinable,
       audience: this.form.audience, audienceSegment: this.form.audience === 'segment' ? this.form.audienceSegment : null,
+      customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null,
       status: 'active',
     };
@@ -563,6 +582,7 @@ export class SchemesComponent implements OnInit {
       type: 'cumulative', action: 'loyalty', scope: 'all', scopeIds: [],
       conditions, reward, weight: Number(this.form.weight) || 0, combinable: false,
       audience: this.form.audience, audienceSegment: this.form.audience === 'segment' ? this.form.audienceSegment : null,
+      customerIds: this.form.audience === 'specific' ? this.form.customerIds : [],
       validFrom: this.form.validFrom || null, validUntil: this.form.validUntil || null, status: 'active',
     };
     this.saving.set(true);
@@ -617,7 +637,7 @@ export class SchemesComponent implements OnInit {
     return {
       id: '', code: '', description: '', discountType: 'percent', discountValue: 10,
       minCartValue: null, maxDiscount: null, scope: 'all', scopeIds: [] as string[],
-      usageLimit: null, perCustomerLimit: 1, audience: 'all', audienceSegment: 'repeat',
+      usageLimit: null, perCustomerLimit: 1, audience: 'all', audienceSegment: 'repeat', customerIds: [] as string[],
       validFrom: '', validUntil: '', status: 'active',
     };
   }
@@ -626,11 +646,12 @@ export class SchemesComponent implements OnInit {
     if (this.couponsLoaded) return;
     this.couponsLoaded = true;
     this.svc.listCoupons().subscribe({
-      next: (cs) => this.coupons.set((cs || []).map((c) => ({ ...c, scopeIds: (c as any).scopeIds ?? (c as any).scope_ids ?? [] }))),
+      next: (cs) => this.coupons.set((cs || []).map((c) => ({ ...c, scopeIds: (c as any).scopeIds ?? (c as any).scope_ids ?? [], customerIds: (c as any).customerIds ?? (c as any).customer_ids ?? [] }))),
     });
   }
 
   couponValid(): boolean {
+    if (this.cForm.audience === 'specific' && !this.cForm.customerIds?.length) return false;
     return !!this.cForm.code?.trim() && Number(this.cForm.discountValue) > 0 &&
       (this.cForm.scope === 'all' || (this.cForm.scopeIds && this.cForm.scopeIds.length > 0));
   }
@@ -648,6 +669,7 @@ export class SchemesComponent implements OnInit {
       usageLimit: (c.usageLimit ?? c.usage_limit) ?? null,
       perCustomerLimit: (c.perCustomerLimit ?? c.per_customer_limit) || 1,
       audience: (c as any).audience || 'all', audienceSegment: (c as any).audienceSegment ?? (c as any).audience_segment ?? 'repeat',
+      customerIds: [...((c as any).customerIds ?? (c as any).customer_ids ?? [])],
       validFrom: ((c.validFrom ?? c.valid_from) || '').slice(0, 10),
       validUntil: ((c.validUntil ?? c.valid_until) || '').slice(0, 10),
       status: c.status || 'active',
@@ -665,6 +687,7 @@ export class SchemesComponent implements OnInit {
       usageLimit: this.cForm.usageLimit ? Number(this.cForm.usageLimit) : null,
       perCustomerLimit: Number(this.cForm.perCustomerLimit) || 1,
       audience: this.cForm.audience, audienceSegment: this.cForm.audience === 'segment' ? this.cForm.audienceSegment : null,
+      customerIds: this.cForm.audience === 'specific' ? this.cForm.customerIds : [],
       validFrom: this.cForm.validFrom || null, validUntil: this.cForm.validUntil || null, status: this.cForm.status,
     } as any;
     this.savingCoupon.set(true);
