@@ -32,8 +32,8 @@ import { ApiService } from '../../core/services/api.service';
         </div>
       } @else if (quote()) {
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div class="flex items-center gap-3 min-w-0">
             <button pButton icon="pi pi-arrow-left" class="p-button-text p-button-rounded" routerLink="/quotes"></button>
             <div>
               <div class="flex items-center gap-3">
@@ -43,7 +43,7 @@ import { ApiService } from '../../core/services/api.service';
               <p class="text-sm text-gray-500 mt-0.5">{{ quote()!.title }}</p>
             </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             @if (quote()!.status === 'draft') {
               <p-button label="Send" icon="pi pi-send" severity="success" (onClick)="updateStatus('sent')" />
               <p-button label="Edit" icon="pi pi-pencil" [outlined]="true" [routerLink]="['/quotes', quoteId, 'edit']" />
