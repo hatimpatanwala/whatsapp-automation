@@ -53,26 +53,26 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
 
       <!-- Summary cards -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Total SKUs</p>
-          <p class="text-2xl font-bold text-gray-900 mt-1">{{ items().length }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-slate-100 text-slate-600"><i class="pi pi-box" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ items().length }}</p><p class="text-xs text-gray-500 mt-1 truncate">Total SKUs</p></div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Low Stock</p>
-          <p class="text-2xl font-bold text-red-500 mt-1">{{ lowStockCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-red-50 text-red-600"><i class="pi pi-exclamation-triangle" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ lowStockCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Low Stock</p></div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Out of Stock</p>
-          <p class="text-2xl font-bold text-orange-500 mt-1">{{ outOfStockCount() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-amber-50 text-amber-600"><i class="pi pi-ban" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ outOfStockCount() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Out of Stock</p></div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <p class="text-xs text-gray-500 font-medium">Total Units</p>
-          <p class="text-2xl font-bold text-gray-900 mt-1">{{ totalUnits() }}</p>
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3.5 hover:shadow-md transition-shadow">
+          <div class="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 bg-primary-50 text-primary-600"><i class="pi pi-database" style="font-size:1.1rem"></i></div>
+          <div class="min-w-0"><p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ totalUnits() }}</p><p class="text-xs text-gray-500 mt-1 truncate">Total Units</p></div>
         </div>
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-wrap gap-3">
         <p-iconfield class="flex-1 min-w-48">
           <p-inputicon styleClass="pi pi-search" />
           <input pInputText [(ngModel)]="searchQuery" placeholder="Search products..." class="w-full" (input)="filter()" />
@@ -88,7 +88,7 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <p-table [value]="filteredItems()" [loading]="loading()" dataKey="id" styleClass="text-sm">
           <ng-template pTemplate="header">
             <tr>
