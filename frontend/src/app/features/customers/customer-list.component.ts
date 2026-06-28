@@ -63,7 +63,6 @@ interface CustomerRow {
         </div>
         <div class="flex gap-2">
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!customers().length" (click)="exportCsv()"></button>
-          <button pButton label="Import" icon="pi pi-upload" class="p-button-sm" severity="secondary"></button>
         </div>
       </div>
 
