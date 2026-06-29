@@ -20,6 +20,7 @@ import { ApiService } from '../../core/services/api.service';
 import { OnboardingService, RegisterNumberResult } from '../../core/services/onboarding.service';
 import { EmbeddedSignupButtonComponent } from '../../shared/embedded-signup-button.component';
 import { DirectNumberRegistrationComponent } from '../../shared/direct-number-registration.component';
+import { CustomFieldsManagerComponent } from './custom-fields-manager.component';
 
 @Component({
   selector: 'wa-settings',
@@ -43,6 +44,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
     DialogModule,
     EmbeddedSignupButtonComponent,
     DirectNumberRegistrationComponent,
+    CustomFieldsManagerComponent,
   ],
   providers: [MessageService],
   template: `
@@ -61,6 +63,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
           <p-tab value="payments"><i class="pi pi-credit-card mr-2"></i>Payments</p-tab>
           <p-tab value="notifications"><i class="pi pi-bell mr-2"></i>Notifications</p-tab>
           <p-tab value="commerce"><i class="pi pi-shop mr-2"></i>Commerce</p-tab>
+          <p-tab value="custom-fields"><i class="pi pi-sliders-h mr-2"></i>Custom Fields</p-tab>
           <p-tab value="subscription"><i class="pi pi-star mr-2"></i>Subscription</p-tab>
         </p-tablist>
 
@@ -868,6 +871,13 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
                 <button pButton label="Preview Storefront" icon="pi pi-external-link" class="p-button-outlined" [loading]="previewingStore()" (click)="previewStorefront()"></button>
                 <button pButton label="Save Commerce Settings" icon="pi pi-check" severity="success" (click)="save()"></button>
               </div>
+            </div>
+          </p-tabpanel>
+
+          <!-- Custom Fields -->
+          <p-tabpanel value="custom-fields">
+            <div class="mt-4">
+              <wa-custom-fields-manager />
             </div>
           </p-tabpanel>
 
