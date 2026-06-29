@@ -9,6 +9,7 @@ import {
   PaymentExpiredEvent,
   QuoteCreatedEvent,
   QuoteStatusChangedEvent,
+  InvoiceCreatedEvent,
 } from '../../events/domain-events';
 import { WorkflowTriggerMatcher } from './workflow-trigger.matcher';
 import { WorkflowExecutionEngine } from './workflow-execution.engine';
@@ -115,6 +116,17 @@ export class WorkflowEventListener {
     await this.handleEventTrigger(event.tenantSchema, 'trigger_quote', event.newStatus, event.customerId, {
       quote_id: event.quoteId,
       quote_status: event.newStatus,
+    });
+  }
+
+  @OnEvent('invoice.created')
+  async onInvoiceCreated(event: InvoiceCreatedEvent): Promise<void> {
+    await this.handleEventTrigger(event.tenantSchema, 'trigger_invoice', 'created', event.customerId, {
+      invoice_id: event.invoiceId,
+      invoice_number: event.invoiceNumber,
+      invoice_total: event.total,
+      doc_type: event.docType,
+      order_id: event.orderId,
     });
   }
 
@@ -277,6 +289,18 @@ export class WorkflowEventListener {
             out.quote_total = out.quote_total ?? q.total_amount;
             out.quote_status = out.quote_status ?? q.status;
             out.currency = q.currency || '₹';
+          }
+        } else if (triggerType === 'trigger_invoice' && out.invoice_id) {
+          const inv = (await qr.query(
+            `SELECT invoice_number, doc_type, total, currency, order_id FROM invoices WHERE id = $1`,
+            [out.invoice_id],
+          ))[0];
+          if (inv) {
+            out.invoice_number = inv.invoice_number ?? out.invoice_number;
+            out.invoice_total = out.invoice_total ?? inv.total;
+            out.doc_type = inv.doc_type ?? out.doc_type;
+            out.order_id = inv.order_id ?? out.order_id;
+            out.currency = inv.currency || '₹';
           }
         }
         return out;

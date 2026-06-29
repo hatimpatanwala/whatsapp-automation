@@ -3,6 +3,8 @@ import { TenantConnectionManager } from '../../database/tenant-connection.manage
 import { SmartNotificationService } from './smart-notification.service';
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { buildInvoicePdf } from './invoice-pdf';
+import { EventBusService } from '../events/event-bus.service';
+import { InvoiceCreatedEvent } from '../events/domain-events';
 
 export type DocType = 'tax_invoice' | 'bill_of_supply' | 'delivery_challan';
 
@@ -56,6 +58,7 @@ export class InvoiceService {
     private readonly connectionManager: TenantConnectionManager,
     @Optional() private readonly smartNotification: SmartNotificationService,
     @Optional() private readonly whatsappApi: WhatsAppApiService,
+    @Optional() private readonly eventBus?: EventBusService,
   ) {}
 
   async getSettings(schema: string): Promise<InvoiceSettings> {
@@ -118,7 +121,8 @@ export class InvoiceService {
   async createInvoiceForOrder(schema: string, orderId: string, docType: DocType, customNumber?: string): Promise<any | null> {
     const settings = await this.getSettings(schema);
 
-    return this.connectionManager.executeInTransaction(schema, async (qr) => {
+    let isNew = false;
+    const invoice = await this.connectionManager.executeInTransaction(schema, async (qr) => {
       const order = (await qr.query(`SELECT * FROM orders WHERE id = $1`, [orderId]))[0];
       if (!order) return null;
 
@@ -183,8 +187,20 @@ export class InvoiceService {
           JSON.stringify(lines),
         ],
       ))[0];
+      isNew = true;
       return saved;
     });
+
+    // Fire the invoice workflow (trigger_invoice) for newly issued documents only
+    // — never on idempotent re-issues. The customer-facing PDF/text is still sent
+    // separately by generateAndSend; this drives any tenant-built invoice workflow.
+    if (invoice && isNew && invoice.customer_id) {
+      this.eventBus?.emit(new InvoiceCreatedEvent(
+        schema, invoice.id, invoice.customer_id, invoice.invoice_number, invoice.doc_type,
+        Number(invoice.total) || 0, invoice.order_id || null,
+      ));
+    }
+    return invoice;
   }
 
   private async nextInvoiceNumber(qr: any, settings: InvoiceSettings, docType: DocType, customNumber?: string): Promise<string> {
