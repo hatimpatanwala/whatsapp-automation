@@ -10,6 +10,8 @@ import { SelectModule } from 'primeng/select';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
+import { PromoCartService } from '../shared/promo-cart.service';
+import { PromoSectionComponent } from '../shared/promo-section.component';
 
 interface OrderItem {
   productId?: string | null;
@@ -29,8 +31,9 @@ interface OrderItem {
   imports: [
     CommonModule, FormsModule, RouterLink,
     ButtonModule, InputTextModule, TextareaModule, InputNumberModule, SelectModule, ToastModule,
+    PromoSectionComponent,
   ],
-  providers: [MessageService],
+  providers: [MessageService, PromoCartService],
   template: `
     <div class="p-4 max-w-5xl mx-auto">
       <p-toast />
@@ -63,6 +66,7 @@ interface OrderItem {
               filterPlaceholder="Search customers..."
               styleClass="w-full"
               appendTo="body"
+              (onChange)="refreshPromo()"
             />
           </div>
 
@@ -143,6 +147,12 @@ interface OrderItem {
             <div class="flex justify-between text-gray-600"><span>Subtotal</span><span class="tabular-nums">₹{{ subtotal() | number:'1.2-2' }}</span></div>
             @if (discount > 0) { <div class="flex justify-between text-green-700"><span>Discount</span><span class="tabular-nums">-₹{{ discount | number:'1.2-2' }}</span></div> }
             @if (deliveryFee > 0) { <div class="flex justify-between text-gray-600"><span>Delivery</span><span class="tabular-nums">₹{{ deliveryFee | number:'1.2-2' }}</span></div> }
+
+            <wa-promo-section [promo]="promo" (apply)="applyCoupon($event)" />
+            @if (promo.couponDiscount() > 0) {
+              <div class="flex justify-between text-green-700"><span>Coupon</span><span class="tabular-nums">-₹{{ promo.couponDiscount() | number:'1.2-2' }}</span></div>
+            }
+
             <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span class="tabular-nums">₹{{ total() | number:'1.2-2' }}</span></div>
             <button pButton class="w-full mt-3" [label]="saving() ? 'Creating…' : 'Create order'"
               icon="pi pi-check" severity="success" [disabled]="!canSave() || saving()" (click)="save()"></button>
@@ -157,6 +167,7 @@ export class OrderFormComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly messageService = inject(MessageService);
+  readonly promo = inject(PromoCartService);
 
   saving = signal(false);
 
@@ -181,7 +192,12 @@ export class OrderFormComponent implements OnInit {
     { label: 'Delivered', value: 'delivered' },
   ];
 
-  total = computed(() => Math.max(0, this.subtotal() - (Number(this.discount) || 0) + (Number(this.deliveryFee) || 0)));
+  total = computed(() => Math.max(0, this.subtotal() - (Number(this.discount) || 0) - this.promo.totalDiscount() + (Number(this.deliveryFee) || 0)));
+
+  /** Lines fed to the promotions engine. */
+  private promoLines() { return this.items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })); }
+  refreshPromo() { this.promo.refresh(this.promoLines(), this.customerId || undefined); }
+  applyCoupon(code: string) { this.promo.applyCoupon(code, this.promoLines(), this.customerId || undefined); }
 
   ngOnInit() {
     this.loadCustomers();
@@ -221,6 +237,7 @@ export class OrderFormComponent implements OnInit {
 
   recalc() {
     this.subtotal.set(this.items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0));
+    this.refreshPromo();
   }
 
   canSave(): boolean {
@@ -230,18 +247,23 @@ export class OrderFormComponent implements OnInit {
   save() {
     if (!this.canSave() || this.saving()) return;
     this.saving.set(true);
+    const lineItems = this.items.map(i => ({
+      productId: i.productId || undefined,
+      productName: i.description,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+    }));
+    const freeItems = this.promo.freeItems().map(f => ({
+      productId: f.productId, productName: '🎁 FREE: ' + f.name, quantity: f.quantity, unitPrice: 0,
+    }));
     const payload = {
       customerId: this.customerId,
       status: this.status,
-      discount: Number(this.discount) || 0,
+      // fold offer + coupon savings into the order discount (createDirect has no coupon field)
+      discount: (Number(this.discount) || 0) + this.promo.totalDiscount(),
       deliveryFee: Number(this.deliveryFee) || 0,
       notes: this.notes || undefined,
-      items: this.items.map(i => ({
-        productId: i.productId || undefined,
-        productName: i.description,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-      })),
+      items: [...lineItems, ...freeItems],
     };
     this.api.post<any>('/orders', payload).subscribe({
       next: (r) => {

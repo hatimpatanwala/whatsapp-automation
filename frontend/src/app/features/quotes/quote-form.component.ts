@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
@@ -13,6 +13,8 @@ import { ToastModule } from 'primeng/toast';
 import { CardModule } from 'primeng/card';
 import { MessageService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
+import { PromoCartService } from '../shared/promo-cart.service';
+import { PromoSectionComponent } from '../shared/promo-section.component';
 
 interface QuoteItem {
   productId?: string;
@@ -28,8 +30,9 @@ interface QuoteItem {
     CommonModule, FormsModule, RouterLink,
     ButtonModule, InputTextModule, TextareaModule, InputNumberModule,
     SelectModule, DatePickerModule, DividerModule, ToastModule, CardModule,
+    PromoSectionComponent,
   ],
-  providers: [MessageService],
+  providers: [MessageService, PromoCartService],
   template: `
     <div class="p-4 max-w-5xl mx-auto">
       <p-toast />
@@ -62,6 +65,7 @@ interface QuoteItem {
               filterPlaceholder="Search customers..."
               styleClass="w-full"
               appendTo="body"
+              (onChange)="refreshPromo()"
             />
           </div>
 
@@ -135,7 +139,13 @@ interface QuoteItem {
             <h3 class="text-base font-semibold text-gray-900 mb-2">Summary</h3>
             <div class="flex justify-between text-gray-600"><span>Items</span><span class="tabular-nums">{{ items.length }}</span></div>
             <div class="flex justify-between text-gray-600"><span>Subtotal</span><span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span></div>
-            <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span></div>
+
+            <wa-promo-section [promo]="promo" (apply)="applyCoupon($event)" />
+            @if (promo.couponDiscount() > 0) {
+              <div class="flex justify-between text-green-700"><span>Coupon</span><span class="tabular-nums">-\u20B9{{ promo.couponDiscount() | number:'1.2-2' }}</span></div>
+            }
+
+            <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span class="tabular-nums">\u20B9{{ total() | number:'1.2-2' }}</span></div>
             <button pButton class="w-full mt-3" [label]="saving() ? 'Saving\u2026' : (isEdit() ? 'Update quote' : 'Create quote')"
               icon="pi pi-check" severity="success" [disabled]="!canSave() || saving()" (click)="save()"></button>
             <button pButton class="w-full" label="Cancel" icon="pi pi-times" severity="secondary" [outlined]="true" routerLink="/quotes"></button>
@@ -150,6 +160,7 @@ export class QuoteFormComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly messageService = inject(MessageService);
+  readonly promo = inject(PromoCartService);
 
   isEdit = signal(false);
   quoteId = '';
@@ -167,6 +178,11 @@ export class QuoteFormComponent implements OnInit {
   products = signal<{ label: string; value: string; price?: number; name?: string }[]>([]);
 
   subtotal = signal(0);
+  total = computed(() => Math.max(0, this.subtotal() - this.promo.totalDiscount()));
+
+  private promoLines() { return this.items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })); }
+  refreshPromo() { this.promo.refresh(this.promoLines(), this.customerId || undefined); }
+  applyCoupon(code: string) { this.promo.applyCoupon(code, this.promoLines(), this.customerId || undefined); }
 
   ngOnInit() {
     this.loadCustomers();
@@ -249,6 +265,7 @@ export class QuoteFormComponent implements OnInit {
   recalculate() {
     const total = this.items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
     this.subtotal.set(total);
+    this.refreshPromo();
   }
 
   canSave(): boolean {
@@ -259,17 +276,25 @@ export class QuoteFormComponent implements OnInit {
     if (!this.canSave()) return;
     this.saving.set(true);
 
+    const freeItems = this.promo.freeItems().map(f => ({
+      productId: f.productId, description: '🎁 FREE: ' + f.name, quantity: f.quantity, unitPrice: 0,
+    }));
     const payload = {
       customerId: this.customerId,
       title: this.title,
       notes: this.notes,
       validUntil: this.validUntil ? this.validUntil.toISOString() : undefined,
-      items: this.items.map(i => ({
-        productId: i.productId || undefined,
-        description: i.description,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-      })),
+      // fold offer + coupon savings into the quote discount
+      discount: this.promo.totalDiscount(),
+      items: [
+        ...this.items.map(i => ({
+          productId: i.productId || undefined,
+          description: i.description,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+        })),
+        ...freeItems,
+      ],
     };
 
     const req = this.isEdit()
