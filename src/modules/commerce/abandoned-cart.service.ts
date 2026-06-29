@@ -75,13 +75,15 @@ export class AbandonedCartService {
       const phone = String(cart.phone).replace(/^\+/, '');
       const name = cart.name || 'there';
       const total = Number(cart.cart_total || 0).toFixed(0);
-      const detail = `🛒 Hi ${name}, you still have ${cart.item_count} item(s) worth ₹${total} in your cart. Reply *menu* to pick up where you left off before they sell out!`;
+      const detail = `🛒 Hi ${name}, you still have ${cart.item_count} item(s) worth ₹${total} in your cart. Tap below to pick up where you left off before they sell out!`;
 
       await this.smartNotification.notify({
         tenantId, schema, recipientPhone: phone, audience: 'customer', channel: 'marketing',
         windowOnly: true, recipientName: name,
         summary: `🛒 ${cart.item_count} item(s) left in your cart`,
         detail,
+        // Tapping a button sends its title → matches the cart/menu keyword workflow.
+        buttons: [{ id: 'view_cart', title: '🛒 View Cart' }, { id: 'menu', title: '🛍️ Menu' }],
       }).catch(() => undefined);
     }
   }
