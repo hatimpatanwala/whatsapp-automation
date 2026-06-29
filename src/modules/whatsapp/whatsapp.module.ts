@@ -24,12 +24,13 @@ import { TenantModule } from '../tenant/tenant.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WabaModule } from '../waba/waba.module';
 import { BuilderModule } from '../builder/builder.module';
+import { CustomFieldModule } from '../custom-field/custom-field.module';
 import { BuilderNotificationListener } from './builder-notification.listener';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { LoyaltyNotificationListener } from './loyalty-notification.listener';
 
 @Module({
-  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, PromotionsModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, PromotionsModule, CustomFieldModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
   controllers: [WhatsAppWebhookController],
   providers: [
     BuilderNotificationListener,
