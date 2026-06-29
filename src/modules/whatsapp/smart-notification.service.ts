@@ -47,6 +47,12 @@ export interface NotifyInput {
    */
   buttons?: { id: string; title: string }[];
   /**
+   * A single CTA-URL button (opens a link, e.g. the storefront cart) sent when
+   * the window is open. Takes precedence over `buttons` — WhatsApp can't combine
+   * a CTA-URL with quick-reply buttons.
+   */
+  ctaUrl?: { url: string; label: string };
+  /**
    * The specific UTILITY template to send when the window is CLOSED (e.g. an
    * order/payment status update). Its own quick-reply button opens the window so
    * the customer can continue. Marketing notifications omit this and use a teaser.
@@ -71,6 +77,7 @@ interface PendingItem {
   detail: string;
   recipientName?: string;
   buttons?: { id: string; title: string }[];
+  ctaUrl?: { url: string; label: string };
   createdAt: number;
 }
 
@@ -201,14 +208,19 @@ export class SmartNotificationService {
       tenantId: input.tenantId, schema: input.schema, phoneNumberId,
       accessToken, audience: input.audience, channel: input.channel,
       summary: input.summary, detail, recipientName: input.recipientName,
-      buttons: input.buttons, createdAt: Date.now(),
+      buttons: input.buttons, ctaUrl: input.ctaUrl, createdAt: Date.now(),
     };
 
     try {
       const windowOpen = await this.orchestrator.hasActiveServiceWindow(input.tenantId, input.recipientPhone);
       if (windowOpen) {
-        // Inside the window: interactive (buttons trigger the next workflow) or text.
-        if (input.buttons && input.buttons.length) {
+        // Inside the window: CTA-URL link button, quick-reply buttons, or text.
+        if (input.ctaUrl) {
+          await this.orchestrator.sendCtaUrl(
+            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
+            detail, input.ctaUrl.label.slice(0, 20), input.ctaUrl.url, undefined, undefined, 'service',
+          );
+        } else if (input.buttons && input.buttons.length) {
           await this.orchestrator.sendButtons(
             input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
             detail, input.buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })), undefined, undefined, 'service',
@@ -306,6 +318,14 @@ export class SmartNotificationService {
   private async sendConsolidated(items: PendingItem[], phone: string): Promise<void> {
     const first = items[0];
     const body = this.consolidate(items);
+    // A single held update with a CTA-URL (e.g. abandoned cart → open the cart).
+    if (items.length === 1 && first.ctaUrl) {
+      await this.orchestrator.sendCtaUrl(
+        first.tenantId, first.phoneNumberId, first.accessToken, phone,
+        body, first.ctaUrl.label.slice(0, 20), first.ctaUrl.url, undefined, undefined, 'service',
+      );
+      return;
+    }
     // Single update → reuse its buttons; multiple → a generic navigation set.
     const buttons = (items.length === 1 && first.buttons?.length)
       ? first.buttons
