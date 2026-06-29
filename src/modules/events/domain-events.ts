@@ -84,6 +84,22 @@ export class StockReservedEvent extends DomainEvent {
   }
 }
 
+// Invoice / document events
+export class InvoiceCreatedEvent extends DomainEvent {
+  readonly eventName = 'invoice.created';
+  constructor(
+    schema: string,
+    public readonly invoiceId: string,
+    public readonly customerId: string,
+    public readonly invoiceNumber: string,
+    public readonly docType: string,
+    public readonly total: number,
+    public readonly orderId: string | null,
+  ) {
+    super(schema);
+  }
+}
+
 export class StockLowEvent extends DomainEvent {
   readonly eventName = 'inventory.stock_low';
   constructor(

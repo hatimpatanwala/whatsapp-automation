@@ -127,6 +127,18 @@ export const NODE_TYPE_DEFINITIONS: NodeTypeDefinition[] = [
       { key: 'event', label: 'Event', type: 'select', options: [{ label: 'Quote Created', value: 'created' }, { label: 'Quote Sent', value: 'sent' }, { label: 'Quote Accepted', value: 'accepted' }, { label: 'Quote Rejected', value: 'rejected' }, { label: 'Quote Converted', value: 'converted' }] },
     ],
   },
+  {
+    type: 'trigger_invoice',
+    label: 'Invoice Event',
+    description: 'Triggers when an invoice or document is issued',
+    category: 'trigger',
+    icon: 'pi-receipt',
+    color: '#f59e0b',
+    maxOutputs: 1,
+    configFields: [
+      { key: 'event', label: 'Event', type: 'select', options: [{ label: 'Invoice Created', value: 'created' }] },
+    ],
+  },
 
   // Messages
   {
@@ -603,6 +615,7 @@ export const NODE_HELP: Record<string, string> = {
   trigger_payment: 'Starts the flow when a payment reaches the selected status.',
   trigger_schedule: 'Runs the flow automatically on the schedule you set.',
   trigger_quote: 'Starts the flow when a quote reaches the selected status.',
+  trigger_invoice: 'Starts the flow when an invoice or document (tax invoice / bill of supply / delivery challan) is issued for an order. Use {{invoice_number}}, {{invoice_total}}, {{doc_type}}.',
   send_text: 'Sends a plain text message. Use {{variables}} to personalize it.',
   send_buttons: 'Sends up to 3 tappable buttons. Connect one arrow per button (top→bottom matches button order), or send to a Switch node to branch on the choice.',
   send_list: 'Sends a tappable list menu (categories, products, or custom items).',
