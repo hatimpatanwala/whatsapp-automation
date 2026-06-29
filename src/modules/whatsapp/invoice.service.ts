@@ -82,12 +82,13 @@ export class InvoiceService {
   private round(n: number): number { return Math.round((n + Number.EPSILON) * 100) / 100; }
 
   async listInvoices(schema: string, orderId?: string): Promise<any[]> {
+    const cols = `i.id, i.order_id, i.invoice_number, i.doc_type, i.customer_name, i.customer_phone,
+                  i.total, i.total_tax, i.currency, i.issued_at,
+                  COALESCE((SELECT pm.status FROM payments pm WHERE pm.order_id = i.order_id LIMIT 1), 'pending') AS payment_status`;
     const rows: any[] = await this.connectionManager.executeInTenantContext(schema, (qr) =>
       orderId
-        ? qr.query(`SELECT id, order_id, invoice_number, doc_type, customer_name, customer_phone, total, total_tax, currency, issued_at
-                    FROM invoices WHERE order_id = $1 ORDER BY issued_at DESC`, [orderId])
-        : qr.query(`SELECT id, order_id, invoice_number, doc_type, customer_name, customer_phone, total, total_tax, currency, issued_at
-                    FROM invoices ORDER BY issued_at DESC LIMIT 200`));
+        ? qr.query(`SELECT ${cols} FROM invoices i WHERE i.order_id = $1 ORDER BY i.issued_at DESC`, [orderId])
+        : qr.query(`SELECT ${cols} FROM invoices i ORDER BY i.issued_at DESC LIMIT 200`));
     // Cross-reference sibling documents of the same order so both the list and
     // the order page can show "this order also has …" and link them together.
     const byOrder = new Map<string, any[]>();
