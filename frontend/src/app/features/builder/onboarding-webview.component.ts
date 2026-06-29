@@ -114,7 +114,11 @@ export class OnboardingWebviewComponent implements OnInit {
   values: Record<string, any> = {};
   private waPhone = '';
 
-  canSubmit = computed(() => this.fields().every(f => !f.isRequired || (this.values[f.fieldKey] !== undefined && this.values[f.fieldKey] !== null && String(this.values[f.fieldKey]).trim() !== '')));
+  // A method (not computed): `values` is a plain object, so a computed wouldn't
+  // re-run as the customer types — the button would stay stuck disabled.
+  canSubmit(): boolean {
+    return this.fields().every(f => !f.isRequired || (this.values[f.fieldKey] !== undefined && this.values[f.fieldKey] !== null && String(this.values[f.fieldKey]).trim() !== ''));
+  }
 
   constructor() { this.http = new HttpClient(inject(HttpBackend)); }
   private unwrap<T>(r: any): T { return (r && typeof r === 'object' && 'data' in r ? r.data : r) as T; }
