@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Req, Res, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, Req, Res, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { InvoiceService, DocType } from '../whatsapp/invoice.service';
 import { OrderService } from '../order/order.service';
@@ -89,8 +89,8 @@ export class InvoiceController {
 
   @Get('invoices')
   @Roles('owner', 'seller', 'staff')
-  async list(@Req() req: Request) {
-    return this.invoiceService.listInvoices(req.tenantContext.schemaName);
+  async list(@Req() req: Request, @Query('orderId') orderId?: string) {
+    return this.invoiceService.listInvoices(req.tenantContext.schemaName, orderId);
   }
 
   @Get('invoices/:id')
