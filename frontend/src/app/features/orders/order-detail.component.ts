@@ -67,8 +67,8 @@ interface EditItem {
           @if (!editing()) {
             <button pButton label="Edit Order" icon="pi pi-pencil" class="p-button-outlined" (click)="startEdit()"></button>
             <p-menu #docMenu [model]="docMenuItems" [popup]="true" appendTo="body" />
-            <button pButton [label]="generatingDoc() ? 'Sending…' : 'Create Document'" icon="pi pi-receipt" class="p-button-outlined" [disabled]="generatingDoc()" (click)="docMenu.toggle($event)"></button>
-            <button pButton label="Update Status" icon="pi pi-refresh" severity="success" (click)="statusDialog = true"></button>
+            <button pButton [label]="generatingDoc() ? 'Sending…' : 'Create Invoice'" icon="pi pi-receipt" severity="success" [disabled]="generatingDoc()" (click)="docMenu.toggle($event)"></button>
+            <button pButton label="Update Status" icon="pi pi-refresh" class="p-button-outlined" (click)="statusDialog = true"></button>
           } @else {
             <button pButton label="Cancel" icon="pi pi-times" class="p-button-outlined" severity="secondary" (click)="cancelEdit()"></button>
             <button pButton [label]="saving() ? 'Saving...' : 'Save Changes'" icon="pi pi-check" severity="success" [disabled]="saving() || editItems().length === 0" (click)="saveEdit()"></button>
