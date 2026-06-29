@@ -32,6 +32,7 @@ import { CommerceModule } from './modules/commerce/commerce.module';
 import { SubscriptionPlanModule } from './modules/subscription-plan/subscription-plan.module';
 import { QuoteModule } from './modules/quote/quote.module';
 import { InvoiceModule } from './modules/invoice/invoice.module';
+import { CustomFieldModule } from './modules/custom-field/custom-field.module';
 import { BuilderModule } from './modules/builder/builder.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
@@ -73,6 +74,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     SubscriptionPlanModule,
     QuoteModule,
     InvoiceModule,
+    CustomFieldModule,
     BuilderModule,
     PromotionsModule,
   ],

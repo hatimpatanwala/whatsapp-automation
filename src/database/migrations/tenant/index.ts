@@ -1237,6 +1237,42 @@ const migration044AudienceSegment: TenantMigration = {
   },
 };
 
+const migration045CustomFields: TenantMigration = {
+  name: '045_custom_fields',
+  async up(qr, schema) {
+    // Admin-defined custom fields for customers and products. Values are stored
+    // in a `custom_fields` JSONB on the entity, keyed by field_key — additive,
+    // so nothing existing changes. Customer fields double as workflow variables.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".custom_field_definitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        entity VARCHAR(20) NOT NULL,                 -- 'customer' | 'product'
+        field_key VARCHAR(64) NOT NULL,              -- slug used as the variable key
+        label VARCHAR(120) NOT NULL,
+        field_type VARCHAR(20) NOT NULL DEFAULT 'text', -- text|textarea|number|date|select|boolean|phone|email
+        options JSONB DEFAULT '[]',                  -- choices for 'select'
+        placeholder VARCHAR(160),
+        help_text VARCHAR(255),
+        is_required BOOLEAN DEFAULT false,           -- (customer) gate workflows until collected
+        collect_from_customer BOOLEAN DEFAULT false, -- show on the customer onboarding webview
+        sort_order INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS cfd_entity_key_uniq ON "${schema}".custom_field_definitions (entity, field_key)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_cfd_entity ON "${schema}".custom_field_definitions (entity, is_active)`);
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'`);
+    await qr.query(`ALTER TABLE "${schema}".products  ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products  DROP COLUMN IF EXISTS custom_fields`);
+    await qr.query(`ALTER TABLE "${schema}".customers DROP COLUMN IF EXISTS custom_fields`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".custom_field_definitions CASCADE`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1282,4 +1318,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration042Loyalty,
   migration043CustomerProfile,
   migration044AudienceSegment,
+  migration045CustomFields,
 ];
