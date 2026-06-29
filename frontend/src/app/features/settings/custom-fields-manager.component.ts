@@ -90,8 +90,8 @@ interface FieldDef {
     </div>
 
     <!-- Add / edit dialog -->
-    <p-dialog [(visible)]="dialog" [header]="editing()?.id ? 'Edit field' : 'New ' + entity() + ' field'" [modal]="true" [style]="{ width: '460px' }" [draggable]="false">
-      @if (editing(); as m) {
+    <p-dialog [(visible)]="dialogVisible" [header]="model?.id ? 'Edit field' : 'New ' + entity() + ' field'" [modal]="true" [style]="{ width: '460px' }" [draggable]="false">
+      @if (model; as m) {
         <div class="space-y-3">
           <div>
             <label class="text-xs font-medium text-gray-500">Label</label>
@@ -128,8 +128,8 @@ interface FieldDef {
         </div>
       }
       <ng-template pTemplate="footer">
-        <button pButton label="Cancel" class="p-button-text" (click)="dialog.set(false)"></button>
-        <button pButton [label]="saving() ? 'Saving…' : 'Save'" icon="pi pi-check" severity="success" [disabled]="saving() || !editing()?.label?.trim()" (click)="save()"></button>
+        <button pButton label="Cancel" class="p-button-text" (click)="dialogVisible = false"></button>
+        <button pButton [label]="saving() ? 'Saving…' : 'Save'" icon="pi pi-check" severity="success" [disabled]="saving() || !model?.label?.trim()" (click)="save()"></button>
       </ng-template>
     </p-dialog>
   `,
@@ -148,8 +148,8 @@ export class CustomFieldsManagerComponent implements OnInit {
 
   all = signal<FieldDef[]>([]);
   filtered = computed(() => this.all().filter(f => f.entity === this.entity()));
-  dialog = signal(false);
-  editing = signal<any>(null);
+  dialogVisible = false;
+  model: any = null;
   optionsText = '';
   saving = signal(false);
 
@@ -181,18 +181,18 @@ export class CustomFieldsManagerComponent implements OnInit {
   }
 
   openNew() {
-    this.editing.set({ entity: this.entity(), label: '', field_type: 'text', is_required: false, collect_from_customer: false, is_active: true });
+    this.model = { entity: this.entity(), label: '', field_type: 'text', is_required: false, collect_from_customer: false, is_active: true };
     this.optionsText = '';
-    this.dialog.set(true);
+    this.dialogVisible = true;
   }
   openEdit(f: FieldDef) {
-    this.editing.set({ ...f });
+    this.model = { ...f };
     this.optionsText = (f.options || []).join(', ');
-    this.dialog.set(true);
+    this.dialogVisible = true;
   }
 
   save() {
-    const m = this.editing();
+    const m = this.model;
     if (!m?.label?.trim() || this.saving()) return;
     this.saving.set(true);
     const body: any = {
@@ -209,7 +209,7 @@ export class CustomFieldsManagerComponent implements OnInit {
     req.subscribe({
       next: () => {
         this.saving.set(false);
-        this.dialog.set(false);
+        this.dialogVisible = false;
         this.toast.add({ severity: 'success', summary: m.id ? 'Field updated' : 'Field added' });
         this.load();
       },
