@@ -12,10 +12,12 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { TextareaModule } from 'primeng/textarea';
 import { AutoCompleteModule } from 'primeng/autocomplete';
+import { MenuModule } from 'primeng/menu';
 import { FormsModule } from '@angular/forms';
-import { MessageService } from 'primeng/api';
+import { MessageService, MenuItem } from 'primeng/api';
 import { OrderService } from '../../core/services/order.service';
 import { ProductService } from '../../core/services/product.service';
+import { ApiService } from '../../core/services/api.service';
 import { OrderStatus } from '../../core/models';
 
 interface EditItem {
@@ -43,6 +45,7 @@ interface EditItem {
     InputTextModule,
     TextareaModule,
     AutoCompleteModule,
+    MenuModule,
     FormsModule,
   ],
   providers: [MessageService],
@@ -62,8 +65,9 @@ interface EditItem {
         </div>
         <div class="flex flex-wrap gap-2">
           @if (!editing()) {
-            <button pButton label="Message Customer" icon="pi pi-whatsapp" class="p-button-outlined" severity="success"></button>
             <button pButton label="Edit Order" icon="pi pi-pencil" class="p-button-outlined" (click)="startEdit()"></button>
+            <p-menu #docMenu [model]="docMenuItems" [popup]="true" appendTo="body" />
+            <button pButton [label]="generatingDoc() ? 'Sending…' : 'Create Document'" icon="pi pi-receipt" class="p-button-outlined" [disabled]="generatingDoc()" (click)="docMenu.toggle($event)"></button>
             <button pButton label="Update Status" icon="pi pi-refresh" severity="success" (click)="statusDialog = true"></button>
           } @else {
             <button pButton label="Cancel" icon="pi pi-times" class="p-button-outlined" severity="secondary" (click)="cancelEdit()"></button>
@@ -341,9 +345,46 @@ export class OrderDetailComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly orderService = inject(OrderService);
   private readonly productService = inject(ProductService);
+  private readonly api = inject(ApiService);
 
   statusDialog = false;
   newStatus = '';
+
+  // Generate a tax document for this order, deliver the PDF on WhatsApp, and
+  // move the order to Processing in one action.
+  generatingDoc = signal(false);
+  docMenuItems: MenuItem[] = [
+    { label: 'Tax Invoice', icon: 'pi pi-receipt', command: () => this.createDocument('tax_invoice', 'Tax Invoice') },
+    { label: 'Bill of Supply', icon: 'pi pi-file', command: () => this.createDocument('bill_of_supply', 'Bill of Supply') },
+    { label: 'Delivery Challan', icon: 'pi pi-truck', command: () => this.createDocument('delivery_challan', 'Delivery Challan') },
+  ];
+
+  createDocument(docType: 'tax_invoice' | 'bill_of_supply' | 'delivery_challan', label: string) {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (!id || this.generatingDoc()) return;
+    this.generatingDoc.set(true);
+    this.api.post<any>(`/orders/${id}/invoice`, { docType }).subscribe({
+      next: (r) => {
+        if (r?.ok === false) {
+          this.generatingDoc.set(false);
+          this.messageService.add({ severity: 'warn', summary: 'Could not issue document', detail: r.reason || 'Check your invoicing settings.' });
+          return;
+        }
+        // Advance the order to Processing alongside the document.
+        this.orderService.updateStatus(id, { status: 'processing' as OrderStatus }).subscribe({
+          next: () => { this.order.update(o => ({ ...o, status: 'processing' })); this.updateOrderSteps('processing'); },
+          error: () => undefined,
+        });
+        this.generatingDoc.set(false);
+        this.messageService.add({ severity: 'success', summary: `${label} sent`, detail: `${r?.invoiceNumber ? r.invoiceNumber + ' — ' : ''}PDF delivered to the customer on WhatsApp. Order moved to Processing.` });
+        this.loadOrder();
+      },
+      error: (e) => {
+        this.generatingDoc.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Failed', detail: e?.error?.message || 'Could not create the document.' });
+      },
+    });
+  }
 
   // Edit state
   editing = signal(false);
