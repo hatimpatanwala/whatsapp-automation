@@ -211,6 +211,7 @@ export class OrderService {
       discount?: number;
       deliveryFee?: number;
       taxAmount?: number;
+      addressId?: string;
     },
   ): Promise<any> {
     return this.connectionManager.executeInTransaction(schema, async (qr) => {
@@ -227,9 +228,9 @@ export class OrderService {
       const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
 
       const order = await qr.query(
-        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes)
-         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null],
+        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes, address_id)
+         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null, data.addressId || null],
       );
 
       for (const it of data.items) {

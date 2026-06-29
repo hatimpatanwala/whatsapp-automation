@@ -239,6 +239,43 @@ interface Cart {
               </div>
               }
 
+              <!-- Deliver to (address) -->
+              @if (cartEnabled()) {
+                <div class="border-t border-gray-100 pt-3 mt-1">
+                  <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Deliver to</p>
+                  @if (addresses().length) {
+                    <div class="space-y-2">
+                      @for (a of addresses(); track a.id) {
+                        <label class="flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer transition-colors"
+                          [class.border-green-400]="selectedAddressId() === a.id" [class.bg-green-50]="selectedAddressId() === a.id" [class.border-gray-200]="selectedAddressId() !== a.id">
+                          <input type="radio" name="addr" [checked]="selectedAddressId() === a.id" (change)="selectedAddressId.set(a.id)" class="mt-1 accent-green-600" />
+                          <span class="min-w-0">
+                            <span class="text-xs font-semibold text-gray-700 capitalize">{{ a.label || 'Address' }}@if (a.is_default) { <span class="text-[10px] bg-green-100 text-green-700 rounded px-1 ml-1">Default</span> }</span>
+                            <span class="block text-xs text-gray-600 leading-snug">{{ a.full_address }}</span>
+                            @if (addrLine(a)) { <span class="block text-[11px] text-gray-400">{{ addrLine(a) }}</span> }
+                          </span>
+                        </label>
+                      }
+                    </div>
+                  }
+                  @if (!showAddAddress()) {
+                    <button class="text-xs text-green-700 font-semibold mt-2" (click)="showAddAddress.set(true)"><i class="pi pi-plus mr-1"></i>{{ addresses().length ? 'Add another address' : 'Add a delivery address' }}</button>
+                  } @else {
+                    <div class="bg-gray-50 rounded-xl p-3 mt-2 space-y-2">
+                      <input [(ngModel)]="newAddr.fullAddress" placeholder="Flat / building / street / area" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                      <div class="flex gap-2">
+                        <input [(ngModel)]="newAddr.city" placeholder="City" class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                        <input [(ngModel)]="newAddr.pincode" placeholder="PIN" inputmode="numeric" class="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <button class="flex-1 bg-green-600 text-white text-sm font-semibold rounded-lg py-2 disabled:opacity-50" [disabled]="savingAddr() || !newAddr.fullAddress.trim()" (click)="saveAddress()">{{ savingAddr() ? 'Saving…' : 'Save address' }}</button>
+                        <button class="text-xs text-gray-400 px-2" (click)="showAddAddress.set(false)">Cancel</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+
               <textarea [(ngModel)]="notes" rows="2" class="w-full border border-gray-200 rounded-2xl px-3.5 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500/25 focus:border-green-400" placeholder="Add delivery notes (optional)…"></textarea>
             }
           </div>
@@ -426,6 +463,13 @@ export class ShopWebviewComponent implements OnInit {
   order = signal<{ orderNumber: string; total: number; viewUrl: string | null } | null>(null);
   quoteResult = signal<{ quoteNumber: string; total: number; viewUrl: string | null } | null>(null);
 
+  // Delivery addresses (checkout)
+  addresses = signal<any[]>([]);
+  selectedAddressId = signal<string | null>(null);
+  showAddAddress = signal(false);
+  savingAddr = signal(false);
+  newAddr: { fullAddress: string; city: string; pincode: string } = { fullAddress: '', city: '', pincode: '' };
+
   search = signal('');
   catFilter = signal('');
   brandFilter = signal('');
@@ -477,6 +521,7 @@ export class ShopWebviewComponent implements OnInit {
         this.brands.set(d.brands || []);
         this.products.set(d.products || []);
         if (d.cart) this.cart.set(d.cart);
+        if (this.cartEnabled()) this.loadAddresses();
         this.loading.set(false);
       },
       error: (e) => { this.loading.set(false); this.loadError.set(e?.error?.message || 'This link is invalid or has expired.'); },
@@ -523,10 +568,39 @@ export class ShopWebviewComponent implements OnInit {
     });
   }
 
+  // ─── Delivery addresses ───────────────────────────────────────────────────
+  loadAddresses() {
+    this.http.get<any>(`${this.base}/m/shop/addresses`, this.opts()).subscribe({
+      next: (r) => {
+        const list = this.unwrap<any[]>(r) || [];
+        this.addresses.set(list);
+        if (!this.selectedAddressId()) this.selectedAddressId.set((list.find((a) => a.is_default) || list[0])?.id || null);
+      },
+      error: () => this.addresses.set([]),
+    });
+  }
+  addrLine(a: any): string { return [a.city, a.state, a.pincode].filter((x: any) => !!x).join(', '); }
+  saveAddress() {
+    const d = this.newAddr;
+    if (!d.fullAddress.trim() || this.savingAddr()) return;
+    this.savingAddr.set(true);
+    this.http.post<any>(`${this.base}/m/shop/addresses`, { fullAddress: d.fullAddress.trim(), city: d.city || undefined, pincode: d.pincode || undefined }, this.opts()).subscribe({
+      next: (r) => {
+        const a = this.unwrap<any>(r);
+        this.savingAddr.set(false);
+        this.showAddAddress.set(false);
+        this.newAddr = { fullAddress: '', city: '', pincode: '' };
+        this.loadAddresses();
+        if (a?.id) this.selectedAddressId.set(a.id);
+      },
+      error: (e) => { this.savingAddr.set(false); alert(e?.error?.message || 'Could not save the address.'); },
+    });
+  }
+
   checkout() {
     if (this.placing()) return;
     this.placing.set(true);
-    const body = { couponCode: this.cart().coupon?.code, notes: this.notes || undefined };
+    const body = { couponCode: this.cart().coupon?.code, notes: this.notes || undefined, addressId: this.selectedAddressId() || undefined };
     this.http.post<any>(`${this.base}/m/shop/checkout`, body, this.opts()).subscribe({
       next: (r) => {
         const o = this.unwrap<any>(r);

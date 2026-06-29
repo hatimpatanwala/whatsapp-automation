@@ -56,9 +56,20 @@ export class ShopController {
     return this.shop.checkCoupon(this.token(req, token), body?.code || '');
   }
 
+  @Get('addresses')
+  async addresses(@Req() req: Request, @Query('token') token?: string) {
+    return this.shop.listAddresses(this.token(req, token));
+  }
+
+  @Post('addresses')
+  @HttpCode(200)
+  async addAddress(@Req() req: Request, @Query('token') token: string, @Body() body: any) {
+    return this.shop.addAddress(this.token(req, token), body || {});
+  }
+
   @Post('checkout')
   @HttpCode(200)
-  async checkout(@Req() req: Request, @Query('token') token: string, @Body() body: { couponCode?: string; notes?: string }) {
+  async checkout(@Req() req: Request, @Query('token') token: string, @Body() body: { couponCode?: string; notes?: string; addressId?: string }) {
     return this.shop.checkout(this.token(req, token), body || {});
   }
 
