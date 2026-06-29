@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../config/redis.module';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { SmartNotificationService } from '../whatsapp/smart-notification.service';
+import { BuilderService } from '../builder/builder.service';
 
 /**
  * Abandoned-cart reminders, delivered cost-efficiently.
@@ -24,6 +25,7 @@ export class AbandonedCartService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService,
     @Optional() private readonly smartNotification: SmartNotificationService,
+    @Optional() private readonly builder?: BuilderService,
   ) {}
 
   // Every 30 minutes — frequent enough to catch a service window before it closes.
@@ -50,7 +52,7 @@ export class AbandonedCartService {
 
     const carts = await this.connectionManager.executeInTenantContext(schema, (qr) =>
       qr.query(
-        `SELECT c.id AS cart_id, cust.phone, cust.name,
+        `SELECT c.id AS cart_id, c.customer_id, cust.phone, cust.name,
                 COUNT(ci.id)::int AS item_count,
                 COALESCE(SUM(ci.quantity * ci.unit_price), 0) AS cart_total,
                 EXTRACT(EPOCH FROM MAX(ci.created_at))::bigint AS last_epoch
@@ -58,7 +60,7 @@ export class AbandonedCartService {
          JOIN cart_items ci ON ci.cart_id = c.id
          JOIN customers cust ON cust.id = c.customer_id
          WHERE c.status = 'active' AND cust.phone IS NOT NULL
-         GROUP BY c.id, cust.phone, cust.name
+         GROUP BY c.id, c.customer_id, cust.phone, cust.name
          HAVING MAX(ci.created_at) < NOW() - make_interval(hours => $1)
          LIMIT 200`,
         [hours],
@@ -77,13 +79,28 @@ export class AbandonedCartService {
       const total = Number(cart.cart_total || 0).toFixed(0);
       const detail = `🛒 Hi ${name}, you still have ${cart.item_count} item(s) worth ₹${total} in your cart. Tap below to pick up where you left off before they sell out!`;
 
+      // Mint a shop session and deep-link straight to the cart so "View Cart"
+      // opens the storefront cart directly. Fall back to a reply button if the
+      // link can't be minted (e.g. FRONTEND_URL not configured).
+      let ctaUrl: { url: string; label: string } | undefined;
+      try {
+        if (this.builder && cart.customer_id) {
+          const session = await this.builder.createShopSession({
+            tenantId, schemaName: schema, customerId: cart.customer_id, customerPhone: phone, customerName: cart.name,
+          });
+          if (session?.url) ctaUrl = { url: `${session.url}&view=cart`, label: '🛒 View Cart' };
+        }
+      } catch { /* fall back to the reply button below */ }
+
       await this.smartNotification.notify({
         tenantId, schema, recipientPhone: phone, audience: 'customer', channel: 'marketing',
         windowOnly: true, recipientName: name,
         summary: `🛒 ${cart.item_count} item(s) left in your cart`,
         detail,
-        // Tapping a button sends its title → matches the cart/menu keyword workflow.
-        buttons: [{ id: 'view_cart', title: '🛒 View Cart' }, { id: 'menu', title: '🛍️ Menu' }],
+        // Preferred: a CTA-URL button opening the storefront cart directly.
+        ctaUrl,
+        // Fallback when no link: a reply button whose title matches the cart workflow.
+        buttons: ctaUrl ? undefined : [{ id: 'view_cart', title: '🛒 View Cart' }, { id: 'menu', title: '🛍️ Menu' }],
       }).catch(() => undefined);
     }
   }

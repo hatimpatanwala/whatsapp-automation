@@ -9,6 +9,7 @@ import { Tenant } from '../../database/entities/public/tenant.entity';
 import { WabaAccount } from '../../database/entities/public/waba-account.entity';
 import { PhoneNumber } from '../../database/entities/public/phone-number.entity';
 import { EventsModule } from '../events/events.module';
+import { BuilderModule } from '../builder/builder.module';
 import { CommerceController } from './commerce.controller';
 import { CommerceService } from './commerce.service';
 import { CatalogSyncService } from './catalog-sync.service';
@@ -22,6 +23,7 @@ import { CatalogSyncCron } from './catalog-sync.cron';
     DatabaseModule,
     TypeOrmModule.forFeature([TenantCatalog, Tenant, WabaAccount, PhoneNumber]),
     EventsModule,
+    BuilderModule,
     forwardRef(() => WabaModule),
     forwardRef(() => WhatsAppModule),
   ],

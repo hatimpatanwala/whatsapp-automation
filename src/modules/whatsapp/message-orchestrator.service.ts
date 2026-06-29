@@ -103,6 +103,28 @@ export class MessageOrchestratorService {
   }
 
   /**
+   * Send an interactive CTA-URL button (opens a link, e.g. the storefront cart).
+   */
+  async sendCtaUrl(
+    tenantId: string,
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    body: string,
+    buttonText: string,
+    url: string,
+    header?: string,
+    footer?: string,
+    category: ConversationCategory = 'service',
+  ): Promise<OrchestatedSendResult> {
+    const preCheck = await this.preSendChecks(tenantId, phoneNumberId, to, category);
+    if (!preCheck.allowed) return { success: false, blocked: true, reason: preCheck.reason };
+
+    const result = await this.whatsappApi.sendCtaUrl(phoneNumberId, accessToken, to, body, buttonText, url, header, footer);
+    return { success: true, messageId: result?.messages?.[0]?.id };
+  }
+
+  /**
    * Send interactive list with full metering pipeline.
    */
   async sendList(
