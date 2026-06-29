@@ -121,8 +121,12 @@ import { ApiService } from '../../core/services/api.service';
                 <div class="space-y-2.5">
                   @for (cf of customerFields(); track cf.field_key) {
                     <div class="flex items-start justify-between gap-3">
-                      <span class="text-xs text-gray-500">{{ cf.label }}</span>
-                      <span class="text-xs font-medium text-gray-900 text-right">{{ cfDisplay(cf) || '—' }}</span>
+                      <span class="text-xs text-gray-500">{{ cf.label }}@if (cf.is_required) { <span class="text-red-400"> *</span> }</span>
+                      @if (cfDisplay(cf)) {
+                        <span class="text-xs font-medium text-gray-900 text-right">{{ cfDisplay(cf) }}</span>
+                      } @else {
+                        <span class="text-xs text-right" [class.text-amber-600]="cf.is_required" [class.text-gray-300]="!cf.is_required">{{ cf.is_required ? 'Pending' : '—' }}</span>
+                      }
                     </div>
                   }
                 </div>
@@ -293,16 +297,24 @@ export class CustomerDetailComponent implements OnInit {
   readonly cur = '₹';
   customerFieldDefs = signal<any[]>([]);
   addresses = signal<any[]>([]);
-  /** Only fields that have a value on this customer, in definition order. */
+  /** All active customer fields (in definition order), with the customer's value
+   *  if set — empty ones still show so they're discoverable before collection. */
   customerFields = computed(() => {
     const vals = this.c()?.customFields ?? this.c()?.custom_fields ?? {};
     return this.customerFieldDefs()
-      .map((d: any) => ({ ...d, field_key: d.field_key ?? d.fieldKey, field_type: d.field_type ?? d.fieldType ?? 'text', value: vals[d.field_key ?? d.fieldKey] }))
-      .filter((d: any) => d.value !== undefined && d.value !== null && d.value !== '');
+      .filter((d: any) => (d.is_active ?? d.isActive) !== false)
+      .map((d: any) => ({
+        ...d,
+        field_key: d.field_key ?? d.fieldKey,
+        field_type: d.field_type ?? d.fieldType ?? 'text',
+        is_required: d.is_required ?? d.isRequired ?? false,
+        value: vals[d.field_key ?? d.fieldKey],
+      }));
   });
   cfDisplay(cf: any): string {
+    if (cf.value === undefined || cf.value === null || cf.value === '') return '';
     if (cf.field_type === 'boolean') return cf.value ? 'Yes' : 'No';
-    return String(cf.value ?? '');
+    return String(cf.value);
   }
   addrLine(a: any): string {
     return [a.city, a.state, a.pincode ?? a.pinCode].filter((x: any) => !!x).join(', ');
