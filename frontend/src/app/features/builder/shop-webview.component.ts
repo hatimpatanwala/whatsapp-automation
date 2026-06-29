@@ -37,7 +37,7 @@ interface Cart {
       <header class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-100 shadow-sm">
         <div class="max-w-2xl mx-auto px-4 py-2.5 flex items-center gap-3">
           @if (view() !== 'catalog') {
-            <button class="w-9 h-9 -ml-1.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-700" (click)="view.set('catalog')"><i class="pi pi-arrow-left"></i></button>
+            <button class="w-9 h-9 -ml-1.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-700" (click)="view() === 'detail' ? closeDetail() : view.set('catalog')"><i class="pi pi-arrow-left"></i></button>
           }
           <div class="w-9 h-9 rounded-xl bg-green-600 text-white flex items-center justify-center shrink-0 shadow-sm">
             <i class="pi pi-shop" style="font-size:1.05rem"></i>
@@ -46,6 +46,7 @@ interface Cart {
             <h1 class="text-[15px] font-bold text-gray-900 truncate leading-tight">{{ store()?.name || 'Store' }}</h1>
             @if (view() === 'catalog') { <p class="text-[11px] text-gray-400 leading-tight">{{ filteredProducts().length }} item{{ filteredProducts().length === 1 ? '' : 's' }}</p> }
             @else if (view() === 'cart') { <p class="text-[11px] text-gray-400 leading-tight">Your cart</p> }
+            @else if (view() === 'detail') { <p class="text-[11px] text-gray-400 leading-tight">Product details</p> }
           </div>
           @if (view() === 'catalog' && cartEnabled()) {
             <button class="relative w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-800" (click)="view.set('cart')" aria-label="Cart">
@@ -284,53 +285,68 @@ interface Cart {
         </div>
       }
 
-      <!-- Product detail modal -->
-      @if (detail(); as p) {
-        <div class="fixed inset-0 z-30 bg-black/40 flex items-end sm:items-center justify-center" (click)="detail.set(null)">
-          <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
-            <div class="relative aspect-square bg-gray-50 flex items-center justify-center">
-              @if (p.image) { <img [src]="p.image" class="w-full h-full object-cover" /> }
-              @else { <i class="pi pi-image text-gray-200" style="font-size:3rem"></i> }
-              <button class="absolute top-3 right-3 bg-white/90 rounded-full w-8 h-8 flex items-center justify-center" (click)="detail.set(null)">&times;</button>
-              <div class="absolute top-3 left-3 flex gap-1">
-                @if (p.isNew) { <span class="text-[10px] font-bold bg-blue-600 text-white rounded px-2 py-0.5">NEW</span> }
-                @if (p.offer) { <span class="text-[10px] font-bold bg-green-600 text-white rounded px-2 py-0.5">{{ p.offer }}</span> }
-              </div>
+      <!-- Product detail page (customer-side) -->
+      @if (view() === 'detail' && detail(); as p) {
+        <main class="max-w-2xl mx-auto pb-28">
+          <div class="relative aspect-square bg-gray-50 flex items-center justify-center">
+            @if (p.image) { <img [src]="p.image" [alt]="p.name" class="w-full h-full object-cover" /> }
+            @else { <i class="pi pi-image text-gray-200" style="font-size:3.5rem"></i> }
+            <div class="absolute top-3 left-3 flex gap-1">
+              @if (p.isNew) { <span class="text-[10px] font-bold bg-blue-600 text-white rounded px-2 py-0.5">NEW</span> }
+              @if (p.offer) { <span class="text-[10px] font-bold bg-green-600 text-white rounded px-2 py-0.5">{{ p.offer }}</span> }
             </div>
-            <div class="p-4 space-y-2">
-              @if (p.brand) { <p class="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{{ p.brand }}</p> }
-              <h2 class="text-lg font-bold text-gray-900 leading-snug">{{ p.name }}</h2>
-              <div class="flex items-baseline gap-2 flex-wrap">
-                @if (showPrices()) {
-                  <span class="text-2xl font-extrabold text-gray-900">{{ sym() }}{{ p.price | number:'1.0-2' }}</span>
-                  @if (p.onSale) { <span class="text-sm text-gray-400 line-through">{{ sym() }}{{ p.basePrice | number:'1.0-2' }}</span> }
-                  @if (p.offer) { <span class="text-[10px] font-bold bg-rose-500 text-white rounded-full px-2 py-0.5">{{ p.offer }}</span> }
-                }
-                <span class="text-xs text-gray-400">per {{ p.uom }}</span>
-              </div>
-              @if (p.description) { <p class="text-sm text-gray-600 whitespace-pre-line">{{ p.description }}</p> }
-              <p class="text-xs" [class.text-red-500]="p.stock <= 0" [class.text-gray-400]="p.stock > 0">{{ p.stock > 0 ? 'In stock' : 'Out of stock' }}</p>
-            </div>
-            <div class="sticky bottom-0 bg-white p-4 border-t border-gray-100">
-              @if (cartEnabled()) {
-                @if (p.stock <= 0) {
-                  <button class="w-full bg-gray-100 text-gray-400 font-semibold rounded-xl py-3.5 text-sm" disabled>Out of stock</button>
-                } @else if (qtyOf(p.id) === 0) {
-                  <button class="w-full bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="busy()" (click)="setQty(p, 1)"><i class="pi pi-shopping-cart"></i>Add to cart</button>
-                } @else {
-                  <div class="flex items-center gap-3">
-                    <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full h-12 px-1.5">
-                      <button class="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center text-gray-600 font-bold text-lg" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) - 1)">−</button>
-                      <span class="text-base font-bold w-8 text-center tabular-nums">{{ qtyOf(p.id) }}</span>
-                      <button class="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center text-green-700 font-bold text-lg" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) + 1)">+</button>
-                    </div>
-                    <button class="flex-1 bg-green-600 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm" (click)="detail.set(null); view.set('cart')">View cart</button>
-                  </div>
-                }
-              } @else if (waLink()) {
-                <a [href]="waLink()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm flex items-center justify-center gap-2 no-underline"><i class="pi pi-whatsapp"></i>Order on WhatsApp</a>
+          </div>
+          <div class="p-4 space-y-3">
+            @if (p.brand) { <p class="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{{ p.brand }}</p> }
+            <h2 class="text-xl font-bold text-gray-900 leading-snug">{{ p.name }}</h2>
+            <div class="flex items-baseline gap-2 flex-wrap">
+              @if (showPrices()) {
+                <span class="text-2xl font-extrabold text-gray-900">{{ sym() }}{{ p.price | number:'1.0-2' }}</span>
+                @if (p.onSale) { <span class="text-sm text-gray-400 line-through">{{ sym() }}{{ p.basePrice | number:'1.0-2' }}</span> }
+                @if (p.offer) { <span class="text-[10px] font-bold bg-rose-500 text-white rounded-full px-2 py-0.5">{{ p.offer }}</span> }
               }
+              <span class="text-xs text-gray-400">per {{ p.uom }}</span>
             </div>
+            <p class="text-xs font-medium" [class.text-red-500]="p.stock <= 0" [class.text-green-600]="p.stock > 0">{{ p.stock > 0 ? '● In stock' : '● Out of stock' }}</p>
+            @if (p.tags?.length) {
+              <div class="flex flex-wrap gap-1.5">
+                @for (t of p.tags; track t) { <span class="text-[11px] bg-gray-100 text-gray-500 rounded-full px-2.5 py-0.5">{{ t }}</span> }
+              </div>
+            }
+            @if (p.description) {
+              <div class="pt-2 border-t border-gray-100">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</p>
+                <p class="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{{ p.description }}</p>
+              </div>
+            }
+          </div>
+        </main>
+
+        <!-- sticky add-to-cart bar -->
+        <div class="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div class="max-w-2xl mx-auto flex items-center gap-3">
+            @if (showPrices()) {
+              <div class="shrink-0">
+                <p class="text-gray-400 text-[11px] leading-none">Price</p>
+                <p class="text-lg font-extrabold text-gray-900 leading-tight">{{ sym() }}{{ p.price | number:'1.0-2' }}</p>
+              </div>
+            }
+            @if (cartEnabled()) {
+              @if (p.stock <= 0) {
+                <button class="flex-1 bg-gray-100 text-gray-400 font-semibold rounded-xl py-3.5 text-sm" disabled>Out of stock</button>
+              } @else if (qtyOf(p.id) === 0) {
+                <button class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="busy()" (click)="setQty(p, 1)"><i class="pi pi-shopping-cart"></i>Add to cart</button>
+              } @else {
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full h-12 px-1.5 shrink-0">
+                  <button class="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center text-gray-600 font-bold text-lg" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) - 1)">−</button>
+                  <span class="text-base font-bold w-8 text-center tabular-nums">{{ qtyOf(p.id) }}</span>
+                  <button class="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center text-green-700 font-bold text-lg" [disabled]="busy()" (click)="setQty(p, qtyOf(p.id) + 1)">+</button>
+                </div>
+                <button class="flex-1 bg-green-600 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm" (click)="view.set('cart')">View cart</button>
+              }
+            } @else if (waLink()) {
+              <a [href]="waLink()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm flex items-center justify-center gap-2 no-underline"><i class="pi pi-whatsapp"></i>Order on WhatsApp</a>
+            }
           </div>
         </div>
       }
@@ -348,7 +364,7 @@ export class ShopWebviewComponent implements OnInit {
   busy = signal(false);
   placing = signal(false);
 
-  view = signal<'catalog' | 'cart' | 'success'>('catalog');
+  view = signal<'catalog' | 'cart' | 'success' | 'detail'>('catalog');
   store = signal<{ name: string; currency: string; whatsappPhone?: string; showPrices?: boolean; cartEnabled?: boolean } | null>(null);
   returnIn = signal<number | null>(null);
   private returnTimer: any = null;
@@ -418,7 +434,9 @@ export class ShopWebviewComponent implements OnInit {
   clearFilters() { this.catFilter.set(''); this.brandFilter.set(''); }
   toggleCat(id: string) { this.catFilter.set(this.catFilter() === id ? '' : id); }
   toggleBrand(id: string) { this.brandFilter.set(this.brandFilter() === id ? '' : id); }
-  openProduct(p: ShopProduct) { this.detail.set(p); }
+  openProduct(p: ShopProduct) { this.detail.set(p); this.view.set('detail'); window.scrollTo({ top: 0 }); }
+  /** Back to the catalog from the product detail page. */
+  closeDetail() { this.detail.set(null); this.view.set('catalog'); }
 
   setQty(p: ShopProduct, qty: number) { this.setQtyId(p.id, qty); }
   setQtyId(productId: string, qty: number) {

@@ -45,6 +45,7 @@ export class QuoteController {
     title?: string;
     notes?: string;
     validUntil?: string;
+    discount?: number;
     items: { productId?: string; description: string; quantity: number; unitPrice: number }[];
   }) {
     return this.quoteService.create(req.tenantContext.schemaName, body);
