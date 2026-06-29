@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -18,6 +18,7 @@ import { MessageService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { CustomerService } from '../../core/services/customer.service';
 import { SchemeService } from '../../core/services/scheme.service';
+import { ApiService } from '../../core/services/api.service';
 
 @Component({
   selector: 'wa-customer-detail',
@@ -111,6 +112,42 @@ import { SchemeService } from '../../core/services/scheme.service';
                 }
                 @if (!c().tags.length) { <p class="text-xs text-gray-400">No tags assigned</p> }
               </div>
+            </div>
+
+            <!-- Custom fields -->
+            @if (customerFields().length) {
+              <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <h3 class="text-sm font-semibold text-gray-900 mb-3">Custom Fields</h3>
+                <div class="space-y-2.5">
+                  @for (cf of customerFields(); track cf.field_key) {
+                    <div class="flex items-start justify-between gap-3">
+                      <span class="text-xs text-gray-500">{{ cf.label }}</span>
+                      <span class="text-xs font-medium text-gray-900 text-right">{{ cfDisplay(cf) || '—' }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Saved addresses -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-900 mb-3">Addresses</h3>
+              @if (!addresses().length) {
+                <p class="text-xs text-gray-400">No saved addresses</p>
+              } @else {
+                <div class="space-y-2.5">
+                  @for (a of addresses(); track a.id) {
+                    <div class="rounded-xl border border-gray-100 p-3">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[11px] font-semibold text-gray-700 capitalize">{{ a.label || 'Address' }}</span>
+                        @if (a.is_default ?? a.isDefault) { <span class="text-[10px] bg-green-100 text-green-700 rounded px-1.5 py-0.5">Default</span> }
+                      </div>
+                      <p class="text-xs text-gray-600 leading-snug">{{ a.full_address ?? a.fullAddress }}</p>
+                      <p class="text-[11px] text-gray-400 mt-0.5">{{ addrLine(a) }}</p>
+                    </div>
+                  }
+                </div>
+              }
             </div>
           </div>
 
@@ -251,8 +288,25 @@ export class CustomerDetailComponent implements OnInit {
   private readonly toast = inject(MessageService);
   private readonly customerService = inject(CustomerService);
   private readonly schemeService = inject(SchemeService);
+  private readonly api = inject(ApiService);
 
   readonly cur = '₹';
+  customerFieldDefs = signal<any[]>([]);
+  addresses = signal<any[]>([]);
+  /** Only fields that have a value on this customer, in definition order. */
+  customerFields = computed(() => {
+    const vals = this.c()?.customFields ?? this.c()?.custom_fields ?? {};
+    return this.customerFieldDefs()
+      .map((d: any) => ({ ...d, field_key: d.field_key ?? d.fieldKey, field_type: d.field_type ?? d.fieldType ?? 'text', value: vals[d.field_key ?? d.fieldKey] }))
+      .filter((d: any) => d.value !== undefined && d.value !== null && d.value !== '');
+  });
+  cfDisplay(cf: any): string {
+    if (cf.field_type === 'boolean') return cf.value ? 'Yes' : 'No';
+    return String(cf.value ?? '');
+  }
+  addrLine(a: any): string {
+    return [a.city, a.state, a.pincode ?? a.pinCode].filter((x: any) => !!x).join(', ');
+  }
   tagDialog = false;
   editDialog = false;
   rewardDialog = false;
@@ -282,6 +336,15 @@ export class CustomerDetailComponent implements OnInit {
         this.loading.set(false);
       },
       error: () => { this.loading.set(false); },
+    });
+    // Customer custom field definitions + saved addresses (display).
+    this.api.get<any>('/custom-fields', { entity: 'customer' } as any).subscribe({
+      next: (r) => this.customerFieldDefs.set(Array.isArray(r) ? r : (r?.data ?? r?.items ?? [])),
+      error: () => this.customerFieldDefs.set([]),
+    });
+    this.api.get<any>(`/customers/${id}/addresses`).subscribe({
+      next: (r) => this.addresses.set(Array.isArray(r) ? r : (r?.data ?? r?.items ?? [])),
+      error: () => this.addresses.set([]),
     });
     this.customerService.getOrders(id).subscribe({
       next: (r: any) => {
