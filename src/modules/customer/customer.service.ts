@@ -9,7 +9,7 @@ export class CustomerService {
   /** Common SELECT columns + derived activity/cart fields (c = customers alias). */
   private readonly customerCols = `
     c.id, c.phone as whatsapp_phone, c.name as whatsapp_name, c.display_name, c.email,
-    c.language, c.tags, c.metadata, c.notes, c.total_orders, c.total_spent,
+    c.language, c.tags, c.metadata, c.custom_fields, c.notes, c.total_orders, c.total_spent,
     c.last_order_at, c.opted_in, c.created_at, c.updated_at,
     CASE WHEN c.opted_in = false THEN 'blocked' ELSE 'active' END as status,
     GREATEST(c.last_order_at, c.updated_at,
