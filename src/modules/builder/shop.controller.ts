@@ -61,4 +61,10 @@ export class ShopController {
   async checkout(@Req() req: Request, @Query('token') token: string, @Body() body: { couponCode?: string; notes?: string }) {
     return this.shop.checkout(this.token(req, token), body || {});
   }
+
+  @Post('quote')
+  @HttpCode(200)
+  async quote(@Req() req: Request, @Query('token') token: string, @Body() body: { notes?: string }) {
+    return this.shop.requestQuote(this.token(req, token), body || {});
+  }
 }

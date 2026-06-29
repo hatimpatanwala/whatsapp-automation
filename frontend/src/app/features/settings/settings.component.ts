@@ -737,6 +737,14 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
 
                   <div class="flex items-center justify-between py-3 border-b border-gray-100">
                     <div>
+                      <p class="text-sm font-medium text-gray-900">Enable Quote Requests</p>
+                      <p class="text-xs text-gray-500">Show a “Request Quote” button in the storefront cart so customers can ask for a custom or bulk price instead of ordering. Quote requests appear in your Quotes dashboard.</p>
+                    </div>
+                    <p-toggleswitch [(ngModel)]="commerce.quotesEnabled" />
+                  </div>
+
+                  <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
                       <p class="text-sm font-medium text-gray-900">Auto-Confirm Orders</p>
                       <p class="text-xs text-gray-500">Automatically confirm orders without manual review. Turn off if you want to review each order before confirming.</p>
                     </div>
@@ -1031,6 +1039,7 @@ export class SettingsComponent implements OnInit {
     cartEnabled: false,
     orderEnabled: false,
     showPrices: true,
+    quotesEnabled: false,
     catalogId: '',
     autoCheckout: false,
     orderNotification: true,
@@ -1253,6 +1262,7 @@ export class SettingsComponent implements OnInit {
         if (settings.commerceCatalogEnabled !== undefined) this.commerce.catalogEnabled = this.parseBool(settings.commerceCatalogEnabled);
         if (settings.commerceCartEnabled !== undefined) this.commerce.cartEnabled = this.parseBool(settings.commerceCartEnabled);
         if (settings.commerceShowPrices !== undefined) this.commerce.showPrices = this.parseBool(settings.commerceShowPrices);
+        if (settings.commerceQuotesEnabled !== undefined) this.commerce.quotesEnabled = this.parseBool(settings.commerceQuotesEnabled);
         if (settings.commerceOrderEnabled !== undefined) this.commerce.orderEnabled = this.parseBool(settings.commerceOrderEnabled);
         if (settings.commerceCatalogId) this.commerce.catalogId = settings.commerceCatalogId;
         if (settings.commerceAutoCheckout !== undefined) this.commerce.autoCheckout = this.parseBool(settings.commerceAutoCheckout);
@@ -1408,6 +1418,7 @@ export class SettingsComponent implements OnInit {
       commerce_catalog_enabled: this.commerce.catalogEnabled,
       commerce_cart_enabled: this.commerce.cartEnabled,
       commerce_show_prices: this.commerce.showPrices,
+      commerce_quotes_enabled: this.commerce.quotesEnabled,
       commerce_order_enabled: this.commerce.orderEnabled,
       commerce_catalog_id: this.commerce.catalogId,
       commerce_auto_checkout: this.commerce.autoCheckout,
