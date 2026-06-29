@@ -81,10 +81,28 @@ export class InvoiceService {
 
   private round(n: number): number { return Math.round((n + Number.EPSILON) * 100) / 100; }
 
-  async listInvoices(schema: string): Promise<any[]> {
-    return this.connectionManager.executeInTenantContext(schema, (qr) =>
-      qr.query(`SELECT id, order_id, invoice_number, doc_type, customer_name, customer_phone, total, total_tax, currency, issued_at
-                FROM invoices ORDER BY issued_at DESC LIMIT 200`));
+  async listInvoices(schema: string, orderId?: string): Promise<any[]> {
+    const rows: any[] = await this.connectionManager.executeInTenantContext(schema, (qr) =>
+      orderId
+        ? qr.query(`SELECT id, order_id, invoice_number, doc_type, customer_name, customer_phone, total, total_tax, currency, issued_at
+                    FROM invoices WHERE order_id = $1 ORDER BY issued_at DESC`, [orderId])
+        : qr.query(`SELECT id, order_id, invoice_number, doc_type, customer_name, customer_phone, total, total_tax, currency, issued_at
+                    FROM invoices ORDER BY issued_at DESC LIMIT 200`));
+    // Cross-reference sibling documents of the same order so both the list and
+    // the order page can show "this order also has …" and link them together.
+    const byOrder = new Map<string, any[]>();
+    for (const r of rows) {
+      if (!r.order_id) continue;
+      const arr = byOrder.get(r.order_id) || [];
+      arr.push(r);
+      byOrder.set(r.order_id, arr);
+    }
+    return rows.map((r) => ({
+      ...r,
+      related: (byOrder.get(r.order_id) || [])
+        .filter((o) => o.id !== r.id)
+        .map((o) => ({ id: o.id, invoiceNumber: o.invoice_number, docType: o.doc_type })),
+    }));
   }
 
   async getInvoice(schema: string, id: string): Promise<any | null> {

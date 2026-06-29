@@ -15,10 +15,11 @@ import { InputIconModule } from 'primeng/inputicon';
 import { MessageService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
 
+interface RelatedDoc { id: string; invoiceNumber: string; docType: string; }
 interface InvoiceRow {
   id: string; order_id: string; invoice_number: string; doc_type: string;
   customer_name: string; customer_phone: string; total: number; total_tax: number;
-  currency: string; issued_at: string; status?: string;
+  currency: string; issued_at: string; status?: string; related?: RelatedDoc[];
 }
 interface Picklist { id: string; name: string; phone?: string; price?: number; }
 interface OrderPick { id: string; label: string; total: number; status: string; }
@@ -101,7 +102,18 @@ interface Line { productId: string | null; description: string; quantity: number
             <ng-template pTemplate="body" let-inv>
               <tr class="hover:bg-gray-50">
                 <td class="font-mono font-semibold text-primary-600">{{ inv.invoice_number }}</td>
-                <td><p-tag [value]="docLabel(inv.doc_type)" [severity]="inv.doc_type === 'tax_invoice' ? 'success' : 'secondary'" styleClass="text-xs" /></td>
+                <td>
+                  <p-tag [value]="docLabel(inv.doc_type)" [severity]="inv.doc_type === 'tax_invoice' ? 'success' : 'secondary'" styleClass="text-xs" />
+                  @if (inv.related?.length) {
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      @for (rl of inv.related; track rl.id) {
+                        <button class="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-600 rounded px-1.5 py-0.5 inline-flex items-center gap-1" (click)="downloadById(rl.id)" [title]="'Download ' + docLabel(rl.docType) + ' ' + rl.invoiceNumber">
+                          <i class="pi pi-link" style="font-size:0.5rem"></i>{{ docLabel(rl.docType) }}
+                        </button>
+                      }
+                    </div>
+                  }
+                </td>
                 <td>
                   <p class="font-medium text-gray-900">{{ inv.customer_name || '—' }}</p>
                   <p class="text-xs text-gray-400">{{ inv.customer_phone }}</p>
@@ -432,6 +444,7 @@ export class InvoicesComponent implements OnInit {
           currency: i.currency || 'INR',
           issued_at: i.issued_at ?? i.issuedAt,
           status: i.status,
+          related: (i.related ?? []).map((rl: any) => ({ id: rl.id, invoiceNumber: rl.invoiceNumber ?? rl.invoice_number, docType: rl.docType ?? rl.doc_type })),
         })));
         this.loading.set(false);
       },
@@ -566,6 +579,7 @@ export class InvoicesComponent implements OnInit {
   }
 
   downloadPdf(inv: InvoiceRow) { window.open(`/api/invoices/${inv.id}/pdf`, '_blank'); }
+  downloadById(id: string) { window.open(`/api/invoices/${id}/pdf`, '_blank'); }
   viewOrder(inv: InvoiceRow) { if (inv.order_id) window.open(`/orders/${inv.order_id}`, '_blank'); }
 
   saveConfig() {

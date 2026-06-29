@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, computed, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
@@ -66,8 +66,10 @@ interface EditItem {
         <div class="flex flex-wrap gap-2">
           @if (!editing()) {
             <button pButton label="Edit Order" icon="pi pi-pencil" class="p-button-outlined" (click)="startEdit()"></button>
-            <p-menu #docMenu [model]="docMenuItems" [popup]="true" appendTo="body" />
-            <button pButton [label]="generatingDoc() ? 'Sending…' : 'Create Invoice'" icon="pi pi-receipt" severity="success" [disabled]="generatingDoc()" (click)="docMenu.toggle($event)"></button>
+            @if (docMenuItems.length) {
+              <p-menu #docMenu [model]="docMenuItems" [popup]="true" appendTo="body" />
+              <button pButton [label]="generatingDoc() ? 'Sending…' : 'Create Invoice'" icon="pi pi-receipt" severity="success" [disabled]="generatingDoc()" (click)="docMenu.toggle($event)"></button>
+            }
             <button pButton label="Update Status" icon="pi pi-refresh" class="p-button-outlined" (click)="statusDialog = true"></button>
           } @else {
             <button pButton label="Cancel" icon="pi pi-times" class="p-button-outlined" severity="secondary" (click)="cancelEdit()"></button>
@@ -306,6 +308,40 @@ interface EditItem {
               </div>
             </div>
 
+            <!-- Documents issued for this order (invoice / bill of supply / challan) -->
+            @if (orderDocs().length) {
+              <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="text-base font-semibold text-gray-900">Documents</h3>
+                  <span class="text-[11px] text-gray-400">{{ orderDocs().length }}/3 issued</span>
+                </div>
+                <div class="space-y-2">
+                  @for (d of orderDocs(); track d.id) {
+                    <div class="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100">
+                      <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                           [class]="(d.docType ?? d.doc_type) === 'tax_invoice' ? 'bg-green-50 text-green-600' : (d.docType ?? d.doc_type) === 'bill_of_supply' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'">
+                        <i [class]="'pi ' + docIcon(d.docType ?? d.doc_type)"></i>
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-gray-900 truncate">{{ docLabel(d.docType ?? d.doc_type) }}</p>
+                        <p class="text-xs text-gray-400 font-mono truncate">{{ d.invoiceNumber ?? d.invoice_number }}</p>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <p class="text-sm font-semibold text-gray-900 tabular-nums">{{ cur }}{{ (d.total ?? 0) | number:'1.0-2' }}</p>
+                        <p class="text-[11px] text-gray-400">{{ (d.issuedAt ?? d.issued_at) | date:'mediumDate' }}</p>
+                      </div>
+                      <button pButton icon="pi pi-download" class="p-button-text p-button-sm p-button-rounded" (click)="downloadDoc(d)"></button>
+                    </div>
+                  }
+                </div>
+                @if (docMenuItems.length) {
+                  <p class="text-[11px] text-gray-400 mt-2.5">{{ docMenuItems.length }} more type{{ docMenuItems.length === 1 ? '' : 's' }} available — use “Create Invoice”.</p>
+                } @else {
+                  <p class="text-[11px] text-green-600 mt-2.5"><i class="pi pi-check-circle mr-1"></i>All document types issued for this order.</p>
+                }
+              </div>
+            }
+
             <!-- Notes -->
             <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-3">Order Notes</h3>
@@ -353,11 +389,36 @@ export class OrderDetailComponent implements OnInit {
   // Generate a tax document for this order, deliver the PDF on WhatsApp, and
   // move the order to Processing in one action.
   generatingDoc = signal(false);
-  docMenuItems: MenuItem[] = [
-    { label: 'Tax Invoice', icon: 'pi pi-receipt', command: () => this.createDocument('tax_invoice', 'Tax Invoice') },
-    { label: 'Bill of Supply', icon: 'pi pi-file', command: () => this.createDocument('bill_of_supply', 'Bill of Supply') },
-    { label: 'Delivery Challan', icon: 'pi pi-truck', command: () => this.createDocument('delivery_challan', 'Delivery Challan') },
+  orderDocs = signal<any[]>([]); // documents already issued for this order
+
+  static readonly DOC_TYPES = [
+    { type: 'tax_invoice', label: 'Tax Invoice', icon: 'pi pi-receipt' },
+    { type: 'bill_of_supply', label: 'Bill of Supply', icon: 'pi pi-file' },
+    { type: 'delivery_challan', label: 'Delivery Challan', icon: 'pi pi-truck' },
   ];
+
+  /** Doc types already issued for this order (so we don't offer them again). */
+  existingTypes = computed(() => new Set(this.orderDocs().map((d: any) => d.docType ?? d.doc_type)));
+
+  /** The "Create Invoice" menu only offers documents not yet created. */
+  get docMenuItems(): MenuItem[] {
+    const have = this.existingTypes();
+    return OrderDetailComponent.DOC_TYPES
+      .filter(d => !have.has(d.type))
+      .map(d => ({ label: d.label, icon: d.icon, command: () => this.createDocument(d.type as any, d.label) }));
+  }
+  docLabel(type: string): string { return OrderDetailComponent.DOC_TYPES.find(d => d.type === type)?.label || 'Document'; }
+  docIcon(type: string): string { return OrderDetailComponent.DOC_TYPES.find(d => d.type === type)?.icon || 'pi pi-file'; }
+  docSeverity(type: string): string { return type === 'tax_invoice' ? 'success' : type === 'bill_of_supply' ? 'info' : 'secondary'; }
+
+  private loadDocs(orderId: string) {
+    this.api.get<any>('/invoices', { orderId } as any).subscribe({
+      next: (r) => this.orderDocs.set(Array.isArray(r) ? r : (r?.data ?? r?.items ?? [])),
+      error: () => this.orderDocs.set([]),
+    });
+  }
+
+  downloadDoc(d: any) { window.open(`/api/invoices/${d.id}/pdf`, '_blank'); }
 
   createDocument(docType: 'tax_invoice' | 'bill_of_supply' | 'delivery_challan', label: string) {
     const id = this.route.snapshot.paramMap.get('id');
@@ -377,6 +438,7 @@ export class OrderDetailComponent implements OnInit {
         });
         this.generatingDoc.set(false);
         this.messageService.add({ severity: 'success', summary: `${label} sent`, detail: `${r?.invoiceNumber ? r.invoiceNumber + ' — ' : ''}PDF delivered to the customer on WhatsApp. Order moved to Processing.` });
+        this.loadDocs(id);
         this.loadOrder();
       },
       error: (e) => {
@@ -453,6 +515,7 @@ export class OrderDetailComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
     this.loading.set(true);
+    this.loadDocs(id);
     this.orderService.getById(id).subscribe({
       next: (o: any) => {
         // NOTE: the API response interceptor camelCases all keys (totalAmount,
