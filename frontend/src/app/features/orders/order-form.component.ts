@@ -259,8 +259,10 @@ export class OrderFormComponent implements OnInit {
     const payload = {
       customerId: this.customerId,
       status: this.status,
-      // fold offer + coupon savings into the order discount (createDirect has no coupon field)
-      discount: (Number(this.discount) || 0) + this.promo.totalDiscount(),
+      // Fold the offer/scheme discount in; the coupon goes as a code so the
+      // backend validates it and records the redemption against the order.
+      discount: (Number(this.discount) || 0) + this.promo.schemeDiscount(),
+      couponCode: this.promo.appliedCoupon()?.code || undefined,
       deliveryFee: Number(this.deliveryFee) || 0,
       notes: this.notes || undefined,
       items: [...lineItems, ...freeItems],

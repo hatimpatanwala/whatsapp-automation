@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Param, Body, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { Request } from 'express';
 import { OrderService } from './order.service';
+import { CouponService } from '../promotions/coupon.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -8,7 +9,10 @@ import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('orders')
 @UseGuards(TenantGuard)
 export class OrderController {
-  constructor(private readonly orderService: OrderService) {}
+  constructor(
+    private readonly orderService: OrderService,
+    private readonly coupons: CouponService,
+  ) {}
 
   @Get()
   @Roles('owner', 'seller', 'staff')
@@ -35,21 +39,39 @@ export class OrderController {
       deliveryFee?: number;
       taxAmount?: number;
       status?: string;
+      couponCode?: string;
     },
   ) {
     const schema = req.tenantContext.schemaName;
     if (!body?.customerId) throw new BadRequestException('A customer is required.');
     if (!body?.items?.length) throw new BadRequestException('Add at least one line item.');
+
+    // Coupon: validate server-side (never trust the client's amount), fold its
+    // discount in, and record the redemption after the order is created.
+    let couponId: string | null = null;
+    let couponDiscount = 0;
+    if (body.couponCode && body.couponCode.trim()) {
+      const cartItems = body.items.map((i) => ({ productId: i.productId, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) }));
+      const v = await this.coupons.validate(schema, body.couponCode, cartItems, body.customerId);
+      if (!v.valid) throw new BadRequestException(v.reason || 'Coupon could not be applied.');
+      couponId = v.coupon!.id;
+      couponDiscount = v.discount;
+    }
+    const totalDiscount = Math.round(((Number(body.discount) || 0) + couponDiscount) * 100) / 100;
+
     const order = await this.orderService.createDirect(schema, {
       customerId: body.customerId,
       items: body.items,
       notes: body.notes,
-      discount: body.discount,
+      discount: totalDiscount,
       deliveryFee: body.deliveryFee,
       taxAmount: body.taxAmount,
     });
     if (body.status && body.status !== 'pending') {
       await this.orderService.updateStatus(schema, order.id, body.status).catch(() => undefined);
+    }
+    if (couponId && couponDiscount > 0) {
+      await this.coupons.redeem(schema, couponId, body.customerId, order.id, couponDiscount).catch(() => undefined);
     }
     return order;
   }

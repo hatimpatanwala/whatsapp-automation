@@ -270,13 +270,23 @@ export class InvoiceService {
 
     const text = this.renderText(inv, settings);
 
+    // Resolve the tenant's WhatsApp sender creds when the caller didn't pass them
+    // (the portal/webview paths don't carry phoneNumberId/accessToken) so the PDF
+    // can actually be uploaded and delivered, not just the text.
+    let phoneNumberId = tenant.phoneNumberId;
+    let accessToken = tenant.accessToken;
+    if ((!phoneNumberId || !accessToken) && this.smartNotification) {
+      const creds = await this.smartNotification.getCreds(tenant.id).catch(() => null);
+      if (creds) { phoneNumberId = phoneNumberId || creds.phoneNumberId; accessToken = accessToken || creds.accessToken; }
+    }
+
     // Generate the PDF and upload it to WhatsApp media (best-effort).
     let pdfMediaId: string | null = null;
     const pdfFilename = `${String(inv.invoice_number).replace(/[^\w.-]/g, '_')}.pdf`;
     try {
-      if (this.whatsappApi && tenant.phoneNumberId && tenant.accessToken) {
+      if (this.whatsappApi && phoneNumberId && accessToken) {
         const pdf = await buildInvoicePdf(inv, this.pdfSettings(settings));
-        pdfMediaId = await this.whatsappApi.uploadMediaBuffer(tenant.phoneNumberId, tenant.accessToken, pdf, 'application/pdf', pdfFilename);
+        pdfMediaId = await this.whatsappApi.uploadMediaBuffer(phoneNumberId, accessToken, pdf, 'application/pdf', pdfFilename);
       }
     } catch (err: any) {
       this.logger.warn(`invoice PDF generation failed: ${err.message}`);
@@ -291,8 +301,8 @@ export class InvoiceService {
           summary: `${DOC_LABEL[docType]} ${inv.invoice_number}`, detail: text, recipientName: inv.customer_name,
         }).catch(() => undefined);
       }
-      if (pdfMediaId && this.whatsappApi && tenant.phoneNumberId && tenant.accessToken) {
-        await this.whatsappApi.sendDocument(tenant.phoneNumberId, tenant.accessToken, phone, { id: pdfMediaId }, pdfFilename, `${DOC_LABEL[docType]} ${inv.invoice_number}`).catch(() => undefined);
+      if (pdfMediaId && this.whatsappApi && phoneNumberId && accessToken) {
+        await this.whatsappApi.sendDocument(phoneNumberId, accessToken, phone, { id: pdfMediaId }, pdfFilename, `${DOC_LABEL[docType]} ${inv.invoice_number}`).catch(() => undefined);
       }
     }
     return { ok: true, text, invoiceNumber: inv.invoice_number, pdfMediaId, pdfFilename };

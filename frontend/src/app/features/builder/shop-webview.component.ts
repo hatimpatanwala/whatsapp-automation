@@ -285,6 +285,25 @@ interface Cart {
         </div>
       }
 
+      <!-- Floating "View cart" bar (catalog view) -->
+      @if (view() === 'catalog' && cartEnabled() && cart().count > 0) {
+        <div class="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div class="max-w-2xl mx-auto flex items-center gap-3">
+            <div class="shrink-0">
+              <p class="text-gray-400 text-[11px] leading-none">{{ cart().count }} item{{ cart().count === 1 ? '' : 's' }}</p>
+              @if (showPrices()) {
+                <p class="text-lg font-extrabold text-gray-900 leading-tight">{{ sym() }}{{ cart().total | number:'1.0-2' }}</p>
+              } @else {
+                <p class="text-sm font-bold text-gray-900 leading-tight">In your cart</p>
+              }
+            </div>
+            <button class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm active:scale-[0.99] transition flex items-center justify-center gap-2" (click)="view.set('cart')">
+              <i class="pi pi-shopping-cart"></i> View cart
+            </button>
+          </div>
+        </div>
+      }
+
       <!-- Product detail page (customer-side) -->
       @if (view() === 'detail' && detail(); as p) {
         <main class="max-w-2xl mx-auto pb-28">
