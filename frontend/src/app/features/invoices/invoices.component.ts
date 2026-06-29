@@ -19,7 +19,7 @@ interface RelatedDoc { id: string; invoiceNumber: string; docType: string; }
 interface InvoiceRow {
   id: string; order_id: string; invoice_number: string; doc_type: string;
   customer_name: string; customer_phone: string; total: number; total_tax: number;
-  currency: string; issued_at: string; status?: string; related?: RelatedDoc[];
+  currency: string; issued_at: string; status?: string; payment_status?: string; related?: RelatedDoc[];
 }
 interface Picklist { id: string; name: string; phone?: string; price?: number; }
 interface OrderPick { id: string; label: string; total: number; status: string; }
@@ -84,15 +84,26 @@ interface Line { productId: string | null; description: string; quantity: number
           </div>
         </div>
 
+        <!-- Filters: document type + payment status -->
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <p-select [(ngModel)]="docTypeFilter" [options]="docTypeFilterOptions" optionLabel="label" optionValue="value" placeholder="All document types" styleClass="w-full sm:w-56" appendTo="body" />
+          <p-select [(ngModel)]="paymentFilter" [options]="paymentFilterOptions" optionLabel="label" optionValue="value" placeholder="All payments" styleClass="w-full sm:w-48" appendTo="body" />
+          @if (docTypeFilter || paymentFilter) {
+            <button pButton label="Reset" icon="pi pi-filter-slash" class="p-button-text p-button-sm" (click)="resetFilters()"></button>
+            <span class="text-xs text-gray-400 ml-auto">{{ filteredInvoices().length }} of {{ invoices().length }}</span>
+          }
+        </div>
+
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <p-table [value]="invoices()" [loading]="loading()" dataKey="id" styleClass="text-sm"
+          <p-table [value]="filteredInvoices()" [loading]="loading()" dataKey="id" styleClass="text-sm"
             [scrollable]="true" scrollHeight="56vh"
-            [paginator]="invoices().length > 15" [rows]="15" [rowsPerPageOptions]="[15, 30, 50]">
+            [paginator]="filteredInvoices().length > 15" [rows]="15" [rowsPerPageOptions]="[15, 30, 50]">
             <ng-template pTemplate="header">
               <tr>
                 <th class="text-xs text-gray-500 font-medium">Invoice #</th>
                 <th class="text-xs text-gray-500 font-medium">Type</th>
                 <th class="text-xs text-gray-500 font-medium">Customer</th>
+                <th class="text-xs text-gray-500 font-medium">Payment</th>
                 <th class="text-xs text-gray-500 font-medium">GST</th>
                 <th class="text-xs text-gray-500 font-medium">Total</th>
                 <th class="text-xs text-gray-500 font-medium">Issued</th>
@@ -118,6 +129,7 @@ interface Line { productId: string | null; description: string; quantity: number
                   <p class="font-medium text-gray-900">{{ inv.customer_name || '—' }}</p>
                   <p class="text-xs text-gray-400">{{ inv.customer_phone }}</p>
                 </td>
+                <td><p-tag [value]="inv.payment_status || 'pending'" [severity]="paySeverity(inv.payment_status)" styleClass="text-xs capitalize" /></td>
                 <td class="text-gray-600 tabular-nums">{{ sym() }}{{ inv.total_tax | number:'1.2-2' }}</td>
                 <td class="font-semibold text-gray-900 tabular-nums">{{ sym() }}{{ inv.total | number:'1.2-2' }}</td>
                 <td class="text-gray-500 text-xs">{{ inv.issued_at | date:'mediumDate' }}</td>
@@ -128,7 +140,7 @@ interface Line { productId: string | null; description: string; quantity: number
               </tr>
             </ng-template>
             <ng-template pTemplate="emptymessage">
-              <tr><td colspan="7">
+              <tr><td colspan="8">
                 <div class="text-center py-12">
                   <i class="pi pi-file text-gray-200" style="font-size:2.5rem"></i>
                   <p class="text-base font-semibold text-gray-700 mt-3">No invoices yet</p>
@@ -418,6 +430,35 @@ export class InvoicesComponent implements OnInit {
   selectedOrder = computed(() => this.orders().find(o => o.id === this.existingOrderId) || null);
 
   sym(): string { const c = this._currency(); return c === 'USD' ? '$' : c === 'EUR' ? '€' : '₹'; }
+
+  // ── List filters (document type + payment status) ──────────────────────────
+  docTypeFilter = '';
+  paymentFilter = '';
+  docTypeFilterOptions = [
+    { label: 'All document types', value: '' },
+    { label: 'Tax Invoice', value: 'tax_invoice' },
+    { label: 'Bill of Supply', value: 'bill_of_supply' },
+    { label: 'Delivery Challan', value: 'delivery_challan' },
+  ];
+  paymentFilterOptions = [
+    { label: 'All payments', value: '' },
+    { label: 'Paid', value: 'paid' },
+    { label: 'Pending', value: 'pending' },
+    { label: 'Failed', value: 'failed' },
+    { label: 'Refunded', value: 'refunded' },
+  ];
+  /** Re-runs each change-detection cycle so the table reflects the live filters. */
+  filteredInvoices(): InvoiceRow[] {
+    const dt = this.docTypeFilter, ps = this.paymentFilter;
+    if (!dt && !ps) return this.invoices();
+    return this.invoices().filter(i =>
+      (!dt || i.doc_type === dt) && (!ps || (i.payment_status || 'pending') === ps));
+  }
+  resetFilters() { this.docTypeFilter = ''; this.paymentFilter = ''; }
+  paySeverity(s?: string): 'success' | 'warn' | 'danger' | 'secondary' {
+    const map: Record<string, 'success' | 'warn' | 'danger' | 'secondary'> = { paid: 'success', pending: 'warn', failed: 'danger', refunded: 'secondary' };
+    return map[s || 'pending'] ?? 'secondary';
+  }
   docLabel(t: string): string { return this.docTypes.find(d => d.value === t)?.label || t; }
   private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
 
@@ -444,6 +485,7 @@ export class InvoicesComponent implements OnInit {
           currency: i.currency || 'INR',
           issued_at: i.issued_at ?? i.issuedAt,
           status: i.status,
+          payment_status: i.payment_status ?? i.paymentStatus ?? 'pending',
           related: (i.related ?? []).map((rl: any) => ({ id: rl.id, invoiceNumber: rl.invoiceNumber ?? rl.invoice_number, docType: rl.docType ?? rl.doc_type })),
         })));
         this.loading.set(false);
