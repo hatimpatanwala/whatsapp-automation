@@ -121,6 +121,10 @@ export class CreateProductDto {
   metadata?: Record<string, any>;
 
   @IsOptional()
+  @IsObject()
+  customFields?: Record<string, any>;
+
+  @IsOptional()
   @IsArray()
   variants?: any[];
 }
