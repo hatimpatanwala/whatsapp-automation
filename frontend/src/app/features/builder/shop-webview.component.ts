@@ -266,21 +266,51 @@ interface Cart {
             </div>
           </div>
         }
+
+        <!-- ─── QUOTE SUCCESS ───────────────────────────────────────── -->
+        @if (view() === 'success' && quoteResult(); as q) {
+          <div class="max-w-md mx-auto p-6">
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+              <p class="text-5xl mb-2">📝</p>
+              <p class="text-lg font-bold text-gray-900">Quote requested!</p>
+              <p class="text-sm text-gray-500 mt-1">Your quote <span class="font-semibold">{{ q.quoteNumber }}</span> has been sent to the store. They'll review and get back to you on WhatsApp.</p>
+              @if (showPrices()) { <p class="text-2xl font-extrabold text-green-700 mt-3">{{ sym() }}{{ q.total | number:'1.0-2' }}</p> }
+              <button class="mt-5 w-full bg-green-600 text-white font-semibold rounded-lg py-3 text-sm" (click)="returnNow()">
+                <i class="pi pi-whatsapp mr-1"></i>Back to chat@if (returnIn() !== null) { <span> ({{ returnIn() }})</span> }
+              </button>
+              @if (q.viewUrl) {
+                <a [href]="q.viewUrl" (click)="cancelAutoReturn()" class="mt-3 block text-sm text-green-700 font-medium">View quote details</a>
+              }
+              <button class="mt-3 text-sm text-gray-500 font-medium" (click)="continueShopping()">Continue shopping</button>
+              @if (returnIn() !== null) { <p class="text-[11px] text-gray-400 mt-3">Returning to WhatsApp automatically…</p> }
+            </div>
+          </div>
+        }
       }
 
       <!-- Sticky checkout bar (cart view) -->
       @if (view() === 'cart' && cart().items.length) {
         <div class="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div class="max-w-2xl mx-auto flex items-center gap-3">
+          <div class="max-w-2xl mx-auto">
             @if (showPrices()) {
-              <div class="shrink-0">
-                <p class="text-gray-400 text-[11px] leading-none">Total</p>
-                <p class="text-lg font-extrabold text-gray-900 leading-tight">{{ sym() }}{{ cart().total | number:'1.0-2' }}</p>
+              <div class="flex items-center justify-between mb-2 px-0.5">
+                <span class="text-gray-400 text-[11px]">Total</span>
+                <span class="text-lg font-extrabold text-gray-900">{{ sym() }}{{ cart().total | number:'1.0-2' }}</span>
               </div>
             }
-            <button class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3.5 text-sm shadow-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="placing()" (click)="checkout()">
-              @if (placing()) { <i class="pi pi-spin pi-spinner"></i> Placing order… } @else { <i class="pi pi-check-circle"></i> Place Order }
-            </button>
+            <div class="flex items-center gap-2">
+              @if (quotesEnabled()) {
+                <button class="flex-1 border-2 border-green-600 text-green-700 font-bold rounded-xl py-3 text-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="placing() || placingQuote()" (click)="requestQuote()">
+                  @if (placingQuote()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-file-edit"></i> Request Quote }
+                </button>
+              }
+              @if (cartEnabled()) {
+                <button class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl py-3 text-sm shadow-sm active:scale-[0.99] transition disabled:opacity-40 flex items-center justify-center gap-2" [disabled]="placing() || placingQuote()" (click)="checkout()">
+                  @if (placing()) { <i class="pi pi-spin pi-spinner"></i> Placing… } @else { <i class="pi pi-check-circle"></i> Place Order }
+                </button>
+              }
+            </div>
+            @if (quotesEnabled()) { <p class="text-[11px] text-gray-400 text-center mt-2">Need a custom or bulk price? Request a quote and we'll get back to you.</p> }
           </div>
         </div>
       }
@@ -382,9 +412,10 @@ export class ShopWebviewComponent implements OnInit {
   loadError = signal<string | null>(null);
   busy = signal(false);
   placing = signal(false);
+  placingQuote = signal(false);
 
   view = signal<'catalog' | 'cart' | 'success' | 'detail'>('catalog');
-  store = signal<{ name: string; currency: string; whatsappPhone?: string; showPrices?: boolean; cartEnabled?: boolean } | null>(null);
+  store = signal<{ name: string; currency: string; whatsappPhone?: string; showPrices?: boolean; cartEnabled?: boolean; quotesEnabled?: boolean } | null>(null);
   returnIn = signal<number | null>(null);
   private returnTimer: any = null;
   categories = signal<Taxon[]>([]);
@@ -393,6 +424,7 @@ export class ShopWebviewComponent implements OnInit {
   cart = signal<Cart>(this.empty());
   detail = signal<ShopProduct | null>(null);
   order = signal<{ orderNumber: string; total: number; viewUrl: string | null } | null>(null);
+  quoteResult = signal<{ quoteNumber: string; total: number; viewUrl: string | null } | null>(null);
 
   search = signal('');
   catFilter = signal('');
@@ -425,6 +457,7 @@ export class ShopWebviewComponent implements OnInit {
   /** Merchant storefront toggles (default ON when the store hasn't set them). */
   showPrices = computed(() => this.store()?.showPrices !== false);
   cartEnabled = computed(() => this.store()?.cartEnabled !== false);
+  quotesEnabled = computed(() => this.store()?.quotesEnabled === true);
   waLink = computed(() => { const p = (this.store()?.whatsappPhone || '').replace(/[^0-9]/g, ''); return p ? `https://wa.me/${p}` : null; });
 
   ngOnInit(): void {
@@ -507,6 +540,23 @@ export class ShopWebviewComponent implements OnInit {
     });
   }
 
+  /** Request a quote (bulk order) from the cart instead of placing an order. */
+  requestQuote() {
+    if (this.placingQuote()) return;
+    this.placingQuote.set(true);
+    this.http.post<any>(`${this.base}/m/shop/quote`, { notes: this.notes || undefined }, this.opts()).subscribe({
+      next: (r) => {
+        const q = this.unwrap<any>(r);
+        this.order.set(null);
+        this.quoteResult.set({ quoteNumber: q.quoteNumber, total: q.total, viewUrl: q.viewUrl });
+        this.placingQuote.set(false);
+        this.view.set('success');
+        this.startAutoReturn();
+      },
+      error: (e) => { this.placingQuote.set(false); alert(e?.error?.message || 'Could not request a quote.'); },
+    });
+  }
+
   // ─── Return to WhatsApp once the order is placed ───────────────────────────
   private startAutoReturn() {
     this.cancelAutoReturn();
@@ -530,6 +580,7 @@ export class ShopWebviewComponent implements OnInit {
   continueShopping() {
     this.cancelAutoReturn();
     this.order.set(null);
+    this.quoteResult.set(null);
     this.notes = '';
     this.view.set('catalog');
     // refresh products (stock) + cart

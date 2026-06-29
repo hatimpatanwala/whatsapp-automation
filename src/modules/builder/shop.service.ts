@@ -3,6 +3,7 @@ import { TenantConnectionManager } from '../../database/tenant-connection.manage
 import { PromotionsEngine } from '../promotions/promotions-engine.service';
 import { CouponService } from '../promotions/coupon.service';
 import { OrderService } from '../order/order.service';
+import { QuoteService } from '../quote/quote.service';
 import { BuilderService } from './builder.service';
 
 interface ShopSession {
@@ -32,6 +33,7 @@ export class ShopService {
     private readonly promotions: PromotionsEngine,
     private readonly coupons: CouponService,
     private readonly orders: OrderService,
+    private readonly quotes: QuoteService,
     private readonly builder: BuilderService,
   ) {}
 
@@ -60,7 +62,7 @@ export class ShopService {
     };
   }
 
-  private async storeInfo(s: ShopSession): Promise<{ name: string; currency: string; whatsappPhone: string; showPrices: boolean; cartEnabled: boolean }> {
+  private async storeInfo(s: ShopSession): Promise<{ name: string; currency: string; whatsappPhone: string; showPrices: boolean; cartEnabled: boolean; quotesEnabled: boolean }> {
     const t = await this.conn.executeGlobal(async (qr) =>
       (await qr.query(`SELECT business_name, name, whatsapp_phone FROM tenants WHERE id = $1`, [s.tenant_id]))[0]);
     const flags = await this.storefrontFlags(s.schema_name);
@@ -70,27 +72,29 @@ export class ShopService {
       whatsappPhone: String(t?.whatsapp_phone || '').replace(/[^0-9]/g, ''),
       showPrices: flags.showPrices,
       cartEnabled: flags.cartEnabled,
+      quotesEnabled: flags.quotesEnabled,
     };
   }
 
-  /** Storefront display toggles from tenant settings (both default ON; only an
-   *  explicit false disables). Settings values may be raw booleans or JSON strings. */
-  private async storefrontFlags(schema: string): Promise<{ showPrices: boolean; cartEnabled: boolean }> {
-    const isOn = (v: any): boolean => {
-      if (typeof v === 'string') { try { v = JSON.parse(v); } catch { /* keep string */ } }
-      return v !== false; // undefined/null/true → ON; only explicit false → OFF
-    };
+  /** Storefront toggles from tenant settings. Prices/cart default ON (only an
+   *  explicit false disables); quote requests default OFF (opt-in). Values may
+   *  be raw booleans or JSON strings. */
+  private async storefrontFlags(schema: string): Promise<{ showPrices: boolean; cartEnabled: boolean; quotesEnabled: boolean }> {
+    const parse = (v: any): any => { if (typeof v === 'string') { try { return JSON.parse(v); } catch { return v; } } return v; };
+    const isOn = (v: any): boolean => parse(v) !== false;   // default ON
+    const isExplicitlyOn = (v: any): boolean => parse(v) === true; // default OFF
     try {
       const rows = await this.conn.executeInTenantContext(schema, async (qr) =>
-        qr.query(`SELECT key, value FROM "${schema}".settings WHERE key IN ('commerce_show_prices','commerce_cart_enabled')`));
+        qr.query(`SELECT key, value FROM "${schema}".settings WHERE key IN ('commerce_show_prices','commerce_cart_enabled','commerce_quotes_enabled')`));
       const m: Record<string, any> = {};
       for (const r of rows) m[r.key] = r.value;
       return {
         showPrices: isOn(m['commerce_show_prices']),
         cartEnabled: isOn(m['commerce_cart_enabled']),
+        quotesEnabled: isExplicitlyOn(m['commerce_quotes_enabled']),
       };
     } catch {
-      return { showPrices: true, cartEnabled: true };
+      return { showPrices: true, cartEnabled: true, quotesEnabled: false };
     }
   }
 
@@ -325,6 +329,52 @@ export class ShopService {
       orderId: order.id,
       orderNumber: order.order_number,
       total: Number(order.total),
+      viewUrl: view?.url || null,
+    };
+  }
+
+  /**
+   * Request a quote (bulk order) from the active cart instead of placing an
+   * order. Creates a draft quote — which emits QuoteCreatedEvent → the quote
+   * workflow (notifications) — and leaves the cart intact so the customer can
+   * still place the order if they prefer.
+   */
+  async requestQuote(token: string, body: { notes?: string }): Promise<any> {
+    const s = await this.session(token);
+    if (!s.customer_id) throw new BadRequestException('No customer for this session.');
+    if (!(await this.storefrontFlags(s.schema_name)).quotesEnabled) {
+      throw new BadRequestException('Quote requests are not enabled for this store.');
+    }
+
+    const cart = await this.getCart(token);
+    if (!cart.items.length) throw new BadRequestException('Your cart is empty.');
+
+    const items = cart.items.map((l: any) => ({
+      productId: l.productId, description: l.name, quantity: l.quantity, unitPrice: l.unitPrice,
+    }));
+
+    const quote = await this.quotes.create(s.schema_name, {
+      customerId: s.customer_id,
+      title: 'Quote request from storefront',
+      notes: body?.notes,
+      discount: cart.discount,
+      items,
+    });
+
+    const view = await this.builder.createViewSession({
+      tenantId: s.tenant_id,
+      schemaName: s.schema_name,
+      type: 'quote',
+      resultId: quote.id,
+      resultNumber: quote.quote_number,
+      customerId: s.customer_id,
+      customerPhone: s.customer_phone,
+    }).catch(() => null);
+
+    return {
+      quoteId: quote.id,
+      quoteNumber: quote.quote_number,
+      total: Number(quote.total_amount ?? quote.total ?? 0),
       viewUrl: view?.url || null,
     };
   }

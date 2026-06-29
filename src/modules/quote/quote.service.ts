@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
+import { EventBusService } from '../events/event-bus.service';
+import { QuoteCreatedEvent } from '../events/domain-events';
 
 @Injectable()
 export class QuoteService {
@@ -7,6 +9,7 @@ export class QuoteService {
 
   constructor(
     private readonly connectionManager: TenantConnectionManager,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async findAll(schema: string, filters?: { status?: string; customerId?: string; page?: number; limit?: number }) {
@@ -82,7 +85,7 @@ export class QuoteService {
     taxAmount?: number;
     items: { productId?: string; description: string; quantity: number; unitPrice: number }[];
   }) {
-    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+    const created = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
       const taxAmount = Math.max(0, Number(data.taxAmount) || 0);
       const discount = Math.max(0, Number(data.discount) || 0);
@@ -114,8 +117,12 @@ export class QuoteService {
         );
       }
 
-      return this.findById(schema, quote.id);
+      return quote;
     });
+
+    // Fire the quote workflow (notifications etc.) now that the quote exists.
+    this.eventBus.emit(new QuoteCreatedEvent(schema, created.id, created.customer_id, created.quote_number, Number(created.total_amount) || 0));
+    return this.findById(schema, created.id);
   }
 
   async update(schema: string, id: string, data: {
