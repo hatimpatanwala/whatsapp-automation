@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Param, Body, Query, Req, UseGuards, BadRequ
 import { Request } from 'express';
 import { OrderService } from './order.service';
 import { CouponService } from '../promotions/coupon.service';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { OrderQueryDto } from './dto/order-query.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
@@ -16,14 +16,8 @@ export class OrderController {
 
   @Get()
   @Roles('owner', 'seller', 'staff')
-  async findAll(
-    @Req() req: Request,
-    @Query() pagination: PaginationDto,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
-    @Query('paymentStatus') paymentStatus?: string,
-  ) {
-    return this.orderService.findAll(req.tenantContext.schemaName, pagination, status, search, paymentStatus);
+  async findAll(@Req() req: Request, @Query() query: OrderQueryDto) {
+    return this.orderService.findAll(req.tenantContext.schemaName, query, query.status, query.search, query.paymentStatus);
   }
 
   /** Create an order from the in-portal "New order" page. */
