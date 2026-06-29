@@ -180,6 +180,10 @@ export class WebhookProcessorService {
     const audience: 'customer' | 'admin' = isAdmin ? 'admin' : 'customer';
     if (isAdmin) {
       this.logger.log(`[FLOW] Message from ADMIN number ${from} for ${schema} — using admin workflows`);
+    } else if (tenant.adminWhatsappNumber && digits(tenant.adminWhatsappNumber) === digits(from) && !tenant.adminWhatsappVerified) {
+      // The number matches the configured admin number but ownership was never
+      // verified — so it's still treated as a customer. Surface why.
+      this.logger.warn(`[FLOW] ${from} matches the admin number for ${schema} but it is NOT verified — treated as customer. Verify it in Settings → Admin WhatsApp.`);
     }
 
     // Idempotency check
@@ -238,8 +242,12 @@ export class WebhookProcessorService {
     // ─── WORKFLOW ENGINE: Check for active execution first ─────────────
     let handledByWorkflow = false;
     try {
-      const activeExecution = await this.workflowEngine.findActiveExecution(schema, from);
-      this.logger.log(`[FLOW] findActiveExecution for ${from}: ${activeExecution ? `id=${activeExecution.id} status=${activeExecution.status}` : 'null'}`);
+      // Admins never resume a CUSTOMER workflow execution. A number that chatted
+      // as a customer (and left a waiting flow) and was later promoted to admin
+      // must route to admin handling — not get pinned to its old customer flow.
+      // Audience-scoped admin trigger matching + built-in admin commands follow.
+      const activeExecution = isAdmin ? null : await this.workflowEngine.findActiveExecution(schema, from);
+      this.logger.log(`[FLOW] findActiveExecution for ${from}: ${activeExecution ? `id=${activeExecution.id} status=${activeExecution.status}` : (isAdmin ? 'skipped (admin sender)' : 'null')}`);
       if (activeExecution) {
         if (activeExecution.status === 'waiting') {
           const reply = this.parseReply(message);
@@ -306,7 +314,8 @@ export class WebhookProcessorService {
       }
 
       // ─── NO WORKFLOW, NO TRIGGER: Check for recently expired execution ─
-      if (!handledByWorkflow) {
+      // (Admins skip this too — it would restart the old customer workflow.)
+      if (!handledByWorkflow && !isAdmin) {
         this.logger.log(`[FLOW] No workflow matched, checking recently expired executions for ${from}`);
         const recentExecution = await this.workflowEngine.findRecentExpiredExecution(schema, from);
         if (recentExecution) {
