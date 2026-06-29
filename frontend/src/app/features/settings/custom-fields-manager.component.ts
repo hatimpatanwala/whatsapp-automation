@@ -111,20 +111,20 @@ interface FieldDef {
             <label class="text-xs font-medium text-gray-500">Help text <span class="text-gray-300">(optional)</span></label>
             <input pInputText [(ngModel)]="m.help_text" class="w-full" placeholder="Shown under the field" />
           </div>
-          <label class="flex items-center justify-between pt-1">
+          <div class="flex items-center justify-between pt-1">
             <span class="text-sm text-gray-900">Required</span>
             <p-toggleswitch [(ngModel)]="m.is_required" />
-          </label>
+          </div>
           @if (entity() === 'customer') {
-            <label class="flex items-center justify-between">
+            <div class="flex items-center justify-between">
               <span class="text-sm text-gray-900">Collect from customer <span class="text-xs text-gray-400">(onboarding form)</span></span>
               <p-toggleswitch [(ngModel)]="m.collect_from_customer" />
-            </label>
+            </div>
           }
-          <label class="flex items-center justify-between">
+          <div class="flex items-center justify-between">
             <span class="text-sm text-gray-900">Active</span>
             <p-toggleswitch [(ngModel)]="m.is_active" />
-          </label>
+          </div>
         </div>
       }
       <ng-template pTemplate="footer">
