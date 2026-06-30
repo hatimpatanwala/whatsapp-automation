@@ -39,6 +39,13 @@ export class BuilderController {
     return this.builder.getResult(this.token(req, token));
   }
 
+  /** Customer accepts/rejects the quote behind a VIEW token. */
+  @Post('respond')
+  @HttpCode(200)
+  async respond(@Req() req: Request, @Query('token') token: string, @Body() body: { action: 'accept' | 'reject' }) {
+    return this.builder.respondToQuote(this.token(req, token), body?.action === 'reject' ? 'reject' : 'accept');
+  }
+
   @Post('offers')
   @HttpCode(200)
   async offers(@Req() req: Request, @Query('token') token: string, @Body() body: any) {

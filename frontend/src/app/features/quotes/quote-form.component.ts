@@ -224,15 +224,17 @@ export class QuoteFormComponent implements OnInit {
     this.loading.set(true);
     this.api.get<any>(`/quotes/${id}`).subscribe({
       next: (q) => {
-        this.title = q.title;
-        this.customerId = q.customer_id;
+        // The API interceptor returns camelCase; keep snake_case as a fallback.
+        this.title = q.title ?? '';
+        this.customerId = q.customerId ?? q.customer_id ?? '';
         this.notes = q.notes || '';
-        this.validUntil = q.valid_until ? new Date(q.valid_until) : null;
+        const validUntil = q.validUntil ?? q.valid_until;
+        this.validUntil = validUntil ? new Date(validUntil) : null;
         this.items = (q.items || []).map((item: any) => ({
-          productId: item.product_id,
+          productId: item.productId ?? item.product_id ?? null,
           description: item.description,
-          quantity: item.quantity,
-          unitPrice: parseFloat(item.unit_price),
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice ?? item.unit_price) || 0,
         }));
         this.recalculate();
         this.loading.set(false);
