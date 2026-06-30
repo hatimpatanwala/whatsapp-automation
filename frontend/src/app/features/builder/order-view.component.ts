@@ -84,6 +84,35 @@ import { BuilderApiService } from './builder-api.service';
             @if (d.notes) { <p class="text-xs text-gray-500 pt-1 italic">{{ d.notes }}</p> }
             <p class="text-xs text-gray-400 pt-1">Reply in WhatsApp if you have any questions or to confirm.</p>
           </section>
+
+          <!-- Customer accept/reject — only for a quote that's been sent and is still open. -->
+          @if (d.type === 'quote' && canRespond(d.status)) {
+            <section class="bg-white rounded-xl border border-gray-200 p-4">
+              @if (respondError()) { <p class="text-xs text-red-600 mb-2"><i class="pi pi-exclamation-circle mr-1"></i>{{ respondError() }}</p> }
+              <p class="text-sm text-gray-600 mb-3">Happy with this quote? Accept to place your order, or let us know if it's not right.</p>
+              <div class="flex gap-2">
+                <button class="flex-1 bg-green-600 text-white font-bold rounded-xl py-3 text-sm shadow-sm disabled:opacity-40 flex items-center justify-center gap-2"
+                  [disabled]="responding()" (click)="respond('accept')">
+                  @if (responding() === 'accept') { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check-circle"></i> } Accept & order
+                </button>
+                <button class="flex-1 border border-gray-300 text-gray-600 font-semibold rounded-xl py-3 text-sm disabled:opacity-40 flex items-center justify-center gap-2"
+                  [disabled]="responding()" (click)="respond('reject')">
+                  @if (responding() === 'reject') { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-times"></i> } Decline
+                </button>
+              </div>
+            </section>
+          }
+          @if (responded()) {
+            <section class="rounded-xl border p-4 text-center"
+              [class.bg-green-50]="responded() === 'accepted' || responded() === 'converted'" [class.border-green-200]="responded() === 'accepted' || responded() === 'converted'"
+              [class.bg-gray-50]="responded() === 'rejected'" [class.border-gray-200]="responded() === 'rejected'">
+              @if (responded() === 'rejected') {
+                <p class="text-sm font-semibold text-gray-700">Thanks for letting us know — we'll be in touch.</p>
+              } @else {
+                <p class="text-sm font-semibold text-green-800"><i class="pi pi-check-circle mr-1"></i>Quote accepted! Your order is being created. Head back to WhatsApp to continue.</p>
+              }
+            </section>
+          }
         </main>
       }
     </div>
@@ -96,6 +125,30 @@ export class OrderViewComponent implements OnInit {
   loading = signal(true);
   error = signal<string | null>(null);
   data = signal<any | null>(null);
+  responding = signal<'accept' | 'reject' | null>(null);
+  responded = signal<string | null>(null);
+  respondError = signal<string | null>(null);
+
+  /** A sent/draft quote that hasn't yet been accepted/rejected can still be acted on. */
+  canRespond(status: string): boolean {
+    return ['sent', 'draft'].includes(status) && !this.responded();
+  }
+
+  respond(action: 'accept' | 'reject'): void {
+    if (this.responding()) return;
+    this.responding.set(action);
+    this.respondError.set(null);
+    this.api.respondToQuote(action).subscribe({
+      next: (r) => {
+        this.responding.set(null);
+        this.responded.set(r?.status || (action === 'accept' ? 'accepted' : 'rejected'));
+      },
+      error: (e) => {
+        this.responding.set(null);
+        this.respondError.set(e?.error?.message || 'Could not submit your response. Please try again.');
+      },
+    });
+  }
 
   ngOnInit(): void {
     const token = this.route.snapshot.queryParamMap.get('token') || '';

@@ -44,16 +44,24 @@ import { ApiService } from '../../core/services/api.service';
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
-            @if (quote()!.status === 'draft') {
-              <p-button label="Send" icon="pi pi-send" severity="success" (onClick)="updateStatus('sent')" />
+            <!-- Edit/add is allowed any time the quote isn't already an order. -->
+            @if (canEdit()) {
               <p-button label="Edit" icon="pi pi-pencil" [outlined]="true" [routerLink]="['/quotes', quoteId, 'edit']" />
             }
+            @if (quote()!.status === 'draft') {
+              <p-button label="Send to customer" icon="pi pi-send" severity="success" (onClick)="updateStatus('sent')" />
+            }
             @if (quote()!.status === 'sent') {
+              <p-button label="Resend" icon="pi pi-refresh" [outlined]="true" (onClick)="updateStatus('sent')" />
               <p-button label="Accept" icon="pi pi-check" severity="success" (onClick)="updateStatus('accepted')" />
               <p-button label="Reject" icon="pi pi-times" severity="danger" [outlined]="true" (onClick)="updateStatus('rejected')" />
             }
             @if (quote()!.status === 'accepted') {
+              <p-button label="Send to customer" icon="pi pi-send" [outlined]="true" (onClick)="updateStatus('sent')" />
               <p-button label="Convert to Order" icon="pi pi-shopping-cart" severity="info" (onClick)="updateStatus('converted')" />
+            }
+            @if (quote()!.status === 'rejected') {
+              <p-button label="Re-send" icon="pi pi-refresh" [outlined]="true" (onClick)="updateStatus('sent')" />
             }
             <p-button label="Duplicate" icon="pi pi-copy" severity="secondary" [outlined]="true" (onClick)="duplicate()" />
             <p-button icon="pi pi-trash" severity="danger" [outlined]="true" (onClick)="confirmDelete()" />
@@ -209,6 +217,11 @@ export class QuoteDetailComponent implements OnInit {
     if (!q?.valid_until) return false;
     return new Date(q.valid_until) < new Date();
   });
+
+  /** Edit/add allowed until the quote has been converted into an order. */
+  canEdit(): boolean {
+    return this.quote()?.status !== 'converted';
+  }
 
   parseFloat = parseFloat;
 

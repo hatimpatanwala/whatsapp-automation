@@ -264,6 +264,27 @@ export class BuilderService implements OnModuleInit {
     });
   }
 
+  /**
+   * Customer accepts/rejects a quote from the VIEW webview. Routes through
+   * QuoteService.updateStatus, so it emits the lifecycle event (workflows fire)
+   * and an acceptance auto-converts the quote into an order.
+   */
+  async respondToQuote(token: string, action: 'accept' | 'reject'): Promise<{ status: string }> {
+    const s = await this.resolveSession(token, 'view');
+    if (s.type !== 'quote') throw new BadRequestException('This link is not a quote.');
+    const current = await this.connectionManager.executeInTenantContext(s.schema_name, async (qr) =>
+      (await qr.query(`SELECT status FROM quotes WHERE id = $1`, [s.result_id]))[0],
+    );
+    if (!current) throw new NotFoundException('Quote not found.');
+    // Only an open (sent) quote can be acted on; ignore replays gracefully.
+    if (!['sent', 'draft'].includes(current.status)) {
+      return { status: current.status };
+    }
+    const newStatus = action === 'accept' ? 'accepted' : 'rejected';
+    const updated = await this.quoteService.updateStatus(s.schema_name, s.result_id, newStatus);
+    return { status: updated?.status || newStatus };
+  }
+
   /** Mint a BULK session (admin downloads/uploads the products sheet over the web). */
   async createBulkSession(input: { tenantId: string; schemaName: string; createdBy?: string }): Promise<{ token: string; url: string }> {
     const token = randomBytes(32).toString('hex');
