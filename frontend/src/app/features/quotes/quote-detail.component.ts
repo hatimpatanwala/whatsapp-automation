@@ -218,9 +218,13 @@ export class QuoteDetailComponent implements OnInit {
     return new Date(q.valid_until) < new Date();
   });
 
-  /** Edit/add allowed until the quote has been converted into an order. */
+  /**
+   * Edit/add is only allowed while the quote is a DRAFT — the state a customer's
+   * storefront quote request arrives in, so the admin can price/adjust it before
+   * sending. Once it's been sent or accepted, the quote is locked.
+   */
   canEdit(): boolean {
-    return this.quote()?.status !== 'converted';
+    return this.quote()?.status === 'draft';
   }
 
   parseFloat = parseFloat;
