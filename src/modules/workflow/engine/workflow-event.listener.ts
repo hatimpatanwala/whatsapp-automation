@@ -15,6 +15,7 @@ import { WorkflowTriggerMatcher } from './workflow-trigger.matcher';
 import { WorkflowExecutionEngine } from './workflow-execution.engine';
 import { ConversationHelper } from '../../whatsapp/helpers/conversation.helper';
 import { MetaTokenService } from '../../waba/meta-token.service';
+import { BuilderService } from '../../builder/builder.service';
 
 @Injectable()
 export class WorkflowEventListener {
@@ -27,6 +28,7 @@ export class WorkflowEventListener {
     private readonly conversationHelper: ConversationHelper,
     @Optional() private readonly smartNotification: SmartNotificationService,
     @Optional() private readonly metaTokenService?: MetaTokenService,
+    @Optional() private readonly builder?: BuilderService,
   ) {}
 
   /**
@@ -64,6 +66,19 @@ export class WorkflowEventListener {
       if (eventValue === 'expired') {
         return { summary: `Payment pending${on}`, detail: `⏰ Your payment${on ? ` for order${on}` : ''} is still pending. Reply here to complete it.`, buttons: payBtns, templateName: 'payment_update', statusText: 'Payment pending' };
       }
+    }
+    if (triggerType === 'trigger_quote') {
+      const qn = v.quote_number ? ` ${v.quote_number}` : '';
+      const total = v.quote_total ? ` for ${cur}${v.quote_total}` : '';
+      const map: Record<string, { detail: string; status: string }> = {
+        sent: { detail: `📝 Your quote${qn}${total} is ready. Tap below to review it and accept or decline.`, status: 'Quote ready' },
+        accepted: { detail: `✅ Thanks for accepting quote${qn}! We're creating your order now.`, status: 'Quote accepted' },
+        rejected: { detail: `Quote${qn} was declined. Reply here if you'd like us to revise it for you.`, status: 'Quote declined' },
+        converted: { detail: `🎉 Quote${qn} is confirmed — your order is being processed. We'll keep you posted!`, status: 'Order created' },
+        expired: { detail: `⌛ Quote${qn} has expired. Reply here if you'd still like to go ahead.`, status: 'Quote expired' },
+      };
+      const m = map[eventValue];
+      return m ? { summary: `Quote${qn}: ${m.status}`, detail: m.detail, buttons: [{ id: 'menu', title: '🛍️ Menu' }] } : null;
     }
     return null;
   }
@@ -160,10 +175,24 @@ export class WorkflowEventListener {
             const template = msg.templateName
               ? { name: msg.templateName, params: [customer.name || 'there', String(enriched.order_number || ''), msg.statusText || ''] }
               : undefined;
+            // A sent quote gets a deep link so the customer can review + accept/decline.
+            let ctaUrl: { url: string; label: string } | undefined;
+            if (triggerType === 'trigger_quote' && eventValue === 'sent' && this.builder && variables.quote_id) {
+              try {
+                const link = await this.builder.createViewSession({
+                  tenantId: t.id, schemaName: schema, type: 'quote',
+                  resultId: variables.quote_id, resultNumber: String(enriched.quote_number || ''),
+                  customerId: customer.id, customerPhone: customer.phone,
+                });
+                ctaUrl = { url: link.url, label: 'View quote' };
+              } catch (e: any) {
+                this.logger.warn(`Could not mint quote view link for ${schema}: ${e?.message}`);
+              }
+            }
             await this.smartNotification.notify({
               tenantId: t.id, schema, recipientPhone: customer.phone,
               audience: 'customer', channel: 'utility', recipientName: customer.name,
-              summary: msg.summary, detail: msg.detail, buttons: msg.buttons, template,
+              summary: msg.summary, detail: msg.detail, buttons: ctaUrl ? undefined : msg.buttons, ctaUrl, template,
             }).catch(() => undefined);
           }
         }

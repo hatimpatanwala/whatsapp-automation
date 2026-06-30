@@ -44,16 +44,24 @@ import { ApiService } from '../../core/services/api.service';
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
-            @if (quote()!.status === 'draft') {
-              <p-button label="Send" icon="pi pi-send" severity="success" (onClick)="updateStatus('sent')" />
+            <!-- Edit/add is allowed any time the quote isn't already an order. -->
+            @if (canEdit()) {
               <p-button label="Edit" icon="pi pi-pencil" [outlined]="true" [routerLink]="['/quotes', quoteId, 'edit']" />
             }
+            @if (quote()!.status === 'draft') {
+              <p-button label="Send to customer" icon="pi pi-send" severity="success" (onClick)="updateStatus('sent')" />
+            }
             @if (quote()!.status === 'sent') {
+              <p-button label="Resend" icon="pi pi-refresh" [outlined]="true" (onClick)="updateStatus('sent')" />
               <p-button label="Accept" icon="pi pi-check" severity="success" (onClick)="updateStatus('accepted')" />
               <p-button label="Reject" icon="pi pi-times" severity="danger" [outlined]="true" (onClick)="updateStatus('rejected')" />
             }
             @if (quote()!.status === 'accepted') {
+              <p-button label="Send to customer" icon="pi pi-send" [outlined]="true" (onClick)="updateStatus('sent')" />
               <p-button label="Convert to Order" icon="pi pi-shopping-cart" severity="info" (onClick)="updateStatus('converted')" />
+            }
+            @if (quote()!.status === 'rejected') {
+              <p-button label="Re-send" icon="pi pi-refresh" [outlined]="true" (onClick)="updateStatus('sent')" />
             }
             <p-button label="Duplicate" icon="pi pi-copy" severity="secondary" [outlined]="true" (onClick)="duplicate()" />
             <p-button icon="pi pi-trash" severity="danger" [outlined]="true" (onClick)="confirmDelete()" />
@@ -69,13 +77,13 @@ import { ApiService } from '../../core/services/api.service';
               <div class="p-4 border-b border-gray-100">
                 <h3 class="text-lg font-semibold">Line Items</h3>
               </div>
-              <p-table [value]="quote()!.items || []" styleClass="p-datatable-sm">
+              <p-table [value]="quote()!.items || []" styleClass="p-datatable-sm quote-items-table">
                 <ng-template pTemplate="header">
                   <tr>
-                    <th>#</th>
+                    <th class="w-10">#</th>
                     <th>Description</th>
                     <th>Product</th>
-                    <th class="text-right">Qty</th>
+                    <th class="text-center w-16">Qty</th>
                     <th class="text-right">Unit Price</th>
                     <th class="text-right">Total</th>
                   </tr>
@@ -85,7 +93,7 @@ import { ApiService } from '../../core/services/api.service';
                     <td class="text-gray-400">{{ i + 1 }}</td>
                     <td class="font-medium">{{ item.description }}</td>
                     <td class="text-sm text-gray-500">{{ item.product_name || '-' }}</td>
-                    <td class="text-right">{{ item.quantity }}</td>
+                    <td class="text-center">{{ item.quantity }}</td>
                     <td class="text-right">\u20B9{{ formatAmount(item.unit_price) }}</td>
                     <td class="text-right font-semibold">\u20B9{{ formatAmount(item.line_total) }}</td>
                   </tr>
@@ -192,6 +200,33 @@ import { ApiService } from '../../core/services/api.service';
       }
     </div>
   `,
+  styles: [`
+    /* Line-items table: give the header room to breathe + a subtle separator,
+       and align cell insets with the card's padding. */
+    :host ::ng-deep .quote-items-table .p-datatable-thead > tr > th {
+      background: #f9fafb;
+      padding: 0.7rem 0.875rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b7280;
+      border-bottom: 1px solid #f0f1f3;
+    }
+    :host ::ng-deep .quote-items-table .p-datatable-tbody > tr > td {
+      padding: 0.7rem 0.875rem;
+    }
+    :host ::ng-deep .quote-items-table .p-datatable-tfoot > tr > td {
+      padding: 0.6rem 0.875rem;
+      border: none;
+    }
+    /* A touch more inset on the outer edges so content isn't flush to the card. */
+    :host ::ng-deep .quote-items-table .p-datatable-thead > tr > th:first-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tbody > tr > td:first-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tfoot > tr > td:first-child { padding-left: 1.25rem; }
+    :host ::ng-deep .quote-items-table .p-datatable-thead > tr > th:last-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tbody > tr > td:last-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tfoot > tr > td:last-child { padding-right: 1.25rem; }
+  `],
 })
 export class QuoteDetailComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -209,6 +244,15 @@ export class QuoteDetailComponent implements OnInit {
     if (!q?.valid_until) return false;
     return new Date(q.valid_until) < new Date();
   });
+
+  /**
+   * Edit/add is allowed while the quote is a DRAFT (incl. a customer's storefront
+   * request) or still only SENT — so the admin can revise it before the customer
+   * acts. Once the customer has accepted (or it's converted/rejected), it locks.
+   */
+  canEdit(): boolean {
+    return ['draft', 'sent'].includes(this.quote()?.status);
+  }
 
   parseFloat = parseFloat;
 

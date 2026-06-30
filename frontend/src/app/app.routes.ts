@@ -164,5 +164,10 @@ export const routes: Routes = [
     path: 'm/invoice-builder',
     loadComponent: () => import('./features/builder/invoice-builder.component').then(m => m.InvoiceBuilderComponent),
   },
+  {
+    // Token-secured customer onboarding webview (collect required custom fields).
+    path: 'm/onboarding',
+    loadComponent: () => import('./features/builder/onboarding-webview.component').then(m => m.OnboardingWebviewComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

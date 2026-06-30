@@ -229,6 +229,19 @@ export class WorkflowExecutionEngine {
       return '';
     }
 
+    // Merge the customer's custom field values so {{field_key}} placeholders
+    // resolve in workflow messages (system vars below still take precedence).
+    let customerVars: Record<string, any> = {};
+    if (customerId) {
+      try {
+        const cf = await this.connectionManager.executeInTenantContext(schema, (qr) =>
+          qr.query(`SELECT custom_fields FROM customers WHERE id = $1`, [customerId]));
+        const v = cf[0]?.custom_fields;
+        customerVars = (typeof v === 'string' ? JSON.parse(v) : v) || {};
+      } catch { /* best-effort */ }
+    }
+    const baseVars = { ...customerVars, ...(triggerData || {}), customer_id: customerId || '', customer_name: customerName || '', customer_phone: customerPhone };
+
     // Create execution record
     const executionId = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
@@ -238,7 +251,7 @@ export class WorkflowExecutionEngine {
          RETURNING id`,
         [
           workflowId, customerPhone, triggerEdge.to, conversationId, customerPhone,
-          JSON.stringify({ ...(triggerData || {}), customer_id: customerId || '', customer_name: customerName || '', customer_phone: customerPhone }),
+          JSON.stringify(baseVars),
           JSON.stringify({ triggerData }),
         ],
       );
@@ -260,7 +273,7 @@ export class WorkflowExecutionEngine {
       customerPhone,
       customerId,
       customerName,
-      variables: { ...(triggerData || {}), customer_id: customerId || '', customer_name: customerName || '', customer_phone: customerPhone },
+      variables: { ...baseVars },
       triggerData,
     };
 

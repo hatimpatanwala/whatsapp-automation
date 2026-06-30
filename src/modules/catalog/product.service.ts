@@ -48,6 +48,7 @@ export class ProductService {
       tags,
       variants: row.variants || [],
       sortOrder: row.sort_order,
+      customFields: typeof row.custom_fields === 'string' ? JSON.parse(row.custom_fields) : (row.custom_fields || {}),
       metadata,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -147,8 +148,8 @@ export class ProductService {
       const slug = dto.sku || dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const product = await qr.query(
-        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom, custom_fields)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          RETURNING *`,
         [
           dto.name, slug, dto.description, dto.categoryId,
@@ -158,6 +159,7 @@ export class ProductService {
           JSON.stringify(dto.translations || {}), JSON.stringify(norm.metadata),
           dto.brandId || null, dto.hsnCode || null, dto.gstRate ?? null,
           (dto.uom || 'pcs').trim() || 'pcs',
+          JSON.stringify(dto.customFields || {}),
         ],
       );
 
@@ -212,6 +214,12 @@ export class ProductService {
       }
 
       if (dto.translations) { fields.push(`translations = $${paramIndex++}`); params.push(JSON.stringify(dto.translations)); }
+
+      // Custom field values — merge so partial updates don't wipe other keys.
+      if (dto.customFields !== undefined) {
+        fields.push(`custom_fields = COALESCE(custom_fields, '{}'::jsonb) || $${paramIndex++}`);
+        params.push(JSON.stringify(dto.customFields || {}));
+      }
 
       // Store extra fields in metadata
       if (dto.tags || dto.shortDescription || dto.sku || dto.barcode || dto.weight) {

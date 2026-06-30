@@ -17,6 +17,7 @@ import { MessageService } from 'primeng/api';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { ProductService, CreateProductPayload, UpdateProductPayload } from '../../core/services/product.service';
+import { ApiService } from '../../core/services/api.service';
 
 @Component({
   selector: 'wa-product-form',
@@ -169,6 +170,44 @@ import { ProductService, CreateProductPayload, UpdateProductPayload } from '../.
                 </div>
               }
             </div>
+
+            <!-- Custom fields (admin-defined under Settings → Custom Fields) -->
+            @if (productCustomFields().length) {
+              <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 class="text-base font-semibold text-gray-900 mb-4">Custom Fields</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  @for (cf of productCustomFields(); track cf.id) {
+                    <div class="flex flex-col gap-1" [class.md:col-span-2]="cf.field_type === 'textarea'">
+                      <label class="text-sm font-medium text-gray-700">{{ cf.label }}@if (cf.is_required) { <span class="text-red-500">*</span> }</label>
+                      @switch (cf.field_type) {
+                        @case ('textarea') {
+                          <textarea [(ngModel)]="customFieldValues[cf.field_key]" [ngModelOptions]="{standalone:true}" rows="2" [placeholder]="cf.placeholder || ''" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                        }
+                        @case ('select') {
+                          <select [(ngModel)]="customFieldValues[cf.field_key]" [ngModelOptions]="{standalone:true}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                            <option value="">Select…</option>
+                            @for (o of cf.options; track o) { <option [value]="o">{{ o }}</option> }
+                          </select>
+                        }
+                        @case ('boolean') {
+                          <label class="inline-flex items-center gap-2 mt-1"><input type="checkbox" [(ngModel)]="customFieldValues[cf.field_key]" [ngModelOptions]="{standalone:true}" class="w-5 h-5 accent-green-600" /> <span class="text-sm text-gray-600">Yes</span></label>
+                        }
+                        @case ('number') {
+                          <input type="number" [(ngModel)]="customFieldValues[cf.field_key]" [ngModelOptions]="{standalone:true}" [placeholder]="cf.placeholder || ''" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                        }
+                        @case ('date') {
+                          <input type="date" [(ngModel)]="customFieldValues[cf.field_key]" [ngModelOptions]="{standalone:true}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                        }
+                        @default {
+                          <input [type]="cf.field_type === 'email' ? 'email' : (cf.field_type === 'phone' ? 'tel' : 'text')" [(ngModel)]="customFieldValues[cf.field_key]" [ngModelOptions]="{standalone:true}" [placeholder]="cf.placeholder || ''" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                        }
+                      }
+                      @if (cf.help_text) { <p class="text-xs text-gray-400">{{ cf.help_text }}</p> }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
           </div>
 
           <!-- Right sidebar -->
@@ -273,6 +312,11 @@ export class ProductFormComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly messageService = inject(MessageService);
   private readonly productService = inject(ProductService);
+  private readonly api = inject(ApiService);
+
+  // Admin-defined product custom fields (Settings → Custom Fields).
+  productCustomFields = signal<any[]>([]);
+  customFieldValues: Record<string, any> = {};
 
   isEditMode = signal(false);
   saving = signal(false);
@@ -329,6 +373,15 @@ export class ProductFormComponent implements OnInit {
 
   ngOnInit() {
     this.productId = this.route.snapshot.paramMap.get('id');
+    // Active product custom fields → rendered as a "Custom Fields" card.
+    this.api.get<any>('/custom-fields', { entity: 'product' } as any).subscribe({
+      next: (r) => {
+        const arr = Array.isArray(r) ? r : (r?.data ?? r?.items ?? []);
+        this.productCustomFields.set(arr.filter((f: any) => (f.is_active ?? f.isActive) !== false)
+          .map((f: any) => ({ ...f, field_key: f.field_key ?? f.fieldKey, field_type: f.field_type ?? f.fieldType ?? 'text', options: f.options ?? [], help_text: f.help_text ?? f.helpText, is_required: f.is_required ?? f.isRequired })));
+      },
+      error: () => this.productCustomFields.set([]),
+    });
     // Load category + brand options BEFORE patching the product. PrimeNG's
     // p-select won't display a value that was set before its options exist,
     // so loading these in parallel with the product made the saved
@@ -426,6 +479,7 @@ export class ProductFormComponent implements OnInit {
         stockQuantity: formValue.stockQuantity ?? undefined,
         lowStockThreshold: formValue.lowStockThreshold ?? undefined,
         tags: formValue.tags ?? undefined,
+        customFields: this.customFieldValues,
       };
 
       this.productService.update(this.productId, payload).subscribe({
@@ -470,6 +524,7 @@ export class ProductFormComponent implements OnInit {
         stockQuantity: formValue.stockQuantity ?? 0,
         lowStockThreshold: formValue.lowStockThreshold ?? 10,
         tags: formValue.tags ?? [],
+        customFields: this.customFieldValues,
       };
 
       this.productService.create(payload).subscribe({
@@ -526,6 +581,8 @@ export class ProductFormComponent implements OnInit {
         if (product.imageUrls && product.imageUrls.length > 0) {
           this.previewImages.set([...product.imageUrls]);
         }
+
+        this.customFieldValues = { ...((product as any).customFields ?? (product as any).custom_fields ?? {}) };
 
         this.loadingProduct.set(false);
       },

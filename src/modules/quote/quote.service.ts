@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { EventBusService } from '../events/event-bus.service';
-import { QuoteCreatedEvent } from '../events/domain-events';
+import { QuoteCreatedEvent, QuoteStatusChangedEvent } from '../events/domain-events';
+import { OrderService } from '../order/order.service';
 
 @Injectable()
 export class QuoteService {
@@ -10,6 +11,7 @@ export class QuoteService {
   constructor(
     private readonly connectionManager: TenantConnectionManager,
     private readonly eventBus: EventBusService,
+    private readonly orders: OrderService,
   ) {}
 
   async findAll(schema: string, filters?: { status?: string; customerId?: string; page?: number; limit?: number }) {
@@ -137,6 +139,11 @@ export class QuoteService {
       const existing = await qr.query(`SELECT * FROM quotes WHERE id = $1`, [id]);
       if (!existing[0]) return null;
 
+      // Editable while draft or sent — locked once accepted/converted/rejected.
+      if (existing[0].status && !['draft', 'sent'].includes(existing[0].status)) {
+        throw new BadRequestException(`This quote is ${existing[0].status} and can no longer be edited.`);
+      }
+
       const updates: string[] = [];
       const params: any[] = [];
       let idx = 1;
@@ -181,26 +188,79 @@ export class QuoteService {
     });
   }
 
-  async updateStatus(schema: string, id: string, status: string) {
-    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      const validStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired', 'converted'];
-      if (!validStatuses.includes(status)) {
-        throw new Error(`Invalid status: ${status}`);
-      }
+  private readonly validStatuses = ['draft', 'sent', 'accepted', 'rejected', 'expired', 'converted'];
 
+  /** Apply a status + its timestamp column. Kept private so transitions stay consistent. */
+  private async setStatus(schema: string, id: string, status: string) {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const extra: string[] = [];
       if (status === 'sent') extra.push(`sent_at = NOW()`);
       if (status === 'accepted') extra.push(`accepted_at = NOW()`);
       if (status === 'converted') extra.push(`converted_at = NOW()`);
-
       const setClauses = [`status = $1`, `updated_at = NOW()`, ...extra];
+      await qr.query(`UPDATE quotes SET ${setClauses.join(', ')} WHERE id = $2`, [status, id]);
+    });
+  }
 
-      await qr.query(
-        `UPDATE quotes SET ${setClauses.join(', ')} WHERE id = $2`,
-        [status, id],
-      );
+  /**
+   * Drive a quote through its lifecycle. Every transition emits a
+   * QuoteStatusChangedEvent so tenant workflows (trigger_quote) can react —
+   * e.g. send the revised quote to the customer, thank them, or notify on reject.
+   * Acceptance auto-converts the quote into a real order.
+   */
+  async updateStatus(schema: string, id: string, status: string) {
+    if (!this.validStatuses.includes(status)) {
+      throw new BadRequestException(`Invalid status: ${status}`);
+    }
 
-      return this.findById(schema, id);
+    const before = await this.findById(schema, id);
+    if (!before) throw new NotFoundException('Quote not found.');
+    const oldStatus = before.status;
+    const customerId = before.customer_id;
+
+    await this.setStatus(schema, id, status);
+    this.eventBus.emit(new QuoteStatusChangedEvent(schema, id, customerId, oldStatus, status));
+
+    // Accepting (or an explicit convert) turns the quote into an order — once.
+    if ((status === 'accepted' || status === 'converted') && oldStatus !== 'converted') {
+      try {
+        await this.convertToOrder(schema, id, before);
+        if (status !== 'converted') {
+          await this.setStatus(schema, id, 'converted');
+          this.eventBus.emit(new QuoteStatusChangedEvent(schema, id, customerId, status, 'converted'));
+        }
+      } catch (e: any) {
+        this.logger.error(`Auto-converting quote ${id} to an order failed: ${e?.message}`);
+      }
+    }
+
+    return this.findById(schema, id);
+  }
+
+  /**
+   * Create a real order from an accepted quote's line items. `quote` may be
+   * passed in to avoid a re-fetch; otherwise it is loaded. Emits OrderCreatedEvent
+   * (via OrderService) so order workflows fire as normal.
+   */
+  async convertToOrder(schema: string, id: string, quote?: any) {
+    const q = quote || (await this.findById(schema, id));
+    if (!q) throw new NotFoundException('Quote not found.');
+    if (!q.customer_id) throw new BadRequestException('Quote has no customer to create an order for.');
+
+    const items = (q.items || []).map((it: any) => ({
+      productId: it.product_id || undefined,
+      productName: it.product_name || it.description || 'Item',
+      quantity: Number(it.quantity) || 1,
+      unitPrice: Number(it.unit_price) || 0,
+    }));
+    if (!items.length) throw new BadRequestException('Quote has no line items to convert.');
+
+    return this.orders.createDirect(schema, {
+      customerId: q.customer_id,
+      items,
+      discount: Number(q.discount) || 0,
+      taxAmount: Number(q.tax_amount) || 0,
+      notes: `Created from quote ${q.quote_number || ''}`.trim(),
     });
   }
 

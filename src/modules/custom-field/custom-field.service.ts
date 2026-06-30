@@ -56,6 +56,33 @@ export class CustomFieldService {
       qr.query(`SELECT * FROM custom_field_definitions WHERE entity = 'customer' AND is_active = true AND is_required = true ORDER BY sort_order, created_at`));
   }
 
+  /** Active customer fields flagged to collect on the onboarding webview. */
+  async collectableCustomerFields(schema: string): Promise<any[]> {
+    return this.conn.executeInTenantContext(schema, (qr) =>
+      qr.query(`SELECT * FROM custom_field_definitions WHERE entity = 'customer' AND is_active = true AND collect_from_customer = true ORDER BY sort_order, created_at`));
+  }
+
+  /** A customer is "onboarded" when every required customer field has a value. */
+  async customerMissingRequired(schema: string, customerId: string): Promise<any[]> {
+    const required = await this.requiredCustomerFields(schema);
+    if (!required.length) return [];
+    const row = await this.conn.executeInTenantContext(schema, async (qr) =>
+      (await qr.query(`SELECT custom_fields FROM customers WHERE id = $1`, [customerId]))[0]);
+    const v = row?.custom_fields;
+    const values = (typeof v === 'string' ? JSON.parse(v) : v) || {};
+    return required.filter((f: any) => {
+      const val = values[f.field_key];
+      return val === undefined || val === null || val === '';
+    });
+  }
+
+  /** Merge submitted values into a customer's custom_fields jsonb. */
+  async applyCustomerFields(schema: string, customerId: string, values: Record<string, any>): Promise<void> {
+    await this.conn.executeInTenantContext(schema, (qr) =>
+      qr.query(`UPDATE customers SET custom_fields = COALESCE(custom_fields, '{}'::jsonb) || $1, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(values || {}), customerId]));
+  }
+
   async create(schema: string, input: CustomFieldDefinitionInput): Promise<any> {
     if (input.entity !== 'customer' && input.entity !== 'product') throw new BadRequestException('entity must be customer or product.');
     if (!input.label?.trim()) throw new BadRequestException('A label is required.');

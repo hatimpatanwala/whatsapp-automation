@@ -23,6 +23,8 @@ import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { AdminCommandService } from './admin-command.service';
 import { SmartNotificationService } from './smart-notification.service';
+import { CustomFieldService } from '../custom-field/custom-field.service';
+import { BuilderService } from '../builder/builder.service';
 
 @Injectable()
 export class WebhookProcessorService {
@@ -52,6 +54,8 @@ export class WebhookProcessorService {
     private readonly configService: ConfigService,
     @Optional() private readonly adminCommandService: AdminCommandService,
     @Optional() private readonly smartNotification: SmartNotificationService,
+    @Optional() private readonly customFieldService: CustomFieldService,
+    @Optional() private readonly builderService: BuilderService,
   ) {
     this.graphApiVersion = this.configService.get<string>('META_GRAPH_API_VERSION', 'v21.0');
   }
@@ -284,26 +288,38 @@ export class WebhookProcessorService {
               const customer = await this.conversationHelper.getOrCreateCustomer(schema, from, contactName);
               const conversation = await this.conversationHelper.getOrCreateConversation(schema, customer.id, from);
 
-              await this.connectionManager.executeInTenantContext(schema, async (qr) => {
-                await qr.query(
-                  `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, status)
-                   VALUES ($1, $2, 'inbound', $3, $4, 'received')`,
-                  [conversation.id, messageId, type, JSON.stringify(message[type] || message)],
-                );
-              });
+              // Required customer fields must be collected before any customer
+              // workflow runs. If missing, send the onboarding link instead of
+              // starting — the workflow runs the next time they message.
+              const missing = (audience === 'customer' && this.customFieldService)
+                ? await this.customFieldService.customerMissingRequired(schema, customer.id).catch(() => [])
+                : [];
+              if (missing.length) {
+                this.logger.log(`[FLOW] ${from} missing ${missing.length} required field(s) — sending onboarding link, holding workflow`);
+                await this.sendOnboardingLink(tenant, schema, customer).catch((e) => this.logger.warn(`onboarding link failed: ${e?.message}`));
+                handledByWorkflow = true;
+              } else {
+                await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+                  await qr.query(
+                    `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, status)
+                     VALUES ($1, $2, 'inbound', $3, $4, 'received')`,
+                    [conversation.id, messageId, type, JSON.stringify(message[type] || message)],
+                  );
+                });
 
-              await this.workflowEngine.startExecution({
-                schema,
-                tenant,
-                workflowId: triggerMatch.workflowId,
-                triggerNodeId: triggerMatch.triggerNodeId,
-                conversationId: conversation.id,
-                customerPhone: from,
-                customerId: customer.id,
-                customerName: contactName,
-                triggerData: { text: matchText, messageType: type, raw: message },
-              });
-              handledByWorkflow = true;
+                await this.workflowEngine.startExecution({
+                  schema,
+                  tenant,
+                  workflowId: triggerMatch.workflowId,
+                  triggerNodeId: triggerMatch.triggerNodeId,
+                  conversationId: conversation.id,
+                  customerPhone: from,
+                  customerId: customer.id,
+                  customerName: contactName,
+                  triggerData: { text: matchText, messageType: type, raw: message },
+                });
+                handledByWorkflow = true;
+              }
             } else {
               this.logger.warn(`Subscription limit for ${schema}: ${canStart.reason} — falling through`);
             }
@@ -406,6 +422,22 @@ export class WebhookProcessorService {
         this.logger.error(`Default reply also failed: ${e.message}`);
       }
     }
+  }
+
+  /** Mint a customer onboarding session and send the link as a CTA-URL button. */
+  private async sendOnboardingLink(tenant: any, schema: string, customer: any): Promise<void> {
+    if (!this.builderService || !this.smartNotification) return;
+    const session = await this.builderService.createOnboardingSession({
+      tenantId: tenant.id, schemaName: schema, customerId: customer.id,
+      customerPhone: customer.phone, customerName: customer.name,
+    });
+    await this.smartNotification.notify({
+      tenantId: tenant.id, schema, recipientPhone: customer.phone, audience: 'customer', channel: 'utility',
+      recipientName: customer.name,
+      summary: 'A quick step before we continue',
+      detail: `Hi ${customer.name || 'there'} 👋 Before we continue, please share a few quick details — it only takes a moment. Tap below 👇`,
+      ctaUrl: { url: session.url, label: '📝 Complete details' },
+    });
   }
 
   private parseReply(message: any): ReplyData {

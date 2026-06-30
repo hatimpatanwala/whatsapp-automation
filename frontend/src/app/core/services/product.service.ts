@@ -38,6 +38,7 @@ export interface CreateProductPayload {
   imageUrls?: string[];
   variants?: Omit<ProductVariant, 'id'>[];
   tags?: string[];
+  customFields?: Record<string, any>;
 }
 
 export interface UpdateProductPayload extends Partial<CreateProductPayload> {}

@@ -282,8 +282,34 @@ export class ShopService {
     return this.getCart(token, code);
   }
 
+  /** Saved delivery addresses for the session's customer (storefront checkout). */
+  async listAddresses(token: string): Promise<any[]> {
+    const s = await this.session(token);
+    if (!s.customer_id) return [];
+    return this.conn.executeInTenantContext(s.schema_name, (qr) =>
+      qr.query(`SELECT id, label, full_address, city, state, pincode, landmark, is_default
+                FROM addresses WHERE customer_id = $1 ORDER BY is_default DESC, created_at DESC`, [s.customer_id]));
+  }
+
+  /** Add a new delivery address for the session's customer. */
+  async addAddress(token: string, data: { label?: string; fullAddress: string; city?: string; state?: string; pincode?: string; landmark?: string; isDefault?: boolean }): Promise<any> {
+    const s = await this.session(token);
+    if (!s.customer_id) throw new BadRequestException('No customer for this session.');
+    if (!data?.fullAddress?.trim()) throw new BadRequestException('Address is required.');
+    return this.conn.executeInTransaction(s.schema_name, async (qr) => {
+      const makeDefault = data.isDefault || (await qr.query(`SELECT 1 FROM addresses WHERE customer_id = $1 LIMIT 1`, [s.customer_id])).length === 0;
+      if (makeDefault) await qr.query(`UPDATE addresses SET is_default = false WHERE customer_id = $1`, [s.customer_id]);
+      const rows = await qr.query(
+        `INSERT INTO addresses (customer_id, label, full_address, city, state, pincode, landmark, is_default)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, label, full_address, city, state, pincode, landmark, is_default`,
+        [s.customer_id, data.label || 'home', data.fullAddress.trim(), data.city || null, data.state || null, data.pincode || null, data.landmark || null, makeDefault],
+      );
+      return rows[0];
+    });
+  }
+
   /** Place the order from the active cart: apply offers + coupon, emit events. */
-  async checkout(token: string, body: { couponCode?: string; notes?: string }): Promise<any> {
+  async checkout(token: string, body: { couponCode?: string; notes?: string; addressId?: string }): Promise<any> {
     const s = await this.session(token);
     if (!s.customer_id) throw new BadRequestException('No customer for this session.');
 
@@ -300,6 +326,7 @@ export class ShopService {
     const order = await this.orders.createDirect(s.schema_name, {
       customerId: s.customer_id,
       items,
+      addressId: body?.addressId,
       discount: cart.discount,
       notes: body?.notes,
     });

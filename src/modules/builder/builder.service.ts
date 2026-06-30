@@ -264,6 +264,27 @@ export class BuilderService implements OnModuleInit {
     });
   }
 
+  /**
+   * Customer accepts/rejects a quote from the VIEW webview. Routes through
+   * QuoteService.updateStatus, so it emits the lifecycle event (workflows fire)
+   * and an acceptance auto-converts the quote into an order.
+   */
+  async respondToQuote(token: string, action: 'accept' | 'reject'): Promise<{ status: string }> {
+    const s = await this.resolveSession(token, 'view');
+    if (s.type !== 'quote') throw new BadRequestException('This link is not a quote.');
+    const current = await this.connectionManager.executeInTenantContext(s.schema_name, async (qr) =>
+      (await qr.query(`SELECT status FROM quotes WHERE id = $1`, [s.result_id]))[0],
+    );
+    if (!current) throw new NotFoundException('Quote not found.');
+    // Only an open (sent) quote can be acted on; ignore replays gracefully.
+    if (!['sent', 'draft'].includes(current.status)) {
+      return { status: current.status };
+    }
+    const newStatus = action === 'accept' ? 'accepted' : 'rejected';
+    const updated = await this.quoteService.updateStatus(s.schema_name, s.result_id, newStatus);
+    return { status: updated?.status || newStatus };
+  }
+
   /** Mint a BULK session (admin downloads/uploads the products sheet over the web). */
   async createBulkSession(input: { tenantId: string; schemaName: string; createdBy?: string }): Promise<{ token: string; url: string }> {
     const token = randomBytes(32).toString('hex');
@@ -398,6 +419,27 @@ export class BuilderService implements OnModuleInit {
     return this.resolveSession(token, 'invoice');
   }
 
+  /** Mint a customer ONBOARDING session (collect required custom fields). */
+  async createOnboardingSession(input: {
+    tenantId: string; schemaName: string;
+    customerId?: string | null; customerPhone?: string | null; customerName?: string | null;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days — customer fills at leisure
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions
+         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, customer_name, status, mode, expires_at)
+       VALUES ($1,$2,$3,'onboarding',$4,$5,$6,'open','onboarding',$7)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.customerId || null, input.customerPhone || null, input.customerName || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/onboarding?token=${token}` };
+  }
+
+  async getOnboardingSession(token: string): Promise<any> {
+    return this.resolveSession(token, 'onboarding');
+  }
+
   /** Categories / brands / products / customers for the promo scope & audience pickers. */
   async promoTaxonomy(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
@@ -421,7 +463,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

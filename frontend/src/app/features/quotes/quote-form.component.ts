@@ -12,6 +12,7 @@ import { DividerModule } from 'primeng/divider';
 import { ToastModule } from 'primeng/toast';
 import { CardModule } from 'primeng/card';
 import { MessageService } from 'primeng/api';
+import { forkJoin } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { PromoCartService } from '../shared/promo-cart.service';
 import { PromoSectionComponent } from '../shared/promo-section.component';
@@ -185,54 +186,82 @@ export class QuoteFormComponent implements OnInit {
   applyCoupon(code: string) { this.promo.applyCoupon(code, this.promoLines(), this.customerId || undefined); }
 
   ngOnInit() {
-    this.loadCustomers();
-    this.loadProducts();
-
     const id = this.route.snapshot.params['id'];
     if (id) {
       this.isEdit.set(true);
       this.quoteId = id;
-      this.loadQuote(id);
+      this.loading.set(true);
+      // Load the customer + product options BEFORE the quote so the dropdowns
+      // can pre-select. p-select with optionValue won't render a selection if the
+      // model is set while the options array is still empty (load-order race).
+      forkJoin({
+        customers: this.api.get<any>('/customers', { limit: 500 }),
+        products: this.api.get<any>('/products', { limit: 500 }),
+      }).subscribe({
+        next: ({ customers, products }) => {
+          this.setCustomers(customers);
+          this.setProducts(products);
+          this.loadQuote(id);
+        },
+        error: () => { this.loadCustomers(); this.loadProducts(); this.loadQuote(id); },
+      });
     } else {
+      this.loadCustomers();
+      this.loadProducts();
       this.addItem();
     }
   }
 
   private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
 
+  private setCustomers(r: any) {
+    this.customers.set(this.arr(r).map((c: any) => ({
+      label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || c.phone || 'Customer'}${(c.whatsappPhone || c.phone) ? ' \u00B7 ' + (c.whatsappPhone || c.phone) : ''}`,
+      value: c.id,
+    })));
+  }
+
+  private setProducts(r: any) {
+    this.products.set(this.arr(r).map((p: any) => ({
+      label: `${p.name} \u2014 \u20B9${Number(p.price) || 0}`,
+      value: p.id,
+      price: Number(p.price) || 0,
+      name: p.name,
+    })));
+  }
+
   loadCustomers() {
-    this.api.get<any>('/customers', { limit: 500 }).subscribe({
-      next: (r) => this.customers.set(this.arr(r).map((c: any) => ({
-        label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || 'Customer'}${c.whatsappPhone ? ' \u00B7 ' + c.whatsappPhone : ''}`,
-        value: c.id,
-      }))),
-    });
+    this.api.get<any>('/customers', { limit: 500 }).subscribe({ next: (r) => this.setCustomers(r) });
   }
 
   loadProducts() {
-    this.api.get<any>('/products', { limit: 500 }).subscribe({
-      next: (r) => this.products.set(this.arr(r).map((p: any) => ({
-        label: `${p.name} \u2014 \u20B9${Number(p.price) || 0}`,
-        value: p.id,
-        price: Number(p.price) || 0,
-        name: p.name,
-      }))),
-    });
+    this.api.get<any>('/products', { limit: 500 }).subscribe({ next: (r) => this.setProducts(r) });
   }
 
   loadQuote(id: string) {
     this.loading.set(true);
     this.api.get<any>(`/quotes/${id}`).subscribe({
       next: (q) => {
-        this.title = q.title;
-        this.customerId = q.customer_id;
+        // Editable while draft or sent; locked once accepted/converted/rejected.
+        // Guard the direct /edit URL too, not just the hidden button.
+        const status = q.status;
+        if (this.isEdit() && status && !['draft', 'sent'].includes(status)) {
+          this.loading.set(false);
+          this.messageService.add({ severity: 'warn', summary: 'Locked', detail: `This quote is ${status} and can no longer be edited.` });
+          this.router.navigate(['/quotes', this.quoteId]);
+          return;
+        }
+        // The API interceptor returns camelCase; keep snake_case as a fallback.
+        this.title = q.title ?? '';
+        this.customerId = q.customerId ?? q.customer_id ?? '';
         this.notes = q.notes || '';
-        this.validUntil = q.valid_until ? new Date(q.valid_until) : null;
+        const validUntil = q.validUntil ?? q.valid_until;
+        this.validUntil = validUntil ? new Date(validUntil) : null;
         this.items = (q.items || []).map((item: any) => ({
-          productId: item.product_id,
+          productId: item.productId ?? item.product_id ?? null,
           description: item.description,
-          quantity: item.quantity,
-          unitPrice: parseFloat(item.unit_price),
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice ?? item.unit_price) || 0,
         }));
         this.recalculate();
         this.loading.set(false);
