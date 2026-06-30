@@ -139,8 +139,8 @@ export class QuoteService {
       const existing = await qr.query(`SELECT * FROM quotes WHERE id = $1`, [id]);
       if (!existing[0]) return null;
 
-      // Only drafts can be edited — once sent/accepted/converted the quote is locked.
-      if (existing[0].status && existing[0].status !== 'draft') {
+      // Editable while draft or sent — locked once accepted/converted/rejected.
+      if (existing[0].status && !['draft', 'sent'].includes(existing[0].status)) {
         throw new BadRequestException(`This quote is ${existing[0].status} and can no longer be edited.`);
       }
 
