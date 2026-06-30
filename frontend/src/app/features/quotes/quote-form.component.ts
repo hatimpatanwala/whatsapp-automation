@@ -12,6 +12,7 @@ import { DividerModule } from 'primeng/divider';
 import { ToastModule } from 'primeng/toast';
 import { CardModule } from 'primeng/card';
 import { MessageService } from 'primeng/api';
+import { forkJoin } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { PromoCartService } from '../shared/promo-cart.service';
 import { PromoSectionComponent } from '../shared/promo-section.component';
@@ -185,39 +186,56 @@ export class QuoteFormComponent implements OnInit {
   applyCoupon(code: string) { this.promo.applyCoupon(code, this.promoLines(), this.customerId || undefined); }
 
   ngOnInit() {
-    this.loadCustomers();
-    this.loadProducts();
-
     const id = this.route.snapshot.params['id'];
     if (id) {
       this.isEdit.set(true);
       this.quoteId = id;
-      this.loadQuote(id);
+      this.loading.set(true);
+      // Load the customer + product options BEFORE the quote so the dropdowns
+      // can pre-select. p-select with optionValue won't render a selection if the
+      // model is set while the options array is still empty (load-order race).
+      forkJoin({
+        customers: this.api.get<any>('/customers', { limit: 500 }),
+        products: this.api.get<any>('/products', { limit: 500 }),
+      }).subscribe({
+        next: ({ customers, products }) => {
+          this.setCustomers(customers);
+          this.setProducts(products);
+          this.loadQuote(id);
+        },
+        error: () => { this.loadCustomers(); this.loadProducts(); this.loadQuote(id); },
+      });
     } else {
+      this.loadCustomers();
+      this.loadProducts();
       this.addItem();
     }
   }
 
   private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
 
+  private setCustomers(r: any) {
+    this.customers.set(this.arr(r).map((c: any) => ({
+      label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || c.phone || 'Customer'}${(c.whatsappPhone || c.phone) ? ' \u00B7 ' + (c.whatsappPhone || c.phone) : ''}`,
+      value: c.id,
+    })));
+  }
+
+  private setProducts(r: any) {
+    this.products.set(this.arr(r).map((p: any) => ({
+      label: `${p.name} \u2014 \u20B9${Number(p.price) || 0}`,
+      value: p.id,
+      price: Number(p.price) || 0,
+      name: p.name,
+    })));
+  }
+
   loadCustomers() {
-    this.api.get<any>('/customers', { limit: 500 }).subscribe({
-      next: (r) => this.customers.set(this.arr(r).map((c: any) => ({
-        label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || 'Customer'}${c.whatsappPhone ? ' \u00B7 ' + c.whatsappPhone : ''}`,
-        value: c.id,
-      }))),
-    });
+    this.api.get<any>('/customers', { limit: 500 }).subscribe({ next: (r) => this.setCustomers(r) });
   }
 
   loadProducts() {
-    this.api.get<any>('/products', { limit: 500 }).subscribe({
-      next: (r) => this.products.set(this.arr(r).map((p: any) => ({
-        label: `${p.name} \u2014 \u20B9${Number(p.price) || 0}`,
-        value: p.id,
-        price: Number(p.price) || 0,
-        name: p.name,
-      }))),
-    });
+    this.api.get<any>('/products', { limit: 500 }).subscribe({ next: (r) => this.setProducts(r) });
   }
 
   loadQuote(id: string) {
