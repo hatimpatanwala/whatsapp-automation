@@ -77,13 +77,13 @@ import { ApiService } from '../../core/services/api.service';
               <div class="p-4 border-b border-gray-100">
                 <h3 class="text-lg font-semibold">Line Items</h3>
               </div>
-              <p-table [value]="quote()!.items || []" styleClass="p-datatable-sm">
+              <p-table [value]="quote()!.items || []" styleClass="p-datatable-sm quote-items-table">
                 <ng-template pTemplate="header">
                   <tr>
-                    <th>#</th>
+                    <th class="w-10">#</th>
                     <th>Description</th>
                     <th>Product</th>
-                    <th class="text-right">Qty</th>
+                    <th class="text-center w-16">Qty</th>
                     <th class="text-right">Unit Price</th>
                     <th class="text-right">Total</th>
                   </tr>
@@ -93,7 +93,7 @@ import { ApiService } from '../../core/services/api.service';
                     <td class="text-gray-400">{{ i + 1 }}</td>
                     <td class="font-medium">{{ item.description }}</td>
                     <td class="text-sm text-gray-500">{{ item.product_name || '-' }}</td>
-                    <td class="text-right">{{ item.quantity }}</td>
+                    <td class="text-center">{{ item.quantity }}</td>
                     <td class="text-right">\u20B9{{ formatAmount(item.unit_price) }}</td>
                     <td class="text-right font-semibold">\u20B9{{ formatAmount(item.line_total) }}</td>
                   </tr>
@@ -200,6 +200,33 @@ import { ApiService } from '../../core/services/api.service';
       }
     </div>
   `,
+  styles: [`
+    /* Line-items table: give the header room to breathe + a subtle separator,
+       and align cell insets with the card's padding. */
+    :host ::ng-deep .quote-items-table .p-datatable-thead > tr > th {
+      background: #f9fafb;
+      padding: 0.7rem 0.875rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b7280;
+      border-bottom: 1px solid #f0f1f3;
+    }
+    :host ::ng-deep .quote-items-table .p-datatable-tbody > tr > td {
+      padding: 0.7rem 0.875rem;
+    }
+    :host ::ng-deep .quote-items-table .p-datatable-tfoot > tr > td {
+      padding: 0.6rem 0.875rem;
+      border: none;
+    }
+    /* A touch more inset on the outer edges so content isn't flush to the card. */
+    :host ::ng-deep .quote-items-table .p-datatable-thead > tr > th:first-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tbody > tr > td:first-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tfoot > tr > td:first-child { padding-left: 1.25rem; }
+    :host ::ng-deep .quote-items-table .p-datatable-thead > tr > th:last-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tbody > tr > td:last-child,
+    :host ::ng-deep .quote-items-table .p-datatable-tfoot > tr > td:last-child { padding-right: 1.25rem; }
+  `],
 })
 export class QuoteDetailComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -219,12 +246,12 @@ export class QuoteDetailComponent implements OnInit {
   });
 
   /**
-   * Edit/add is only allowed while the quote is a DRAFT — the state a customer's
-   * storefront quote request arrives in, so the admin can price/adjust it before
-   * sending. Once it's been sent or accepted, the quote is locked.
+   * Edit/add is allowed while the quote is a DRAFT (incl. a customer's storefront
+   * request) or still only SENT — so the admin can revise it before the customer
+   * acts. Once the customer has accepted (or it's converted/rejected), it locks.
    */
   canEdit(): boolean {
-    return this.quote()?.status === 'draft';
+    return ['draft', 'sent'].includes(this.quote()?.status);
   }
 
   parseFloat = parseFloat;

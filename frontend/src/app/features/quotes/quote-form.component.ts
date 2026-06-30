@@ -242,10 +242,10 @@ export class QuoteFormComponent implements OnInit {
     this.loading.set(true);
     this.api.get<any>(`/quotes/${id}`).subscribe({
       next: (q) => {
-        // Only drafts are editable — once sent/accepted the quote is locked.
+        // Editable while draft or sent; locked once accepted/converted/rejected.
         // Guard the direct /edit URL too, not just the hidden button.
         const status = q.status;
-        if (this.isEdit() && status && status !== 'draft') {
+        if (this.isEdit() && status && !['draft', 'sent'].includes(status)) {
           this.loading.set(false);
           this.messageService.add({ severity: 'warn', summary: 'Locked', detail: `This quote is ${status} and can no longer be edited.` });
           this.router.navigate(['/quotes', this.quoteId]);

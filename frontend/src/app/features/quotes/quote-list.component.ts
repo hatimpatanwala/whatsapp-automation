@@ -106,7 +106,7 @@ interface Quote {
           [paginator]="true"
           [rowsPerPageOptions]="[10, 15, 25, 50]"
           [loading]="loading()"
-          styleClass="p-datatable-sm"
+          styleClass="p-datatable-sm quote-list-table"
           [globalFilterFields]="['quote_number', 'title', 'customer_name']"
         >
           <ng-template pTemplate="header">
@@ -165,6 +165,22 @@ interface Quote {
       </div>
     </div>
   `,
+  styles: [`
+    /* Consistent header + comfortable insets matching the detail table. */
+    :host ::ng-deep .quote-list-table .p-datatable-thead > tr > th {
+      background: #f9fafb;
+      padding: 0.7rem 0.875rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+    :host ::ng-deep .quote-list-table .p-datatable-tbody > tr > td { padding: 0.7rem 0.875rem; }
+    :host ::ng-deep .quote-list-table .p-datatable-thead > tr > th:first-child,
+    :host ::ng-deep .quote-list-table .p-datatable-tbody > tr > td:first-child { padding-left: 1.25rem; }
+    :host ::ng-deep .quote-list-table .p-datatable-thead > tr > th:last-child,
+    :host ::ng-deep .quote-list-table .p-datatable-tbody > tr > td:last-child { padding-right: 1.25rem; }
+  `],
 })
 export class QuoteListComponent implements OnInit {
   private readonly api = inject(ApiService);
