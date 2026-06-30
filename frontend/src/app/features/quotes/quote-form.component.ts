@@ -242,6 +242,15 @@ export class QuoteFormComponent implements OnInit {
     this.loading.set(true);
     this.api.get<any>(`/quotes/${id}`).subscribe({
       next: (q) => {
+        // Only drafts are editable — once sent/accepted the quote is locked.
+        // Guard the direct /edit URL too, not just the hidden button.
+        const status = q.status;
+        if (this.isEdit() && status && status !== 'draft') {
+          this.loading.set(false);
+          this.messageService.add({ severity: 'warn', summary: 'Locked', detail: `This quote is ${status} and can no longer be edited.` });
+          this.router.navigate(['/quotes', this.quoteId]);
+          return;
+        }
         // The API interceptor returns camelCase; keep snake_case as a fallback.
         this.title = q.title ?? '';
         this.customerId = q.customerId ?? q.customer_id ?? '';
