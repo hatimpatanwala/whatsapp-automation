@@ -19,6 +19,7 @@
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migration:run": "ts-node -r tsconfig-paths/register scripts/run-tenant-migrations.ts",
+    "migration:public": "ts-node --project tsconfig.scripts.json --transpile-only -r tsconfig-paths/register scripts/run-public-migrations.ts",
     "tenant:create": "ts-node -r tsconfig-paths/register scripts/create-tenant.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register src/database/seed-admin.ts",
     "seed:superadmin": "ts-node --project tsconfig.scripts.json --transpile-only -r tsconfig-paths/register scripts/seed-super-admin.ts",

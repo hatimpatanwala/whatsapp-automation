@@ -27,10 +27,14 @@ import { BuilderModule } from '../builder/builder.module';
 import { BuilderNotificationListener } from './builder-notification.listener';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { LoyaltyNotificationListener } from './loyalty-notification.listener';
+import { ErpModule } from '../erp/erp.module';
+import { ErpReminderService } from './erp-reminder.service';
+import { ErpReminderController } from './erp-reminder.controller';
+import { ErpReminderCron } from './erp-reminder.cron';
 
 @Module({
-  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, PromotionsModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
-  controllers: [WhatsAppWebhookController],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, PromotionsModule, ErpModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
+  controllers: [WhatsAppWebhookController, ErpReminderController],
   providers: [
     BuilderNotificationListener,
     LoyaltyNotificationListener,
@@ -50,6 +54,8 @@ import { LoyaltyNotificationListener } from './loyalty-notification.listener';
     SmartNotificationProcessor,
     InvoiceService,
     AdminCommandService,
+    ErpReminderService,
+    ErpReminderCron,
   ],
   exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService, InvoiceService],
 })

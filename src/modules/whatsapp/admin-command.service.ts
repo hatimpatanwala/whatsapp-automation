@@ -5,6 +5,10 @@ import { TenantConnectionManager } from '../../database/tenant-connection.manage
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { InvoiceService, DocType } from './invoice.service';
 import { BuilderService } from '../builder/builder.service';
+import { PlanFeatureService } from '../erp/common/plan-feature.service';
+import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
+import { ErpDocumentService } from '../erp/invoicing/erp-document.service';
+import { ErpReminderService } from './erp-reminder.service';
 
 interface AdminState {
   flow: string;
@@ -23,6 +27,7 @@ interface AdminState {
 export class AdminCommandService {
   private readonly logger = new Logger(AdminCommandService.name);
   private readonly STATE_TTL = 1800; // 30 minutes
+  private readonly SECTION_TTL = 10800; // 3 hours — how long a chosen section stays the admin's quick menu
 
   private readonly ORDER_STATUSES: { id: string; title: string }[] = [
     { id: 'confirmed', title: '✅ Confirm' },
@@ -45,6 +50,10 @@ export class AdminCommandService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Optional() private readonly invoiceService: InvoiceService,
     private readonly builder: BuilderService,
+    @Optional() private readonly planFeatures: PlanFeatureService,
+    @Optional() private readonly erpInvoices: ErpInvoiceService,
+    @Optional() private readonly erpDocuments: ErpDocumentService,
+    @Optional() private readonly erpReminders: ErpReminderService,
   ) {}
 
   // ─── Entry point ────────────────────────────────────────────────────────────
@@ -62,16 +71,23 @@ export class AdminCommandService {
         return this.showHelp(tenant, to);
       }
 
-      // "menu" / greeting resets to the main menu.
-      if (!id && /^(menu|hi|hello|hey|start|admin|home|back)$/i.test(text)) {
+      // "main menu" / "home" always resets to the top-level section list.
+      if (!id && /^(main\s*menu|mainmenu|main|home)$/i.test(text)) {
         await this.clearState(schema, to);
         return this.showMainMenu(tenant, to);
       }
 
-      // "offers" / "schemes" / "coupons" → marketing menu.
+      // "menu" / greeting → sticky menu (the section the admin is working in,
+      // if they picked one in the last 3 hours), else the main section list.
+      if (!id && /^(menu|menus|hi|hello|hey|start|admin|back)$/i.test(text)) {
+        await this.clearState(schema, to);
+        return this.showMenu(tenant, to);
+      }
+
+      // "offers" / "schemes" / "coupons" → marketing section.
       if (!id && /^(offers?|schemes?|coupons?|deals?|promotions?)$/i.test(text)) {
         await this.clearState(schema, to);
-        return this.showPromotionsMenu(tenant, to);
+        return this.showSectionMenu(tenant, to, 'sec_marketing');
       }
 
       // An interactive tap (id) always wins and resets any text-input flow.
@@ -92,38 +108,114 @@ export class AdminCommandService {
     }
   }
 
-  // ─── Main menu (categories) ──────────────────────────────────────────────────
+  // ─── Sectioned navigation ─────────────────────────────────────────────────────
+  /**
+   * Section definitions. The main menu shows one row per section; tapping a section
+   * opens its options (and makes it the admin's "sticky" menu for 3 hours). Rows
+   * reuse the existing command ids, and ERP-only rows are filtered out when the
+   * tenant's plan has no ERP — so a layman admin sees only what's relevant.
+   */
+  private async buildSections(
+    tenant: any,
+  ): Promise<Array<{ id: string; title: string; desc: string; rows: Array<{ id: string; title: string; description?: string }> }>> {
+    const erp = await this.isErp(tenant);
+    const e = (r: { id: string; title: string; description?: string }) => (erp ? [r] : []);
+    const home = { id: 'main_menu', title: '🏠 Main Menu' };
+    return [
+      {
+        id: 'sec_sales', title: '🛒 Sales', desc: 'Invoices, orders, quotes & reminders',
+        rows: [
+          ...e({ id: 'einv_new', title: '➕ New Invoice', description: 'Create an invoice' }),
+          ...e({ id: 'einv_unpaid', title: '🔴 Unpaid Invoices', description: 'Outstanding invoices' }),
+          ...e({ id: 'einv_recent', title: '🧾 Recent Invoices' }),
+          { id: 'menu_orders', title: '📦 Orders', description: 'Recent orders' },
+          { id: 'menu_pending', title: '⏳ Pending Orders' },
+          { id: 'menu_quotes', title: '📄 Quotes' },
+          ...e({ id: 'erp_remind', title: '🔔 Payment Reminders', description: 'Nudge unpaid customers' }),
+          home,
+        ],
+      },
+      {
+        id: 'sec_catalog', title: '🛍️ Catalog', desc: 'Products, categories & stock',
+        rows: [
+          { id: 'prod_list', title: '🛍️ Product List' },
+          { id: 'prod_add', title: '➕ Add Product' },
+          { id: 'prod_update', title: '✏️ Update Product' },
+          { id: 'prod_delete', title: '🗑️ Delete Product' },
+          { id: 'menu_lowstock', title: '📉 Low Stock' },
+          { id: 'cat_categories', title: '🏷️ Categories' },
+          { id: 'cat_brands', title: '🔖 Brands' },
+          home,
+        ],
+      },
+      {
+        id: 'sec_customers', title: '👥 Customers', desc: 'View & manage customers',
+        rows: [
+          { id: 'menu_customers_text', title: '👥 Top Customers' },
+          { id: 'menu_customers', title: '📈 Customer Insights', description: 'Open the insights page' },
+          home,
+        ],
+      },
+      {
+        id: 'sec_money', title: '💰 Money', desc: 'Payments & receivables',
+        rows: [
+          { id: 'menu_payments', title: '💳 Recent Payments' },
+          ...e({ id: 'einv_unpaid', title: '🔴 Unpaid Invoices' }),
+          ...e({ id: 'erp_report', title: '📊 Business Report' }),
+          home,
+        ],
+      },
+      {
+        id: 'sec_marketing', title: '🎯 Offers', desc: 'Schemes, discounts & coupons',
+        rows: [
+          { id: 'promo_manage', title: '🛠️ Create / Manage' },
+          { id: 'promo_active', title: '📋 Active Offers' },
+          home,
+        ],
+      },
+      {
+        id: 'sec_reports', title: '📊 Reports', desc: 'Summary & insights',
+        rows: [
+          ...e({ id: 'erp_report', title: '📊 Business Report' }),
+          { id: 'menu_summary', title: '📈 Today’s Summary' },
+          home,
+        ],
+      },
+    ];
+  }
+
+  /** Sticky-aware entry: show the admin's current section if set, else the main menu. */
+  private async showMenu(tenant: any, to: string): Promise<void> {
+    const sticky = await this.getSection(tenant.schemaName, to);
+    if (sticky) return this.showSectionMenu(tenant, to, sticky, true);
+    return this.showMainMenu(tenant, to);
+  }
+
+  /** Top-level section list. Always clears the sticky section. */
   private async showMainMenu(tenant: any, to: string): Promise<void> {
-    await this.sendList(tenant, to, '🛠️ *Admin Control*\nManage your whole store from WhatsApp.', 'Open', [
-      {
-        title: 'Sales',
-        rows: [
-          { id: 'cat_orders', title: '📦 Orders', description: 'View, confirm & update status' },
-          { id: 'cat_quotes', title: '📄 Quotes', description: 'View & update quotes' },
-        ],
-      },
-      {
-        title: 'Catalog',
-        rows: [
-          { id: 'cat_products', title: '🛍️ Products', description: 'List / add / update / delete' },
-          { id: 'menu_lowstock', title: '📉 Low Stock', description: 'Items running low' },
-        ],
-      },
-      {
-        title: 'Marketing',
-        rows: [
-          { id: 'cat_promotions', title: '🎯 Schemes & Offers', description: 'Discounts, BOGO & coupons' },
-        ],
-      },
-      {
-        title: 'Store',
-        rows: [
-          { id: 'menu_customers', title: '👥 Customers', description: 'Top customers' },
-          { id: 'menu_payments', title: '💳 Payments', description: 'Recent payments' },
-          { id: 'menu_summary', title: '📊 Summary', description: 'Today at a glance' },
-          { id: 'menu_help', title: '❓ Help', description: 'All commands & guide' },
-        ],
-      },
+    await this.clearSection(tenant.schemaName, to);
+    const sections = await this.buildSections(tenant);
+    const rows = sections.map((s) => ({ id: s.id, title: s.title, description: s.desc }));
+    rows.push({ id: 'menu_help', title: '❓ Help', description: 'All commands & guide' });
+    await this.sendList(
+      tenant, to,
+      '🛠️ *Admin Control*\nChoose a section to manage your store from WhatsApp.',
+      'Open section',
+      [{ title: 'Sections', rows }],
+    );
+  }
+
+  /** A single section's options. Sets/refreshes the 3-hour sticky menu. */
+  private async showSectionMenu(tenant: any, to: string, sectionId: string, sticky = false): Promise<void> {
+    const sections = await this.buildSections(tenant);
+    const sec = sections.find((s) => s.id === sectionId);
+    if (!sec) return this.showMainMenu(tenant, to);
+    await this.setSection(tenant.schemaName, to, sectionId);
+    const hint = sticky
+      ? '\n\n_This is your quick menu (type *menu* anytime). Tap 🏠 Main Menu or type *main menu* to switch sections._'
+      : '\n\n_Saved as your quick menu for 3h — just type *menu* to come back here._';
+    await this.sendList(tenant, to, `${sec.title}\n${sec.desc}${hint}`, 'Choose', [
+      { title: sec.title.replace(/^\S+\s*/, '') || 'Options', rows: sec.rows },
     ]);
   }
 
@@ -259,6 +351,11 @@ export class AdminCommandService {
 
   // ─── Command router (interactive taps) ──────────────────────────────────────
   private async handleCommand(tenant: any, to: string, id: string): Promise<void> {
+    // Section navigation: a section row opens that section (and makes it sticky);
+    // the Main Menu row returns to the top-level section list.
+    if (id.startsWith('sec_')) return this.showSectionMenu(tenant, to, id);
+    if (id === 'main_menu') return this.showMainMenu(tenant, to);
+
     // Category submenus
     if (id === 'cat_orders') return this.showOrdersMenu(tenant, to);
     if (id === 'cat_quotes') return this.showQuotesMenu(tenant, to);
@@ -316,6 +413,19 @@ export class AdminCommandService {
       }
     }
     if (id === 'invskip') return this.send(tenant, to, '👍 No document issued.\n\nSend *menu* for more.');
+
+    // ─── ERP invoices (plan-gated) ──────────────────────────────────────────
+    if (id === 'cat_einvoices') return this.showErpInvoiceMenu(tenant, to);
+    if (id === 'einv_new') return this.startErpInvoice(tenant, to);
+    if (id === 'einv_unpaid') return this.listErpInvoices(tenant, to, true);
+    if (id === 'einv_recent') return this.listErpInvoices(tenant, to, false);
+    if (id.startsWith('einvv_')) return this.showErpInvoice(tenant, to, id.slice('einvv_'.length));
+    if (id.startsWith('einvpay_')) return this.startErpPayment(tenant, to, id.slice('einvpay_'.length));
+    if (id.startsWith('einvpdfc_')) return this.sendErpInvoicePdf(tenant, to, id.slice('einvpdfc_'.length), 'customer');
+    if (id.startsWith('einvpdf_')) return this.sendErpInvoicePdf(tenant, to, id.slice('einvpdf_'.length), 'admin');
+    if (id === 'erp_report') return this.showErpReport(tenant, to);
+    if (id === 'erp_remind') return this.sendErpReminders(tenant, to);
+
     if (id === 'pdeln' || id === 'cancel') return this.showMainMenu(tenant, to);
 
     return this.showMainMenu(tenant, to);
@@ -618,6 +728,54 @@ export class AdminCommandService {
       return this.showTaxonomy(tenant, to, kind);
     }
 
+    // ─── ERP: create invoice (customer → items → tax → discount) ────────────
+    if (state.flow === 'erp_invoice') {
+      if (state.step === 'customer') {
+        state.data.customerName = /^skip$/i.test(text) ? null : text.substring(0, 200);
+        state.data.items = [];
+        state.step = 'items';
+        await this.setState(schema, to, state);
+        return this.send(tenant, to,
+          'Now add line items, one per message, as *name qty price*\n_e.g._ `Office Chair 2 1500`\n\nSend *done* when finished.');
+      }
+      if (state.step === 'items') {
+        if (/^done$/i.test(text)) {
+          if (!state.data.items.length) return this.send(tenant, to, 'Add at least one item, e.g. `Widget 3 200`.');
+          state.step = 'tax';
+          await this.setState(schema, to, state);
+          return this.send(tenant, to, 'Tax rate %? Send a number like `18`, or *skip* for none.');
+        }
+        const parts = text.trim().split(/\s+/);
+        if (parts.length < 3) return this.send(tenant, to, 'Format: *name qty price* — e.g. `Office Chair 2 1500`.');
+        const price = this.parseNumber(parts.pop() as string);
+        const qty = this.parseNumber(parts.pop() as string);
+        const name = parts.join(' ');
+        if (price === null || qty === null || !name) return this.send(tenant, to, 'Could not read that. Use *name qty price*, e.g. `Widget 3 200`.');
+        state.data.items.push({ description: name, quantity: qty, unitPrice: price });
+        await this.setState(schema, to, state);
+        return this.send(tenant, to, `✅ Added *${name}* ×${qty} @ ₹${price}.\nSend another item or *done*.`);
+      }
+      if (state.step === 'tax') {
+        state.data.taxRatePct = /^skip$/i.test(text) ? 0 : (this.parseNumber(text) ?? 0);
+        state.step = 'discount';
+        await this.setState(schema, to, state);
+        return this.send(tenant, to, 'Discount amount (₹)? Send a number, or *skip* for none.');
+      }
+      if (state.step === 'discount') {
+        const discount = /^skip$/i.test(text) ? 0 : (this.parseNumber(text) ?? 0);
+        await this.clearState(schema, to);
+        return this.createErpInvoice(tenant, to, state.data.customerName, state.data.items, state.data.taxRatePct || 0, discount);
+      }
+    }
+
+    // ─── ERP: record a payment ──────────────────────────────────────────────
+    if (state.flow === 'erp_payment') {
+      const amount = /^full$/i.test(text) ? Number(state.data.balance) : this.parseNumber(text);
+      if (amount === null || !(amount > 0)) return this.send(tenant, to, 'Send a valid amount, or *full* to pay the balance.');
+      await this.clearState(schema, to);
+      return this.applyErpPayment(tenant, to, state.data.invoiceId, amount);
+    }
+
     await this.clearState(schema, to);
     return this.showMainMenu(tenant, to);
   }
@@ -656,6 +814,203 @@ export class AdminCommandService {
       tenant, to,
       `📊 *Today's Summary*\n\n• Orders today: *${s.today.orders}*\n• Revenue today: *${tenant.currency || '₹'}${s.today.revenue}*\n• Open orders: *${s.pending}*\n• Low-stock items: *${s.lowStock}*\n\nSend *menu* for actions.`,
     );
+  }
+
+  // ─── ERP invoices (plan-gated) ────────────────────────────────────────────────
+  /** True when the tenant's plan includes the ERP feature. */
+  private async isErp(tenant: any): Promise<boolean> {
+    if (!this.planFeatures || !this.erpInvoices) return false;
+    try {
+      return await this.planFeatures.hasFeatures(tenant.id, ['erp']);
+    } catch {
+      return false;
+    }
+  }
+
+  private async sendErpUpsell(tenant: any, to: string): Promise<void> {
+    await this.send(tenant, to,
+      '🔒 Invoicing is part of the *ERP* add-on (Professional & Enterprise plans). Upgrade to create and track invoices from WhatsApp.\n\nSend *menu* to go back.');
+  }
+
+  private async showErpInvoiceMenu(tenant: any, to: string): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    await this.sendList(tenant, to, '🧾 *Invoices*\nCreate invoices and record payments.', 'Open', [{
+      title: 'Invoices',
+      rows: [
+        { id: 'einv_new', title: '➕ New Invoice', description: 'Create an invoice' },
+        { id: 'einv_unpaid', title: '🔴 Unpaid / Partial', description: 'Outstanding invoices' },
+        { id: 'einv_recent', title: '🧾 Recent', description: 'Latest invoices' },
+        { id: 'erp_remind', title: '🔔 Payment Reminders', description: 'WhatsApp all unpaid customers' },
+        { id: 'erp_report', title: '📊 Business Report', description: 'Receivables, sales & expenses' },
+        { id: 'cancel', title: '⬅️ Back to menu' },
+      ],
+    }]);
+  }
+
+  private async listErpInvoices(tenant: any, to: string, unpaidOnly: boolean): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    // ERP (AR) invoices are distinguished from GST/order documents by `year IS NOT NULL`.
+    const rows = await this.query(tenant.schemaName, async (qr) =>
+      qr.query(
+        unpaidOnly
+          ? `SELECT id, invoice_number, payment_status, total, balance_due FROM invoices
+             WHERE year IS NOT NULL AND payment_status IN ('unpaid','partial')
+             ORDER BY created_at DESC LIMIT 10`
+          : `SELECT id, invoice_number, payment_status, total, balance_due FROM invoices
+             WHERE year IS NOT NULL ORDER BY created_at DESC LIMIT 10`,
+      ),
+    );
+    if (!rows.length) {
+      return this.send(tenant, to, unpaidOnly ? '✅ No outstanding invoices.\n\nSend *menu* to go back.' : '🧾 No invoices yet.\n\nTap *New Invoice* from the Invoices menu.');
+    }
+    const listRows = rows.map((i: any) => ({
+      id: `einvv_${i.id}`,
+      title: `${i.invoice_number} · ${this.titleCase(i.payment_status)}`.substring(0, 24),
+      description: `Total ₹${i.total} · Bal ₹${i.balance_due}`,
+    }));
+    await this.sendList(tenant, to, `🧾 *${unpaidOnly ? 'Outstanding Invoices' : 'Recent Invoices'}*\nTap one to view & record a payment.`, 'View invoice', [
+      { title: 'Invoices', rows: listRows },
+    ]);
+  }
+
+  private async showErpInvoice(tenant: any, to: string, id: string): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    let inv: any;
+    try {
+      inv = await this.erpInvoices.findById(tenant.schemaName, id);
+    } catch {
+      return this.send(tenant, to, 'Invoice not found. Send *menu*.');
+    }
+    const items = (inv.items || [])
+      .map((l: any) => `• ${l.description} ×${l.quantity} — ₹${l.lineTotal ?? (l.quantity * l.unitPrice)}`)
+      .join('\n');
+    const body = `🧾 *${inv.invoice_number}*\n${inv.customer_name ? inv.customer_name + '\n' : ''}Status: *${this.titleCase(inv.payment_status)}*\n\n${items || 'No items'}\n\n` +
+      `Total: ₹${inv.total}\nPaid: ₹${inv.amount_paid}\n*Balance: ₹${inv.balance_due}*`;
+    // Up to 3 buttons: Record Payment (if owing) · PDF to me · Send to customer.
+    const buttons: { id: string; title: string }[] = [];
+    if (inv.payment_status !== 'paid') buttons.push({ id: `einvpay_${inv.id}`, title: '💰 Record Payment' });
+    buttons.push({ id: `einvpdf_${inv.id}`, title: '📄 Get PDF' });
+    if (inv.customer_phone) buttons.push({ id: `einvpdfc_${inv.id}`, title: '📤 Send to customer' });
+    return this.sendButtons(tenant, to, body, buttons.slice(0, 3));
+  }
+
+  private async startErpInvoice(tenant: any, to: string): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    await this.setState(tenant.schemaName, to, { flow: 'erp_invoice', step: 'customer', data: {} });
+    await this.send(tenant, to, '🧾 *New Invoice*\n\nWho is this for? Send the *customer name*, or *skip*.');
+  }
+
+  private async createErpInvoice(
+    tenant: any, to: string,
+    customerName: string | null,
+    items: { description: string; quantity: number; unitPrice: number }[],
+    taxRatePct: number, discount: number,
+  ): Promise<void> {
+    try {
+      const inv: any = await this.erpInvoices.create(tenant.schemaName, {
+        customerName: customerName || undefined,
+        items,
+        taxRate: (Number(taxRatePct) || 0) / 100,
+        discount: Number(discount) || 0,
+      });
+      const body = `✅ *Invoice created*\n\n🧾 *${inv.invoice_number}*\n${customerName ? customerName + '\n' : ''}Total: *₹${inv.total}*\nBalance: ₹${inv.balance_due}`;
+      await this.sendButtons(tenant, to, body, [
+        { id: `einvpay_${inv.id}`, title: '💰 Record Payment' },
+        { id: `einvpdf_${inv.id}`, title: '📄 Get PDF' },
+      ]);
+    } catch (err: any) {
+      this.logger.error(`createErpInvoice failed: ${err.message}`);
+      await this.send(tenant, to, `⚠️ Could not create the invoice: ${err.message || 'error'}.\n\nSend *menu* to try again.`);
+    }
+  }
+
+  /** Generate the invoice PDF and send it as a WhatsApp document — to the admin or the customer. */
+  private async sendErpInvoicePdf(tenant: any, to: string, invoiceId: string, recipient: 'admin' | 'customer'): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    if (!this.erpDocuments) return this.send(tenant, to, '⚠️ PDF generation is unavailable right now.');
+    try {
+      const { buffer, filename, invoice } = await this.erpDocuments.getInvoicePdf(tenant.schemaName, invoiceId);
+      const target = recipient === 'customer' ? invoice.customer_phone : to;
+      if (!target) return this.send(tenant, to, 'No customer phone on this invoice. Tap *Get PDF* to receive it yourself.');
+
+      const mediaId = await this.whatsappApi.uploadMediaBuffer(tenant.phoneNumberId, tenant.accessToken, buffer, 'application/pdf', filename);
+      if (!mediaId) return this.send(tenant, to, '⚠️ Could not prepare the PDF. Please try again.');
+      await this.whatsappApi.sendDocument(tenant.phoneNumberId, tenant.accessToken, target, { id: mediaId }, filename, `Invoice ${invoice.invoice_number}`);
+
+      await this.send(tenant, to, recipient === 'customer'
+        ? `📤 Sent *${invoice.invoice_number}* to the customer (${invoice.customer_phone}).\n\nSend *menu* for more.`
+        : `📄 Sent you *${invoice.invoice_number}*.\n\nSend *menu* for more.`);
+    } catch (err: any) {
+      this.logger.error(`sendErpInvoicePdf failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not generate the PDF. Send *menu* to try again.');
+    }
+  }
+
+  private async startErpPayment(tenant: any, to: string, invoiceId: string): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    let inv: any;
+    try {
+      inv = await this.erpInvoices.findById(tenant.schemaName, invoiceId);
+    } catch {
+      return this.send(tenant, to, 'Invoice not found. Send *menu*.');
+    }
+    if (inv.payment_status === 'paid') return this.send(tenant, to, `✅ ${inv.invoice_number} is already fully paid.\n\nSend *menu*.`);
+    await this.setState(tenant.schemaName, to, { flow: 'erp_payment', step: 'amount', data: { invoiceId, balance: inv.balance_due } });
+    await this.send(tenant, to, `💰 *Record Payment* for *${inv.invoice_number}*\nBalance due: *₹${inv.balance_due}*\n\nSend the amount to record, or *full* to settle the balance.`);
+  }
+
+  private async applyErpPayment(tenant: any, to: string, invoiceId: string, amount: number): Promise<void> {
+    try {
+      const { invoice }: any = await this.erpInvoices.recordPayment(tenant.schemaName, invoiceId, { amount });
+      const tail = invoice.payment_status === 'paid' ? '✅ Fully paid.' : `Remaining balance: *₹${invoice.balance_due}*`;
+      await this.send(tenant, to, `✅ Recorded *₹${amount}* against *${invoice.invoice_number}*.\nStatus: *${this.titleCase(invoice.payment_status)}*\n${tail}\n\nSend *menu* for more.`);
+    } catch (err: any) {
+      this.logger.error(`applyErpPayment failed: ${err.message}`);
+      await this.send(tenant, to, `⚠️ ${err.message || 'Could not record the payment'}.\n\nSend *menu* to try again.`);
+    }
+  }
+
+  /** ERP business report: receivables, today's invoiced sales, this month's expenses. */
+  private async showErpReport(tenant: any, to: string): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    const r = await this.query(tenant.schemaName, async (qr) => {
+      const recv = (await qr.query(
+        `SELECT COUNT(*)::int AS n, ROUND(COALESCE(SUM(balance_due * exchange_rate),0), 2) AS due
+         FROM invoices WHERE year IS NOT NULL AND payment_status <> 'paid'`))[0];
+      const sales = (await qr.query(
+        `SELECT ROUND(COALESCE(SUM(base_total),0), 2) AS amt, COUNT(*)::int AS n
+         FROM invoices WHERE year IS NOT NULL AND issued_at::date = CURRENT_DATE`))[0];
+      const exp = (await qr.query(
+        `SELECT COALESCE(SUM(total),0) AS amt FROM expenses
+         WHERE removed = false AND expense_date >= date_trunc('month', NOW())`))[0];
+      const topUnpaid = await qr.query(
+        `SELECT invoice_number, balance_due FROM invoices
+         WHERE year IS NOT NULL AND payment_status <> 'paid'
+         ORDER BY balance_due DESC LIMIT 3`);
+      return { recv, sales, exp, topUnpaid };
+    });
+    const top = r.topUnpaid.map((i: any) => `   • ${i.invoice_number} — ₹${i.balance_due}`).join('\n');
+    await this.send(tenant, to,
+      `📊 *Business Report*\n\n` +
+      `🔴 *Receivables:* ₹${r.recv.due} across ${r.recv.n} invoice(s)\n` +
+      (top ? `${top}\n` : '') +
+      `\n🧾 *Invoiced today:* ₹${r.sales.amt} (${r.sales.n})\n` +
+      `🧾 *Expenses this month:* ₹${r.exp.amt}\n\n` +
+      `Send *menu* for more.`);
+  }
+
+  /** Send WhatsApp payment reminders to every customer with an outstanding invoice. */
+  private async sendErpReminders(tenant: any, to: string): Promise<void> {
+    if (!(await this.isErp(tenant))) return this.sendErpUpsell(tenant, to);
+    if (!this.erpReminders) return this.send(tenant, to, '⚠️ Reminders are unavailable right now.');
+    await this.send(tenant, to, '🔔 Sending payment reminders to customers with unpaid invoices…');
+    try {
+      const r = await this.erpReminders.remindOverdue(tenant.id, tenant.schemaName, tenant.phoneNumberId, tenant.accessToken);
+      await this.send(tenant, to, `✅ Sent *${r.sent}* reminder(s)${r.total ? ` of ${r.total} outstanding` : ''}.\n\nSend *menu* for more.`);
+    } catch (err: any) {
+      this.logger.error(`sendErpReminders failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not send reminders. Send *menu* to try again.');
+    }
   }
 
   // ─── Data helpers ───────────────────────────────────────────────────────────
@@ -887,5 +1242,19 @@ export class AdminCommandService {
   }
   private async clearState(schema: string, phone: string): Promise<void> {
     try { await this.redis.del(this.stateKey(schema, phone)); } catch {}
+  }
+
+  // ─── Sticky section (the admin's "current menu" for 3 hours) ──────────────────
+  private sectionKey(schema: string, phone: string): string {
+    return `admin:section:${schema}:${phone}`;
+  }
+  private async getSection(schema: string, phone: string): Promise<string | null> {
+    try { return await this.redis.get(this.sectionKey(schema, phone)); } catch { return null; }
+  }
+  private async setSection(schema: string, phone: string, sectionId: string): Promise<void> {
+    try { await this.redis.set(this.sectionKey(schema, phone), sectionId, 'EX', this.SECTION_TTL); } catch {}
+  }
+  private async clearSection(schema: string, phone: string): Promise<void> {
+    try { await this.redis.del(this.sectionKey(schema, phone)); } catch {}
   }
 }

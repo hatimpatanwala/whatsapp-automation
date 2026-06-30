@@ -33,6 +33,8 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
   aiFeatures: { label: 'AI Features', desc: 'Chatbot and smart replies', icon: 'pi-sparkles' },
   advancedAnalytics: { label: 'Advanced Analytics', desc: 'In-depth reports', icon: 'pi-chart-bar' },
   multiCatalog: { label: 'Multi-Catalog', desc: 'Multiple product catalogs', icon: 'pi-th-large' },
+  // ── ERP / Business Suite (single switch for the whole suite) ───────────
+  erp: { label: 'ERP — Business Suite', desc: 'Full ERP: invoicing, CRM, procurement, inventory, POS, GST, HR', icon: 'pi-building' },
 };
 
 @Component({

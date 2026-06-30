@@ -3,6 +3,7 @@ import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { onboardingGuard } from './core/guards/onboarding.guard';
 import { featureGuard } from './core/guards/feature.guard';
+import { erpAccessGuard } from './core/guards/erp-access.guard';
 
 export const routes: Routes = [
   {
@@ -87,6 +88,11 @@ export const routes: Routes = [
         path: 'quotes',
         canActivate: [featureGuard('quotes')],
         loadChildren: () => import('./features/quotes/quotes.routes').then(m => m.QUOTES_ROUTES),
+      },
+      {
+        path: 'erp',
+        canActivate: [erpAccessGuard],
+        loadChildren: () => import('./features/erp/erp.routes').then(m => m.ERP_ROUTES),
       },
       {
         path: 'workflow-builder',

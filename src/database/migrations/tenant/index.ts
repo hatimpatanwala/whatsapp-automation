@@ -1273,6 +1273,712 @@ const migration045CustomFields: TenantMigration = {
   },
 };
 
+// ─── ERP foundation ─────────────────────────────────────────────────────────
+// Premium ERP/CRM layer (IDURAR feature parity). Additive only: this migration
+// creates the per-tenant document numbering table used by ERP documents
+// (invoices, quotes, offers, supplier orders, payment receipts) and seeds ERP
+// settings defaults. It does NOT alter or gate any existing table — the ERP
+// becomes visible per-tenant purely via the subscription plan's `features.erp`
+// flag, so running this on every tenant schema is safe and breaks nothing.
+const migration046ErpSequences: TenantMigration = {
+  name: '046_erp_sequences',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".erp_sequences (
+        doc_type VARCHAR(40) NOT NULL,
+        year INT NOT NULL,
+        last_number INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (doc_type, year)
+      )
+    `);
+    // ERP provisioning marker + defaults, stored in the existing settings KV table.
+    // 'erp_provisioned' flips to true the first time the tenant's ERP is enabled;
+    // it gates one-time seeding/backfill so re-enabling after a downgrade is instant.
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('erp_provisioned', 'false'),
+        ('erp_currency', '"INR"'),
+        ('erp_default_tax_rate', '0'),
+        ('erp_invoice_prefix', '"INV"'),
+        ('erp_quote_prefix', '"QUO"'),
+        ('erp_offer_prefix', '"OFR"')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".erp_sequences CASCADE`);
+    await qr.query(`
+      DELETE FROM "${schema}".settings WHERE key IN (
+        'erp_provisioned', 'erp_currency', 'erp_default_tax_rate',
+        'erp_invoice_prefix', 'erp_quote_prefix', 'erp_offer_prefix'
+      )
+    `);
+  },
+};
+
+// ─── ERP Phase 1: Invoicing core (AR) ────────────────────────────────────────
+// Extends the EXISTING GST `invoices` table (mig 032) and order/UPI `payments`
+// table (mig 013) for standalone accounts-receivable: amount paid, balance due,
+// payment status, due date — plus a `payment_modes` reference table. All columns
+// are nullable/defaulted and additive, so existing invoice/payment flows are
+// untouched. ERP visibility remains purely plan-gated (`features.erp`).
+const migration047ErpInvoicingCore: TenantMigration = {
+  name: '047_erp_invoicing_core',
+  async up(qr, schema) {
+    // AR tracking on invoices (existing table keeps `items` JSONB, totals, GST).
+    await qr.query(`
+      ALTER TABLE "${schema}".invoices
+        ADD COLUMN IF NOT EXISTS year INT,
+        ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS balance_due NUMERIC(12,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
+        ADD COLUMN IF NOT EXISTS note TEXT
+    `);
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_invoices_payment_status
+        ON "${schema}".invoices(payment_status)
+    `);
+
+    // Payment modes (Cash / UPI / Bank Transfer / …) — IDURAR PaymentMode.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".payment_modes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        ref VARCHAR(100),
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Link payments to an invoice + payment mode for AR reconciliation
+    // (existing order/UPI columns stay; both order_id and invoice_id are nullable).
+    await qr.query(`
+      ALTER TABLE "${schema}".payments
+        ADD COLUMN IF NOT EXISTS invoice_id UUID REFERENCES "${schema}".invoices(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS payment_mode_id UUID REFERENCES "${schema}".payment_modes(id),
+        ADD COLUMN IF NOT EXISTS ref VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS description TEXT
+    `);
+    await qr.query(`
+      CREATE INDEX IF NOT EXISTS idx_payments_invoice ON "${schema}".payments(invoice_id)
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_payments_invoice`);
+    await qr.query(`
+      ALTER TABLE "${schema}".payments
+        DROP COLUMN IF EXISTS invoice_id,
+        DROP COLUMN IF EXISTS payment_mode_id,
+        DROP COLUMN IF EXISTS ref,
+        DROP COLUMN IF EXISTS description
+    `);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".payment_modes CASCADE`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_invoices_payment_status`);
+    await qr.query(`
+      ALTER TABLE "${schema}".invoices
+        DROP COLUMN IF EXISTS year,
+        DROP COLUMN IF EXISTS due_date,
+        DROP COLUMN IF EXISTS amount_paid,
+        DROP COLUMN IF EXISTS balance_due,
+        DROP COLUMN IF EXISTS payment_status,
+        DROP COLUMN IF EXISTS note
+    `);
+  },
+};
+
+// ─── ERP Phase 2: CRM (clients, leads, offers) ───────────────────────────────
+const migration048ErpCrm: TenantMigration = {
+  name: '048_erp_crm',
+  async up(qr, schema) {
+    // Enrich customers with B2B/client fields (additive, nullable).
+    await qr.query(`
+      ALTER TABLE "${schema}".customers
+        ADD COLUMN IF NOT EXISTS company VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS gstin VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS billing_address TEXT,
+        ADD COLUMN IF NOT EXISTS is_erp_client BOOLEAN NOT NULL DEFAULT false
+    `);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".leads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        first_name VARCHAR(120) NOT NULL,
+        last_name VARCHAR(120),
+        company VARCHAR(255),
+        job_title VARCHAR(120),
+        email VARCHAR(255),
+        phone VARCHAR(20),
+        address TEXT,
+        country VARCHAR(80),
+        source VARCHAR(80),
+        status VARCHAR(30) NOT NULL DEFAULT 'new',
+        notes TEXT,
+        converted_customer_id UUID,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_leads_status ON "${schema}".leads(status) WHERE removed = false`);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".offers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        offer_number VARCHAR(40) UNIQUE NOT NULL,
+        year INT NOT NULL,
+        lead_id UUID REFERENCES "${schema}".leads(id) ON DELETE SET NULL,
+        title VARCHAR(255),
+        subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
+        tax_rate NUMERIC(6,4) NOT NULL DEFAULT 0,
+        total_tax NUMERIC(14,2) NOT NULL DEFAULT 0,
+        discount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        total NUMERIC(14,2) NOT NULL DEFAULT 0,
+        currency VARCHAR(3) DEFAULT 'INR',
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        note TEXT,
+        valid_until TIMESTAMPTZ,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".offer_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        offer_id UUID NOT NULL REFERENCES "${schema}".offers(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES "${schema}".products(id) ON DELETE SET NULL,
+        description VARCHAR(500) NOT NULL,
+        quantity NUMERIC(12,2) NOT NULL DEFAULT 1,
+        unit_price NUMERIC(14,2) NOT NULL DEFAULT 0,
+        line_total NUMERIC(14,2) NOT NULL DEFAULT 0,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_offer_items_offer ON "${schema}".offer_items(offer_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".offer_items CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".offers CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".leads CASCADE`);
+    await qr.query(`ALTER TABLE "${schema}".customers
+      DROP COLUMN IF EXISTS company, DROP COLUMN IF EXISTS gstin,
+      DROP COLUMN IF EXISTS billing_address, DROP COLUMN IF EXISTS is_erp_client`);
+  },
+};
+
+// ─── ERP Phase 3: Procurement (suppliers, supplier orders, expenses) ──────────
+const migration049ErpProcurement: TenantMigration = {
+  name: '049_erp_procurement',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".suppliers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company VARCHAR(255) NOT NULL,
+        contact_name VARCHAR(200),
+        email VARCHAR(255),
+        phone VARCHAR(20),
+        gstin VARCHAR(20),
+        address TEXT,
+        bank_account VARCHAR(120),
+        notes TEXT,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".expense_categories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        description TEXT,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".expenses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(200) NOT NULL,
+        description TEXT,
+        ref VARCHAR(100),
+        expense_category_id UUID REFERENCES "${schema}".expense_categories(id) ON DELETE SET NULL,
+        supplier_id UUID REFERENCES "${schema}".suppliers(id) ON DELETE SET NULL,
+        amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        tax_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        total NUMERIC(14,2) NOT NULL DEFAULT 0,
+        payment_mode_id UUID REFERENCES "${schema}".payment_modes(id),
+        expense_date TIMESTAMPTZ DEFAULT NOW(),
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_expenses_category ON "${schema}".expenses(expense_category_id) WHERE removed = false`);
+
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".supplier_orders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_number VARCHAR(40) UNIQUE NOT NULL,
+        year INT NOT NULL,
+        supplier_id UUID REFERENCES "${schema}".suppliers(id) ON DELETE SET NULL,
+        subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
+        tax_rate NUMERIC(6,4) NOT NULL DEFAULT 0,
+        total_tax NUMERIC(14,2) NOT NULL DEFAULT 0,
+        discount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        total NUMERIC(14,2) NOT NULL DEFAULT 0,
+        currency VARCHAR(3) DEFAULT 'INR',
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
+        note TEXT,
+        expected_date TIMESTAMPTZ,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".supplier_order_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        supplier_order_id UUID NOT NULL REFERENCES "${schema}".supplier_orders(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES "${schema}".products(id) ON DELETE SET NULL,
+        description VARCHAR(500) NOT NULL,
+        quantity NUMERIC(12,2) NOT NULL DEFAULT 1,
+        unit_price NUMERIC(14,2) NOT NULL DEFAULT 0,
+        line_total NUMERIC(14,2) NOT NULL DEFAULT 0,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_so_items_order ON "${schema}".supplier_order_items(supplier_order_id)`);
+
+    // Optional ERP product fields tying products to procurement.
+    await qr.query(`
+      ALTER TABLE "${schema}".products
+        ADD COLUMN IF NOT EXISTS sku VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS cost_price NUMERIC(14,2),
+        ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES "${schema}".suppliers(id)
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS sku, DROP COLUMN IF EXISTS cost_price, DROP COLUMN IF EXISTS supplier_id`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".supplier_order_items CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".supplier_orders CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".expenses CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".expense_categories CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".suppliers CASCADE`);
+  },
+};
+
+// ─── ERP Phase 4: HR (employees) ──────────────────────────────────────────────
+const migration050ErpHr: TenantMigration = {
+  name: '050_erp_hr',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".employees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        surname VARCHAR(150),
+        email VARCHAR(255),
+        phone VARCHAR(20),
+        department VARCHAR(120),
+        position VARCHAR(120),
+        gender VARCHAR(20),
+        birthday DATE,
+        address TEXT,
+        urgent_contact VARCHAR(120),
+        salary NUMERIC(14,2),
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".employees CASCADE`);
+  },
+};
+
+// ─── ERP Phase 6: Enterprise (multi-currency, multi-warehouse, tax rates) ─────
+const migration051ErpEnterprise: TenantMigration = {
+  name: '051_erp_enterprise',
+  async up(qr, schema) {
+    // Multi-currency: a table of currencies with exchange rate to the base currency.
+    // exchange_rate = how many BASE units equal 1 unit of this currency.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".erp_currencies (
+        code VARCHAR(3) PRIMARY KEY,
+        name VARCHAR(80) NOT NULL,
+        symbol VARCHAR(8) NOT NULL DEFAULT '',
+        exchange_rate NUMERIC(16,6) NOT NULL DEFAULT 1,
+        is_base BOOLEAN NOT NULL DEFAULT false,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    // Snapshot the rate + base-currency total on invoices for reporting.
+    await qr.query(`
+      ALTER TABLE "${schema}".invoices
+        ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(16,6) NOT NULL DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS base_total NUMERIC(16,2)
+    `);
+    await qr.query(`UPDATE "${schema}".invoices SET base_total = total WHERE base_total IS NULL`);
+
+    // Tax rates (named, reusable on documents).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".erp_tax_rates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(80) NOT NULL,
+        rate NUMERIC(6,4) NOT NULL DEFAULT 0,
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Multi-warehouse stock.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".erp_warehouses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        code VARCHAR(40),
+        address TEXT,
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".erp_stock (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        warehouse_id UUID NOT NULL REFERENCES "${schema}".erp_warehouses(id) ON DELETE CASCADE,
+        product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        variant_id UUID REFERENCES "${schema}".product_variants(id) ON DELETE CASCADE,
+        quantity NUMERIC(14,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT uq_erp_stock UNIQUE (warehouse_id, product_id, variant_id)
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_erp_stock_product ON "${schema}".erp_stock(product_id)`);
+    // Stock movement ledger (adjust / transfer in/out) for auditability.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".erp_stock_movements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        warehouse_id UUID NOT NULL REFERENCES "${schema}".erp_warehouses(id) ON DELETE CASCADE,
+        product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        variant_id UUID,
+        quantity_delta NUMERIC(14,2) NOT NULL,
+        type VARCHAR(20) NOT NULL,
+        ref VARCHAR(120),
+        note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_erp_stock_mov_wh ON "${schema}".erp_stock_movements(warehouse_id, created_at DESC)`);
+
+    // Seed base currency from the existing erp_currency setting + ERP company/format settings.
+    await qr.query(`
+      INSERT INTO "${schema}".erp_currencies (code, name, symbol, exchange_rate, is_base, enabled)
+      SELECT
+        COALESCE((SELECT value::text FROM "${schema}".settings WHERE key='erp_currency'), '"INR"')::jsonb #>> '{}',
+        'Base Currency', '₹', 1, true, true
+      WHERE NOT EXISTS (SELECT 1 FROM "${schema}".erp_currencies WHERE is_base = true)
+      ON CONFLICT (code) DO NOTHING
+    `);
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('erp_base_currency', '"INR"'),
+        ('erp_company_name', '""'),
+        ('erp_company_email', '""'),
+        ('erp_company_phone', '""'),
+        ('erp_company_website', '""'),
+        ('erp_currency_position', '"before"'),
+        ('erp_currency_decimals', '2')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".erp_stock_movements CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".erp_stock CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".erp_warehouses CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".erp_tax_rates CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".erp_currencies CASCADE`);
+    await qr.query(`ALTER TABLE "${schema}".invoices DROP COLUMN IF EXISTS exchange_rate, DROP COLUMN IF EXISTS base_total`);
+  },
+};
+
+// ─── ERP Phase 7: Enterprise CRM (companies/people), branches, API keys ───────
+const migration052ErpEnterprise2: TenantMigration = {
+  name: '052_erp_enterprise2',
+  async up(qr, schema) {
+    // Companies (CRM organisations) + People (contacts under a company) — the
+    // IDURAR Enterprise "Companies & Peoples" CRM hierarchy.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".companies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        registration_number VARCHAR(80),
+        tax_number VARCHAR(40),
+        email VARCHAR(255),
+        phone VARCHAR(20),
+        website VARCHAR(255),
+        industry VARCHAR(120),
+        address TEXT,
+        country VARCHAR(80),
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".people (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID REFERENCES "${schema}".companies(id) ON DELETE SET NULL,
+        first_name VARCHAR(120) NOT NULL,
+        last_name VARCHAR(120),
+        job_title VARCHAR(120),
+        email VARCHAR(255),
+        phone VARCHAR(20),
+        notes TEXT,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_people_company ON "${schema}".people(company_id) WHERE removed = false`);
+
+    // Branches (sub-entities within the company — multi-branch operations).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".branches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        code VARCHAR(40),
+        manager VARCHAR(150),
+        phone VARCHAR(20),
+        address TEXT,
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Developer API keys (only a hash is stored; the raw key is shown once).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".api_keys (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(120) NOT NULL,
+        key_prefix VARCHAR(16) NOT NULL,
+        key_hash VARCHAR(255) NOT NULL,
+        last_used_at TIMESTAMPTZ,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".api_keys CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".branches CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".people CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".companies CASCADE`);
+  },
+};
+
+// ─── ERP Phase 8: Vyapar parity (returns, cash & bank, reminders) ─────────────
+const migration053ErpVyapar: TenantMigration = {
+  name: '053_erp_vyapar',
+  async up(qr, schema) {
+    // Credit Notes (sale returns) + Debit Notes (purchase returns).
+    for (const t of ['credit_notes', 'debit_notes']) {
+      const partyCol = t === 'credit_notes'
+        ? `customer_id UUID, customer_name VARCHAR(255), customer_phone VARCHAR(20), invoice_id UUID REFERENCES "${schema}".invoices(id) ON DELETE SET NULL,`
+        : `supplier_id UUID REFERENCES "${schema}".suppliers(id) ON DELETE SET NULL,`;
+      await qr.query(`
+        CREATE TABLE IF NOT EXISTS "${schema}".${t} (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          note_number VARCHAR(40) UNIQUE NOT NULL,
+          year INT NOT NULL,
+          ${partyCol}
+          subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
+          tax_rate NUMERIC(6,4) NOT NULL DEFAULT 0,
+          total_tax NUMERIC(14,2) NOT NULL DEFAULT 0,
+          discount NUMERIC(14,2) NOT NULL DEFAULT 0,
+          total NUMERIC(14,2) NOT NULL DEFAULT 0,
+          currency VARCHAR(3) DEFAULT 'INR',
+          reason TEXT,
+          status VARCHAR(20) NOT NULL DEFAULT 'issued',
+          items JSONB NOT NULL DEFAULT '[]',
+          removed BOOLEAN NOT NULL DEFAULT false,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+    }
+
+    // Cash & Bank accounts (money accounts) + link payments to an account.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".bank_accounts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        type VARCHAR(20) NOT NULL DEFAULT 'bank',
+        account_number VARCHAR(60),
+        bank_name VARCHAR(150),
+        opening_balance NUMERIC(16,2) NOT NULL DEFAULT 0,
+        current_balance NUMERIC(16,2) NOT NULL DEFAULT 0,
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`ALTER TABLE "${schema}".payments ADD COLUMN IF NOT EXISTS bank_account_id UUID REFERENCES "${schema}".bank_accounts(id)`);
+
+    // Payment-reminder tracking on invoices.
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS last_reminder_at TIMESTAMPTZ`);
+    await qr.query(`
+      INSERT INTO "${schema}".settings (key, value) VALUES
+        ('erp_auto_reminders', 'false'),
+        ('erp_reminder_days_overdue', '0')
+      ON CONFLICT (key) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices DROP COLUMN IF EXISTS last_reminder_at`);
+    await qr.query(`ALTER TABLE "${schema}".payments DROP COLUMN IF EXISTS bank_account_id`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".bank_accounts CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".debit_notes CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".credit_notes CASCADE`);
+  },
+};
+
+// ─── ERP Phase 10: batch/serial, recurring invoices, branch tagging ───────────
+const migration054ErpAdvanced: TenantMigration = {
+  name: '054_erp_advanced',
+  async up(qr, schema) {
+    // Batch / serial tracking for products. type='batch' (lot with mfg/expiry) or
+    // 'serial' (one unit, unique serial). Optional warehouse for stock location.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".product_batches (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        warehouse_id UUID REFERENCES "${schema}".erp_warehouses(id) ON DELETE SET NULL,
+        type VARCHAR(10) NOT NULL DEFAULT 'batch',
+        batch_number VARCHAR(80),
+        serial_number VARCHAR(120),
+        mfg_date DATE,
+        expiry_date DATE,
+        quantity NUMERIC(14,2) NOT NULL DEFAULT 0,
+        cost_price NUMERIC(14,2),
+        notes TEXT,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_batches_product ON "${schema}".product_batches(product_id) WHERE removed = false`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_batches_expiry ON "${schema}".product_batches(expiry_date) WHERE removed = false AND expiry_date IS NOT NULL`);
+
+    // Recurring invoice templates — a cron materialises real invoices from these.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".recurring_invoices (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(200),
+        customer_id UUID,
+        customer_name VARCHAR(255),
+        customer_phone VARCHAR(20),
+        items JSONB NOT NULL DEFAULT '[]',
+        tax_rate NUMERIC(6,4) NOT NULL DEFAULT 0,
+        discount NUMERIC(14,2) NOT NULL DEFAULT 0,
+        currency VARCHAR(3) DEFAULT 'INR',
+        frequency VARCHAR(20) NOT NULL DEFAULT 'monthly',
+        next_run_date DATE NOT NULL,
+        last_run_at TIMESTAMPTZ,
+        generated_count INT NOT NULL DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_recurring_due ON "${schema}".recurring_invoices(next_run_date) WHERE enabled = true AND removed = false`);
+
+    // In-document branch tagging.
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS branch_id UUID`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_invoices_branch ON "${schema}".invoices(branch_id) WHERE branch_id IS NOT NULL`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_invoices_branch`);
+    await qr.query(`ALTER TABLE "${schema}".invoices DROP COLUMN IF EXISTS branch_id`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".recurring_invoices CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".product_batches CASCADE`);
+  },
+};
+
+// ─── ERP Phase 11: POS (barcode) + e-way bills ───────────────────────────────
+const migration055ErpPosEway: TenantMigration = {
+  name: '055_erp_pos_eway',
+  async up(qr, schema) {
+    // Barcode for POS scan-in lookups.
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS barcode VARCHAR(64)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_products_barcode ON "${schema}".products(barcode) WHERE barcode IS NOT NULL`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_products_sku ON "${schema}".products(sku) WHERE sku IS NOT NULL`);
+
+    // E-way bills (goods transport document) linked to an invoice.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".eway_bills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        eway_number VARCHAR(40) UNIQUE NOT NULL,
+        invoice_id UUID REFERENCES "${schema}".invoices(id) ON DELETE SET NULL,
+        invoice_number VARCHAR(40),
+        transport_mode VARCHAR(20) DEFAULT 'road',
+        vehicle_number VARCHAR(20),
+        transporter VARCHAR(150),
+        from_place VARCHAR(120),
+        to_place VARCHAR(120),
+        distance_km INT,
+        value NUMERIC(14,2),
+        valid_until TIMESTAMPTZ,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        removed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_eway_invoice ON "${schema}".eway_bills(invoice_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".eway_bills CASCADE`);
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS barcode`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -1319,4 +2025,14 @@ export const tenantMigrations: TenantMigration[] = [
   migration043CustomerProfile,
   migration044AudienceSegment,
   migration045CustomFields,
+  migration046ErpSequences,
+  migration047ErpInvoicingCore,
+  migration048ErpCrm,
+  migration049ErpProcurement,
+  migration050ErpHr,
+  migration051ErpEnterprise,
+  migration052ErpEnterprise2,
+  migration053ErpVyapar,
+  migration054ErpAdvanced,
+  migration055ErpPosEway,
 ];

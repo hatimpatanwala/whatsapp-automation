@@ -224,6 +224,8 @@ export class PlanFormComponent implements OnInit {
     { key: 'aiFeatures', label: 'AI Features', desc: 'Chatbot, smart replies, intent detection' },
     { key: 'advancedAnalytics', label: 'Advanced Analytics', desc: 'In-depth reports and dashboards' },
     { key: 'multiCatalog', label: 'Multi-Catalog', desc: 'Multiple WhatsApp product catalogs' },
+    // ── ERP / Business Suite (single switch for the whole suite) ───────────
+    { key: 'erp', label: 'ERP — Business Suite', desc: 'Full ERP: invoicing, accounting, CRM, procurement, inventory, POS, GST, HR' },
   ];
 
   planForm = this.fb.group({
@@ -249,6 +251,8 @@ export class PlanFormComponent implements OnInit {
     aiFeatures: [false],
     advancedAnalytics: [false],
     multiCatalog: [false],
+    // ERP / Business Suite (single switch)
+    erp: [false],
     // Display
     isActive: [true],
     sortOrder: [1],
@@ -289,6 +293,8 @@ export class PlanFormComponent implements OnInit {
           aiFeatures: plan.features?.aiFeatures ?? false,
           advancedAnalytics: plan.features?.advancedAnalytics ?? false,
           multiCatalog: plan.features?.multiCatalog ?? false,
+          // ERP / Business Suite (single switch)
+          erp: plan.features?.erp ?? false,
           // Display
           isActive: plan.isActive,
           sortOrder: plan.sortOrder,
@@ -347,6 +353,13 @@ export class PlanFormComponent implements OnInit {
         aiFeatures: v.aiFeatures ?? false,
         advancedAnalytics: v.advancedAnalytics ?? false,
         multiCatalog: v.multiCatalog ?? false,
+        erp: v.erp ?? false,
+        // Mirror the single ERP switch onto the legacy sub-flags so any code still
+        // reading them stays consistent (the suite is all-or-nothing now).
+        erpInvoicing: v.erp ?? false,
+        erpCrm: v.erp ?? false,
+        erpProcurement: v.erp ?? false,
+        erpHr: v.erp ?? false,
       },
       isActive: v.isActive,
       sortOrder: v.sortOrder,

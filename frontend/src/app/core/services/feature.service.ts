@@ -16,6 +16,14 @@ export const FEATURE_KEYS = {
   aiFeatures: 'aiFeatures',
   advancedAnalytics: 'advancedAnalytics',
   multiCatalog: 'multiCatalog',
+  // Premium ERP/CRM layer. `erp` is the master switch that toggles the ERP
+  // navigation section; the sub-keys gate individual ERP areas so plans can be
+  // packaged at different tiers (see public migration 007_erp_feature_flag).
+  erp: 'erp',
+  erpInvoicing: 'erpInvoicing',
+  erpCrm: 'erpCrm',
+  erpProcurement: 'erpProcurement',
+  erpHr: 'erpHr',
 } as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[keyof typeof FEATURE_KEYS];
