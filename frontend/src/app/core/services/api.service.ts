@@ -86,8 +86,15 @@ export class ApiService {
    * surface we deliver PDFs to the user's chat instead of downloading.
    */
   inAppWebview(): boolean {
-    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
-    return /WhatsApp/i.test(ua);
+    if (typeof window === 'undefined') return false;
+    // The portal-login bridge tags the landing URL with `ctx=wa` when opened from
+    // WhatsApp; persist it so the whole SPA session knows (survives navigation).
+    // This is reliable where the userAgent isn't (iOS WhatsApp doesn't brand it).
+    try {
+      if (/[?&]ctx=wa\b/.test(window.location.search)) sessionStorage.setItem('wa_webview', '1');
+      if (sessionStorage.getItem('wa_webview') === '1') return true;
+    } catch { /* sessionStorage may be unavailable */ }
+    return /WhatsApp/i.test((navigator && navigator.userAgent) || '');
   }
 
   /**

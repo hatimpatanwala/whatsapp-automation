@@ -92,7 +92,12 @@ export class BuilderController {
       if (createdBy) req.session.adminPhone = createdBy;
       // Persist the session first so the auth cookie is set on THIS response.
       await new Promise<void>((resolve, reject) => req.session.save((e) => (e ? reject(e) : resolve())));
-      return res.redirect(`${base}${this.safePortalPath(to)}`);
+      // Tag the landing URL so the SPA knows it's running inside the WhatsApp
+      // webview (reliable across iOS/Android where the userAgent isn't) and
+      // should deliver PDFs to chat instead of trying to download them.
+      const path = this.safePortalPath(to);
+      const marked = path.includes('?') ? `${path}&ctx=wa` : `${path}?ctx=wa`;
+      return res.redirect(`${base}${marked}`);
     } catch {
       return res.redirect(`${base}/auth/login?error=portal_link_expired`);
     }
