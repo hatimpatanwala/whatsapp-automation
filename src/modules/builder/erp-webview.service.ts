@@ -269,20 +269,72 @@ export class ErpWebviewService {
 
   // ── Customers (read) ────────────────────────────────────────────────────────
 
-  async customers(token: string, search?: string): Promise<any[]> {
+  async customers(token: string, search?: string, segment?: string): Promise<any[]> {
     const { schema } = await this.ctx(token);
     const term = (search || '').trim();
     return this.q(schema, async (qr) => {
       const params: any[] = [];
-      let where = '';
-      if (term) { where = `WHERE name ILIKE $1 OR phone ILIKE $1`; params.push(`%${term}%`); }
+      const conds: string[] = [];
+      if (term) { params.push(`%${term}%`); conds.push(`(c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length})`); }
+      let orderBy = `(c.last_order_at IS NULL), c.last_order_at DESC NULLS LAST, c.total_spent DESC NULLS LAST`;
+      switch (segment) {
+        case 'top': conds.push('c.total_spent > 0'); orderBy = 'c.total_spent DESC NULLS LAST'; break;
+        case 'repeat': conds.push('c.total_orders > 1'); orderBy = 'c.total_orders DESC'; break;
+        case 'new': conds.push(`c.created_at >= NOW() - INTERVAL '30 days'`); orderBy = 'c.created_at DESC'; break;
+        case 'inactive': conds.push(`(c.last_order_at IS NULL OR c.last_order_at < NOW() - INTERVAL '60 days')`); orderBy = 'c.last_order_at ASC NULLS FIRST'; break;
+        case 'dues': conds.push(`EXISTS (SELECT 1 FROM invoices i WHERE i.customer_id = c.id AND i.year IS NOT NULL AND i.balance_due > 0)`); orderBy = 'c.total_spent DESC NULLS LAST'; break;
+        default: break; // 'all'
+      }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
       return qr.query(
-        `SELECT id, name, phone, COALESCE(total_spent, 0) AS total_spent, COALESCE(total_orders, 0) AS order_count, last_order_at
-           FROM customers ${where}
-          ORDER BY (last_order_at IS NULL), last_order_at DESC NULLS LAST, total_spent DESC NULLS LAST
-          LIMIT 50`,
+        `SELECT c.id, c.name, c.phone, COALESCE(c.total_spent, 0) AS total_spent, COALESCE(c.total_orders, 0) AS order_count, c.last_order_at
+           FROM customers c ${where}
+          ORDER BY ${orderBy}
+          LIMIT 60`,
         params,
       );
+    });
+  }
+
+  /** Full customer view for the console — profile + ledger + recent orders & invoices. */
+  async customerDetail(token: string, id: string): Promise<any> {
+    const { schema } = await this.ctx(token);
+    return this.q(schema, async (qr) => {
+      const customer = (await qr.query(
+        `SELECT id, name, phone, COALESCE(total_spent, 0) AS total_spent, COALESCE(total_orders, 0) AS order_count, last_order_at
+           FROM customers WHERE id = $1`,
+        [id],
+      ))[0];
+      if (!customer) throw new NotFoundException('Customer not found');
+      const symbol =
+        (await qr.query(`SELECT symbol FROM erp_currencies WHERE is_base = true LIMIT 1`).catch(() => []))[0]?.symbol || '₹';
+      const orders = await qr.query(
+        `SELECT id, order_number, status, total, created_at FROM orders WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        [id],
+      );
+      const invoices = await qr.query(
+        `SELECT invoice_number, total, amount_paid, balance_due, payment_status, COALESCE(issued_at, created_at) AS date
+           FROM invoices WHERE customer_id = $1 ORDER BY COALESCE(issued_at, created_at) DESC LIMIT 20`,
+        [id],
+      );
+      // Ledger from AR invoices (year IS NOT NULL) — billed − paid = outstanding.
+      const arInvoices = await qr.query(
+        `SELECT invoice_number, total, amount_paid, balance_due, COALESCE(issued_at, created_at) AS date
+           FROM invoices WHERE customer_id = $1 AND year IS NOT NULL ORDER BY COALESCE(issued_at, created_at) ASC`,
+        [id],
+      );
+      const entries: any[] = [];
+      for (const inv of arInvoices) {
+        entries.push({ date: inv.date, ref: inv.invoice_number, description: 'Invoice raised', debit: Number(inv.total) || 0, credit: 0 });
+        const paid = Number(inv.amount_paid) || 0;
+        if (paid > 0) entries.push({ date: inv.date, ref: inv.invoice_number, description: 'Payment received', debit: 0, credit: paid });
+      }
+      let balance = 0;
+      for (const e of entries) { balance += e.debit - e.credit; e.balance = balance; }
+      const billed = arInvoices.reduce((s: number, i: any) => s + (Number(i.total) || 0), 0);
+      const paid = arInvoices.reduce((s: number, i: any) => s + (Number(i.amount_paid) || 0), 0);
+      const outstanding = arInvoices.reduce((s: number, i: any) => s + (Number(i.balance_due) || 0), 0);
+      return { customer, currency: symbol, ledger: { summary: { billed, paid, outstanding }, entries }, orders, invoices };
     });
   }
 

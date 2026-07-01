@@ -51,6 +51,14 @@ export class CustomerController {
     return this.segmentService.create(req.tenantContext.schemaName, body);
   }
 
+  /** Customer ledgers / accounts-receivable overview (ERP). Declared before :id. */
+  @Get('ledgers')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('erp')
+  async getLedgers(@Req() req: Request) {
+    return this.customerService.getCustomerLedgersSummary(req.tenantContext.schemaName);
+  }
+
   @Get(':id')
   async findOne(@Req() req: Request, @Param('id') id: string) {
     return this.customerService.findById(req.tenantContext.schemaName, id);

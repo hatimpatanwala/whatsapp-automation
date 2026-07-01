@@ -164,6 +164,25 @@ export class CustomerService {
     });
   }
 
+  /** Customer ledgers overview (accounts receivable) — one row per customer with
+   *  outstanding dues, for the portal "Ledgers" page. ERP feature. */
+  async getCustomerLedgersSummary(schema: string): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      return qr.query(
+        `SELECT c.id AS customer_id, c.name, c.phone,
+                COALESCE(SUM(i.total), 0) AS billed,
+                COALESCE(SUM(i.amount_paid), 0) AS paid,
+                COALESCE(SUM(i.balance_due), 0) AS outstanding,
+                COUNT(i.*)::int AS invoice_count
+           FROM customers c
+           JOIN invoices i ON i.customer_id = c.id AND i.year IS NOT NULL
+          GROUP BY c.id, c.name, c.phone
+         HAVING COALESCE(SUM(i.total), 0) > 0
+          ORDER BY outstanding DESC, billed DESC`,
+      );
+    });
+  }
+
   /** Quotes raised for this customer. */
   async getCustomerQuotes(schema: string, customerId: string): Promise<any[]> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {

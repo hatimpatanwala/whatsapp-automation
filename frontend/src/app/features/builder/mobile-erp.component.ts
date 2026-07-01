@@ -194,16 +194,24 @@ const ORDER_STATUS_OPTIONS = [
 
           <!-- ── CUSTOMERS ─────────────────────────────────────────── -->
           @if (view() === 'customers') {
+            <select [(ngModel)]="customerSegment" (ngModelChange)="loadCustomers()" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white mb-2">
+              <option value="all">All customers</option>
+              <option value="dues">With dues</option>
+              <option value="top">Top spenders</option>
+              <option value="repeat">Repeat buyers</option>
+              <option value="new">New (last 30 days)</option>
+              <option value="inactive">Inactive</option>
+            </select>
             <input [(ngModel)]="customerQuery" (ngModelChange)="onCustomerSearch()" placeholder="Search customers…"
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white mb-3" />
             @for (c of customers(); track c.id) {
-              <div class="bg-white rounded-2xl border border-gray-100 p-3.5 mb-2 flex items-center gap-3">
+              <button (click)="openCustomer(c)" class="w-full text-left bg-white rounded-2xl border border-gray-100 p-3.5 mb-2 flex items-center gap-3">
                 <div class="min-w-0 flex-1">
                   <p class="text-sm font-semibold text-gray-900 truncate">{{ c.name || c.phone }}</p>
                   <p class="text-[11px] text-gray-400">{{ c.phone }}{{ c.orderCount ? ' · ' + c.orderCount + ' orders' : '' }}</p>
                 </div>
                 <p class="text-sm font-bold tabular-nums shrink-0">{{ cur() }}{{ fmt(c.totalSpent) }}</p>
-              </div>
+              </button>
             } @empty { <p class="text-center text-gray-400 py-10 text-sm">{{ busy() ? 'Loading…' : 'No customers.' }}</p> }
           }
 
@@ -331,6 +339,63 @@ const ORDER_STATUS_OPTIONS = [
         </div>
       }
 
+      <!-- ── Customer detail + ledger sheet ─────────────────────────── -->
+      @if (customerDetail(); as d) {
+        <div class="fixed inset-0 z-40 bg-black/40 flex items-end" (click)="customerDetail.set(null)">
+          <div class="bg-white w-full max-w-2xl mx-auto rounded-t-2xl p-4 max-h-[88vh] overflow-y-auto" (click)="$event.stopPropagation()">
+            <div class="flex items-center justify-between mb-1">
+              <h2 class="text-base font-bold">{{ d.customer.name || d.customer.phone }}</h2>
+              <button (click)="customerDetail.set(null)" class="text-gray-400"><i class="pi pi-times"></i></button>
+            </div>
+            <p class="text-sm text-gray-500 mb-3">{{ d.customer.phone }}{{ d.customer.orderCount ? ' · ' + d.customer.orderCount + ' orders' : '' }}</p>
+
+            <div class="grid grid-cols-3 gap-2 mb-4">
+              <div class="rounded-xl border border-gray-100 p-2.5 text-center">
+                <p class="text-[10px] text-gray-400 uppercase">Billed</p>
+                <p class="text-sm font-bold tabular-nums">{{ sym(d.currency) }}{{ fmt(d.ledger.summary.billed) }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 p-2.5 text-center">
+                <p class="text-[10px] text-gray-400 uppercase">Paid</p>
+                <p class="text-sm font-bold text-green-600 tabular-nums">{{ sym(d.currency) }}{{ fmt(d.ledger.summary.paid) }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 p-2.5 text-center">
+                <p class="text-[10px] text-gray-400 uppercase">Due</p>
+                <p class="text-sm font-bold tabular-nums" [class.text-red-600]="d.ledger.summary.outstanding > 0">{{ sym(d.currency) }}{{ fmt(d.ledger.summary.outstanding) }}</p>
+              </div>
+            </div>
+
+            @if (d.ledger.entries.length) {
+              <p class="text-xs font-bold text-gray-500 uppercase mb-2">Ledger</p>
+              <div class="border border-gray-100 rounded-xl divide-y divide-gray-50 mb-4">
+                @for (e of d.ledger.entries; track $index) {
+                  <div class="flex justify-between items-center px-3 py-2 text-sm">
+                    <span class="truncate">{{ e.description }} <span class="text-gray-400 text-xs">{{ e.ref }}</span></span>
+                    <span class="text-right shrink-0 ml-2 tabular-nums" [class.text-green-600]="e.credit">
+                      {{ e.debit ? sym(d.currency) + fmt(e.debit) : '−' + sym(d.currency) + fmt(e.credit) }}
+                      <span class="block text-[10px] text-gray-400">bal {{ sym(d.currency) }}{{ fmt(e.balance) }}</span>
+                    </span>
+                  </div>
+                }
+              </div>
+            }
+
+            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Recent orders</p>
+            <div class="border border-gray-100 rounded-xl divide-y divide-gray-50 mb-4">
+              @for (o of d.orders; track o.id) {
+                <div class="flex justify-between px-3 py-2 text-sm"><span class="truncate">#{{ o.orderNumber }} · {{ label(o.status) }}</span><span class="tabular-nums shrink-0 ml-2">{{ sym(d.currency) }}{{ fmt(o.total) }}</span></div>
+              } @empty { <p class="px-3 py-2 text-sm text-gray-400">No orders.</p> }
+            </div>
+
+            <p class="text-xs font-bold text-gray-500 uppercase mb-2">Invoices</p>
+            <div class="border border-gray-100 rounded-xl divide-y divide-gray-50">
+              @for (inv of d.invoices; track inv.invoiceNumber) {
+                <div class="flex justify-between px-3 py-2 text-sm"><span class="truncate">{{ inv.invoiceNumber }} · {{ label(inv.paymentStatus) }}</span><span class="tabular-nums shrink-0 ml-2">{{ sym(d.currency) }}{{ fmt(inv.total) }}</span></div>
+              } @empty { <p class="px-3 py-2 text-sm text-gray-400">No invoices.</p> }
+            </div>
+          </div>
+        </div>
+      }
+
       @if (toast()) {
         <div class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-2 rounded-full shadow-lg">{{ toast() }}</div>
       }
@@ -375,11 +440,13 @@ export class MobileErpComponent implements OnInit {
   orderDetail = signal<any>(null);
   invoiceDetail = signal<any>(null);
   productDetail = signal<any>(null);
+  customerDetail = signal<any>(null);
 
   orderFilter = 'open';
   invoiceFilter = '';
   productQuery = '';
   customerQuery = '';
+  customerSegment = 'all';
   newTaxName = '';
   newTaxRate: number | null = null;
   payAmount: number | null = null;
@@ -449,7 +516,13 @@ export class MobileErpComponent implements OnInit {
   }
   loadCustomers(): void {
     this.busy.set(true);
-    this.get<any>('/customers', this.customerQuery ? { q: this.customerQuery } : {}).subscribe({ next: (r) => { this.customers.set(unwrap<any[]>(r) || []); this.busy.set(false); }, error: () => this.busy.set(false) });
+    const params: Record<string, string> = {};
+    if (this.customerQuery) params['q'] = this.customerQuery;
+    if (this.customerSegment && this.customerSegment !== 'all') params['segment'] = this.customerSegment;
+    this.get<any>('/customers', params).subscribe({ next: (r) => { this.customers.set(unwrap<any[]>(r) || []); this.busy.set(false); }, error: () => this.busy.set(false) });
+  }
+  openCustomer(c: any): void {
+    this.get<any>(`/customers/${c.id}`).subscribe({ next: (r) => this.customerDetail.set(unwrap(r)) });
   }
   loadTaxRates(): void {
     this.busy.set(true);

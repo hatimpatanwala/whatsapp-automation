@@ -57,6 +57,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/invoices/invoices.component').then(m => m.InvoicesComponent),
       },
       {
+        // Ledgers / accounts-receivable overview (ERP).
+        path: 'ledgers',
+        loadComponent: () => import('./features/ledgers/ledgers.component').then(m => m.LedgersComponent),
+      },
+      {
         path: 'inventory',
         loadComponent: () => import('./features/inventory/inventory.component').then(m => m.InventoryComponent),
       },

@@ -91,8 +91,13 @@ export class ErpWebviewController {
 
   // ── Customers ──
   @Get('customers')
-  customers(@Req() req: Request, @Query('q') q?: string, @Query('token') token?: string) {
-    return this.svc.customers(this.token(req, token), q);
+  customers(@Req() req: Request, @Query('q') q?: string, @Query('segment') segment?: string, @Query('token') token?: string) {
+    return this.svc.customers(this.token(req, token), q, segment);
+  }
+
+  @Get('customers/:id')
+  customer(@Req() req: Request, @Param('id') id: string, @Query('token') token?: string) {
+    return this.svc.customerDetail(this.token(req, token), id);
   }
 
   // ── Tax rates ──
