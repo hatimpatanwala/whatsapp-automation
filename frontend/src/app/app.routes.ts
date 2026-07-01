@@ -169,5 +169,11 @@ export const routes: Routes = [
     path: 'm/onboarding',
     loadComponent: () => import('./features/builder/onboarding-webview.component').then(m => m.OnboardingWebviewComponent),
   },
+  {
+    // Token-secured ERP Console webview — admin manages orders, invoices, catalog
+    // & customers from inside WhatsApp (opened from the admin menu).
+    path: 'm/erp',
+    loadComponent: () => import('./features/builder/mobile-erp.component').then(m => m.MobileErpComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

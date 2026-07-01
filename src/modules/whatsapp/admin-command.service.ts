@@ -120,16 +120,19 @@ export class AdminCommandService {
   ): Promise<Array<{ id: string; title: string; desc: string; rows: Array<{ id: string; title: string; description?: string }> }>> {
     const erp = await this.isErp(tenant);
     const e = (r: { id: string; title: string; description?: string }) => (erp ? [r] : []);
+    const b = (r: { id: string; title: string; description?: string }) => (erp ? [] : [r]);
     const home = { id: 'main_menu', title: '🏠 Main Menu' };
     return [
       {
         id: 'sec_sales', title: '🛒 Sales', desc: 'Invoices, orders, quotes & reminders',
         rows: [
-          ...e({ id: 'einv_new', title: '➕ New Invoice', description: 'Create an invoice' }),
-          ...e({ id: 'einv_unpaid', title: '🔴 Unpaid Invoices', description: 'Outstanding invoices' }),
-          ...e({ id: 'einv_recent', title: '🧾 Recent Invoices' }),
-          { id: 'menu_orders', title: '📦 Orders', description: 'Recent orders' },
-          { id: 'menu_pending', title: '⏳ Pending Orders' },
+          ...e({ id: 'erp_console', title: '🖥️ ERP Console', description: 'Open the full admin app' }),
+          ...e({ id: 'einv_new', title: '➕ New Invoice', description: 'Open the invoice builder' }),
+          ...e({ id: 'erp_console_invoices', title: '🧾 Manage Invoices', description: 'View, pay & track' }),
+          { id: 'new_order', title: '✨ New Order', description: 'Build a new order' },
+          ...e({ id: 'erp_console_orders', title: '📦 Manage Orders', description: 'View & update status' }),
+          ...b({ id: 'menu_orders', title: '📦 Orders', description: 'Recent orders' }),
+          ...b({ id: 'menu_pending', title: '⏳ Pending Orders' }),
           { id: 'menu_quotes', title: '📄 Quotes' },
           ...e({ id: 'erp_remind', title: '🔔 Payment Reminders', description: 'Nudge unpaid customers' }),
           home,
@@ -138,6 +141,7 @@ export class AdminCommandService {
       {
         id: 'sec_catalog', title: '🛍️ Catalog', desc: 'Products, categories & stock',
         rows: [
+          ...e({ id: 'erp_console_catalog', title: '🛍️ Manage Catalog', description: 'Edit prices, stock & products' }),
           { id: 'prod_list', title: '🛍️ Product List' },
           { id: 'prod_add', title: '➕ Add Product' },
           { id: 'prod_update', title: '✏️ Update Product' },
@@ -151,6 +155,7 @@ export class AdminCommandService {
       {
         id: 'sec_customers', title: '👥 Customers', desc: 'View & manage customers',
         rows: [
+          ...e({ id: 'erp_console_customers', title: '👥 Manage Customers', description: 'Open the console' }),
           { id: 'menu_customers_text', title: '👥 Top Customers' },
           { id: 'menu_customers', title: '📈 Customer Insights', description: 'Open the insights page' },
           home,
@@ -159,6 +164,7 @@ export class AdminCommandService {
       {
         id: 'sec_money', title: '💰 Money', desc: 'Payments & receivables',
         rows: [
+          ...e({ id: 'erp_console_invoices', title: '🧾 Manage Invoices', description: 'View & record payments' }),
           { id: 'menu_payments', title: '💳 Recent Payments' },
           ...e({ id: 'einv_unpaid', title: '🔴 Unpaid Invoices' }),
           ...e({ id: 'erp_report', title: '📊 Business Report' }),
@@ -176,6 +182,7 @@ export class AdminCommandService {
       {
         id: 'sec_reports', title: '📊 Reports', desc: 'Summary & insights',
         rows: [
+          ...e({ id: 'erp_console', title: '🖥️ ERP Console', description: 'Open the full admin app' }),
           ...e({ id: 'erp_report', title: '📊 Business Report' }),
           { id: 'menu_summary', title: '📈 Today’s Summary' },
           home,
@@ -414,9 +421,21 @@ export class AdminCommandService {
     }
     if (id === 'invskip') return this.send(tenant, to, '👍 No document issued.\n\nSend *menu* for more.');
 
+    // ─── ERP Console webviews (plan-gated) ──────────────────────────────────
+    if (id === 'erp_console') return this.createErpConsoleLink(tenant, to, 'dashboard', '🖥️ Open ERP Console',
+      '🖥️ *ERP Console*\n\nTap below to open your full admin app — dashboard, orders, invoices, catalog & customers, all in one place. This link works for 2 hours.');
+    if (id === 'erp_console_orders') return this.createErpConsoleLink(tenant, to, 'orders', '📦 Open Orders',
+      '📦 *Manage Orders*\n\nTap below to see every order, open its details and update the status. This link works for 2 hours.');
+    if (id === 'erp_console_invoices') return this.createErpConsoleLink(tenant, to, 'invoices', '🧾 Open Invoices',
+      '🧾 *Manage Invoices*\n\nTap below to view invoices, record payments and track receivables. This link works for 2 hours.');
+    if (id === 'erp_console_catalog') return this.createErpConsoleLink(tenant, to, 'catalog', '🛍️ Open Catalog',
+      '🛍️ *Manage Catalog*\n\nTap below to edit product prices, stock and details, or add products. This link works for 2 hours.');
+    if (id === 'erp_console_customers') return this.createErpConsoleLink(tenant, to, 'customers', '👥 Open Customers',
+      '👥 *Customers*\n\nTap below to browse and search your customers. This link works for 2 hours.');
+
     // ─── ERP invoices (plan-gated) ──────────────────────────────────────────
     if (id === 'cat_einvoices') return this.showErpInvoiceMenu(tenant, to);
-    if (id === 'einv_new') return this.startErpInvoice(tenant, to);
+    if (id === 'einv_new') return this.createErpInvoiceLink(tenant, to);
     if (id === 'einv_unpaid') return this.listErpInvoices(tenant, to, true);
     if (id === 'einv_recent') return this.listErpInvoices(tenant, to, false);
     if (id.startsWith('einvv_')) return this.showErpInvoice(tenant, to, id.slice('einvv_'.length));
@@ -1112,6 +1131,43 @@ export class AdminCommandService {
     } catch (err: any) {
       this.logger.error(`createBuilderLink failed: ${err.message}`);
       await this.send(tenant, to, '⚠️ Could not open the builder right now. Send *menu* and try again.');
+    }
+  }
+
+  /** Mint an ERP Console session (deep-linked to a tab) and send a CTA URL button. */
+  private async createErpConsoleLink(tenant: any, to: string, view: string, label: string, body: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createErpSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        view,
+        createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(tenant.phoneNumberId, tenant.accessToken, to, body, label, url);
+    } catch (err: any) {
+      this.logger.error(`createErpConsoleLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the ERP console right now. Send *menu* and try again.');
+    }
+  }
+
+  /** Mint an invoice-builder session and send a CTA URL button (rich web form). */
+  private async createErpInvoiceLink(tenant: any, to: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createInvoiceSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        '🧾 *New Invoice*\n\nTap below to open the invoice builder — pick the customer, add items, set tax & discount, then issue. This link works for 2 hours.',
+        'Open Invoice Builder',
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createErpInvoiceLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the invoice builder. Send *menu* and try again.');
     }
   }
 

@@ -440,6 +440,33 @@ export class BuilderService implements OnModuleInit {
     return this.resolveSession(token, 'onboarding');
   }
 
+  /**
+   * Mint an ERP CONSOLE session — a full-featured admin webview (`/m/erp`) to
+   * manage orders, invoices, catalog, customers & reports from inside WhatsApp.
+   * `view` deep-links the console to a specific tab (orders/invoices/catalog/…);
+   * it's only a UI hint, so it rides on the URL rather than the token row.
+   */
+  async createErpSession(input: {
+    tenantId: string; schemaName: string; view?: string; createdBy?: string;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + this.ttlMs); // 2h — admin tool
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions (token_hash, tenant_id, schema_name, type, created_by, status, mode, expires_at)
+       VALUES ($1,$2,$3,'erp',$4,'open','erp',$5)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.createdBy || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    const view = input.view ? `&view=${encodeURIComponent(input.view)}` : '';
+    return { token, url: `${base}/m/erp?token=${token}${view}` };
+  }
+
+  /** Validate an ERP-console token → the tenant it operates on. */
+  async getErpSession(token: string): Promise<{ schemaName: string; tenantId: string }> {
+    const s = await this.resolveSession(token, 'erp');
+    return { schemaName: s.schema_name, tenantId: s.tenant_id };
+  }
+
   /** Categories / brands / products / customers for the promo scope & audience pickers. */
   async promoTaxonomy(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
@@ -463,7 +490,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' | 'erp' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

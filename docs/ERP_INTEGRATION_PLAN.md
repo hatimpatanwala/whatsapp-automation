@@ -694,3 +694,19 @@ Follow-ups to Phase 15, all verified end-to-end against the running stack (read-
 All GETs → ErpFeatureGuard permits them for downgraded-but-provisioned tenants, so a tenant who dropped ERP can pull **all** their data out. Robust by design: `SELECT *` per dataset (no column drift), each query wrapped so a missing table just yields no sheet. Registered in `erp.module.ts`. Frontend `ErpExportComponent` (`/erp/export`) is the **landing for read-only tenants** (the "Download My Data" nav entry → here, replacing the dashboard) and also appears as "Export Data" under Administration for full-ERP users. *Verified:* `all.xlsx` = 30 sheets / valid xlsx; CSV download has correct headers + rows; export page shows 102 records across 29 datasets with per-dataset CSV + "Download Everything (Excel)".
 
 **C. Custom screens honour read-only.** The custom `ErpInvoiceListComponent` (not built on the shared `ErpCrudComponent`) was still showing "New Invoice"/Record-Payment/Reminder in read-only — the "it lets me create a new invoice" bug. Now injects `ErpAccessService` and hides those controls + early-returns `openCreate`/`openPayment` when `readOnly()`. *Verified:* read-only invoice screen has 0 New/Record-Payment/Reminder controls, 10 view-only rows, banner shown, data visible (writes already 403 server-side).
+
+---
+
+## 31. ERP Console webview + richer WhatsApp admin control (Phase 17)
+
+**Ask:** the WhatsApp admin control was limited/text-only; options like order list, create order, invoices and catalog should open a **WhatsApp webview** — selecting one redirects the admin into a rich mobile screen to manage it.
+
+**Unified ERP Console webview** — `/m/erp?token=&view=` (`mobile-erp.component.ts`): a token-authenticated mobile admin app with tabs **Dashboard / Orders / Invoices / Catalog / Customers**. List + detail + actions: change order status, record invoice payment, edit product price/stock/name/active, and "+ New" order/invoice (mints the existing builder / invoice-builder webviews). `?view=` deep-links a tab so each WhatsApp menu option lands on the right screen. Bare HttpClient + `X-Builder-Token` (no app session), matching the other `/m/*` webviews.
+
+**Backend.** `BuilderService.createErpSession()` / `getErpSession()` add an `erp` mode to `builder_sessions` (multi-use, 2h). `ErpWebviewController` (`/m/erp`, `@Public`) + `ErpWebviewService`: orders/products/customers/dashboard via raw SQL (schema-per-tenant), invoices via **reused `ErpInvoiceService.list/findById/recordPayment`** so numbers match the panel. **`BuilderModule` now imports `ErpModule`** (acyclic — ErpModule imports no app modules) for `ErpInvoiceService`. Gotcha: customers table column is `total_orders` (aliased to `order_count`).
+
+**WhatsApp wiring** (`admin-command.service.ts`): `createErpConsoleLink(view,label,body)` + `createErpInvoiceLink` send CTA-URL buttons. New ERP-gated menu rows: **🖥️ ERP Console, 📦 Manage Orders, 🧾 Manage Invoices, 🛍️ Manage Catalog, 👥 Manage Customers**. `einv_new` (New Invoice) repointed from the text state-machine to the invoice-builder webview. Non-ERP tenants keep the simple text lists (new `b()` base-only helper alongside `e()`).
+
+**Verified** on `tenant_demo_store`: backend boots (no circular dep); every endpoint 200; product edit (₹250→₹275, stock 0→42) and invoice payment (INV-2026-0013 unpaid→partial) persist; Playwright — Dashboard KPIs, Catalog list + product-edit sheet, and Invoices (with per-invoice USD/₹ symbols) all render on live data.
+
+> **Deploy note:** always clean-build the backend (`rm -rf dist tsconfig.build.tsbuildinfo && npm run build`) — plain `nest build` is incremental + deletes dist, so it can leave `dist/*.js` files un-emitted (`Cannot find module './telemetry'`). The backend runs as native `node dist/main` on :3000 (not watch-mode); rebuild + restart it to load backend changes.
