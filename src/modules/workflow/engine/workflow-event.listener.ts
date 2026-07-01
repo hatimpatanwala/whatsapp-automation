@@ -309,15 +309,16 @@ export class WorkflowEventListener {
             }
           }
         } else if (triggerType === 'trigger_quote' && out.quote_id) {
+          // NB: the quotes table has no `currency` column — don't select it.
           const q = (await qr.query(
-            `SELECT quote_number, status, total_amount, currency FROM quotes WHERE id = $1`,
+            `SELECT quote_number, status, total_amount FROM quotes WHERE id = $1`,
             [out.quote_id],
           ))[0];
           if (q) {
             out.quote_number = q.quote_number ?? out.quote_number;
             out.quote_total = out.quote_total ?? q.total_amount;
             out.quote_status = out.quote_status ?? q.status;
-            out.currency = q.currency || '₹';
+            out.currency = out.currency || '₹';
           }
         } else if (triggerType === 'trigger_invoice' && out.invoice_id) {
           const inv = (await qr.query(
