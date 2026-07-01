@@ -22,6 +22,7 @@ interface QuoteItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  discount?: number;
 }
 
 @Component({
@@ -86,33 +87,42 @@ interface QuoteItem {
 
             <div class="space-y-2.5">
               @for (item of items; track $index; let i = $index) {
-                <div class="flex flex-wrap items-start gap-2 p-2.5 bg-gray-50 rounded-xl">
-                  <div class="flex-1 min-w-[10rem]">
-                    <p-select
-                      [options]="products()"
-                      [(ngModel)]="item.productId"
-                      optionLabel="label"
-                      optionValue="value"
-                      placeholder="Pick a product (optional)"
-                      [showClear]="true"
-                      [filter]="true"
-                      styleClass="w-full"
-                      appendTo="body"
-                      (onChange)="onProductSelect(i)"
-                    />
-                    <input pInputText [(ngModel)]="item.description" class="w-full mt-1.5 text-sm" placeholder="Description" />
+                <div class="p-3 bg-gray-50 rounded-xl space-y-2">
+                  <div class="flex items-start gap-2">
+                    <div class="flex-1 min-w-0">
+                      <p-select
+                        [options]="products()"
+                        [(ngModel)]="item.productId"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Pick a product (optional)"
+                        [showClear]="true"
+                        [filter]="true"
+                        styleClass="w-full"
+                        appendTo="body"
+                        (onChange)="onProductSelect(i)"
+                      />
+                      <input pInputText [(ngModel)]="item.description" class="w-full mt-1.5 text-sm" placeholder="Description" />
+                    </div>
+                    <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger shrink-0" (click)="removeItem(i)"></button>
                   </div>
-                  <div class="w-16">
-                    <label class="text-[10px] text-gray-400 font-medium">Qty</label>
-                    <p-inputNumber [(ngModel)]="item.quantity" [min]="1" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full text-center" />
-                  </div>
-                  <div class="w-28">
-                    <label class="text-[10px] text-gray-400 font-medium">Unit price</label>
-                    <p-inputNumber [(ngModel)]="item.unitPrice" [min]="0" mode="currency" currency="INR" locale="en-IN" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" />
-                  </div>
-                  <div class="flex flex-col items-end pt-4">
-                    <span class="text-sm font-semibold tabular-nums">\u20B9{{ (item.quantity * item.unitPrice) | number:'1.0-2' }}</span>
-                    <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger -mr-1" (click)="removeItem(i)"></button>
+                  <div class="grid grid-cols-3 sm:grid-cols-4 gap-2 items-end">
+                    <div>
+                      <label class="text-[10px] text-gray-400 font-medium">Qty</label>
+                      <p-inputNumber [(ngModel)]="item.quantity" [min]="1" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full text-center" />
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-gray-400 font-medium">Unit price</label>
+                      <p-inputNumber [(ngModel)]="item.unitPrice" [min]="0" mode="currency" currency="INR" locale="en-IN" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" />
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-gray-400 font-medium">Discount \u20B9</label>
+                      <p-inputNumber [(ngModel)]="item.discount" [min]="0" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" placeholder="0" />
+                    </div>
+                    <div class="text-right col-span-3 sm:col-span-1 border-t sm:border-t-0 border-gray-200 pt-2 sm:pt-0">
+                      <label class="text-[10px] text-gray-400 font-medium">Line total</label>
+                      <p class="text-sm font-semibold tabular-nums">\u20B9{{ lineTotal(item) | number:'1.0-2' }}</p>
+                    </div>
                   </div>
                 </div>
               }
@@ -140,6 +150,9 @@ interface QuoteItem {
             <h3 class="text-base font-semibold text-gray-900 mb-2">Summary</h3>
             <div class="flex justify-between text-gray-600"><span>Items</span><span class="tabular-nums">{{ items.length }}</span></div>
             <div class="flex justify-between text-gray-600"><span>Subtotal</span><span class="tabular-nums">\u20B9{{ subtotal() | number:'1.2-2' }}</span></div>
+            @if (lineDiscountTotal() > 0) {
+              <div class="flex justify-between text-green-700"><span>Line discounts</span><span class="tabular-nums">-\u20B9{{ lineDiscountTotal() | number:'1.2-2' }}</span></div>
+            }
 
             <wa-promo-section [promo]="promo" (apply)="applyCoupon($event)" />
             @if (promo.couponDiscount() > 0) {
@@ -179,7 +192,13 @@ export class QuoteFormComponent implements OnInit {
   products = signal<{ label: string; value: string; price?: number; name?: string }[]>([]);
 
   subtotal = signal(0);
-  total = computed(() => Math.max(0, this.subtotal() - this.promo.totalDiscount()));
+  lineDiscountTotal = signal(0);
+  total = computed(() => Math.max(0, this.subtotal() - this.lineDiscountTotal() - this.promo.totalDiscount()));
+
+  /** Net total for one line: qty × price − discount (never negative). */
+  lineTotal(item: QuoteItem): number {
+    return Math.max(0, (item.quantity || 0) * (item.unitPrice || 0) - (Number(item.discount) || 0));
+  }
 
   private promoLines() { return this.items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })); }
   refreshPromo() { this.promo.refresh(this.promoLines(), this.customerId || undefined); }
@@ -262,6 +281,7 @@ export class QuoteFormComponent implements OnInit {
           description: item.description,
           quantity: Number(item.quantity) || 1,
           unitPrice: Number(item.unitPrice ?? item.unit_price) || 0,
+          discount: Number(item.discount) || 0,
         }));
         this.recalculate();
         this.loading.set(false);
@@ -271,7 +291,7 @@ export class QuoteFormComponent implements OnInit {
   }
 
   addItem() {
-    this.items.push({ description: '', quantity: 1, unitPrice: 0 });
+    this.items.push({ description: '', quantity: 1, unitPrice: 0, discount: 0 });
   }
 
   removeItem(index: number) {
@@ -292,8 +312,14 @@ export class QuoteFormComponent implements OnInit {
   }
 
   recalculate() {
-    const total = this.items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
-    this.subtotal.set(total);
+    let gross = 0, disc = 0;
+    for (const item of this.items) {
+      const g = (item.quantity || 0) * (item.unitPrice || 0);
+      gross += g;
+      disc += Math.min(Math.max(0, Number(item.discount) || 0), g); // a line discount can't exceed the line
+    }
+    this.subtotal.set(gross);
+    this.lineDiscountTotal.set(disc);
     this.refreshPromo();
   }
 
@@ -321,6 +347,7 @@ export class QuoteFormComponent implements OnInit {
           description: i.description,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
+          discount: Number(i.discount) || 0,
         })),
         ...freeItems,
       ],

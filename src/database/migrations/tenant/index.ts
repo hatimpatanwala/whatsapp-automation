@@ -2014,6 +2014,16 @@ const migration057AdminNotifications: TenantMigration = {
   async down(qr, schema) { await qr.query(`DROP TABLE IF EXISTS "${schema}".admin_notifications`); },
 };
 
+const migration058QuoteItemDiscount: TenantMigration = {
+  name: '058_quote_item_discount',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".quote_items ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) NOT NULL DEFAULT 0`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".quote_items DROP COLUMN IF EXISTS discount`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2072,4 +2082,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration055ErpPosEway,
   migration056TaxRatePercent,
   migration057AdminNotifications,
+  migration058QuoteItemDiscount,
 ];

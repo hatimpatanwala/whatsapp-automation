@@ -85,10 +85,12 @@ export class QuoteService {
     validUntil?: string;
     discount?: number;
     taxAmount?: number;
-    items: { productId?: string; description: string; quantity: number; unitPrice: number }[];
+    items: { productId?: string; description: string; quantity: number; unitPrice: number; discount?: number }[];
   }) {
+    const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) =>
+      Math.max(0, it.quantity * it.unitPrice - (Number(it.discount) || 0));
     const created = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      const subtotal = data.items.reduce((sum, item) => sum + lineNet(item), 0);
       const taxAmount = Math.max(0, Number(data.taxAmount) || 0);
       const discount = Math.max(0, Number(data.discount) || 0);
       const taxRate = subtotal > 0 ? taxAmount / subtotal : 0;
@@ -111,11 +113,12 @@ export class QuoteService {
 
       for (let i = 0; i < data.items.length; i++) {
         const item = data.items[i];
-        const lineTotal = item.quantity * item.unitPrice;
+        const itemDiscount = Math.max(0, Number(item.discount) || 0);
+        const lineTotal = lineNet(item);
         await qr.query(
-          `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, line_total, sort_order)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [quote.id, item.productId || null, item.description, item.quantity, item.unitPrice, lineTotal, i],
+          `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, discount, line_total, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [quote.id, item.productId || null, item.description, item.quantity, item.unitPrice, itemDiscount, lineTotal, i],
         );
       }
 
@@ -132,9 +135,11 @@ export class QuoteService {
     notes?: string;
     validUntil?: string;
     customerId?: string;
-    items?: { productId?: string; description: string; quantity: number; unitPrice: number }[];
+    items?: { productId?: string; description: string; quantity: number; unitPrice: number; discount?: number }[];
     taxRate?: number;
   }) {
+    const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) =>
+      Math.max(0, it.quantity * it.unitPrice - (Number(it.discount) || 0));
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const existing = await qr.query(`SELECT * FROM quotes WHERE id = $1`, [id]);
       if (!existing[0]) return null;
@@ -154,7 +159,7 @@ export class QuoteService {
       if (data.customerId !== undefined) { updates.push(`customer_id = $${idx++}`); params.push(data.customerId); }
 
       if (data.items) {
-        const subtotal = data.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const subtotal = data.items.reduce((sum, item) => sum + lineNet(item), 0);
         const taxRate = data.taxRate ?? existing[0].tax_rate ?? 0;
         const taxAmount = subtotal * taxRate;
         const totalAmount = subtotal + taxAmount;
@@ -175,11 +180,12 @@ export class QuoteService {
         await qr.query(`DELETE FROM quote_items WHERE quote_id = $1`, [id]);
         for (let i = 0; i < data.items.length; i++) {
           const item = data.items[i];
-          const lineTotal = item.quantity * item.unitPrice;
+          const itemDiscount = Math.max(0, Number(item.discount) || 0);
+          const lineTotal = lineNet(item);
           await qr.query(
-            `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, line_total, sort_order)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [id, item.productId || null, item.description, item.quantity, item.unitPrice, lineTotal, i],
+            `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, discount, line_total, sort_order)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [id, item.productId || null, item.description, item.quantity, item.unitPrice, itemDiscount, lineTotal, i],
           );
         }
       }
