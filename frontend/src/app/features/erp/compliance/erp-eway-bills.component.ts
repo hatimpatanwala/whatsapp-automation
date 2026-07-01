@@ -42,6 +42,7 @@ import { ErpCurrencyService } from '../../../core/services/erp-currency.service'
               <td class="text-sm text-gray-500">{{ row.validUntil | date:'mediumDate' }}</td>
               <td><p-tag [value]="row.status | titlecase" [severity]="row.status === 'active' ? 'success' : 'danger'" /></td>
               <td class="text-right">
+                <button pButton icon="pi pi-download" class="p-button-text p-button-sm" pTooltip="Download PDF" (click)="downloadPdf(row)"></button>
                 @if (row.status === 'active') { <button pButton icon="pi pi-ban" class="p-button-text p-button-sm p-button-danger" pTooltip="Cancel" (click)="cancel(row)"></button> }
               </td>
             </tr>
@@ -104,6 +105,8 @@ export class ErpEwayBillsComponent implements OnInit {
   cancel(row: any) {
     this.api.put(`/erp/eway-bills/${row.id}/cancel`, {}).subscribe({ next: () => { this.toast.add({ severity: 'success', summary: 'Cancelled' }); this.load(); } });
   }
+  /** Open the standard-format e-way bill PDF (streams from the API with the session cookie). */
+  downloadPdf(row: any) { window.open(this.api.url(`/erp/eway-bills/${row.id}/pdf`), '_blank'); }
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   private blank() { return { invoiceId: null as any, transportMode: 'road', vehicleNumber: '', fromPlace: '', toPlace: '', distanceKm: 0, transporter: '' }; }
 }

@@ -1,8 +1,9 @@
-import { Injectable, Controller, UseGuards, Get, Post, Put, Param, Body, Query, Req, BadRequestException, NotFoundException } from '@nestjs/common';
-import { Request } from 'express';
+import { Injectable, Controller, UseGuards, Get, Post, Put, Param, Body, Query, Req, Res, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { ErpSequenceService } from '../common/erp-sequence.service';
 import { firstRow } from '../common/sql-result.util';
+import { buildEwayBillPdf } from './eway-pdf';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { ErpFeatureGuard } from '../../../common/guards/erp-feature.guard';
 import { RequiresFeature } from '../../../common/decorators/requires-feature.decorator';
@@ -62,6 +63,34 @@ export class EwayBillService {
     });
   }
 
+  /** Standard-format (EWB-01) PDF for one e-way bill, with its linked invoice's goods. */
+  async getEwayPdf(schema: string, id: string): Promise<{ buffer: Buffer; filename: string }> {
+    const { eway, invoice, settings } = await this.cm.executeInTenantContext(schema, async (qr) => {
+      const eway = firstRow(await qr.query(`SELECT * FROM "${schema}".eway_bills WHERE id = $1 AND removed = false`, [id]));
+      if (!eway) throw new NotFoundException('E-way bill not found');
+      let invoice: any = null;
+      if (eway.invoice_id) {
+        invoice = firstRow(await qr.query(`SELECT * FROM "${schema}".invoices WHERE id = $1`, [eway.invoice_id]));
+      }
+      const rows = await qr.query(
+        `SELECT key, value FROM "${schema}".settings
+         WHERE key IN ('business_name','invoice_legal_name','invoice_address','invoice_gstin','erp_currency','currency')`,
+      );
+      const m: Record<string, any> = {};
+      for (const r of rows) m[r.key] = r.value;
+      const settings = {
+        businessName: m.invoice_legal_name || m.business_name || 'Your Business',
+        address: m.invoice_address || undefined,
+        gstin: m.invoice_gstin || undefined,
+        currency: m.erp_currency || m.currency || 'INR',
+      };
+      return { eway, invoice, settings };
+    });
+    const buffer = await buildEwayBillPdf(eway, invoice, settings);
+    const filename = `eway-${String(eway.eway_number).replace(/[^\w.-]/g, '_')}.pdf`;
+    return { buffer, filename };
+  }
+
   async cancel(schema: string, id: string) {
     const row = await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(`UPDATE "${schema}".eway_bills SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND removed = false RETURNING id`, [id]).then(firstRow));
@@ -78,4 +107,14 @@ export class EwayBillController {
   @Get() @Roles('owner', 'seller') list(@Req() req: Request, @Query('page') p?: string, @Query('limit') l?: string) { return this.service.list(req.tenantContext.schemaName, p ? +p : 1, l ? +l : 50); }
   @Post() @Roles('owner', 'seller') create(@Req() req: Request, @Body() b: EwayInput) { return this.service.create(req.tenantContext.schemaName, b); }
   @Put(':id/cancel') @Roles('owner', 'seller') cancel(@Req() req: Request, @Param('id') id: string) { return this.service.cancel(req.tenantContext.schemaName, id); }
+
+  /** Download the e-way bill as a standard-format PDF. @Res() bypasses the JSON envelope. */
+  @Get(':id/pdf')
+  @Roles('owner', 'seller')
+  async pdf(@Req() req: Request, @Param('id') id: string, @Res() res: Response) {
+    const { buffer, filename } = await this.service.getEwayPdf(req.tenantContext.schemaName, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(buffer);
+  }
 }
