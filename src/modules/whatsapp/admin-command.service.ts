@@ -572,6 +572,8 @@ export class AdminCommandService {
       .map((c: any) => `• *${c.name || c.phone}* — ${c.total_orders || 0} orders · ₹${c.total_spent || 0}`)
       .join('\n');
     await this.send(tenant, to, `👥 *Top Customers*\n\n${lines}\n\nSend *menu* to go back.`);
+    await this.createPortalEditLink(tenant, to, '/customers', '👥 Open customers',
+      '👥 *Customers*\n\nTap below to browse and manage all your customers in the portal. This link opens once and lasts 15 minutes.');
   }
 
   private async listLowStock(tenant: any, to: string): Promise<void> {
@@ -661,6 +663,8 @@ export class AdminCommandService {
       .map((p: any) => `• *${p.name}*${p.brand ? ` _(${p.brand})_` : ''} — ${p.currency || '₹'}${p.price}${p.track ? ` · stock ${p.stock}` : ''}${p.is_active ? '' : ' (inactive)'}`)
       .join('\n');
     await this.send(tenant, to, `🛍️ *Products* (${products.length})\n\n${lines}\n\nSend *menu* to go back.`);
+    await this.createPortalEditLink(tenant, to, '/products', '🛍️ Open full catalog',
+      '🛍️ *Products*\n\nTap below to manage your full catalog in the portal — search, edit, add. This link opens once and lasts 15 minutes.');
   }
 
   private async listProductsForAction(tenant: any, to: string, prefix: string, body: string): Promise<void> {
@@ -848,6 +852,8 @@ export class AdminCommandService {
       .map((p: any) => `• ${p.currency || '₹'}${p.amount} · ${this.titleCase(p.method || '')} · *${this.titleCase(p.status)}*${p.order_number ? ` · #${p.order_number}` : ''}`)
       .join('\n');
     await this.send(tenant, to, `💳 *Recent Payments*\n\n${lines}\n\nSend *menu* to go back.`);
+    await this.createPortalEditLink(tenant, to, '/payments', '💳 Open payments',
+      '💳 *Payments*\n\nTap below to see and manage all payments in the portal. This link opens once and lasts 15 minutes.');
   }
 
   private async showSummary(tenant: any, to: string): Promise<void> {
