@@ -240,24 +240,23 @@ export function buildInteractivePayNote(
   };
 }
 
-/** Quote ready: send the full quote, then offer to resend it or get help. */
-export function buildQuoteReadyNote(name: string, description: string, event = 'created'): DefaultWorkflowDef {
+/**
+ * Quote ready: send the finalised quote (send_quote already appends a "View Quote"
+ * CTA that opens the review + accept page) and END. No follow-up button node — a
+ * waiting button node would trap the customer, so every later message ("hi",
+ * "menu") kept resuming the execution and re-sending the quote in a loop.
+ */
+export function buildQuoteReadyNote(name: string, description: string, event = 'sent'): DefaultWorkflowDef {
   return {
     name,
     description,
     trigger: { type: 'trigger_quote', event },
     nodes: [
       { id: 'n1', type: 'trigger_quote', label: 'Quote Event', x: 300, y: 40, config: { event }, outputs: ['n2'] },
-      { id: 'n2', type: 'send_quote', label: 'Send Quote', x: 300, y: 180, config: { headerMessage: '📋 Hi {{customer_name}}, here’s your quote:', footerMessage: 'Tap below if you need anything 👇' }, outputs: ['n3'] },
-      { id: 'n3', type: 'send_buttons', label: 'Options', x: 300, y: 330, config: { message: 'What would you like to do?', buttons: [{ id: 'rq', title: '📋 Resend Quote' }, { id: 'help', title: '💬 Talk to us' }] }, outputs: ['n4', 'n5'] },
-      { id: 'n4', type: 'send_quote', label: 'Resend Quote', x: 200, y: 480, config: { headerMessage: '📋 Here’s your quote again:' }, outputs: [] },
-      { id: 'n5', type: 'start_workflow', label: 'Talk to us', x: 420, y: 480, config: { workflowName: 'Talk to us', passVariables: true }, outputs: [] },
+      { id: 'n2', type: 'send_quote', label: 'Send Quote', x: 300, y: 200, config: { headerMessage: '🎉 Hi {{customer_name}}, your quote is ready! Please review it and tap *View Quote* below to accept and place your order.', footerMessage: '' }, outputs: [] },
     ],
     edges: [
       { id: 'e1', from: 'n1', to: 'n2' },
-      { id: 'e2', from: 'n2', to: 'n3' },
-      { id: 'e3', from: 'n3', to: 'n4' },
-      { id: 'e4', from: 'n3', to: 'n5' },
     ],
   };
 }
