@@ -525,6 +525,21 @@ export class AdminCommandService {
     const body = `📄 *Quote #${q.quote_number}*\n${q.title ? q.title + '\n' : ''}Status: *${this.titleCase(q.status)}*\n\n${lines || 'No items'}\n\n*Total: ₹${q.total_amount}*`;
     await this.sendList(tenant, to, body, 'Update status',
       [{ title: 'Set status to', rows: this.QUOTE_STATUSES.map((s) => ({ id: `qstatus_${q.id}_${s.id}`, title: s.title })) }]);
+    // Full editor in the portal (logged in) — change items, customer, pricing, etc.
+    await this.createPortalEditLink(tenant, to, `/quotes/${quoteId}/edit`, '✏️ Edit quote',
+      `✏️ *Edit Quote #${q.quote_number}*\n\nTap below to open the full quote editor in your portal — items, customer, pricing and more. This link opens once and lasts 15 minutes.`);
+  }
+
+  /** Send a CTA that opens a specific portal page (logged in) via the auto-login bridge. */
+  private async createPortalEditLink(tenant: any, to: string, path: string, label: string, body: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createPortalLoginSession({
+        tenantId: tenant.id, schemaName: tenant.schemaName, view: path, createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(tenant.phoneNumberId, tenant.accessToken, to, body, label, url);
+    } catch (err: any) {
+      this.logger.error(`createPortalEditLink failed: ${err.message}`);
+    }
   }
 
   private async updateQuoteStatus(tenant: any, to: string, quoteId: string, status: string): Promise<void> {
@@ -591,6 +606,9 @@ export class AdminCommandService {
 
     await this.sendList(tenant, to, body, 'Update status',
       [{ title: 'Set status to', rows: this.ORDER_STATUSES.map((s) => ({ id: `ostatus_${o.id}_${s.id}`, title: s.title })) }]);
+    // Open the full order in the portal (logged in).
+    await this.createPortalEditLink(tenant, to, `/orders/${orderId}`, '📦 Open order',
+      `📦 *Order #${o.order_number}*\n\nTap below to open the full order in your portal. This link opens once and lasts 15 minutes.`);
   }
 
   private async updateOrderStatus(tenant: any, to: string, orderId: string, status: string): Promise<void> {
