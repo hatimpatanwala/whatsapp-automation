@@ -164,6 +164,77 @@ export class CustomerService {
     });
   }
 
+  /** Every invoice raised for this customer — order documents + ERP AR invoices. */
+  async getCustomerInvoices(schema: string, customerId: string): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      return qr.query(
+        `SELECT id, invoice_number, doc_type, year, total, amount_paid, balance_due,
+                payment_status, status, COALESCE(issued_at, created_at) AS issued_at, created_at
+           FROM invoices
+          WHERE customer_id = $1
+          ORDER BY COALESCE(issued_at, created_at) DESC`,
+        [customerId],
+      );
+    });
+  }
+
+  /** Payments recorded against this customer's orders (all tenants). */
+  async getCustomerPayments(schema: string, customerId: string): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      return qr.query(
+        `SELECT p.*, o.order_number, o.id AS order_id
+           FROM payments p
+           JOIN orders o ON o.id = p.order_id
+          WHERE o.customer_id = $1
+          ORDER BY p.created_at DESC`,
+        [customerId],
+      );
+    });
+  }
+
+  /**
+   * Customer ledger / statement of account (ERP feature). Builds a chronological
+   * debit (invoice raised) / credit (payment received) list with a running balance
+   * from the tenant's AR invoices, plus a billed / paid / outstanding summary.
+   * Uses ONLY the invoices table so billed − paid = outstanding stays consistent
+   * (ERP invoice payments are tracked as invoices.amount_paid, not the payments table).
+   */
+  async getCustomerLedger(schema: string, customerId: string): Promise<any> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const currency =
+        (await qr.query(`SELECT symbol FROM erp_currencies WHERE is_base = true LIMIT 1`).catch(() => []))[0]?.symbol ||
+        '₹';
+      const invoices = await qr.query(
+        `SELECT invoice_number, total, amount_paid, balance_due, payment_status,
+                COALESCE(issued_at, created_at) AS date
+           FROM invoices
+          WHERE customer_id = $1 AND year IS NOT NULL
+          ORDER BY COALESCE(issued_at, created_at) ASC, created_at ASC`,
+        [customerId],
+      );
+      const entries: any[] = [];
+      for (const inv of invoices) {
+        entries.push({
+          date: inv.date, type: 'invoice', ref: inv.invoice_number,
+          description: 'Invoice raised', debit: Number(inv.total) || 0, credit: 0,
+        });
+        const paid = Number(inv.amount_paid) || 0;
+        if (paid > 0) {
+          entries.push({
+            date: inv.date, type: 'payment', ref: inv.invoice_number,
+            description: 'Payment received', debit: 0, credit: paid,
+          });
+        }
+      }
+      let balance = 0;
+      for (const e of entries) { balance += e.debit - e.credit; e.balance = balance; }
+      const billed = invoices.reduce((s: number, i: any) => s + (Number(i.total) || 0), 0);
+      const paid = invoices.reduce((s: number, i: any) => s + (Number(i.amount_paid) || 0), 0);
+      const outstanding = invoices.reduce((s: number, i: any) => s + (Number(i.balance_due) || 0), 0);
+      return { currency, summary: { billed, paid, outstanding, invoiceCount: invoices.length }, entries };
+    });
+  }
+
   /** The customer's current active cart (for the detail page / segments). */
   async getActiveCart(schema: string, customerId: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {

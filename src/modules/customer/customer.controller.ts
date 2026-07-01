@@ -4,6 +4,8 @@ import { CustomerService } from './customer.service';
 import { SegmentService } from '../campaign/segment.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
+import { ErpFeatureGuard } from '../../common/guards/erp-feature.guard';
+import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('customers')
@@ -57,6 +59,30 @@ export class CustomerController {
   @Get(':id/orders')
   async getOrders(@Req() req: Request, @Param('id') id: string) {
     return this.customerService.getCustomerOrders(req.tenantContext.schemaName, id);
+  }
+
+  /** Customer's invoices (order documents + ERP AR invoices) — all tenants. */
+  @Get(':id/invoices')
+  async getInvoices(@Req() req: Request, @Param('id') id: string) {
+    return this.customerService.getCustomerInvoices(req.tenantContext.schemaName, id);
+  }
+
+  /** Payments recorded against this customer's orders — all tenants. */
+  @Get(':id/payments')
+  async getPayments(@Req() req: Request, @Param('id') id: string) {
+    return this.customerService.getCustomerPayments(req.tenantContext.schemaName, id);
+  }
+
+  /**
+   * Customer ledger / statement of account. ERP-only — the guard also grants
+   * read-only access to downgraded-but-provisioned tenants so they can still view
+   * their historical ledger.
+   */
+  @Get(':id/ledger')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('erp')
+  async getLedger(@Req() req: Request, @Param('id') id: string) {
+    return this.customerService.getCustomerLedger(req.tenantContext.schemaName, id);
   }
 
   @Get(':id/cart')

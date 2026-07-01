@@ -19,6 +19,7 @@ import { FormsModule } from '@angular/forms';
 import { CustomerService } from '../../core/services/customer.service';
 import { SchemeService } from '../../core/services/scheme.service';
 import { ApiService } from '../../core/services/api.service';
+import { ErpAccessService } from '../../core/services/erp-access.service';
 
 @Component({
   selector: 'wa-customer-detail',
@@ -158,13 +159,16 @@ import { ApiService } from '../../core/services/api.service';
           <!-- Right: tabs -->
           <div class="lg:col-span-2">
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <p-tabs value="0">
+              <p-tabs value="orders">
                 <p-tablist>
-                  <p-tab value="0">Orders ({{ orders().length }})</p-tab>
-                  <p-tab value="1">Notes</p-tab>
+                  <p-tab value="orders">Orders ({{ orders().length }})</p-tab>
+                  <p-tab value="invoices">Invoices ({{ invoices().length }})</p-tab>
+                  <p-tab value="payments">Payments ({{ payments().length }})</p-tab>
+                  @if (erpAccess.visible()) { <p-tab value="ledger">Ledger</p-tab> }
+                  <p-tab value="notes">Notes</p-tab>
                 </p-tablist>
                 <p-tabpanels>
-                  <p-tabpanel value="0">
+                  <p-tabpanel value="orders">
                     <p-table [value]="orders()" styleClass="text-sm" [paginator]="orders().length > 8" [rows]="8">
                       <ng-template pTemplate="header">
                         <tr>
@@ -188,7 +192,104 @@ import { ApiService } from '../../core/services/api.service';
                     </p-table>
                   </p-tabpanel>
 
-                  <p-tabpanel value="1">
+                  <!-- Invoices (all tenants) -->
+                  <p-tabpanel value="invoices">
+                    <p-table [value]="invoices()" styleClass="text-sm" [paginator]="invoices().length > 8" [rows]="8">
+                      <ng-template pTemplate="header">
+                        <tr>
+                          <th class="text-xs text-gray-500">Invoice #</th>
+                          <th class="text-xs text-gray-500">Type</th>
+                          <th class="text-xs text-gray-500 text-right">Total</th>
+                          <th class="text-xs text-gray-500 text-right">Balance</th>
+                          <th class="text-xs text-gray-500">Status</th>
+                          <th class="text-xs text-gray-500">Date</th>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="body" let-inv>
+                        <tr class="hover:bg-gray-50">
+                          <td class="font-semibold text-gray-800">{{ inv.invoiceNumber }}</td>
+                          <td class="text-gray-600 capitalize">{{ invType(inv) }}</td>
+                          <td class="text-right font-semibold">{{ cur }}{{ inv.total | number:'1.0-2' }}</td>
+                          <td class="text-right" [class.text-red-600]="(inv.balanceDue || 0) > 0">{{ cur }}{{ (inv.balanceDue ?? 0) | number:'1.0-2' }}</td>
+                          <td><p-tag [value]="inv.paymentStatus || inv.status" [severity]="paySeverity(inv.paymentStatus)" styleClass="text-xs capitalize" /></td>
+                          <td class="text-xs text-gray-500">{{ inv.issuedAt | date:'mediumDate' }}</td>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="emptymessage"><tr><td colspan="6" class="text-center text-gray-400 text-sm py-6">No invoices yet.</td></tr></ng-template>
+                    </p-table>
+                  </p-tabpanel>
+
+                  <!-- Payments (all tenants) -->
+                  <p-tabpanel value="payments">
+                    <p-table [value]="payments()" styleClass="text-sm" [paginator]="payments().length > 8" [rows]="8">
+                      <ng-template pTemplate="header">
+                        <tr>
+                          <th class="text-xs text-gray-500">Order #</th>
+                          <th class="text-xs text-gray-500 text-right">Amount</th>
+                          <th class="text-xs text-gray-500">Method</th>
+                          <th class="text-xs text-gray-500">Status</th>
+                          <th class="text-xs text-gray-500">Date</th>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="body" let-p>
+                        <tr class="hover:bg-gray-50">
+                          <td>{{ p.orderNumber || '—' }}</td>
+                          <td class="text-right font-semibold">{{ cur }}{{ p.amount | number:'1.0-2' }}</td>
+                          <td class="text-gray-600 capitalize">{{ p.method || p.provider || p.gateway || '—' }}</td>
+                          <td><p-tag [value]="p.status" [severity]="paySeverity(p.status)" styleClass="text-xs capitalize" /></td>
+                          <td class="text-xs text-gray-500">{{ p.createdAt | date:'medium' }}</td>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="emptymessage"><tr><td colspan="5" class="text-center text-gray-400 text-sm py-6">No payments recorded.</td></tr></ng-template>
+                    </p-table>
+                  </p-tabpanel>
+
+                  <!-- Ledger / statement of account (ERP only) -->
+                  @if (erpAccess.visible()) {
+                    <p-tabpanel value="ledger">
+                      @if (ledger(); as L) {
+                        <div class="grid grid-cols-3 gap-3 p-4">
+                          <div class="rounded-xl border border-gray-100 p-3 text-center">
+                            <p class="text-[11px] text-gray-500 uppercase">Billed</p>
+                            <p class="text-base font-bold text-gray-900">{{ L.currency }}{{ L.summary.billed | number:'1.0-2' }}</p>
+                          </div>
+                          <div class="rounded-xl border border-gray-100 p-3 text-center">
+                            <p class="text-[11px] text-gray-500 uppercase">Paid</p>
+                            <p class="text-base font-bold text-green-600">{{ L.currency }}{{ L.summary.paid | number:'1.0-2' }}</p>
+                          </div>
+                          <div class="rounded-xl border border-gray-100 p-3 text-center">
+                            <p class="text-[11px] text-gray-500 uppercase">Outstanding</p>
+                            <p class="text-base font-bold" [class.text-red-600]="L.summary.outstanding > 0" [class.text-gray-900]="L.summary.outstanding <= 0">{{ L.currency }}{{ L.summary.outstanding | number:'1.0-2' }}</p>
+                          </div>
+                        </div>
+                        <p-table [value]="L.entries" styleClass="text-sm" [paginator]="L.entries.length > 12" [rows]="12">
+                          <ng-template pTemplate="header">
+                            <tr>
+                              <th class="text-xs text-gray-500">Date</th>
+                              <th class="text-xs text-gray-500">Particulars</th>
+                              <th class="text-xs text-gray-500 text-right">Debit</th>
+                              <th class="text-xs text-gray-500 text-right">Credit</th>
+                              <th class="text-xs text-gray-500 text-right">Balance</th>
+                            </tr>
+                          </ng-template>
+                          <ng-template pTemplate="body" let-e>
+                            <tr class="hover:bg-gray-50">
+                              <td class="text-xs text-gray-500">{{ e.date | date:'mediumDate' }}</td>
+                              <td class="text-gray-700">{{ e.description }} <span class="text-gray-400 text-xs">· {{ e.ref }}</span></td>
+                              <td class="text-right">{{ e.debit ? cur + (e.debit | number:'1.0-2') : '' }}</td>
+                              <td class="text-right text-green-600">{{ e.credit ? cur + (e.credit | number:'1.0-2') : '' }}</td>
+                              <td class="text-right font-semibold" [class.text-red-600]="e.balance > 0">{{ cur }}{{ e.balance | number:'1.0-2' }}</td>
+                            </tr>
+                          </ng-template>
+                          <ng-template pTemplate="emptymessage"><tr><td colspan="5" class="text-center text-gray-400 text-sm py-6">No ledger entries yet.</td></tr></ng-template>
+                        </p-table>
+                      } @else {
+                        <p class="text-center text-gray-400 text-sm py-10">Loading ledger…</p>
+                      }
+                    </p-tabpanel>
+                  }
+
+                  <p-tabpanel value="notes">
                     <div class="p-4">
                       <textarea pTextarea class="w-full" rows="6" [(ngModel)]="notes" placeholder="Add private notes about this customer..."></textarea>
                       <div class="flex justify-end mt-2">
@@ -293,6 +394,7 @@ export class CustomerDetailComponent implements OnInit {
   private readonly customerService = inject(CustomerService);
   private readonly schemeService = inject(SchemeService);
   private readonly api = inject(ApiService);
+  readonly erpAccess = inject(ErpAccessService);
 
   readonly cur = '₹';
   customerFieldDefs = signal<any[]>([]);
@@ -331,6 +433,9 @@ export class CustomerDetailComponent implements OnInit {
   loading = signal(true);
   c = signal<any>({ tags: [] });
   orders = signal<any[]>([]);
+  invoices = signal<any[]>([]);
+  payments = signal<any[]>([]);
+  ledger = signal<any>(null);
   cart = signal<any>(null);
 
   edit = { name: '', displayName: '', email: '' };
@@ -372,6 +477,34 @@ export class CustomerDetailComponent implements OnInit {
       },
     });
     this.customerService.getCart(id).subscribe({ next: (cart) => this.cart.set(cart) });
+    // Invoices + payments — available to every tenant.
+    this.api.get<any>(`/customers/${id}/invoices`).subscribe({
+      next: (r) => this.invoices.set(this.arr(r)),
+      error: () => this.invoices.set([]),
+    });
+    this.api.get<any>(`/customers/${id}/payments`).subscribe({
+      next: (r) => this.payments.set(this.arr(r)),
+      error: () => this.payments.set([]),
+    });
+    // Ledger — ERP feature only (guard also allows read-only for downgraded tenants).
+    this.erpAccess.ensure().then(({ enabled, readOnly }) => {
+      if (enabled || readOnly) {
+        this.api.get<any>(`/customers/${id}/ledger`).subscribe({
+          next: (r) => this.ledger.set(r?.data ?? r),
+          error: () => this.ledger.set(null),
+        });
+      }
+    });
+  }
+
+  private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
+  invType(inv: any): string {
+    if (inv.year) return 'Invoice';
+    return (inv.docType || '').replace(/_/g, ' ') || 'Document';
+  }
+  paySeverity(s: string): any {
+    return ({ paid: 'success', completed: 'success', success: 'success', partial: 'warn',
+      pending: 'warn', unpaid: 'danger', failed: 'danger', refunded: 'info' } as any)[s] ?? 'secondary';
   }
 
   initials(): string {
