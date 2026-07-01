@@ -264,6 +264,10 @@ const ORDER_STATUS_OPTIONS = [
                   class="border border-gray-200 rounded-xl py-2 text-sm font-semibold disabled:opacity-50">{{ s.title }}</button>
               }
             </div>
+            <button (click)="openInPortal('/orders/' + o.id)"
+              class="w-full border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm mt-3 flex items-center justify-center gap-2">
+              <i class="pi pi-external-link" style="font-size:0.8rem"></i> Open order in portal
+            </button>
           </div>
         </div>
       }
@@ -298,6 +302,10 @@ const ORDER_STATUS_OPTIONS = [
             } @else {
               <p class="text-center text-green-600 font-semibold text-sm py-2">✓ Fully paid</p>
             }
+            <button (click)="openInPortal('/erp/invoices')"
+              class="w-full border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm mt-3 flex items-center justify-center gap-2">
+              <i class="pi pi-external-link" style="font-size:0.8rem"></i> Open in portal
+            </button>
           </div>
         </div>
       }
@@ -392,6 +400,10 @@ const ORDER_STATUS_OPTIONS = [
                 <div class="flex justify-between px-3 py-2 text-sm"><span class="truncate">{{ inv.invoiceNumber }} · {{ label(inv.paymentStatus) }}</span><span class="tabular-nums shrink-0 ml-2">{{ sym(d.currency) }}{{ fmt(inv.total) }}</span></div>
               } @empty { <p class="px-3 py-2 text-sm text-gray-400">No invoices.</p> }
             </div>
+            <button (click)="openInPortal('/customers/' + d.customer.id)"
+              class="w-full border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm mt-4 flex items-center justify-center gap-2">
+              <i class="pi pi-external-link" style="font-size:0.8rem"></i> Open full profile in portal
+            </button>
           </div>
         </div>
       }
@@ -537,13 +549,14 @@ export class MobileErpComponent implements OnInit {
       error: (e) => { this.saving.set(false); this.showToast(this.errMsg(e)); },
     });
   }
-  /** Open the FULL portal product editor (logged in) via the portal auto-login bridge. */
-  openFullProductEdit(p: any): void {
-    this.post<any>('/portal-link', { to: `/products/${p.id}/edit` }).subscribe({
+  /** Open the FULL web portal (logged in) at a portal path, via the auto-login bridge. */
+  openInPortal(to: string): void {
+    this.post<any>('/portal-link', { to }).subscribe({
       next: (r) => { const u = unwrap<any>(r)?.url; if (u) window.location.href = u; },
       error: (e) => this.showToast(this.errMsg(e)),
     });
   }
+  openFullProductEdit(p: any): void { this.openInPortal(`/products/${p.id}/edit`); }
 
   private searchTimer: any;
   onProductSearch(): void { clearTimeout(this.searchTimer); this.searchTimer = setTimeout(() => this.loadProducts(), 300); }
