@@ -6,7 +6,7 @@ import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { returnToWhatsApp } from './webview-return';
 
-type Tab = 'dashboard' | 'orders' | 'invoices' | 'catalog' | 'customers';
+type Tab = 'dashboard' | 'orders' | 'invoices' | 'catalog' | 'customers' | 'taxes';
 
 const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.data : r) as T;
 /** Invoice list comes back as { data: [...] } inside the envelope → unwrap twice. */
@@ -206,6 +206,28 @@ const ORDER_STATUS_OPTIONS = [
               </div>
             } @empty { <p class="text-center text-gray-400 py-10 text-sm">{{ busy() ? 'Loading…' : 'No customers.' }}</p> }
           }
+
+          <!-- ── TAX RATES ─────────────────────────────────────────── -->
+          @if (view() === 'taxes') {
+            <div class="bg-white rounded-2xl border border-gray-100 p-3.5 mb-3">
+              <p class="text-xs font-bold text-gray-500 uppercase mb-2">Add tax rate</p>
+              <div class="flex gap-2">
+                <input [(ngModel)]="newTaxName" placeholder="Name e.g. GST 18%" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" />
+                <input type="number" [(ngModel)]="newTaxRate" placeholder="%" class="w-16 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" />
+                <button (click)="addTax()" [disabled]="saving()" class="bg-green-600 text-white text-sm font-semibold px-3 py-2 rounded-xl shrink-0 disabled:opacity-50">Add</button>
+              </div>
+              <p class="text-[11px] text-gray-400 mt-1">Enter the percentage — e.g. 18 for 18%.</p>
+            </div>
+            @for (t of taxRates(); track t.id) {
+              <div class="w-full text-left bg-white rounded-2xl border border-gray-100 p-3.5 mb-2 flex items-center gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ t.name }}{{ t.isDefault ? ' · default' : '' }}</p>
+                  <p class="text-[11px] text-gray-400">{{ t.enabled ? 'Enabled' : 'Disabled' }}</p>
+                </div>
+                <p class="text-sm font-bold tabular-nums shrink-0">{{ t.rate }}%</p>
+              </div>
+            } @empty { <p class="text-center text-gray-400 py-10 text-sm">{{ busy() ? 'Loading…' : 'No tax rates yet.' }}</p> }
+          }
         </main>
       }
 
@@ -300,6 +322,10 @@ const ORDER_STATUS_OPTIONS = [
               </label>
               <button (click)="saveProduct(p)" [disabled]="saving()"
                 class="bg-green-600 text-white font-semibold rounded-xl py-2.5 text-sm disabled:opacity-50">Save changes</button>
+              <button (click)="openFullProductEdit(p)"
+                class="w-full border border-gray-200 text-gray-700 font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
+                <i class="pi pi-external-link" style="font-size:0.8rem"></i> More details — full editor
+              </button>
             </div>
           </div>
         </div>
@@ -323,6 +349,7 @@ export class MobileErpComponent implements OnInit {
     { id: 'invoices', label: 'Invoices' },
     { id: 'catalog', label: 'Catalog' },
     { id: 'customers', label: 'Customers' },
+    { id: 'taxes', label: 'Taxes' },
   ];
   readonly orderStatusOptions = ORDER_STATUS_OPTIONS;
 
@@ -342,6 +369,7 @@ export class MobileErpComponent implements OnInit {
   invoices = signal<any[]>([]);
   products = signal<any[]>([]);
   customers = signal<any[]>([]);
+  taxRates = signal<any[]>([]);
   paymentModes = signal<any[]>([]);
 
   orderDetail = signal<any>(null);
@@ -352,6 +380,8 @@ export class MobileErpComponent implements OnInit {
   invoiceFilter = '';
   productQuery = '';
   customerQuery = '';
+  newTaxName = '';
+  newTaxRate: number | null = null;
   payAmount: number | null = null;
   payModeId: string | null = null;
   editName = '';
@@ -393,6 +423,7 @@ export class MobileErpComponent implements OnInit {
     else if (tab === 'invoices') { this.loadInvoices(); this.loadPaymentModes(); }
     else if (tab === 'catalog') this.loadProducts();
     else if (tab === 'customers') this.loadCustomers();
+    else if (tab === 'taxes') this.loadTaxRates();
   }
 
   // ── loaders ──
@@ -419,6 +450,26 @@ export class MobileErpComponent implements OnInit {
   loadCustomers(): void {
     this.busy.set(true);
     this.get<any>('/customers', this.customerQuery ? { q: this.customerQuery } : {}).subscribe({ next: (r) => { this.customers.set(unwrap<any[]>(r) || []); this.busy.set(false); }, error: () => this.busy.set(false) });
+  }
+  loadTaxRates(): void {
+    this.busy.set(true);
+    this.get<any>('/tax-rates').subscribe({ next: (r) => { this.taxRates.set(unwrap<any[]>(r) || []); this.busy.set(false); }, error: () => this.busy.set(false) });
+  }
+  addTax(): void {
+    const name = this.newTaxName.trim();
+    if (!name || this.newTaxRate == null) { this.showToast('Enter a name and a rate %'); return; }
+    this.saving.set(true);
+    this.post<any>('/tax-rates', { name, rate: this.newTaxRate }).subscribe({
+      next: () => { this.saving.set(false); this.newTaxName = ''; this.newTaxRate = null; this.showToast('Tax rate added'); this.loadTaxRates(); },
+      error: (e) => { this.saving.set(false); this.showToast(this.errMsg(e)); },
+    });
+  }
+  /** Open the FULL portal product editor (logged in) via the portal auto-login bridge. */
+  openFullProductEdit(p: any): void {
+    this.post<any>('/portal-link', { to: `/products/${p.id}/edit` }).subscribe({
+      next: (r) => { const u = unwrap<any>(r)?.url; if (u) window.location.href = u; },
+      error: (e) => this.showToast(this.errMsg(e)),
+    });
   }
 
   private searchTimer: any;

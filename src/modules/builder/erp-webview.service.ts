@@ -299,4 +299,43 @@ export class ErpWebviewService {
     const { url } = await this.builder.createInvoiceSession({ tenantId, schemaName: schema });
     return { url };
   }
+
+  // ── Tax rates (percentage, e.g. 18 = 18%) ───────────────────────────────────
+
+  async taxRates(token: string): Promise<any[]> {
+    const { schema } = await this.ctx(token);
+    return this.q(schema, (qr) =>
+      qr.query(`SELECT id, name, rate, is_default, enabled FROM erp_tax_rates WHERE removed = false ORDER BY is_default DESC, rate ASC`),
+    );
+  }
+
+  async createTaxRate(token: string, body: { name?: string; rate?: number }): Promise<any> {
+    const { schema } = await this.ctx(token);
+    const name = String(body?.name || '').trim();
+    const rate = Number(body?.rate);
+    if (!name || isNaN(rate)) throw new BadRequestException('Name and rate (%) are required');
+    return this.q(schema, async (qr) =>
+      (await qr.query(`INSERT INTO erp_tax_rates (name, rate) VALUES ($1, $2) RETURNING id, name, rate, is_default, enabled`, [name, rate]))[0],
+    );
+  }
+
+  async updateTaxRate(token: string, id: string, body: { name?: string; rate?: number; enabled?: boolean }): Promise<any> {
+    const { schema } = await this.ctx(token);
+    return this.q(schema, async (qr) => {
+      const sets: string[] = [];
+      const params: any[] = [];
+      let p = 1;
+      if (body.name != null && String(body.name).trim()) { sets.push(`name = $${p++}`); params.push(String(body.name).trim()); }
+      if (body.rate != null && !isNaN(Number(body.rate))) { sets.push(`rate = $${p++}`); params.push(Number(body.rate)); }
+      if (body.enabled != null) { sets.push(`enabled = $${p++}`); params.push(!!body.enabled); }
+      if (sets.length) { params.push(id); await qr.query(`UPDATE erp_tax_rates SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${p}`, params); }
+      return (await qr.query(`SELECT id, name, rate, is_default, enabled FROM erp_tax_rates WHERE id = $1`, [id]))[0];
+    });
+  }
+
+  // ── Portal deep-link: open the FULL web portal (logged in) at a specific page ─
+  async portalLink(token: string, to: string): Promise<{ url: string }> {
+    const { schema, tenantId } = await this.ctx(token);
+    return this.builder.createPortalLoginSession({ tenantId, schemaName: schema, view: to || '/dashboard' });
+  }
 }

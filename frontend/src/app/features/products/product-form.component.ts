@@ -96,8 +96,13 @@ import { ApiService } from '../../core/services/api.service';
                     <input pInputText formControlName="hsnCode" placeholder="e.g. 6109" class="w-full" />
                   </div>
                   <div class="flex flex-col gap-1">
-                    <label class="text-sm font-medium text-gray-700">Tax Rate % <span class="text-xs text-gray-400">(optional)</span></label>
-                    <input pInputText type="number" formControlName="gstRate" placeholder="e.g. 18" class="w-full" />
+                    <label class="text-sm font-medium text-gray-700">Tax Rate <span class="text-xs text-gray-400">(optional)</span></label>
+                    <p-select [options]="taxRateOptions" [(ngModel)]="taxSelection" [ngModelOptions]="{ standalone: true }"
+                      (onChange)="onTaxChange($event.value)" optionLabel="label" optionValue="value" [showClear]="true"
+                      styleClass="w-full" placeholder="Select a tax rate" appendTo="body" />
+                    @if (taxSelection === 'custom') {
+                      <input pInputText type="number" formControlName="gstRate" placeholder="Custom %, e.g. 18" class="w-full mt-2" />
+                    }
                   </div>
                 </div>
 
@@ -335,6 +340,9 @@ export class ProductFormComponent implements OnInit {
 
   categoryOptions: { label: string; value: string }[] = [];
   brandOptions: { label: string; value: string }[] = [];
+  /** Tax rate dropdown: defined rates (percentages) + a "Custom rate…" option. */
+  taxRateOptions: { label: string; value: number | 'custom' }[] = [];
+  taxSelection: number | 'custom' | null = null;
 
   uomOptions: { label: string; value: string }[] = [
     { value: 'pcs', label: 'Piece (pcs)' }, { value: 'unit', label: 'Unit' },
@@ -371,6 +379,19 @@ export class ProductFormComponent implements OnInit {
 
   get f() { return this.productForm.controls; }
 
+  /** Dropdown → gstRate. 'custom' reveals the number input; clearing sets no tax. */
+  onTaxChange(v: number | 'custom' | null): void {
+    if (v === 'custom') return;
+    this.f.gstRate.setValue(v == null ? null : Number(v));
+  }
+  /** Set the dropdown to match the loaded gstRate (a known rate, else 'Custom'). */
+  private syncTaxSelection(): void {
+    const g = this.f.gstRate.value;
+    if (g == null) { this.taxSelection = null; return; }
+    const match = this.taxRateOptions.find((o) => o.value === Number(g));
+    this.taxSelection = match ? (match.value as number) : 'custom';
+  }
+
   ngOnInit() {
     this.productId = this.route.snapshot.paramMap.get('id');
     // Active product custom fields → rendered as a "Custom Fields" card.
@@ -389,9 +410,19 @@ export class ProductFormComponent implements OnInit {
     forkJoin({
       categories: this.productService.getCategories().pipe(catchError(() => of([]))),
       brands: this.productService.getBrands().pipe(catchError(() => of([]))),
-    }).subscribe(({ categories, brands }) => {
+      taxRates: this.api.get<any>('/tax-rates').pipe(catchError(() => of([]))),
+    }).subscribe(({ categories, brands, taxRates }) => {
       this.categoryOptions = (categories || []).map((c) => ({ label: c.name, value: c.id }));
       this.brandOptions = (brands || []).map((b) => ({ label: b.name, value: b.id }));
+      const rates = Array.isArray(taxRates) ? taxRates : (taxRates?.data ?? taxRates?.items ?? []);
+      const seen = new Set<number>();
+      this.taxRateOptions = [
+        ...rates
+          .filter((r: any) => (r.enabled ?? true) !== false)
+          .map((r: any) => ({ label: `${r.name} — ${Number(r.rate)}%`, value: Number(r.rate) }))
+          .filter((o: any) => (seen.has(o.value) ? false : (seen.add(o.value), true))),
+        { label: 'Custom rate…', value: 'custom' as const },
+      ];
       if (this.productId) {
         this.isEditMode.set(true);
         this.loadProduct(this.productId);
@@ -577,6 +608,7 @@ export class ProductFormComponent implements OnInit {
           gstRate: (product as any).gstRate ?? null,
           tags: product.tags ?? [],
         });
+        this.syncTaxSelection();
 
         if (product.imageUrls && product.imageUrls.length > 0) {
           this.previewImages.set([...product.imageUrls]);

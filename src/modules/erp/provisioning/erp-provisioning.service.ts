@@ -105,7 +105,7 @@ export class ErpProvisioningService {
     );
     await qr.query(
       `INSERT INTO "${schema}".erp_tax_rates (name, rate, is_default, enabled)
-       SELECT * FROM (VALUES ('No Tax', 0::numeric, true, true), ('GST 18%', 0.18, false, true), ('GST 5%', 0.05, false, true)) AS t(name, rate, is_default, enabled)
+       SELECT * FROM (VALUES ('No Tax', 0::numeric, true, true), ('GST 18%', 18, false, true), ('GST 12%', 12, false, true), ('GST 5%', 5, false, true), ('GST 28%', 28, false, true)) AS t(name, rate, is_default, enabled)
        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".erp_tax_rates)`,
     );
   }

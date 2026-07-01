@@ -1979,6 +1979,20 @@ const migration055ErpPosEway: TenantMigration = {
   },
 };
 
+const migration056TaxRatePercent: TenantMigration = {
+  name: '056_tax_rates_as_percent',
+  async up(qr, schema) {
+    // Tax rates are now entered/stored as a PERCENTAGE (18) instead of a fraction
+    // (0.18) — consistent with product gst_rate. Convert any pre-existing fractional
+    // rows (0 < rate < 1) to their percentage equivalent. `rate` is a reference value
+    // (not used in any tax calculation), so this is a display-only, safe backfill.
+    await qr.query(
+      `UPDATE "${schema}".erp_tax_rates SET rate = rate * 100, updated_at = NOW() WHERE rate > 0 AND rate < 1`,
+    );
+  },
+  async down() { /* irreversible: cannot reliably tell converted rows apart */ },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2035,4 +2049,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration053ErpVyapar,
   migration054ErpAdvanced,
   migration055ErpPosEway,
+  migration056TaxRatePercent,
 ];

@@ -142,7 +142,7 @@ export interface ErpCrudConfig {
               <label class="block text-xs font-semibold text-gray-500 mb-1">{{ f.label }}@if (f.required) { <span class="text-red-500">*</span> }</label>
               @switch (f.type) {
                 @case ('textarea') { <textarea [(ngModel)]="model[f.key]" rows="2" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" [placeholder]="f.placeholder || ''"></textarea> }
-                @case ('number') { <p-inputNumber [(ngModel)]="model[f.key]" inputStyleClass="w-full" /> }
+                @case ('number') { <p-inputNumber [(ngModel)]="model[f.key]" [minFractionDigits]="0" [maxFractionDigits]="2" inputStyleClass="w-full" /> }
                 @case ('currency') { <p-inputNumber [(ngModel)]="model[f.key]" mode="currency" currency="INR" locale="en-IN" inputStyleClass="w-full" /> }
                 @case ('select') { <p-select [options]="optionsFor(f)" [(ngModel)]="model[f.key]" optionLabel="label" optionValue="value" [showClear]="true" [filter]="true" styleClass="w-full" [placeholder]="f.placeholder || 'Select'" /> }
                 @case ('boolean') { <div class="pt-2"><p-checkbox [(ngModel)]="model[f.key]" [binary]="true" /></div> }

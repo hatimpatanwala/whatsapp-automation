@@ -40,6 +40,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/catalog-taxonomy/catalog-taxonomy.component').then(m => m.CatalogTaxonomyComponent),
       },
       {
+        // Tax Rates — available to every tenant (ERP or not).
+        path: 'tax-rates',
+        loadComponent: () => import('./features/tax-rates/tax-rates.component').then(m => m.TaxRatesComponent),
+      },
+      {
         path: 'schemes',
         loadComponent: () => import('./features/schemes/schemes.component').then(m => m.SchemesComponent),
       },

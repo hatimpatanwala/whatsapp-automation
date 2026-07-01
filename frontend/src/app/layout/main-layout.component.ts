@@ -353,6 +353,7 @@ export class MainLayoutComponent implements OnInit {
       items: [
         { label: 'Products', icon: 'pi-box', route: '/products' },
         { label: 'Categories & Brands', icon: 'pi-tags', route: '/catalog-taxonomy' },
+        { label: 'Tax Rates', icon: 'pi-percentage', route: '/tax-rates' },
         { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory' },
         { label: 'Warehouse Stock', icon: 'pi-building-columns', route: '/erp/stock', featureKey: 'erp' },
         { label: 'Batch & Serial', icon: 'pi-qrcode', route: '/erp/batches', featureKey: 'erp' },
@@ -365,7 +366,6 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },
         { label: 'Cash & Bank', icon: 'pi-wallet', route: '/erp/bank-accounts', featureKey: 'erp' },
         { label: 'Payment Modes', icon: 'pi-money-bill', route: '/erp/payment-modes', featureKey: 'erp' },
-        { label: 'Tax Rates', icon: 'pi-percentage', route: '/erp/tax-rates', featureKey: 'erp' },
         { label: 'Currencies', icon: 'pi-dollar', route: '/erp/currencies', featureKey: 'erp' },
       ],
     },

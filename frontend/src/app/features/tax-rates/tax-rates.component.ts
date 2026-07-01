@@ -1,14 +1,22 @@
 import { Component } from '@angular/core';
-import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
+import { ErpCrudComponent, ErpCrudConfig } from '../erp/shared/erp-crud.component';
 
+/**
+ * Tax Rates — available to EVERY tenant (ERP or not). Reusable named rates
+ * (entered as a percentage, e.g. 18) that the product form offers as a dropdown.
+ * Backed by the un-gated /tax-rates endpoint.
+ */
 @Component({
-  selector: 'wa-erp-tax-rates', standalone: true, imports: [ErpCrudComponent],
+  selector: 'wa-tax-rates',
+  standalone: true,
+  imports: [ErpCrudComponent],
   template: `<wa-erp-crud [config]="config" />`,
 })
-export class ErpTaxRatesComponent {
+export class TaxRatesComponent {
   config: ErpCrudConfig = {
-    title: 'Tax Rates', subtitle: 'Reusable tax rates for products, invoices and documents',
-    apiPath: '/erp/tax-rates', newLabel: 'New Tax Rate', labelField: 'name', searchFields: ['name'],
+    title: 'Tax Rates',
+    subtitle: 'Reusable tax rates for your products & invoices — enter a percentage (e.g. 18 for 18%)',
+    apiPath: '/tax-rates', newLabel: 'New Tax Rate', labelField: 'name', searchFields: ['name'],
     columns: [
       { field: 'name', header: 'Name' },
       { field: 'rate', header: 'Rate (%)' },

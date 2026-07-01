@@ -95,6 +95,31 @@ export class ErpWebviewController {
     return this.svc.customers(this.token(req, token), q);
   }
 
+  // ── Tax rates ──
+  @Get('tax-rates')
+  taxRates(@Req() req: Request, @Query('token') token?: string) {
+    return this.svc.taxRates(this.token(req, token));
+  }
+
+  @Post('tax-rates')
+  @HttpCode(200)
+  createTaxRate(@Req() req: Request, @Body() body: { name?: string; rate?: number }, @Query('token') token?: string) {
+    return this.svc.createTaxRate(this.token(req, token), body);
+  }
+
+  @Post('tax-rates/:id')
+  @HttpCode(200)
+  updateTaxRate(@Req() req: Request, @Param('id') id: string, @Body() body: any, @Query('token') token?: string) {
+    return this.svc.updateTaxRate(this.token(req, token), id, body);
+  }
+
+  // ── Open the full portal (logged in) at a specific page — e.g. product edit ──
+  @Post('portal-link')
+  @HttpCode(200)
+  portalLink(@Req() req: Request, @Body() body: { to?: string }, @Query('token') token?: string) {
+    return this.svc.portalLink(this.token(req, token), body?.to || '/dashboard');
+  }
+
   // ── Create actions (mint the focused builder/invoice webviews) ──
   @Post('new/builder')
   @HttpCode(200)

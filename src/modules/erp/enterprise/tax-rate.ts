@@ -23,3 +23,14 @@ export class TaxRateService extends BaseTenantCrudService {
 export class TaxRateController extends BaseErpCrudController {
   constructor(protected readonly service: TaxRateService) { super(); }
 }
+
+/**
+ * Tax rates are useful to EVERY tenant (product GST, invoices) — not just ERP.
+ * This un-gated controller exposes the same reusable rates (stored as a percentage,
+ * e.g. 18) to all tenants so the product form can offer them as a dropdown.
+ */
+@Controller('tax-rates')
+@UseGuards(TenantGuard)
+export class TaxRatePublicController extends BaseErpCrudController {
+  constructor(protected readonly service: TaxRateService) { super(); }
+}

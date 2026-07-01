@@ -21,7 +21,7 @@ import { ExpenseController, ExpenseService } from './procurement/expense';
 import { SupplierOrderController, SupplierOrderService } from './procurement/supplier-order';
 import { EmployeeController, EmployeeService } from './hr/employee';
 import { CurrencyController, CurrencyService } from './enterprise/currency';
-import { TaxRateController, TaxRateService } from './enterprise/tax-rate';
+import { TaxRateController, TaxRatePublicController, TaxRateService } from './enterprise/tax-rate';
 import { WarehouseController, WarehouseService } from './enterprise/warehouse';
 import { StockController, StockService } from './enterprise/stock';
 import { ErpSettingsController, ErpSettingsService } from './enterprise/erp-settings';
@@ -66,6 +66,7 @@ import { ErpExportService } from './export/erp-export.service';
     // enterprise
     CurrencyController,
     TaxRateController,
+    TaxRatePublicController,
     WarehouseController,
     StockController,
     ErpSettingsController,
