@@ -118,6 +118,12 @@ export class ErpWebviewController {
     return this.svc.updateTaxRate(this.token(req, token), id, body);
   }
 
+  // ── E-way bills ──
+  @Get('eway-bills')
+  ewayBills(@Req() req: Request, @Query('token') token?: string) {
+    return this.svc.ewayBills(this.token(req, token));
+  }
+
   // ── Open the full portal (logged in) at a specific page — e.g. product edit ──
   @Post('portal-link')
   @HttpCode(200)

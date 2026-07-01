@@ -385,6 +385,17 @@ export class ErpWebviewService {
     });
   }
 
+  // ── E-way bills (list; create/manage happens in the portal) ─────────────────
+  async ewayBills(token: string): Promise<any[]> {
+    const { schema } = await this.ctx(token);
+    return this.q(schema, (qr) =>
+      qr.query(
+        `SELECT id, eway_number, invoice_number, value, status, transport_mode, vehicle_number, valid_until, created_at
+           FROM eway_bills WHERE removed = false ORDER BY created_at DESC LIMIT 50`,
+      ),
+    );
+  }
+
   // ── Portal deep-link: open the FULL web portal (logged in) at a specific page ─
   async portalLink(token: string, to: string): Promise<{ url: string }> {
     const { schema, tenantId } = await this.ctx(token);

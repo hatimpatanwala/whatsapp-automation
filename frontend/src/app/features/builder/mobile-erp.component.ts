@@ -6,7 +6,7 @@ import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { returnToWhatsApp } from './webview-return';
 
-type Tab = 'dashboard' | 'orders' | 'invoices' | 'catalog' | 'customers' | 'taxes';
+type Tab = 'dashboard' | 'orders' | 'invoices' | 'catalog' | 'customers' | 'taxes' | 'eway';
 
 const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.data : r) as T;
 /** Invoice list comes back as { data: [...] } inside the envelope → unwrap twice. */
@@ -236,6 +236,23 @@ const ORDER_STATUS_OPTIONS = [
               </div>
             } @empty { <p class="text-center text-gray-400 py-10 text-sm">{{ busy() ? 'Loading…' : 'No tax rates yet.' }}</p> }
           }
+
+          <!-- ── E-WAY BILLS ───────────────────────────────────────── -->
+          @if (view() === 'eway') {
+            <button (click)="openInPortal('/erp/eway-bills')"
+              class="w-full bg-green-600 text-white text-sm font-semibold px-3 py-2.5 rounded-xl mb-3 flex items-center justify-center gap-2">
+              <i class="pi pi-plus"></i> Generate / manage in portal
+            </button>
+            @for (b of ewayBills(); track b.id) {
+              <div class="bg-white rounded-2xl border border-gray-100 p-3.5 mb-2 flex items-center gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-gray-900 truncate">{{ b.ewayNumber }}{{ b.invoiceNumber ? ' · ' + b.invoiceNumber : '' }}</p>
+                  <p class="text-[11px] text-gray-400">{{ label(b.status) }}{{ b.vehicleNumber ? ' · ' + b.vehicleNumber : '' }}{{ b.validUntil ? ' · till ' + (b.validUntil | date:'mediumDate') : '' }}</p>
+                </div>
+                <p class="text-sm font-bold tabular-nums shrink-0">{{ cur() }}{{ fmt(b.value) }}</p>
+              </div>
+            } @empty { <p class="text-center text-gray-400 py-10 text-sm">{{ busy() ? 'Loading…' : 'No e-way bills yet.' }}</p> }
+          }
         </main>
       }
 
@@ -427,6 +444,7 @@ export class MobileErpComponent implements OnInit {
     { id: 'catalog', label: 'Catalog' },
     { id: 'customers', label: 'Customers' },
     { id: 'taxes', label: 'Taxes' },
+    { id: 'eway', label: 'E-Way' },
   ];
   readonly orderStatusOptions = ORDER_STATUS_OPTIONS;
 
@@ -447,6 +465,7 @@ export class MobileErpComponent implements OnInit {
   products = signal<any[]>([]);
   customers = signal<any[]>([]);
   taxRates = signal<any[]>([]);
+  ewayBills = signal<any[]>([]);
   paymentModes = signal<any[]>([]);
 
   orderDetail = signal<any>(null);
@@ -503,6 +522,7 @@ export class MobileErpComponent implements OnInit {
     else if (tab === 'catalog') this.loadProducts();
     else if (tab === 'customers') this.loadCustomers();
     else if (tab === 'taxes') this.loadTaxRates();
+    else if (tab === 'eway') this.loadEwayBills();
   }
 
   // ── loaders ──
@@ -539,6 +559,10 @@ export class MobileErpComponent implements OnInit {
   loadTaxRates(): void {
     this.busy.set(true);
     this.get<any>('/tax-rates').subscribe({ next: (r) => { this.taxRates.set(unwrap<any[]>(r) || []); this.busy.set(false); }, error: () => this.busy.set(false) });
+  }
+  loadEwayBills(): void {
+    this.busy.set(true);
+    this.get<any>('/eway-bills').subscribe({ next: (r) => { this.ewayBills.set(unwrap<any[]>(r) || []); this.busy.set(false); }, error: () => this.busy.set(false) });
   }
   addTax(): void {
     const name = this.newTaxName.trim();

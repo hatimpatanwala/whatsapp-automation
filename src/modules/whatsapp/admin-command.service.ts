@@ -134,6 +134,7 @@ export class AdminCommandService {
           ...b({ id: 'menu_orders', title: '📦 Orders', description: 'Recent orders' }),
           ...b({ id: 'menu_pending', title: '⏳ Pending Orders' }),
           { id: 'menu_quotes', title: '📄 Quotes' },
+          ...e({ id: 'erp_eway', title: '🚚 E-Way Bills', description: 'GST transport documents' }),
           ...e({ id: 'erp_remind', title: '🔔 Payment Reminders', description: 'Nudge unpaid customers' }),
           home,
         ],
@@ -458,6 +459,8 @@ export class AdminCommandService {
     if (id.startsWith('einvpdf_')) return this.sendErpInvoicePdf(tenant, to, id.slice('einvpdf_'.length), 'admin');
     if (id === 'erp_report') return this.showErpReport(tenant, to);
     if (id === 'erp_remind') return this.sendErpReminders(tenant, to);
+    if (id === 'erp_eway') return this.createPortalEditLink(tenant, to, '/erp/eway-bills', '🚚 Open E-Way Bills',
+      '🚚 *E-Way Bills*\n\nTap below to view and generate GST e-way bills in your portal. This link opens once and lasts 15 minutes.');
 
     if (id === 'pdeln' || id === 'cancel') return this.showMainMenu(tenant, to);
 
@@ -882,7 +885,7 @@ export class AdminCommandService {
   private isErpCommandId(id: string): boolean {
     return (
       id === 'erp_console' || id.startsWith('erp_console_') ||
-      id === 'erp_report' || id === 'erp_remind' || id === 'cat_einvoices' ||
+      id === 'erp_report' || id === 'erp_remind' || id === 'erp_eway' || id === 'cat_einvoices' ||
       id === 'einv_new' || id === 'einv_unpaid' || id === 'einv_recent' ||
       id.startsWith('einvv_') || id.startsWith('einvpay_') ||
       id.startsWith('einvpdfc_') || id.startsWith('einvpdf_')
