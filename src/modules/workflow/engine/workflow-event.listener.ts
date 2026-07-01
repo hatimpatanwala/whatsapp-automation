@@ -71,7 +71,7 @@ export class WorkflowEventListener {
       const qn = v.quote_number ? ` ${v.quote_number}` : '';
       const total = v.quote_total ? ` for ${cur}${v.quote_total}` : '';
       const map: Record<string, { detail: string; status: string }> = {
-        sent: { detail: `📝 Your quote${qn}${total} is ready. Tap below to review it and accept or decline.`, status: 'Quote ready' },
+        sent: { detail: `🎉 Your quote${qn}${total} is ready! Please review your quote and accept to place the order.`, status: 'Quote ready' },
         accepted: { detail: `✅ Thanks for accepting quote${qn}! We're creating your order now.`, status: 'Quote accepted' },
         rejected: { detail: `Quote${qn} was declined. Reply here if you'd like us to revise it for you.`, status: 'Quote declined' },
         converted: { detail: `🎉 Quote${qn} is confirmed — your order is being processed. We'll keep you posted!`, status: 'Order created' },

@@ -102,6 +102,14 @@ import { BuilderApiService } from './builder-api.service';
               </div>
             </section>
           }
+          <!-- Draft quote: the business is still preparing it — no accept yet. -->
+          @if (d.type === 'quote' && d.status === 'draft' && !responded()) {
+            <section class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+              <i class="pi pi-clock text-amber-500" style="font-size:1.5rem"></i>
+              <p class="text-sm font-semibold text-amber-800 mt-2">Your quote is being prepared</p>
+              <p class="text-xs text-amber-600 mt-1">We'll send you a message the moment it's ready to review & accept.</p>
+            </section>
+          }
           @if (responded()) {
             <section class="rounded-xl border p-4 text-center"
               [class.bg-green-50]="responded() === 'accepted' || responded() === 'converted'" [class.border-green-200]="responded() === 'accepted' || responded() === 'converted'"
@@ -131,7 +139,9 @@ export class OrderViewComponent implements OnInit {
 
   /** A sent/draft quote that hasn't yet been accepted/rejected can still be acted on. */
   canRespond(status: string): boolean {
-    return ['sent', 'draft'].includes(status) && !this.responded();
+    // Only a quote the business has SENT can be accepted — a draft is still being
+    // prepared/priced by the admin, so the customer must wait for it.
+    return status === 'sent' && !this.responded();
   }
 
   respond(action: 'accept' | 'reject'): void {

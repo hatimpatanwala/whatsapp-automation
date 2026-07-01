@@ -116,8 +116,8 @@ interface QuoteItem {
                       <p-inputNumber [(ngModel)]="item.unitPrice" [min]="0" mode="currency" currency="INR" locale="en-IN" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" />
                     </div>
                     <div>
-                      <label class="text-[10px] text-gray-400 font-medium">Discount \u20B9</label>
-                      <p-inputNumber [(ngModel)]="item.discount" [min]="0" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" placeholder="0" />
+                      <label class="text-[10px] text-gray-400 font-medium">Discount %</label>
+                      <p-inputNumber [(ngModel)]="item.discount" [min]="0" [max]="100" suffix="%" (onInput)="recalculate()" styleClass="w-full" inputStyleClass="w-full" placeholder="0" />
                     </div>
                     <div class="text-right col-span-3 sm:col-span-1 border-t sm:border-t-0 border-gray-200 pt-2 sm:pt-0">
                       <label class="text-[10px] text-gray-400 font-medium">Line total</label>
@@ -195,9 +195,11 @@ export class QuoteFormComponent implements OnInit {
   lineDiscountTotal = signal(0);
   total = computed(() => Math.max(0, this.subtotal() - this.lineDiscountTotal() - this.promo.totalDiscount()));
 
-  /** Net total for one line: qty × price − discount (never negative). */
+  /** Net total for one line: qty × price − discount% (never negative). */
   lineTotal(item: QuoteItem): number {
-    return Math.max(0, (item.quantity || 0) * (item.unitPrice || 0) - (Number(item.discount) || 0));
+    const gross = (item.quantity || 0) * (item.unitPrice || 0);
+    const pct = Math.min(100, Math.max(0, Number(item.discount) || 0));
+    return Math.max(0, gross - (gross * pct) / 100);
   }
 
   private promoLines() { return this.items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })); }
@@ -315,8 +317,9 @@ export class QuoteFormComponent implements OnInit {
     let gross = 0, disc = 0;
     for (const item of this.items) {
       const g = (item.quantity || 0) * (item.unitPrice || 0);
+      const pct = Math.min(100, Math.max(0, Number(item.discount) || 0));
       gross += g;
-      disc += Math.min(Math.max(0, Number(item.discount) || 0), g); // a line discount can't exceed the line
+      disc += (g * pct) / 100;
     }
     this.subtotal.set(gross);
     this.lineDiscountTotal.set(disc);

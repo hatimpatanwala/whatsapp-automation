@@ -87,8 +87,11 @@ export class QuoteService {
     taxAmount?: number;
     items: { productId?: string; description: string; quantity: number; unitPrice: number; discount?: number }[];
   }) {
-    const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) =>
-      Math.max(0, it.quantity * it.unitPrice - (Number(it.discount) || 0));
+    const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) => {
+      const gross = it.quantity * it.unitPrice;
+      const pct = Math.min(100, Math.max(0, Number(it.discount) || 0)); // discount is a PERCENTAGE
+      return Math.max(0, gross - (gross * pct) / 100);
+    };
     const created = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const subtotal = data.items.reduce((sum, item) => sum + lineNet(item), 0);
       const taxAmount = Math.max(0, Number(data.taxAmount) || 0);
@@ -113,7 +116,7 @@ export class QuoteService {
 
       for (let i = 0; i < data.items.length; i++) {
         const item = data.items[i];
-        const itemDiscount = Math.max(0, Number(item.discount) || 0);
+        const itemDiscount = Math.min(100, Math.max(0, Number(item.discount) || 0)); // stored as a percentage
         const lineTotal = lineNet(item);
         await qr.query(
           `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, discount, line_total, sort_order)
@@ -138,8 +141,11 @@ export class QuoteService {
     items?: { productId?: string; description: string; quantity: number; unitPrice: number; discount?: number }[];
     taxRate?: number;
   }) {
-    const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) =>
-      Math.max(0, it.quantity * it.unitPrice - (Number(it.discount) || 0));
+    const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) => {
+      const gross = it.quantity * it.unitPrice;
+      const pct = Math.min(100, Math.max(0, Number(it.discount) || 0)); // discount is a PERCENTAGE
+      return Math.max(0, gross - (gross * pct) / 100);
+    };
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
       const existing = await qr.query(`SELECT * FROM quotes WHERE id = $1`, [id]);
       if (!existing[0]) return null;
@@ -180,7 +186,7 @@ export class QuoteService {
         await qr.query(`DELETE FROM quote_items WHERE quote_id = $1`, [id]);
         for (let i = 0; i < data.items.length; i++) {
           const item = data.items[i];
-          const itemDiscount = Math.max(0, Number(item.discount) || 0);
+          const itemDiscount = Math.min(100, Math.max(0, Number(item.discount) || 0)); // stored as a percentage
           const lineTotal = lineNet(item);
           await qr.query(
             `INSERT INTO quote_items (quote_id, product_id, description, quantity, unit_price, discount, line_total, sort_order)

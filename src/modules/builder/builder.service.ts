@@ -276,8 +276,9 @@ export class BuilderService implements OnModuleInit {
       (await qr.query(`SELECT status FROM quotes WHERE id = $1`, [s.result_id]))[0],
     );
     if (!current) throw new NotFoundException('Quote not found.');
-    // Only an open (sent) quote can be acted on; ignore replays gracefully.
-    if (!['sent', 'draft'].includes(current.status)) {
+    // Only a SENT quote can be accepted/declined — a draft is still being prepared
+    // by the admin. Ignore replays / premature actions gracefully.
+    if (current.status !== 'sent') {
       return { status: current.status };
     }
     const newStatus = action === 'accept' ? 'accepted' : 'rejected';
