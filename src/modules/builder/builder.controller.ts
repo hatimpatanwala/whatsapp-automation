@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Req, Body, Query, HttpCode } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Get, Post, Req, Res, Body, Query, HttpCode } from '@nestjs/common';
+import { Request, Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { Public } from '../../common/decorators/public.decorator';
 import { BuilderService } from './builder.service';
 
@@ -12,7 +13,10 @@ import { BuilderService } from './builder.service';
 @Controller('m/builder')
 @Public()
 export class BuilderController {
-  constructor(private readonly builder: BuilderService) {}
+  constructor(
+    private readonly builder: BuilderService,
+    private readonly config: ConfigService,
+  ) {}
 
   private token(req: Request, q?: string): string {
     return (req.headers['x-builder-token'] as string) || q || '';
@@ -62,5 +66,42 @@ export class BuilderController {
   @HttpCode(200)
   async submit(@Req() req: Request, @Query('token') token: string, @Body() body: any) {
     return this.builder.submit(this.token(req, token), body);
+  }
+
+  /**
+   * Admin Portal auto-login bridge. Validates + consumes a one-time 'portal'
+   * token, establishes the web session as the tenant owner, then redirects into
+   * the full portal. `to` is an allow-listed portal path (open-redirect safe).
+   */
+  @Get('portal-login')
+  async portalLogin(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('token') token?: string,
+    @Query('to') to?: string,
+  ): Promise<void> {
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    try {
+      const { tenantId, schemaName, user } = await this.builder.consumePortalSession(this.token(req, token));
+      req.session.userId = user.id;
+      req.session.userRole = user.role;
+      req.session.tenantId = tenantId;
+      req.session.tenantSchema = schemaName;
+      // Persist the session first so the auth cookie is set on THIS response.
+      await new Promise<void>((resolve, reject) => req.session.save((e) => (e ? reject(e) : resolve())));
+      return res.redirect(`${base}${this.safePortalPath(to)}`);
+    } catch {
+      return res.redirect(`${base}/auth/login?error=portal_link_expired`);
+    }
+  }
+
+  /** Only redirect to known first-party portal paths — prevents open redirects. */
+  private safePortalPath(to?: string): string {
+    const allow = ['/dashboard', '/orders', '/products', '/quotes', '/invoices', '/customers',
+      '/erp', '/inventory', '/payments', '/deliveries', '/schemes', '/campaigns', '/settings'];
+    if (to && to.startsWith('/') && !to.startsWith('//')) {
+      if (allow.some((a) => to === a || to.startsWith(`${a}/`) || to.startsWith(`${a}?`))) return to;
+    }
+    return '/dashboard';
   }
 }

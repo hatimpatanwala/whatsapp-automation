@@ -219,14 +219,21 @@ export class ErpWebviewService {
   ): Promise<any> {
     const { schema } = await this.ctx(token);
     return this.q(schema, async (qr) => {
-      const exists = (await qr.query(`SELECT id FROM products WHERE id = $1`, [id]))[0];
+      const exists = (await qr.query(`SELECT id, sale_price FROM products WHERE id = $1`, [id]))[0];
       if (!exists) throw new NotFoundException('Product not found');
 
       const sets: string[] = [];
       const params: any[] = [];
       let p = 1;
       if (patch.name != null && String(patch.name).trim()) { sets.push(`name = $${p++}`); params.push(String(patch.name).trim()); }
-      if (patch.price != null && !isNaN(Number(patch.price))) { sets.push(`base_price = $${p++}`); params.push(Number(patch.price)); }
+      if (patch.price != null && !isNaN(Number(patch.price))) {
+        // The catalog (and this editor's Price field) shows COALESCE(sale_price, base_price).
+        // Write whichever column is actually displayed so the edit reflects: if a sale price
+        // is set, update it; otherwise update base_price. Writing only base_price left an
+        // existing sale_price masking the change, so the edit silently appeared to do nothing.
+        const priceCol = exists.sale_price != null ? 'sale_price' : 'base_price';
+        sets.push(`${priceCol} = $${p++}`); params.push(Number(patch.price));
+      }
       if (patch.active != null) { sets.push(`is_active = $${p++}`); params.push(!!patch.active); }
       if (sets.length) {
         params.push(id);

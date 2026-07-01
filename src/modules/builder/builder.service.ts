@@ -467,6 +467,47 @@ export class BuilderService implements OnModuleInit {
     return { schemaName: s.schema_name, tenantId: s.tenant_id };
   }
 
+  /**
+   * Mint a one-time "Admin Portal" auto-login link. Opens the FULL web portal
+   * (every tool, the complete dashboard) logged in as the tenant owner, straight
+   * from WhatsApp. Because it grants full portal access it is deliberately
+   * short-lived (15 min) and single-use (consumed on redemption — see
+   * consumePortalSession). `view` is the portal path to land on.
+   */
+  async createPortalLoginSession(input: {
+    tenantId: string; schemaName: string; view?: string; createdBy?: string;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min — full-access link
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions (token_hash, tenant_id, schema_name, type, created_by, status, mode, expires_at)
+       VALUES ($1,$2,$3,'portal',$4,'open','portal',$5)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.createdBy || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    const to = input.view ? `&to=${encodeURIComponent(input.view)}` : '';
+    // Hits the backend bridge (sets the session cookie) which then redirects into the portal.
+    return { token, url: `${base}/api/m/builder/portal-login?token=${token}${to}` };
+  }
+
+  /**
+   * Validate + CONSUME a portal-login token, returning the tenant + the owner
+   * user to establish the web session as. Single-use: the token is marked 'used'
+   * so the link cannot be replayed.
+   */
+  async consumePortalSession(
+    token: string,
+  ): Promise<{ tenantId: string; schemaName: string; user: { id: string; role: string } }> {
+    const s = await this.resolveSession(token, 'portal');
+    await this.ds.query(`UPDATE public.builder_sessions SET status = 'used' WHERE token_hash = $1`, [this.hash(token)]);
+    const user = await this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
+      const owner = (await qr.query(`SELECT id, role FROM users WHERE role = 'owner' ORDER BY created_at ASC LIMIT 1`))[0];
+      return owner || (await qr.query(`SELECT id, role FROM users ORDER BY created_at ASC LIMIT 1`))[0];
+    });
+    if (!user) throw new UnauthorizedException('No portal user for this tenant.');
+    return { tenantId: s.tenant_id, schemaName: s.schema_name, user };
+  }
+
   /** Categories / brands / products / customers for the promo scope & audience pickers. */
   async promoTaxonomy(schema: string): Promise<any> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
@@ -490,7 +531,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' | 'erp' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' | 'erp' | 'portal' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,
@@ -499,9 +540,10 @@ export class BuilderService implements OnModuleInit {
     const s = rows[0];
     if (!s) throw new UnauthorizedException('Invalid link.');
     if ((s.mode || 'build') !== expectedMode) throw new ForbiddenException('This link is not valid here.');
-    // 'view' links stay usable until expiry; 'build' links are single-use.
-    if (expectedMode === 'build' && s.status !== 'open') {
-      throw new ForbiddenException('This builder link has already been used.');
+    // 'view'/'erp' links stay usable until expiry; 'build' + 'portal' (full-access
+    // auto-login) links are single-use — invalidated the moment they're redeemed.
+    if ((expectedMode === 'build' || expectedMode === 'portal') && s.status !== 'open') {
+      throw new ForbiddenException('This link has already been used.');
     }
     if (new Date(s.expires_at).getTime() < Date.now()) {
       throw new ForbiddenException('This link has expired. Please request a new one.');

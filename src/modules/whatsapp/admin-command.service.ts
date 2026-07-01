@@ -182,7 +182,8 @@ export class AdminCommandService {
       {
         id: 'sec_reports', title: '📊 Reports', desc: 'Summary & insights',
         rows: [
-          ...e({ id: 'erp_console', title: '🖥️ ERP Console', description: 'Open the full admin app' }),
+          { id: 'admin_portal', title: '🖥️ Admin Portal', description: 'Open your full web portal' },
+          ...e({ id: 'erp_console', title: '📱 ERP Console', description: 'Quick mobile admin app' }),
           ...e({ id: 'erp_report', title: '📊 Business Report' }),
           { id: 'menu_summary', title: '📈 Today’s Summary' },
           home,
@@ -420,6 +421,19 @@ export class AdminCommandService {
       }
     }
     if (id === 'invskip') return this.send(tenant, to, '👍 No document issued.\n\nSend *menu* for more.');
+
+    // ─── Admin Portal (full web portal auto-login — available to every tenant) ─
+    if (id === 'admin_portal') return this.createPortalLoginLink(tenant, to);
+
+    // ─── ERP gate ───────────────────────────────────────────────────────────
+    // Every ERP command requires the plan's `erp` feature — the SAME check the
+    // portal uses (/erp/status → features.erp). The menu already hides ERP rows
+    // when off, but a stale button (tapped from an older message sent while ERP
+    // was still on) would otherwise still fire the handler. Block it here so the
+    // WhatsApp surface stays exactly in lockstep with the portal.
+    if (this.isErpCommandId(id) && !(await this.isErp(tenant))) {
+      return this.sendErpUpsell(tenant, to);
+    }
 
     // ─── ERP Console webviews (plan-gated) ──────────────────────────────────
     if (id === 'erp_console') return this.createErpConsoleLink(tenant, to, 'dashboard', '🖥️ Open ERP Console',
@@ -837,6 +851,17 @@ export class AdminCommandService {
 
   // ─── ERP invoices (plan-gated) ────────────────────────────────────────────────
   /** True when the tenant's plan includes the ERP feature. */
+  /** True for any command id that belongs to the plan-gated ERP surface. */
+  private isErpCommandId(id: string): boolean {
+    return (
+      id === 'erp_console' || id.startsWith('erp_console_') ||
+      id === 'erp_report' || id === 'erp_remind' || id === 'cat_einvoices' ||
+      id === 'einv_new' || id === 'einv_unpaid' || id === 'einv_recent' ||
+      id.startsWith('einvv_') || id.startsWith('einvpay_') ||
+      id.startsWith('einvpdfc_') || id.startsWith('einvpdf_')
+    );
+  }
+
   private async isErp(tenant: any): Promise<boolean> {
     if (!this.planFeatures || !this.erpInvoices) return false;
     try {
@@ -1147,6 +1172,29 @@ export class AdminCommandService {
     } catch (err: any) {
       this.logger.error(`createErpConsoleLink failed: ${err.message}`);
       await this.send(tenant, to, '⚠️ Could not open the ERP console right now. Send *menu* and try again.');
+    }
+  }
+
+  /** Mint a one-time Admin-Portal auto-login link and send it as a CTA button. */
+  private async createPortalLoginLink(tenant: any, to: string): Promise<void> {
+    try {
+      const { url } = await this.builder.createPortalLoginSession({
+        tenantId: tenant.id,
+        schemaName: tenant.schemaName,
+        view: '/dashboard',
+        createdBy: to,
+      });
+      await this.whatsappApi.sendCtaUrl(
+        tenant.phoneNumberId,
+        tenant.accessToken,
+        to,
+        '🖥️ *Admin Portal*\n\nTap below to open your complete web portal — every tool and the full dashboard, already logged in. For your security this link opens once and expires in 15 minutes.',
+        'Open Admin Portal',
+        url,
+      );
+    } catch (err: any) {
+      this.logger.error(`createPortalLoginLink failed: ${err.message}`);
+      await this.send(tenant, to, '⚠️ Could not open the portal right now. Send *menu* and try again.');
     }
   }
 
