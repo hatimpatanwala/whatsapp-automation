@@ -25,18 +25,25 @@ export class ClientService {
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.min(200, Math.max(1, filters.limit ?? 50));
     const offset = (page - 1) * limit;
-    const conditions = ['is_erp_client = true'];
+    // Show EVERY customer here — a WhatsApp customer who messages is a client of the
+    // business, so they appear in the ERP automatically (no manual promotion needed).
+    // Explicitly-created B2B clients (is_erp_client = true, with billing details) are
+    // surfaced first; the flag is kept as a B2B marker, not a visibility gate.
+    const conditions: string[] = [];
     const params: any[] = [];
     if (filters.search) {
       params.push(`%${filters.search}%`);
       conditions.push(`(name ILIKE $1 OR company ILIKE $1 OR phone ILIKE $1 OR email ILIKE $1)`);
     }
-    const where = `WHERE ${conditions.join(' AND ')}`;
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     return this.cm.executeInTenantContext(schema, async (qr) => {
       const total = parseInt((await qr.query(`SELECT COUNT(*)::int AS total FROM "${schema}".customers ${where}`, params))[0].total);
       const data = await qr.query(
-        `SELECT id, name, phone, email, company, gstin, billing_address, total_orders, total_spent, created_at
-         FROM "${schema}".customers ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        `SELECT id, name, phone, email, company, gstin, billing_address, is_erp_client,
+                total_orders, total_spent, created_at
+         FROM "${schema}".customers ${where}
+         ORDER BY is_erp_client DESC, total_spent DESC NULLS LAST, created_at DESC
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, limit, offset],
       );
       return { data, total, page, limit, totalPages: Math.ceil(total / limit) };

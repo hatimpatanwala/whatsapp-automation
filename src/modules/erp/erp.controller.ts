@@ -42,7 +42,7 @@ export class ErpController {
           (SELECT COUNT(*)::int FROM "${schema}".employees WHERE removed = false) AS employees,
           (SELECT COUNT(*)::int FROM "${schema}".inventory WHERE track_inventory = true AND stock_quantity <= low_stock_threshold) AS low_stock`))[0];
       const recentInvoices = await q(`SELECT invoice_number, customer_name, total, payment_status, issued_at FROM "${schema}".invoices WHERE year IS NOT NULL ORDER BY created_at DESC LIMIT 5`);
-      const topClients = await q(`SELECT name, company, total_spent FROM "${schema}".customers WHERE is_erp_client = true ORDER BY total_spent DESC NULLS LAST LIMIT 5`);
+      const topClients = await q(`SELECT name, company, total_spent FROM "${schema}".customers WHERE total_spent > 0 ORDER BY total_spent DESC NULLS LAST LIMIT 5`);
       const monthlySales = await q(`
         SELECT to_char(date_trunc('month', issued_at), 'Mon') AS month, COALESCE(SUM(base_total),0)::float AS amt
         FROM "${schema}".invoices

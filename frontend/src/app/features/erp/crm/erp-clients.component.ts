@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpClientsComponent {
   config: ErpCrudConfig = {
-    title: 'Clients', subtitle: 'B2B customers with billing details',
+    title: 'Clients', subtitle: 'Every customer who messages you — add billing details to invoice them',
     apiPath: '/erp/clients', newLabel: 'New Client', labelField: 'name',
     searchFields: ['name', 'company', 'phone', 'email'],
     columns: [
