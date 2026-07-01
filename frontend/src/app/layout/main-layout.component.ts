@@ -188,38 +188,43 @@ interface NavSection {
               icon="pi pi-bell"
               class="p-button-text p-button-sm p-button-rounded text-gray-600 relative"
               pBadge
-              [value]="notifTotal().toString()"
-              [badgeDisabled]="notifTotal() === 0"
-              (click)="notifPanel.toggle($event)"
+              [value]="unread().toString()"
+              [badgeDisabled]="unread() === 0"
+              (click)="notifPanel.toggle($event); loadFeed()"
               pTooltip="Notifications"
               tooltipPosition="bottom"
             ></button>
             <p-popover #notifPanel>
-              <div class="w-72">
+              <div class="w-80 max-h-[70vh] overflow-y-auto">
                 <div class="flex items-center justify-between px-1 pb-2 mb-1 border-b border-gray-100">
                   <span class="text-sm font-semibold text-gray-900">Notifications</span>
-                  @if (notifTotal() > 0) {
-                    <span class="text-xs text-gray-400">{{ notifTotal() }} pending</span>
+                  @if (unread() > 0) {
+                    <button class="text-xs text-primary-600 font-semibold hover:underline" (click)="markAllRead()">Mark all read</button>
                   }
                 </div>
-                @if (notifications().length) {
-                  @for (n of notifications(); track n.route) {
+                @if (feed().length) {
+                  @for (n of feed(); track n.id) {
                     <a
                       [routerLink]="n.route"
-                      (click)="notifPanel.hide()"
-                      class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 no-underline transition-colors"
+                      (click)="onNotifClick(n); notifPanel.hide()"
+                      class="flex items-start gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 no-underline transition-colors"
+                      [class.bg-primary-50]="!n.is_read"
                     >
-                      <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-primary-50 text-primary-600 shrink-0">
-                        <i [class]="'pi ' + n.icon"></i>
+                      <span class="flex items-center justify-center w-9 h-9 rounded-lg shrink-0" [class]="notifIconClass(n.type)">
+                        <i [class]="'pi ' + notifIcon(n.type)"></i>
                       </span>
-                      <span class="flex-1 text-sm text-gray-700">{{ n.label }}</span>
-                      <span class="text-xs font-semibold bg-gray-100 text-gray-700 rounded-full px-2 py-0.5 tabular-nums">{{ n.count }}</span>
+                      <span class="flex-1 min-w-0">
+                        <span class="block text-sm font-medium text-gray-800 truncate">{{ n.title }}</span>
+                        @if (n.body) { <span class="block text-xs text-gray-500 truncate">{{ n.body }}</span> }
+                        <span class="block text-[11px] text-gray-400">{{ n.created_at | date:'short' }}</span>
+                      </span>
+                      @if (!n.is_read) { <span class="w-2 h-2 rounded-full bg-primary-500 shrink-0 mt-1.5"></span> }
                     </a>
                   }
                 } @else {
                   <div class="py-8 text-center">
                     <i class="pi pi-check-circle text-green-400" style="font-size:1.75rem"></i>
-                    <p class="text-sm text-gray-500 mt-2">You're all caught up</p>
+                    <p class="text-sm text-gray-500 mt-2">No notifications yet</p>
                   </div>
                 }
               </div>
@@ -468,6 +473,35 @@ export class MainLayoutComponent implements OnInit {
   notifications = signal<{ label: string; icon: string; route: string; count: number }[]>([]);
   notifTotal = computed(() => this.notifications().reduce((sum, n) => sum + n.count, 0));
 
+  // Event-driven notification feed (new orders / quotes / customers / …).
+  feed = signal<any[]>([]);
+  unread = signal(0);
+  private feedTimer: any = null;
+
+  loadFeed(): void {
+    this.apiService.get<any>('/notifications').subscribe({
+      next: (r) => { const d = r?.data ?? r; this.feed.set(d?.items ?? []); this.unread.set(d?.unread ?? 0); },
+      error: () => {},
+    });
+  }
+  markAllRead(): void {
+    this.apiService.post<any>('/notifications/read', {}).subscribe({
+      next: () => { this.feed.update((f) => f.map((n) => ({ ...n, is_read: true }))); this.unread.set(0); },
+    });
+  }
+  onNotifClick(n: any): void {
+    if (n.is_read) return;
+    this.apiService.post<any>('/notifications/read', { id: n.id }).subscribe({ next: () => {} });
+    n.is_read = true;
+    this.unread.update((u) => Math.max(0, u - 1));
+  }
+  notifIcon(type: string): string {
+    return ({ order: 'pi-shopping-cart', quote: 'pi-file-edit', customer: 'pi-user-plus', payment: 'pi-credit-card', invoice: 'pi-receipt' } as any)[type] || 'pi-bell';
+  }
+  notifIconClass(type: string): string {
+    return ({ order: 'bg-blue-50 text-blue-600', quote: 'bg-purple-50 text-purple-600', customer: 'bg-green-50 text-green-600', payment: 'bg-emerald-50 text-emerald-600', invoice: 'bg-amber-50 text-amber-600' } as any)[type] || 'bg-gray-100 text-gray-600';
+  }
+
   currentPageTitle = computed(() => {
     const url = this.router.url;
     // Most-specific (longest) matching route wins, so /erp/invoices beats /erp.
@@ -483,6 +517,8 @@ export class MainLayoutComponent implements OnInit {
     this.erpAccess.load();
     this.currentUrl.set(this.router.url);
     this.router.events.subscribe((e) => { if (e instanceof NavigationEnd) this.currentUrl.set(e.urlAfterRedirects); });
+    this.loadFeed();
+    this.feedTimer = setInterval(() => this.loadFeed(), 45000);
     this.apiService.get<any>('/orders/dashboard/counts').subscribe({
       next: (counts) => {
         this.badges.set({

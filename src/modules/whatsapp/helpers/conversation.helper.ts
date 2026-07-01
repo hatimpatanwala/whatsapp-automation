@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { Tenant } from '../../../database/entities/public/tenant.entity';
 import { Subscription } from '../../../database/entities/public/subscription.entity';
+import { EventBusService } from '../../events/event-bus.service';
+import { CustomerCreatedEvent } from '../../events/domain-events';
 
 @Injectable()
 export class ConversationHelper {
@@ -15,24 +17,21 @@ export class ConversationHelper {
     private readonly subscriptionRepository: Repository<Subscription>,
     @InjectRepository(Tenant)
     private readonly tenantRepository: Repository<Tenant>,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async getOrCreateCustomer(schema: string, phone: string, name?: string): Promise<any> {
-    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      let customer = await qr.query(
-        `SELECT * FROM customers WHERE phone = $1`,
-        [phone],
-      );
-
-      if (customer.length === 0) {
-        customer = await qr.query(
-          `INSERT INTO customers (phone, name) VALUES ($1, $2) RETURNING *`,
-          [phone, name || phone],
-        );
-      }
-
-      return customer[0];
+    const { customer, created } = await this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      let rows = await qr.query(`SELECT * FROM customers WHERE phone = $1`, [phone]);
+      if (rows.length) return { customer: rows[0], created: false };
+      rows = await qr.query(`INSERT INTO customers (phone, name) VALUES ($1, $2) RETURNING *`, [phone, name || phone]);
+      return { customer: rows[0], created: true };
     });
+    // Notify the admin (in-app feed + WhatsApp) when a brand-new customer appears.
+    if (created) {
+      try { this.eventBus.emit(new CustomerCreatedEvent(schema, customer.id, phone)); } catch { /* best-effort */ }
+    }
+    return customer;
   }
 
   async getOrCreateConversation(schema: string, customerId: string, phone: string): Promise<any> {

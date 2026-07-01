@@ -1993,6 +1993,27 @@ const migration056TaxRatePercent: TenantMigration = {
   async down() { /* irreversible: cannot reliably tell converted rows apart */ },
 };
 
+const migration057AdminNotifications: TenantMigration = {
+  name: '057_admin_notifications',
+  async up(qr, schema) {
+    // In-app admin notification feed (portal bell): new orders, quotes, customers, etc.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".admin_notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        type VARCHAR(40) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        body TEXT,
+        route VARCHAR(200),
+        entity_id UUID,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_admin_notif_created ON "${schema}".admin_notifications (created_at DESC)`);
+  },
+  async down(qr, schema) { await qr.query(`DROP TABLE IF EXISTS "${schema}".admin_notifications`); },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2050,4 +2071,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration054ErpAdvanced,
   migration055ErpPosEway,
   migration056TaxRatePercent,
+  migration057AdminNotifications,
 ];
