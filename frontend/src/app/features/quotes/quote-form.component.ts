@@ -160,7 +160,7 @@ interface QuoteItem {
             }
 
             <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span class="tabular-nums">\u20B9{{ total() | number:'1.2-2' }}</span></div>
-            <button pButton class="w-full mt-3" [label]="saving() ? 'Saving\u2026' : (isEdit() ? 'Update quote' : 'Create quote')"
+            <button pButton class="w-full mt-3" [label]="saving() ? 'Saving\u2026' : (isEdit() ? 'Update & send quote' : 'Create quote')"
               icon="pi pi-check" severity="success" [disabled]="!canSave() || saving()" (click)="save()"></button>
             <button pButton class="w-full" label="Cancel" icon="pi pi-times" severity="secondary" [outlined]="true" routerLink="/quotes"></button>
           </div>
@@ -359,11 +359,23 @@ export class QuoteFormComponent implements OnInit {
 
     req.subscribe({
       next: () => {
-        this.messageService.add({
-          severity: 'success',
-          summary: this.isEdit() ? 'Updated' : 'Created',
-          detail: `Quote ${this.isEdit() ? 'updated' : 'created'} successfully`,
-        });
+        // On edit, also (re)send the quote to the customer so they get the revised version.
+        if (this.isEdit()) {
+          this.api.patch(`/quotes/${this.quoteId}/status`, { status: 'sent' }).subscribe({
+            next: () => {
+              this.messageService.add({ severity: 'success', summary: 'Updated & sent', detail: 'The customer has been sent the revised quote.' });
+              this.saving.set(false);
+              this.router.navigate(['/quotes']);
+            },
+            error: () => {
+              this.messageService.add({ severity: 'warn', summary: 'Updated', detail: 'Quote saved, but could not send it to the customer.' });
+              this.saving.set(false);
+              this.router.navigate(['/quotes']);
+            },
+          });
+          return;
+        }
+        this.messageService.add({ severity: 'success', summary: 'Created', detail: 'Quote created successfully' });
         this.saving.set(false);
         this.router.navigate(['/quotes']);
       },
