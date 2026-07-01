@@ -74,8 +74,11 @@ export class AdminFeedListener {
     // "Review quote" routes to the quote card (view + edit link + set status to
     // "Sent" → the customer gets it → accepts → auto-converts to an order).
     await this.wa(e.tenantSchema, (svc, tid) =>
-      svc.sendCustomNotification(tid, `📄 *New Quote ${num}*\n${w.name} · ₹${e.totalAmount}\n\nReview it, edit if needed, then send it to the customer.`,
-        [{ id: `quote_${e.quoteId}`, title: '📄 Review quote' }]));
+      svc.sendCustomNotification(tid, `📄 *New Quote ${num}*\n${w.name} · ₹${e.totalAmount}\n\nTap *Review* to view/edit (add discounts, change items) or *Accept* to approve — accepting converts it into an order.`,
+        [
+          { id: `quote_${e.quoteId}`, title: '📄 Review' },
+          { id: `qstatus_${e.quoteId}_accepted`, title: '✅ Accept' },
+        ]));
   }
 
   @OnEvent('customer.created')
