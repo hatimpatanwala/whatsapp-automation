@@ -9,6 +9,7 @@ export class ErpClientsComponent {
   config: ErpCrudConfig = {
     title: 'Clients', subtitle: 'Every customer who messages you — add billing details to invoice them',
     apiPath: '/erp/clients', newLabel: 'New Client', labelField: 'name',
+    rowLink: '/customers', // click a client → full 360 profile (orders, invoices, quotes, payments, ledger)
     searchFields: ['name', 'company', 'phone', 'email'],
     columns: [
       { field: 'name', header: 'Name' },

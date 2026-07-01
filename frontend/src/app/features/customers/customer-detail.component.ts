@@ -162,6 +162,7 @@ import { ErpAccessService } from '../../core/services/erp-access.service';
               <p-tabs value="orders">
                 <p-tablist>
                   <p-tab value="orders">Orders ({{ orders().length }})</p-tab>
+                  <p-tab value="quotes">Quotes ({{ quotes().length }})</p-tab>
                   <p-tab value="invoices">Invoices ({{ invoices().length }})</p-tab>
                   <p-tab value="payments">Payments ({{ payments().length }})</p-tab>
                   @if (erpAccess.visible()) { <p-tab value="ledger">Ledger</p-tab> }
@@ -189,6 +190,31 @@ import { ErpAccessService } from '../../core/services/erp-access.service';
                         </tr>
                       </ng-template>
                       <ng-template pTemplate="emptymessage"><tr><td colspan="5" class="text-center text-gray-400 text-sm py-6">No orders yet.</td></tr></ng-template>
+                    </p-table>
+                  </p-tabpanel>
+
+                  <!-- Quotes (all tenants) -->
+                  <p-tabpanel value="quotes">
+                    <p-table [value]="quotes()" styleClass="text-sm" [paginator]="quotes().length > 8" [rows]="8">
+                      <ng-template pTemplate="header">
+                        <tr>
+                          <th class="text-xs text-gray-500">Quote #</th>
+                          <th class="text-xs text-gray-500 text-right">Total</th>
+                          <th class="text-xs text-gray-500">Status</th>
+                          <th class="text-xs text-gray-500">Valid until</th>
+                          <th class="text-xs text-gray-500">Date</th>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="body" let-q>
+                        <tr class="hover:bg-gray-50">
+                          <td><a [routerLink]="['/quotes', q.id]" class="text-primary-600 font-semibold hover:underline">{{ q.quoteNumber }}</a></td>
+                          <td class="text-right font-semibold">{{ cur }}{{ q.totalAmount | number:'1.0-2' }}</td>
+                          <td><p-tag [value]="q.status" [severity]="quoteSeverity(q.status)" styleClass="text-xs capitalize" /></td>
+                          <td class="text-xs text-gray-500">{{ q.validUntil ? (q.validUntil | date:'mediumDate') : '—' }}</td>
+                          <td class="text-xs text-gray-500">{{ q.createdAt | date:'mediumDate' }}</td>
+                        </tr>
+                      </ng-template>
+                      <ng-template pTemplate="emptymessage"><tr><td colspan="5" class="text-center text-gray-400 text-sm py-6">No quotes yet.</td></tr></ng-template>
                     </p-table>
                   </p-tabpanel>
 
@@ -433,6 +459,7 @@ export class CustomerDetailComponent implements OnInit {
   loading = signal(true);
   c = signal<any>({ tags: [] });
   orders = signal<any[]>([]);
+  quotes = signal<any[]>([]);
   invoices = signal<any[]>([]);
   payments = signal<any[]>([]);
   ledger = signal<any>(null);
@@ -477,7 +504,11 @@ export class CustomerDetailComponent implements OnInit {
       },
     });
     this.customerService.getCart(id).subscribe({ next: (cart) => this.cart.set(cart) });
-    // Invoices + payments — available to every tenant.
+    // Quotes, invoices + payments — available to every tenant.
+    this.api.get<any>(`/customers/${id}/quotes`).subscribe({
+      next: (r) => this.quotes.set(this.arr(r)),
+      error: () => this.quotes.set([]),
+    });
     this.api.get<any>(`/customers/${id}/invoices`).subscribe({
       next: (r) => this.invoices.set(this.arr(r)),
       error: () => this.invoices.set([]),
@@ -505,6 +536,10 @@ export class CustomerDetailComponent implements OnInit {
   paySeverity(s: string): any {
     return ({ paid: 'success', completed: 'success', success: 'success', partial: 'warn',
       pending: 'warn', unpaid: 'danger', failed: 'danger', refunded: 'info' } as any)[s] ?? 'secondary';
+  }
+  quoteSeverity(s: string): any {
+    return ({ accepted: 'success', converted: 'success', sent: 'info', draft: 'secondary',
+      rejected: 'danger', expired: 'warn' } as any)[s] ?? 'secondary';
   }
 
   initials(): string {

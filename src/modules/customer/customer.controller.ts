@@ -61,6 +61,12 @@ export class CustomerController {
     return this.customerService.getCustomerOrders(req.tenantContext.schemaName, id);
   }
 
+  /** Customer's quotes — all tenants. */
+  @Get(':id/quotes')
+  async getQuotes(@Req() req: Request, @Param('id') id: string) {
+    return this.customerService.getCustomerQuotes(req.tenantContext.schemaName, id);
+  }
+
   /** Customer's invoices (order documents + ERP AR invoices) — all tenants. */
   @Get(':id/invoices')
   async getInvoices(@Req() req: Request, @Param('id') id: string) {

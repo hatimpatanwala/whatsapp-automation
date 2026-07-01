@@ -15,6 +15,7 @@ import { DialogModule } from 'primeng/dialog';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { CheckboxModule } from 'primeng/checkbox';
 import { MessageService, ConfirmationService } from 'primeng/api';
+import { Router } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
 import { ErpCurrencyService } from '../../../core/services/erp-currency.service';
 import { ErpAccessService } from '../../../core/services/erp-access.service';
@@ -52,6 +53,9 @@ export interface ErpCrudConfig {
   newLabel?: string;          // default 'New'
   /** Optional row→label for the delete confirm. */
   labelField?: string;
+  /** When set, clicking a row navigates to `[rowLink, row.id]` (a rich detail page)
+   *  instead of opening the edit dialog. The pencil action still opens the editor. */
+  rowLink?: string;
 }
 
 /**
@@ -102,7 +106,7 @@ export interface ErpCrudConfig {
             </tr>
           </ng-template>
           <ng-template pTemplate="body" let-row>
-            <tr class="cursor-pointer hover:bg-gray-50" (click)="openEdit(row)">
+            <tr class="cursor-pointer hover:bg-gray-50" (click)="onRowClick(row)">
               @for (c of config.columns; track c.field) {
                 <td>
                   @switch (c.type) {
@@ -162,8 +166,15 @@ export class ErpCrudComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly toast = inject(MessageService);
   private readonly confirm = inject(ConfirmationService);
+  private readonly router = inject(Router);
   readonly currency = inject(ErpCurrencyService);
   readonly erpAccess = inject(ErpAccessService);
+
+  /** Row click → detail page when rowLink is configured, else the edit dialog. */
+  onRowClick(row: any): void {
+    if (this.config.rowLink && row?.id) this.router.navigate([this.config.rowLink, row.id]);
+    else this.openEdit(row);
+  }
 
   loading = signal(true);
   saving = signal(false);

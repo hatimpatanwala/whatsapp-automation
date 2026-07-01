@@ -164,6 +164,17 @@ export class CustomerService {
     });
   }
 
+  /** Quotes raised for this customer. */
+  async getCustomerQuotes(schema: string, customerId: string): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      return qr.query(
+        `SELECT id, quote_number, status, total_amount, valid_until, created_at
+           FROM quotes WHERE customer_id = $1 ORDER BY created_at DESC`,
+        [customerId],
+      );
+    });
+  }
+
   /** Every invoice raised for this customer — order documents + ERP AR invoices. */
   async getCustomerInvoices(schema: string, customerId: string): Promise<any[]> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
