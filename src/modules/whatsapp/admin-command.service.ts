@@ -5,6 +5,7 @@ import { TenantConnectionManager } from '../../database/tenant-connection.manage
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { InvoiceService, DocType } from './invoice.service';
 import { BuilderService } from '../builder/builder.service';
+import { QuoteService } from '../quote/quote.service';
 import { PlanFeatureService } from '../erp/common/plan-feature.service';
 import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
 import { ErpDocumentService } from '../erp/invoicing/erp-document.service';
@@ -54,6 +55,7 @@ export class AdminCommandService {
     @Optional() private readonly erpInvoices: ErpInvoiceService,
     @Optional() private readonly erpDocuments: ErpDocumentService,
     @Optional() private readonly erpReminders: ErpReminderService,
+    @Optional() private readonly quoteService?: QuoteService,
   ) {}
 
   // ─── Entry point ────────────────────────────────────────────────────────────
@@ -548,19 +550,25 @@ export class AdminCommandService {
   private async updateQuoteStatus(tenant: any, to: string, quoteId: string, status: string): Promise<void> {
     const valid = this.QUOTE_STATUSES.map((s) => s.id);
     if (!valid.includes(status)) return this.send(tenant, to, 'Invalid status. Send *menu*.');
-    const updated = await this.query(tenant.schemaName, async (qr) => {
-      const extra = status === 'sent' ? ', sent_at = NOW()'
-        : status === 'accepted' ? ', accepted_at = NOW()'
-          : status === 'converted' ? ', converted_at = NOW()'
-            : '';
-      const rows = await qr.query(
-        `UPDATE quotes SET status = $1, updated_at = NOW()${extra} WHERE id = $2 RETURNING quote_number`,
-        [status, quoteId],
-      );
-      return rows[0];
-    });
-    if (!updated) return this.send(tenant, to, 'Quote not found. Send *menu*.');
-    await this.send(tenant, to, `✅ Quote #${updated.quote_number} is now *${this.titleCase(status)}*.\n\nSend *menu* for more.`);
+    try {
+      // Route through QuoteService so status changes fire the lifecycle:
+      //  - 'sent'     → the customer is sent the quote to review & accept
+      //  - 'accepted' → auto-converts into an order
+      if (this.quoteService) {
+        await this.quoteService.updateStatus(tenant.schemaName, quoteId, status);
+      } else {
+        const extra = status === 'sent' ? ', sent_at = NOW()' : status === 'accepted' ? ', accepted_at = NOW()' : status === 'converted' ? ', converted_at = NOW()' : '';
+        await this.query(tenant.schemaName, (qr) => qr.query(`UPDATE quotes SET status = $1, updated_at = NOW()${extra} WHERE id = $2`, [status, quoteId]));
+      }
+    } catch {
+      return this.send(tenant, to, '⚠️ Could not update the quote. Send *menu* and try again.');
+    }
+    const q = await this.query(tenant.schemaName, (qr) => qr.query(`SELECT quote_number FROM quotes WHERE id = $1`, [quoteId]).then((r: any[]) => r[0]));
+    if (!q) return this.send(tenant, to, 'Quote not found. Send *menu*.');
+    const note = status === 'sent' ? '\n\n📤 The customer has been sent the quote to review & accept.'
+      : status === 'accepted' ? '\n\n🛒 Converting it into an order…'
+        : '';
+    await this.send(tenant, to, `✅ Quote #${q.quote_number} is now *${this.titleCase(status)}*.${note}\n\nSend *menu* for more.`);
   }
 
   // ─── Customers & low stock ──────────────────────────────────────────────────

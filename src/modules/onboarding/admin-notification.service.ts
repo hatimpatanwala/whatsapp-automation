@@ -48,13 +48,18 @@ export class AdminNotificationService {
    */
   async notifyNewOrder(
     tenantId: string,
-    order: { id: string; customerName: string; total: string; itemSummary: string },
+    order: { id: string; orderNumber?: string; customerName: string; total: string; itemSummary: string },
   ): Promise<AdminNotificationResult> {
-    const freeFormText = `🛒 *New Order!*\n\nOrder #${order.id}\nCustomer: ${order.customerName}\nTotal: ${order.total}\nItems: ${order.itemSummary}\n\nReply *CONFIRM* to confirm or *VIEW* for details.`;
+    const num = order.orderNumber || order.id;
+    const freeFormText = `🛒 *New Order #${num}*\n\nCustomer: ${order.customerName}\nTotal: ${order.total}${order.itemSummary ? `\nItems: ${order.itemSummary}` : ''}\n\nTap below to view the full order or confirm it.`;
 
+    // Buttons carry the order id so they route to the real order-view / confirm
+    // handlers (order_<id> → details; ostatus_<id>_confirmed → confirm the order).
+    // Previously these were static ids with no handler, so "View Details" just
+    // bounced the admin to the main menu.
     const buttons = [
-      { id: 'confirm_order', title: 'Confirm' },
-      { id: 'view_order', title: 'View Details' },
+      { id: `order_${order.id}`, title: '👁️ View Order' },
+      { id: `ostatus_${order.id}_confirmed`, title: '✅ Confirm' },
     ];
 
     const templateFallback = {
@@ -63,10 +68,10 @@ export class AdminNotificationService {
       components: [{
         type: 'body',
         parameters: [
-          { type: 'text', text: order.id },
+          { type: 'text', text: String(num) },
           { type: 'text', text: order.customerName },
           { type: 'text', text: order.total },
-          { type: 'text', text: order.itemSummary },
+          { type: 'text', text: order.itemSummary || '-' },
         ],
       }],
     };

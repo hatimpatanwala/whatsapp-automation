@@ -63,7 +63,7 @@ export class AdminFeedListener {
     const w = await this.who(e.tenantSchema, e.customerId);
     const num = e.orderNumber ? `#${e.orderNumber}` : '';
     await this.feed.create(e.tenantSchema, { type: 'order', title: `New order ${num}`.trim(), body: `${w.name} · ₹${e.total}`, route: `/orders/${e.orderId}`, entityId: e.orderId });
-    await this.wa(e.tenantSchema, (svc, tid) => svc.notifyNewOrder(tid, { id: e.orderNumber || e.orderId, customerName: w.name, total: `₹${e.total}`, itemSummary: '' }));
+    await this.wa(e.tenantSchema, (svc, tid) => svc.notifyNewOrder(tid, { id: e.orderId, orderNumber: e.orderNumber, customerName: w.name, total: `₹${e.total}`, itemSummary: '' }));
   }
 
   @OnEvent('quote.created')
@@ -71,7 +71,11 @@ export class AdminFeedListener {
     const w = await this.who(e.tenantSchema, e.customerId);
     const num = e.quoteNumber ? `#${e.quoteNumber}` : '';
     await this.feed.create(e.tenantSchema, { type: 'quote', title: `New quote ${num}`.trim(), body: `${w.name} · ₹${e.totalAmount}`, route: `/quotes/${e.quoteId}`, entityId: e.quoteId });
-    await this.wa(e.tenantSchema, (svc, tid) => svc.sendCustomNotification(tid, `📄 *New Quote ${num}*\n${w.name} · ₹${e.totalAmount}\n\nOpen your admin portal to review it.`));
+    // "Review quote" routes to the quote card (view + edit link + set status to
+    // "Sent" → the customer gets it → accepts → auto-converts to an order).
+    await this.wa(e.tenantSchema, (svc, tid) =>
+      svc.sendCustomNotification(tid, `📄 *New Quote ${num}*\n${w.name} · ₹${e.totalAmount}\n\nReview it, edit if needed, then send it to the customer.`,
+        [{ id: `quote_${e.quoteId}`, title: '📄 Review quote' }]));
   }
 
   @OnEvent('customer.created')

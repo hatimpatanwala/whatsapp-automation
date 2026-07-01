@@ -24,6 +24,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { WabaModule } from '../waba/waba.module';
 import { BuilderModule } from '../builder/builder.module';
+import { QuoteModule } from '../quote/quote.module';
 import { CustomFieldModule } from '../custom-field/custom-field.module';
 import { BuilderNotificationListener } from './builder-notification.listener';
 import { PromotionsModule } from '../promotions/promotions.module';
@@ -34,7 +35,7 @@ import { ErpReminderController } from './erp-reminder.controller';
 import { ErpReminderCron } from './erp-reminder.cron';
 
 @Module({
-  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, PromotionsModule, CustomFieldModule, ErpModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, QuoteModule, PromotionsModule, CustomFieldModule, ErpModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
   controllers: [WhatsAppWebhookController, ErpReminderController],
   providers: [
     BuilderNotificationListener,
