@@ -322,7 +322,9 @@ export function buildDefaultNotifications(): DefaultWorkflowDef[] {
       '⏰ Your payment for order *#{{order_number}}* is still pending. Reply here to complete it.',
       '💳 Payment Details',
     ),
-    buildQuoteReadyNote('Quote Ready', 'Sends the full quote, with buttons to resend or ask questions.'),
+    // Fires when the admin SENDS the quote (status → sent), not on the customer's
+    // initial request — so the customer only gets the finalised, priced quote.
+    buildQuoteReadyNote('Quote Ready', 'Sends the finalised quote when the admin sends it — with buttons to view/accept.', 'sent'),
     buildQuoteAcceptedNote('Quote Accepted', 'Thanks the customer and resends the accepted quote.'),
   ];
 }
