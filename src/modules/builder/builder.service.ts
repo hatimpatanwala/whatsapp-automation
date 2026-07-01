@@ -469,6 +469,16 @@ export class BuilderService implements OnModuleInit {
   }
 
   /**
+   * Like {@link getErpSession} but also returns `createdBy` — the WhatsApp number
+   * of the admin who opened the console. Used to deliver PDFs straight to their
+   * chat (the WhatsApp webview can't download files).
+   */
+  async getErpSessionMeta(token: string): Promise<{ schemaName: string; tenantId: string; createdBy: string | null }> {
+    const s = await this.resolveSession(token, 'erp');
+    return { schemaName: s.schema_name, tenantId: s.tenant_id, createdBy: s.created_by || null };
+  }
+
+  /**
    * Mint a one-time "Admin Portal" auto-login link. Opens the FULL web portal
    * (every tool, the complete dashboard) logged in as the tenant owner, straight
    * from WhatsApp. Because it grants full portal access it is deliberately
@@ -498,7 +508,7 @@ export class BuilderService implements OnModuleInit {
    */
   async consumePortalSession(
     token: string,
-  ): Promise<{ tenantId: string; schemaName: string; user: { id: string; role: string } }> {
+  ): Promise<{ tenantId: string; schemaName: string; user: { id: string; role: string }; createdBy: string | null }> {
     const s = await this.resolveSession(token, 'portal');
     await this.ds.query(`UPDATE public.builder_sessions SET status = 'used' WHERE token_hash = $1`, [this.hash(token)]);
     const user = await this.connectionManager.executeInTenantContext(s.schema_name, async (qr) => {
@@ -506,7 +516,7 @@ export class BuilderService implements OnModuleInit {
       return owner || (await qr.query(`SELECT id, role FROM users ORDER BY created_at ASC LIMIT 1`))[0];
     });
     if (!user) throw new UnauthorizedException('No portal user for this tenant.');
-    return { tenantId: s.tenant_id, schemaName: s.schema_name, user };
+    return { tenantId: s.tenant_id, schemaName: s.schema_name, user, createdBy: s.created_by || null };
   }
 
   /** Categories / brands / products / customers for the promo scope & audience pickers. */

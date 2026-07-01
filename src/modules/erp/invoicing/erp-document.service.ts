@@ -3,6 +3,7 @@ import { QueryRunner } from 'typeorm';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { buildErpInvoicePdf, ErpPdfSettings } from './erp-invoice-pdf';
 import { buildErpDocPdf } from './erp-doc-pdf';
+import { buildEwayBillPdf } from '../compliance/eway-pdf';
 import { firstRow } from '../common/sql-result.util';
 
 /**
@@ -112,6 +113,21 @@ export class ErpDocumentService {
       ] : undefined,
     }, settings);
     return { buffer, filename: `receipt-${String(payment.id).slice(0, 8)}.pdf`, payment };
+  }
+
+  /** Standard-format (GST EWB-01) e-way bill PDF as a Buffer + filename + the row. */
+  async getEwayPdf(schema: string, ewayId: string): Promise<{ buffer: Buffer; filename: string; eway: any }> {
+    const { eway, invoice, settings } = await this.cm.executeInTenantContext(schema, async (qr) => {
+      const eway = firstRow(await qr.query(`SELECT * FROM "${schema}".eway_bills WHERE id = $1 AND removed = false`, [ewayId]));
+      if (!eway) throw new NotFoundException('E-way bill not found');
+      const invoice = eway.invoice_id
+        ? firstRow(await qr.query(`SELECT * FROM "${schema}".invoices WHERE id = $1`, [eway.invoice_id]))
+        : null;
+      return { eway, invoice, settings: await this.loadSettings(qr, schema) };
+    });
+    const buffer = await buildEwayBillPdf(eway, invoice, settings);
+    const filename = `eway-${String(eway.eway_number).replace(/[^\w.-]/g, '_')}.pdf`;
+    return { buffer, filename, eway };
   }
 
   /** Pull the business header fields from the tenant settings KV table. */

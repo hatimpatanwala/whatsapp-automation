@@ -620,9 +620,17 @@ export class InvoicesComponent implements OnInit {
     this.discount = 0; this.deliveryFee = 0; this.notes = ''; this.invoiceNumber = ''; this.existingOrderId = '';
   }
 
-  // Blob-download (not window.open) so PDFs save inside the WhatsApp in-app browser.
-  downloadPdf(inv: InvoiceRow) { this.api.downloadFile(`/invoices/${inv.id}/pdf`, `invoice-${inv.invoice_number || inv.id}.pdf`, () => this.toast.add({ severity: 'error', summary: 'Download failed' })); }
-  downloadById(id: string) { this.api.downloadFile(`/invoices/${id}/pdf`, `invoice-${id}.pdf`, () => this.toast.add({ severity: 'error', summary: 'Download failed' })); }
+  // Desktop downloads inline; inside the WhatsApp webview it's sent to the chat.
+  downloadPdf(inv: InvoiceRow) { this.deliverInvoice(inv.id, `invoice-${inv.invoice_number || inv.id}.pdf`); }
+  downloadById(id: string) { this.deliverInvoice(id, `invoice-${id}.pdf`); }
+  private deliverInvoice(id: string, filename: string) {
+    this.api.deliverPdf({
+      downloadPath: `/invoices/${id}/pdf`, filename,
+      sendPath: `/m/doc-delivery/portal/invoice/${id}`,
+      onSent: () => this.toast.add({ severity: 'success', summary: '📄 Sent to your WhatsApp', detail: 'Check your chat for the PDF' }),
+      onError: (e: any) => this.toast.add({ severity: 'error', summary: 'Could not send', detail: e?.error?.message || 'Please try again' }),
+    });
+  }
   viewOrder(inv: InvoiceRow) { if (inv.order_id) window.open(`/orders/${inv.order_id}`, '_blank'); }
 
   saveConfig() {

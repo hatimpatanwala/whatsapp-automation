@@ -583,38 +583,19 @@ export class MobileErpComponent implements OnInit {
   }
   openFullProductEdit(p: any): void { this.openInPortal(`/products/${p.id}/edit`); }
   /**
-   * Download the standard-format e-way bill PDF.
-   *
-   * We must NOT use window.open('_blank') here: inside the WhatsApp in-app
-   * browser that hands the URL to the *external* system browser, which ejects
-   * the user out of WhatsApp AND fails (the external browser has none of the
-   * webview's context). Instead we fetch the PDF as a blob through the same
-   * token-authed client the console already uses and trigger a save in place —
-   * the user stays in WhatsApp and any real server error surfaces as a toast.
+   * The console always runs inside the WhatsApp WebView, which can't download
+   * files (a `_blank`/blob link bounces to the external browser and ejects the
+   * user out of WhatsApp). So instead of downloading we ask the server to send
+   * the e-way bill PDF to the admin's chat as a document — reliable and native.
    */
   downloadEway(b: any): void {
-    this.savePdf(`/eway-bills/${b.id}/pdf`, `eway-bill-${b.ewayNumber || b.id}.pdf`);
-  }
-
-  /** Fetch a token-authed PDF as a blob and save it without leaving the webview. */
-  private savePdf(path: string, filename: string): void {
-    this.showToast('Preparing PDF…');
-    this.http.get(`${this.base}${path}`, { ...this.opts(), responseType: 'blob' }).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob as Blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        // Fallback for webviews that ignore the download attribute (e.g. iOS):
-        // open the blob inline in the same view so it still renders in WhatsApp.
-        setTimeout(() => { try { URL.revokeObjectURL(url); } catch { /* noop */ } }, 10000);
-      },
-      error: (e) => this.showToast(this.errMsg(e)),
-    });
+    this.showToast('Sending to your WhatsApp…');
+    this.http
+      .post(`${environment.apiUrl}/m/doc-delivery/console/eway/${b.id}`, {}, this.opts())
+      .subscribe({
+        next: () => this.showToast('📄 Sent — check your WhatsApp chat'),
+        error: (e) => this.showToast(this.errMsg(e)),
+      });
   }
 
   private searchTimer: any;

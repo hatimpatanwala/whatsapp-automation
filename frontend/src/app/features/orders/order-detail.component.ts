@@ -418,8 +418,16 @@ export class OrderDetailComponent implements OnInit {
     });
   }
 
-  // Blob-download (not window.open) so PDFs save inside the WhatsApp webview.
-  downloadDoc(d: any) { this.api.downloadFile(`/invoices/${d.id}/pdf`, `${d.invoiceNumber || d.invoice_number || d.id}.pdf`, () => this.messageService.add({ severity: 'error', summary: 'Download failed' })); }
+  // Desktop downloads inline; inside the WhatsApp webview it's sent to the chat.
+  downloadDoc(d: any) {
+    this.api.deliverPdf({
+      downloadPath: `/invoices/${d.id}/pdf`,
+      filename: `${d.invoiceNumber || d.invoice_number || d.id}.pdf`,
+      sendPath: `/m/doc-delivery/portal/invoice/${d.id}`,
+      onSent: () => this.messageService.add({ severity: 'success', summary: '📄 Sent to your WhatsApp', detail: 'Check your chat for the PDF' }),
+      onError: (e: any) => this.messageService.add({ severity: 'error', summary: 'Could not send', detail: e?.error?.message || 'Please try again' }),
+    });
+  }
 
   createDocument(docType: 'tax_invoice' | 'bill_of_supply' | 'delivery_challan', label: string) {
     const id = this.route.snapshot.paramMap.get('id');

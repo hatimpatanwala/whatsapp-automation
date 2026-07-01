@@ -425,7 +425,9 @@ export class ErpWebviewService {
 
   // ── Portal deep-link: open the FULL web portal (logged in) at a specific page ─
   async portalLink(token: string, to: string): Promise<{ url: string }> {
-    const { schema, tenantId } = await this.ctx(token);
-    return this.builder.createPortalLoginSession({ tenantId, schemaName: schema, view: to || '/dashboard' });
+    const { schemaName, tenantId, createdBy } = await this.builder.getErpSessionMeta(token);
+    // Carry the admin's WhatsApp number into the portal session so the portal can
+    // deliver PDFs to their chat when it's running inside the WhatsApp webview.
+    return this.builder.createPortalLoginSession({ tenantId, schemaName, view: to || '/dashboard', createdBy: createdBy || undefined });
   }
 }

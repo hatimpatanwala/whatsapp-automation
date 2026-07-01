@@ -76,17 +76,46 @@ export class ApiService {
     });
   }
 
-  // ─── File download ─────────────────────────────────────────────────────────
+  // ─── File download / delivery ──────────────────────────────────────────────
 
   /**
-   * Download a file (PDF, xlsx, receipt…) and save it WITHOUT `window.open`.
+   * True when running inside the WhatsApp in-app browser (its WebView). That
+   * WebView cannot download files — `window.open('_blank')` and blob/`download`
+   * links both bounce to the external system browser, ejecting the user out of
+   * WhatsApp (and 401-ing on the cookie-less external context). So on this
+   * surface we deliver PDFs to the user's chat instead of downloading.
+   */
+  inAppWebview(): boolean {
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+    return /WhatsApp/i.test(ua);
+  }
+
+  /**
+   * Get a PDF to the user the right way for their surface:
+   *   - Desktop / normal browser → download the file inline.
+   *   - WhatsApp webview → POST `sendPath` so the server sends it to their chat.
+   */
+  deliverPdf(opts: {
+    downloadPath: string; filename: string; sendPath: string;
+    onSent?: () => void; onError?: (e: unknown) => void;
+  }): void {
+    if (this.inAppWebview()) {
+      this.post(opts.sendPath, {}).subscribe({
+        next: () => { if (opts.onSent) opts.onSent(); },
+        error: (e) => { if (opts.onError) opts.onError(e); },
+      });
+    } else {
+      this.downloadFile(opts.downloadPath, opts.filename, opts.onError);
+    }
+  }
+
+  /**
+   * Download a file (PDF, xlsx, receipt…) WITHOUT `window.open`.
    *
-   * `window.open(url, '_blank')` is broken inside the WhatsApp in-app browser:
-   * it hands the URL to the external system browser, ejecting the user out of
-   * WhatsApp — and that external browser has none of this session's cookies, so
-   * a cookie-authed endpoint 401s and the user sees an error page. Fetching the
-   * file as a blob through this authenticated client and triggering a same-page
-   * save keeps the user in context on every browser (webview or desktop).
+   * On desktop we fetch the file as a blob through this authenticated client and
+   * trigger a same-page save. Inside the WhatsApp WebView (which can't save a
+   * blob without ejecting to Chrome) we navigate the current tab to the file so
+   * it opens/downloads natively and the user stays in WhatsApp.
    *
    * @param path      API path (relative — same as the other wrappers) or absolute URL.
    * @param filename  Suggested download name.
@@ -94,6 +123,12 @@ export class ApiService {
    */
   downloadFile(path: string, filename: string, onError?: (e: unknown) => void): void {
     const target = /^https?:\/\//.test(path) ? path : this.url(path);
+    if (this.inAppWebview()) {
+      // Same-tab navigation carries the session cookie and does NOT eject to the
+      // external browser the way `_blank` / blob downloads do.
+      window.location.href = target;
+      return;
+    }
     this.http.get(target, { withCredentials: true, responseType: 'blob' }).subscribe({
       next: (blob) => {
         const objectUrl = URL.createObjectURL(blob);

@@ -33,13 +33,16 @@ import { ErpModule } from '../erp/erp.module';
 import { ErpReminderService } from './erp-reminder.service';
 import { ErpReminderController } from './erp-reminder.controller';
 import { ErpReminderCron } from './erp-reminder.cron';
+import { DocDeliveryService } from './doc-delivery.service';
+import { DocDeliveryController } from './doc-delivery.controller';
 
 @Module({
   imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, QuoteModule, PromotionsModule, CustomFieldModule, ErpModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
-  controllers: [WhatsAppWebhookController, ErpReminderController],
+  controllers: [WhatsAppWebhookController, ErpReminderController, DocDeliveryController],
   providers: [
     BuilderNotificationListener,
     LoyaltyNotificationListener,
+    DocDeliveryService,
     WhatsAppApiService,
     WhatsAppMessageService,
     WebhookProcessorService,

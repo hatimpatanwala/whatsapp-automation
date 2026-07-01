@@ -82,11 +82,14 @@ export class BuilderController {
   ): Promise<void> {
     const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
     try {
-      const { tenantId, schemaName, user } = await this.builder.consumePortalSession(this.token(req, token));
+      const { tenantId, schemaName, user, createdBy } = await this.builder.consumePortalSession(this.token(req, token));
       req.session.userId = user.id;
       req.session.userRole = user.role;
       req.session.tenantId = tenantId;
       req.session.tenantSchema = schemaName;
+      // Admin's WhatsApp number (when the portal was opened from WhatsApp) — lets
+      // the portal deliver PDFs to their chat while running in the WhatsApp webview.
+      if (createdBy) req.session.adminPhone = createdBy;
       // Persist the session first so the auth cookie is set on THIS response.
       await new Promise<void>((resolve, reject) => req.session.save((e) => (e ? reject(e) : resolve())));
       return res.redirect(`${base}${this.safePortalPath(to)}`);

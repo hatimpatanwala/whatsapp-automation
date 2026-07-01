@@ -105,10 +105,15 @@ export class ErpEwayBillsComponent implements OnInit {
   cancel(row: any) {
     this.api.put(`/erp/eway-bills/${row.id}/cancel`, {}).subscribe({ next: () => { this.toast.add({ severity: 'success', summary: 'Cancelled' }); this.load(); } });
   }
-  /** Download the standard-format e-way bill PDF as a blob (works in the WhatsApp webview). */
+  /** Desktop downloads inline; inside the WhatsApp webview it's sent to the chat. */
   downloadPdf(row: any) {
-    this.api.downloadFile(`/erp/eway-bills/${row.id}/pdf`, `eway-bill-${row.ewayNumber || row.id}.pdf`,
-      () => this.toast.add({ severity: 'error', summary: 'Download failed' }));
+    this.api.deliverPdf({
+      downloadPath: `/erp/eway-bills/${row.id}/pdf`,
+      filename: `eway-bill-${row.ewayNumber || row.id}.pdf`,
+      sendPath: `/m/doc-delivery/portal/eway/${row.id}`,
+      onSent: () => this.toast.add({ severity: 'success', summary: '📄 Sent to your WhatsApp', detail: 'Check your chat for the PDF' }),
+      onError: (e: any) => this.toast.add({ severity: 'error', summary: 'Could not send', detail: e?.error?.message || 'Please try again' }),
+    });
   }
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   private blank() { return { invoiceId: null as any, transportMode: 'road', vehicleNumber: '', fromPlace: '', toPlace: '', distanceKm: 0, transporter: '' }; }

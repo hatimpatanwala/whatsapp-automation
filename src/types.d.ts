@@ -10,6 +10,7 @@ declare module 'express-session' {
     adminId?: string;
     adminRole?: string;
     isAdmin?: boolean;
+    adminPhone?: string;
   }
 }
 

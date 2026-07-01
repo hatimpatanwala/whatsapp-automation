@@ -21,6 +21,7 @@ declare global {
       adminId: string;
       adminRole: string;
       isAdmin: boolean;
+      adminPhone: string;
     }
   }
 }
@@ -36,5 +37,6 @@ declare module 'express-session' {
     tenantSchema?: string;
 
     isAdmin?: boolean;
+    adminPhone?: string;
   }
 }

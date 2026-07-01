@@ -454,9 +454,14 @@ export class ErpInvoiceListComponent implements OnInit {
   }
 
   downloadPdf(inv: ErpInvoice) {
-    // Blob-download (not window.open) so it works inside the WhatsApp webview.
-    this.api.downloadFile(`/erp/invoices/${inv.id}/pdf`, `invoice-${inv.invoiceNumber || inv.id}.pdf`,
-      () => this.toast.add({ severity: 'error', summary: 'Download failed', detail: 'Could not fetch the PDF' }));
+    // Desktop downloads inline; inside the WhatsApp webview it's sent to the chat.
+    this.api.deliverPdf({
+      downloadPath: `/erp/invoices/${inv.id}/pdf`,
+      filename: `invoice-${inv.invoiceNumber || inv.id}.pdf`,
+      sendPath: `/m/doc-delivery/portal/invoice/${inv.id}`,
+      onSent: () => this.toast.add({ severity: 'success', summary: '📄 Sent to your WhatsApp', detail: 'Check your chat for the PDF' }),
+      onError: (e: any) => this.toast.add({ severity: 'error', summary: 'Could not send', detail: e?.error?.message || 'Please try again' }),
+    });
   }
 
   downloadReceipt(p: any) {
