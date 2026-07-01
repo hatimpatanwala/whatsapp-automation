@@ -454,11 +454,14 @@ export class ErpInvoiceListComponent implements OnInit {
   }
 
   downloadPdf(inv: ErpInvoice) {
-    window.open(this.erp.invoicePdfUrl(inv.id), '_blank');
+    // Blob-download (not window.open) so it works inside the WhatsApp webview.
+    this.api.downloadFile(`/erp/invoices/${inv.id}/pdf`, `invoice-${inv.invoiceNumber || inv.id}.pdf`,
+      () => this.toast.add({ severity: 'error', summary: 'Download failed', detail: 'Could not fetch the PDF' }));
   }
 
   downloadReceipt(p: any) {
-    window.open(this.api.url(`/erp/invoices/payments/${p.id}/receipt`), '_blank');
+    this.api.downloadFile(`/erp/invoices/payments/${p.id}/receipt`, `receipt-${p.id}.pdf`,
+      () => this.toast.add({ severity: 'error', summary: 'Download failed', detail: 'Could not fetch the receipt' }));
   }
 
   remind(inv: ErpInvoice) {

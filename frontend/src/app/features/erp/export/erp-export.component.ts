@@ -144,14 +144,16 @@ export class ErpExportComponent implements OnInit {
 
   downloadAll() {
     this.downloadingAll.set(true);
-    // The browser handles the file download from the same-origin, cookie-authed URL.
-    window.open(this.api.url('/erp/export/all.xlsx'), '_blank');
+    // Blob-download (not window.open) so it works inside the WhatsApp webview.
+    this.api.downloadFile('/erp/export/all.xlsx', 'export-all.xlsx',
+      () => this.toast.add({ severity: 'error', summary: 'Download failed' }));
     // We can't observe the download stream; clear the spinner shortly after kickoff.
     setTimeout(() => this.downloadingAll.set(false), 2500);
   }
 
   downloadCsv(d: DatasetSummary) {
     if (d.count === 0) return;
-    window.open(this.api.url(`/erp/export/csv/${d.key}`), '_blank');
+    this.api.downloadFile(`/erp/export/csv/${d.key}`, `${d.key}.csv`,
+      () => this.toast.add({ severity: 'error', summary: 'Download failed' }));
   }
 }

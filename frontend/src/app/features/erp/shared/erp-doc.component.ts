@@ -226,7 +226,9 @@ export class ErpDocComponent implements OnInit {
   }
 
   downloadPdf(row: any) {
-    window.open(this.api.url(`${this.config.apiPath}/${row.id}/pdf`), '_blank');
+    // Blob-download (not window.open) so PDFs save inside the WhatsApp webview.
+    this.api.downloadFile(`${this.config.apiPath}/${row.id}/pdf`, `${row[this.config.numberField] || row.id}.pdf`,
+      () => this.toast.add({ severity: 'error', summary: 'Download failed' }));
   }
 
   confirmDelete(row: any) {

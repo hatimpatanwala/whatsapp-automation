@@ -125,6 +125,7 @@ export class ErpReportsComponent implements OnInit {
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
   downloadGstr1(fmt: 'csv' | 'json') {
     const path = fmt === 'json' ? 'gst/export-json' : 'gst/export';
-    window.open(this.api.url(`/erp/reports/${path}?from=${this.from}&to=${this.to}`), '_blank');
+    // Blob-download (not window.open) so it works inside the WhatsApp webview.
+    this.api.downloadFile(`/erp/reports/${path}?from=${this.from}&to=${this.to}`, `gstr1-${this.from}-${this.to}.${fmt === 'json' ? 'json' : 'csv'}`);
   }
 }

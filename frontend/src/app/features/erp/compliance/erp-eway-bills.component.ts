@@ -105,8 +105,11 @@ export class ErpEwayBillsComponent implements OnInit {
   cancel(row: any) {
     this.api.put(`/erp/eway-bills/${row.id}/cancel`, {}).subscribe({ next: () => { this.toast.add({ severity: 'success', summary: 'Cancelled' }); this.load(); } });
   }
-  /** Open the standard-format e-way bill PDF (streams from the API with the session cookie). */
-  downloadPdf(row: any) { window.open(this.api.url(`/erp/eway-bills/${row.id}/pdf`), '_blank'); }
+  /** Download the standard-format e-way bill PDF as a blob (works in the WhatsApp webview). */
+  downloadPdf(row: any) {
+    this.api.downloadFile(`/erp/eway-bills/${row.id}/pdf`, `eway-bill-${row.ewayNumber || row.id}.pdf`,
+      () => this.toast.add({ severity: 'error', summary: 'Download failed' }));
+  }
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   private blank() { return { invoiceId: null as any, transportMode: 'road', vehicleNumber: '', fromPlace: '', toPlace: '', distanceKm: 0, transporter: '' }; }
 }

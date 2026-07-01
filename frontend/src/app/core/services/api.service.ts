@@ -75,4 +75,38 @@ export class ApiService {
       withCredentials: true,
     });
   }
+
+  // ─── File download ─────────────────────────────────────────────────────────
+
+  /**
+   * Download a file (PDF, xlsx, receipt…) and save it WITHOUT `window.open`.
+   *
+   * `window.open(url, '_blank')` is broken inside the WhatsApp in-app browser:
+   * it hands the URL to the external system browser, ejecting the user out of
+   * WhatsApp — and that external browser has none of this session's cookies, so
+   * a cookie-authed endpoint 401s and the user sees an error page. Fetching the
+   * file as a blob through this authenticated client and triggering a same-page
+   * save keeps the user in context on every browser (webview or desktop).
+   *
+   * @param path      API path (relative — same as the other wrappers) or absolute URL.
+   * @param filename  Suggested download name.
+   * @param onError   Optional callback for surfacing failures to the user.
+   */
+  downloadFile(path: string, filename: string, onError?: (e: unknown) => void): void {
+    const target = /^https?:\/\//.test(path) ? path : this.url(path);
+    this.http.get(target, { withCredentials: true, responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => { try { URL.revokeObjectURL(objectUrl); } catch { /* noop */ } }, 10000);
+      },
+      error: (e) => { if (onError) onError(e); },
+    });
+  }
 }

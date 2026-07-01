@@ -620,8 +620,9 @@ export class InvoicesComponent implements OnInit {
     this.discount = 0; this.deliveryFee = 0; this.notes = ''; this.invoiceNumber = ''; this.existingOrderId = '';
   }
 
-  downloadPdf(inv: InvoiceRow) { window.open(`/api/invoices/${inv.id}/pdf`, '_blank'); }
-  downloadById(id: string) { window.open(`/api/invoices/${id}/pdf`, '_blank'); }
+  // Blob-download (not window.open) so PDFs save inside the WhatsApp in-app browser.
+  downloadPdf(inv: InvoiceRow) { this.api.downloadFile(`/invoices/${inv.id}/pdf`, `invoice-${inv.invoice_number || inv.id}.pdf`, () => this.toast.add({ severity: 'error', summary: 'Download failed' })); }
+  downloadById(id: string) { this.api.downloadFile(`/invoices/${id}/pdf`, `invoice-${id}.pdf`, () => this.toast.add({ severity: 'error', summary: 'Download failed' })); }
   viewOrder(inv: InvoiceRow) { if (inv.order_id) window.open(`/orders/${inv.order_id}`, '_blank'); }
 
   saveConfig() {

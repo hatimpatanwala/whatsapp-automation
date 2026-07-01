@@ -418,7 +418,8 @@ export class OrderDetailComponent implements OnInit {
     });
   }
 
-  downloadDoc(d: any) { window.open(`/api/invoices/${d.id}/pdf`, '_blank'); }
+  // Blob-download (not window.open) so PDFs save inside the WhatsApp webview.
+  downloadDoc(d: any) { this.api.downloadFile(`/invoices/${d.id}/pdf`, `${d.invoiceNumber || d.invoice_number || d.id}.pdf`, () => this.messageService.add({ severity: 'error', summary: 'Download failed' })); }
 
   createDocument(docType: 'tax_invoice' | 'bill_of_supply' | 'delivery_challan', label: string) {
     const id = this.route.snapshot.paramMap.get('id');

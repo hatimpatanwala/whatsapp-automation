@@ -161,7 +161,7 @@ export class ErpPosComponent implements OnInit {
         this.saving.set(false);
         const inv = res.invoice;
         this.toast.add({ severity: 'success', summary: `Sale ${inv.invoiceNumber}`, detail: paid ? 'Paid' : 'Saved unpaid' });
-        if (paid) window.open(this.erp.invoicePdfUrl(inv.id), '_blank');
+        if (paid) this.api.downloadFile(`/erp/invoices/${inv.id}/pdf`, `invoice-${inv.invoiceNumber || inv.id}.pdf`, () => this.toast.add({ severity: 'error', summary: 'Download failed' }));
         this.reset();
       },
       error: (e) => { this.saving.set(false); this.toast.add({ severity: 'error', summary: 'Checkout failed', detail: e?.error?.error?.message || 'Error' }); },
