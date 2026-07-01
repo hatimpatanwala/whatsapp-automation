@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { BuilderService } from './builder.service';
 import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
+import { buildEwayBillPdf } from '../erp/compliance/eway-pdf';
 
 /** Order statuses an admin can set from the console (mirrors the WhatsApp flow). */
 const ORDER_STATUSES = ['confirmed', 'processing', 'ready_for_delivery', 'delivered', 'cancelled'];
@@ -394,6 +395,32 @@ export class ErpWebviewService {
            FROM eway_bills WHERE removed = false ORDER BY created_at DESC LIMIT 50`,
       ),
     );
+  }
+
+  /** Standard-format e-way bill PDF for the console (token-authenticated). */
+  async ewayPdf(token: string, id: string): Promise<{ buffer: Buffer; filename: string }> {
+    const { schema } = await this.ctx(token);
+    const { eway, invoice, settings } = await this.q(schema, async (qr) => {
+      const eway = (await qr.query(`SELECT * FROM eway_bills WHERE id = $1 AND removed = false`, [id]))[0];
+      if (!eway) throw new NotFoundException('E-way bill not found');
+      let invoice: any = null;
+      if (eway.invoice_id) invoice = (await qr.query(`SELECT * FROM invoices WHERE id = $1`, [eway.invoice_id]))[0] || null;
+      const rows = await qr.query(
+        `SELECT key, value FROM settings WHERE key IN ('business_name','invoice_legal_name','invoice_address','invoice_gstin','erp_currency','currency')`,
+      );
+      const m: Record<string, any> = {};
+      for (const r of rows) m[r.key] = r.value;
+      const settings = {
+        businessName: m.invoice_legal_name || m.business_name || 'Your Business',
+        address: m.invoice_address || undefined,
+        gstin: m.invoice_gstin || undefined,
+        currency: m.erp_currency || m.currency || 'INR',
+      };
+      return { eway, invoice, settings };
+    });
+    const buffer = await buildEwayBillPdf(eway, invoice, settings);
+    const filename = `eway-${String(eway.eway_number).replace(/[^\w.-]/g, '_')}.pdf`;
+    return { buffer, filename };
   }
 
   // ── Portal deep-link: open the FULL web portal (logged in) at a specific page ─

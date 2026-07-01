@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query, Req, HttpCode } from '@nestjs/common';
-import { Request } from 'express';
+import { Body, Controller, Get, Param, Post, Query, Req, Res, HttpCode } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { ErpWebviewService } from './erp-webview.service';
 
@@ -122,6 +122,14 @@ export class ErpWebviewController {
   @Get('eway-bills')
   ewayBills(@Req() req: Request, @Query('token') token?: string) {
     return this.svc.ewayBills(this.token(req, token));
+  }
+
+  @Get('eway-bills/:id/pdf')
+  async ewayPdf(@Req() req: Request, @Param('id') id: string, @Res() res: Response, @Query('token') token?: string) {
+    const { buffer, filename } = await this.svc.ewayPdf(this.token(req, token), id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(buffer);
   }
 
   // ── Open the full portal (logged in) at a specific page — e.g. product edit ──

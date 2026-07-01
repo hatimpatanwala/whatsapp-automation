@@ -74,14 +74,21 @@ export function buildEwayBillPdf(e: any, invoice: any | null, s: ErpPdfSettings)
       kv2('From', e.from_place || '-', 'To', e.to_place || '-');
 
       // ── 4. Goods details (from the linked invoice) ─────────────────────
+      // Columns fit inside [left, right]; Amount is right-aligned and ends
+      // 6px before the right border so nothing spills out of the table.
       section('4. Goods Details');
+      const cDesc = left + 8, wDesc = 208;
+      const cHsn = left + 224, wHsn = 46;
+      const cQty = left + 276, wQty = 44;
+      const cRate = left + 326, wRate = 78;
+      const cAmt = left + 410, wAmt = right - (left + 410) - 6;
       doc.rect(left, y, W, 16).fillAndStroke('#f3f4f6', '#cccccc');
       doc.fillColor('#111').fontSize(8);
-      doc.text('Description', left + 8, y + 4, { width: 250 });
-      doc.text('HSN', left + 262, y + 4, { width: 58 });
-      doc.text('Qty', left + 320, y + 4, { width: 46, align: 'right' });
-      doc.text('Rate', left + 372, y + 4, { width: 72, align: 'right' });
-      doc.text('Amount', left + 450, y + 4, { width: W - 450 + left - 8, align: 'right' });
+      doc.text('Description', cDesc, y + 4, { width: wDesc });
+      doc.text('HSN', cHsn, y + 4, { width: wHsn });
+      doc.text('Qty', cQty, y + 4, { width: wQty, align: 'right' });
+      doc.text('Rate', cRate, y + 4, { width: wRate, align: 'right' });
+      doc.text('Amount', cAmt, y + 4, { width: wAmt, align: 'right' });
       y += 16;
 
       const items = invoice ? safeParse(invoice.items) : [];
@@ -93,25 +100,25 @@ export function buildEwayBillPdf(e: any, invoice: any | null, s: ErpPdfSettings)
           const amt = Number(it.lineTotal ?? it.line_total ?? qty * rate);
           doc.rect(left, y, W, 16).stroke('#eeeeee');
           doc.fillColor('#333');
-          doc.text(String(it.description || it.name || '-'), left + 8, y + 4, { width: 250, ellipsis: true, height: 10 });
-          doc.text(String(it.hsn || it.hsnCode || '-'), left + 262, y + 4, { width: 58 });
-          doc.text(String(qty), left + 320, y + 4, { width: 46, align: 'right' });
-          doc.text(money(rate), left + 372, y + 4, { width: 72, align: 'right' });
-          doc.text(money(amt), left + 450, y + 4, { width: W - 450 + left - 8, align: 'right' });
+          doc.text(String(it.description || it.name || '-'), cDesc, y + 4, { width: wDesc, ellipsis: true, height: 10 });
+          doc.text(String(it.hsn || it.hsnCode || '-'), cHsn, y + 4, { width: wHsn });
+          doc.text(String(qty), cQty, y + 4, { width: wQty, align: 'right' });
+          doc.text(money(rate), cRate, y + 4, { width: wRate, align: 'right' });
+          doc.text(money(amt), cAmt, y + 4, { width: wAmt, align: 'right' });
           y += 16;
           if (y > 760) { doc.addPage(); y = 40; }
         }
       } else {
         doc.rect(left, y, W, 16).stroke('#eeeeee');
-        doc.fillColor('#777').text('Value of goods as per linked invoice', left + 8, y + 4, { width: 360 });
-        doc.fillColor('#111').text(money(e.value), left + 450, y + 4, { width: W - 450 + left - 8, align: 'right' });
+        doc.fillColor('#777').text('Value of goods as per linked invoice', cDesc, y + 4, { width: 360 });
+        doc.fillColor('#111').text(money(e.value), cAmt, y + 4, { width: wAmt, align: 'right' });
         y += 16;
       }
 
       // Total
       doc.rect(left, y, W, 18).fillAndStroke('#f9fafb', '#cccccc');
       doc.fillColor('#111').fontSize(9).text('Total Value', left + 8, y + 5);
-      doc.text(money(e.value), left + 450, y + 5, { width: W - 450 + left - 8, align: 'right' });
+      doc.text(money(e.value), cAmt, y + 5, { width: wAmt, align: 'right' });
       y += 26;
 
       // ── Footer ─────────────────────────────────────────────────────────

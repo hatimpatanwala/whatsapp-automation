@@ -250,6 +250,7 @@ const ORDER_STATUS_OPTIONS = [
                   <p class="text-[11px] text-gray-400">{{ label(b.status) }}{{ b.vehicleNumber ? ' · ' + b.vehicleNumber : '' }}{{ b.validUntil ? ' · till ' + (b.validUntil | date:'mediumDate') : '' }}</p>
                 </div>
                 <p class="text-sm font-bold tabular-nums shrink-0">{{ cur() }}{{ fmt(b.value) }}</p>
+                <button (click)="downloadEway(b)" class="shrink-0 text-green-700 hover:text-green-800 p-1" aria-label="Download PDF"><i class="pi pi-download" style="font-size:0.95rem"></i></button>
               </div>
             } @empty { <p class="text-center text-gray-400 py-10 text-sm">{{ busy() ? 'Loading…' : 'No e-way bills yet.' }}</p> }
           }
@@ -581,6 +582,10 @@ export class MobileErpComponent implements OnInit {
     });
   }
   openFullProductEdit(p: any): void { this.openInPortal(`/products/${p.id}/edit`); }
+  /** Open the standard-format e-way bill PDF (token in the query so the API auths). */
+  downloadEway(b: any): void {
+    window.open(`${this.base}/eway-bills/${b.id}/pdf?token=${encodeURIComponent(this.token())}`, '_blank');
+  }
 
   private searchTimer: any;
   onProductSearch(): void { clearTimeout(this.searchTimer); this.searchTimer = setTimeout(() => this.loadProducts(), 300); }
