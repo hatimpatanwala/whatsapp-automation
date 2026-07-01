@@ -683,7 +683,7 @@ export class AdminCommandService {
   private async askUpdateField(tenant: any, to: string, productId: string): Promise<void> {
     await this.sendList(tenant, to, 'What would you like to change?', 'Choose field', [
       {
-        title: 'Field',
+        title: 'Quick edit',
         rows: [
           { id: `pupdf_${productId}_price`, title: '💰 Price' },
           { id: `pupdf_${productId}_stock`, title: '📦 Stock' },
@@ -691,6 +691,9 @@ export class AdminCommandService {
         ],
       },
     ]);
+    // Full editor in the portal — images, description, category, tax, HSN, etc.
+    await this.createPortalEditLink(tenant, to, `/products/${productId}/edit`, '✏️ Full editor',
+      `✏️ *Edit product*\n\nFor everything else — images, description, category, tax rate, HSN — tap below to open the complete editor in your portal. This link opens once and lasts 15 minutes.`);
   }
 
   private async askUpdateValue(tenant: any, to: string, productId: string, field: string): Promise<void> {
