@@ -32,6 +32,21 @@ export class OrderStatusChangedEvent extends DomainEvent {
   }
 }
 
+export class OrderAssignedEvent extends DomainEvent {
+  readonly eventName = 'order.assigned';
+  constructor(
+    schema: string,
+    public readonly orderId: string,
+    public readonly orderNumber: string,
+    public readonly customerId: string,
+    public readonly employeeId: string,
+    public readonly employeeName: string,
+    public readonly employeePhone: string,
+  ) {
+    super(schema);
+  }
+}
+
 // Payment Events
 export class PaymentVerifiedEvent extends DomainEvent {
   readonly eventName = 'payment.verified';

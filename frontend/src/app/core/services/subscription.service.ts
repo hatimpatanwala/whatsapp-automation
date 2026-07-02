@@ -219,4 +219,15 @@ export class SubscriptionService {
   removeTenantSubscription(tenantId: string): Observable<any> {
     return this.api.delete(`/admin/tenants/${tenantId}/subscription`);
   }
+
+  /**
+   * Set (or clear) a tenant's TEAM override — allowed staff roles + member cap.
+   * Send `{ clear: true }` to fall back to the plan's team config.
+   */
+  setTenantTeam(
+    tenantId: string,
+    body: { roles?: string[]; memberLimit?: number | null; clear?: boolean },
+  ): Observable<{ team: any }> {
+    return this.api.patch<{ team: any }>(`/admin/tenants/${tenantId}/team`, body);
+  }
 }

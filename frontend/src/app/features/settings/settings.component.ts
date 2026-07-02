@@ -21,6 +21,7 @@ import { OnboardingService, RegisterNumberResult } from '../../core/services/onb
 import { EmbeddedSignupButtonComponent } from '../../shared/embedded-signup-button.component';
 import { DirectNumberRegistrationComponent } from '../../shared/direct-number-registration.component';
 import { CustomFieldsManagerComponent } from './custom-fields-manager.component';
+import { TeamComponent } from './team.component';
 
 @Component({
   selector: 'wa-settings',
@@ -45,6 +46,7 @@ import { CustomFieldsManagerComponent } from './custom-fields-manager.component'
     EmbeddedSignupButtonComponent,
     DirectNumberRegistrationComponent,
     CustomFieldsManagerComponent,
+    TeamComponent,
   ],
   providers: [MessageService],
   template: `
@@ -63,6 +65,7 @@ import { CustomFieldsManagerComponent } from './custom-fields-manager.component'
           <p-tab value="payments"><i class="pi pi-credit-card mr-2"></i>Payments</p-tab>
           <p-tab value="notifications"><i class="pi pi-bell mr-2"></i>Notifications</p-tab>
           <p-tab value="commerce"><i class="pi pi-shop mr-2"></i>Commerce</p-tab>
+          <p-tab value="team"><i class="pi pi-users mr-2"></i>Team</p-tab>
           <p-tab value="custom-fields"><i class="pi pi-sliders-h mr-2"></i>Custom Fields</p-tab>
           <p-tab value="subscription"><i class="pi pi-star mr-2"></i>Subscription</p-tab>
         </p-tablist>
@@ -875,6 +878,13 @@ import { CustomFieldsManagerComponent } from './custom-fields-manager.component'
           </p-tabpanel>
 
           <!-- Custom Fields -->
+          <!-- Team / staff -->
+          <p-tabpanel value="team">
+            <div class="mt-4">
+              <wa-team />
+            </div>
+          </p-tabpanel>
+
           <p-tabpanel value="custom-fields">
             <div class="mt-4">
               <wa-custom-fields-manager />

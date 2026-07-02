@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, signal, inject, computed, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -300,6 +300,37 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
                     </div>
                   }
                 </div>
+
+                <!-- Team override -->
+                <div class="bg-white rounded-xl p-6 border border-gray-200 mt-4">
+                  <div class="flex items-start justify-between mb-4 gap-3">
+                    <div>
+                      <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Team</h3>
+                      <p class="text-xs text-gray-500 mt-1">Which staff roles this tenant can assign, and the member cap. Overrides the plan.
+                        @if (teamOverrideActive()) { <span class="text-amber-600 font-medium">· override active</span> } @else { <span class="text-gray-400">· using plan default</span> }
+                      </p>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                      @if (teamOverrideActive()) {
+                        <button pButton label="Use plan default" icon="pi pi-refresh" class="p-button-text p-button-sm text-gray-500" (click)="clearTeamOverride()"></button>
+                      }
+                      <button pButton label="Save" icon="pi pi-check" severity="success" size="small" [loading]="savingTeam()" (click)="saveTeam()"></button>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                    @for (r of teamRoleOptions; track r.key) {
+                      <div class="flex items-center justify-between gap-2 p-3 border border-gray-200 rounded-lg">
+                        <span class="text-sm text-gray-700">{{ r.label }}</span>
+                        <p-toggleswitch [(ngModel)]="teamRoles[r.key]" />
+                      </div>
+                    }
+                  </div>
+                  <div class="flex flex-col gap-1 max-w-xs">
+                    <label class="text-sm font-medium text-gray-700">Max team members</label>
+                    <p-inputnumber [(ngModel)]="teamMemberLimit" [min]="0" placeholder="Unlimited" styleClass="w-full" inputStyleClass="w-full" />
+                    <p class="text-[11px] text-gray-400">Blank = unlimited. Staff only (owner excluded).</p>
+                  </div>
+                </div>
               </div>
             </p-tabpanel>
 
@@ -555,6 +586,20 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
             </div>
           </div>
           <p-divider />
+          <h4 class="text-sm font-semibold text-gray-700">Team <span class="text-xs text-gray-500 font-normal">(allowed staff roles + member cap)</span></h4>
+          <div class="grid grid-cols-3 gap-3">
+            @for (r of teamRoleOptions; track r.key) {
+              <div class="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
+                <span class="text-sm text-gray-700">{{ r.label }}</span>
+                <p-toggleswitch [(ngModel)]="customPlan.teamRoles[r.key]" />
+              </div>
+            }
+          </div>
+          <div class="flex flex-col gap-1 max-w-[12rem]">
+            <label class="text-xs text-gray-500">Max team members</label>
+            <p-inputnumber [(ngModel)]="customPlan.limits['teamMemberLimit']" [min]="0" placeholder="Unlimited" styleClass="w-full" inputStyleClass="w-full" />
+          </div>
+          <p-divider />
           <h4 class="text-sm font-semibold text-gray-700">Features</h4>
           <div class="grid grid-cols-2 gap-x-6 gap-y-1">
             @for (feat of featureList; track feat.key) {
@@ -621,6 +666,7 @@ export class TenantDetailComponent implements OnInit {
   private readonly subscriptionService = inject(SubscriptionService);
   private readonly api = inject(ApiService);
   private readonly messageService = inject(MessageService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   tenantId = '';
   loading = signal(true);
@@ -650,17 +696,36 @@ export class TenantDetailComponent implements OnInit {
   selectedPlanId = '';
   planExpiry: Date | null = null;
   minDate = new Date();
-  planOptions = computed(() =>
-    this.allPlans().map((p: any) => ({
+  planOptions = computed(() => {
+    const opts = this.allPlans().map((p: any) => ({
       label: `${p.name} (${p.tier})${!p.isActive ? ' — hidden' : ''}`,
       value: p.id,
-    })),
-  );
+    }));
+    // Ensure the tenant's CURRENT plan is selectable even if it's a hidden/custom
+    // plan not in the public list — otherwise the dropdown can't pre-select it.
+    const sub = this.activeSub();
+    if (sub?.planId && !opts.some((o) => o.value === sub.planId)) {
+      opts.unshift({ label: `${sub.planName || 'Current plan'} (${sub.planTier || 'custom'}) — current`, value: sub.planId });
+    }
+    return opts;
+  });
 
   // Feature overrides
   featureList = Object.entries(FEATURE_LABELS).map(([key, val]) => ({ key, ...val }));
   featureOverrides: Record<string, boolean> = {};
   planFeatures = signal<Record<string, boolean>>({});
+
+  // Team override (per-tenant)
+  teamRoleOptions = [
+    { key: 'employee', label: 'Employee' },
+    { key: 'salesman', label: 'Salesman' },
+    { key: 'accountant', label: 'Accountant' },
+  ];
+  teamRoles: Record<string, boolean> = { employee: false, salesman: false, accountant: false };
+  teamMemberLimit: number | null = null;
+  teamOverrideActive = signal(false);
+  savingTeam = signal(false);
+  private planTeam: { roles: string[]; memberLimit: number | null } = { roles: [], memberLimit: null };
 
   // Custom plan dialog
   showCustomPlanDialog = false;
@@ -712,7 +777,7 @@ export class TenantDetailComponent implements OnInit {
   loadTenant() {
     this.loading.set(true);
     this.tenantService.getById(this.tenantId).subscribe({
-      next: (t) => { this.tenant.set(t); this.loading.set(false); },
+      next: (t) => { this.tenant.set(t); this.initTeamOverride(t); this.loading.set(false); },
       error: () => { this.loading.set(false); this.toast('error', 'Failed to load tenant'); },
     });
   }
@@ -722,12 +787,62 @@ export class TenantDetailComponent implements OnInit {
       next: (sub: any) => {
         if (sub && !sub.message) {
           this.activeSub.set(sub);
+          // Pre-select the current plan in the Plan & Billing dropdown.
+          if (sub.planId) this.selectedPlanId = sub.planId;
           const pf = sub.planFeatures || {};
           this.planFeatures.set({ ...pf });
           this.featureOverrides = { ...pf };
+          const pl = sub.planLimits || {};
+          this.planTeam = { roles: Array.isArray(pl.teamRoles) ? pl.teamRoles : [], memberLimit: pl.teamMemberLimit ?? null };
+          if (!this.teamOverrideActive()) this.applyTeam(this.planTeam.roles, this.planTeam.memberLimit);
+          // p-toggleswitch can miss an async model update (esp. after the object
+          // is reassigned): force a CD pass on the next tick so every toggle's
+          // view matches featureOverrides.
+          setTimeout(() => this.cdr.detectChanges(), 0);
         }
       },
       error: () => {},
+    });
+  }
+
+  // ─── Team override ───────────────────────────────────────────────────────
+  private applyTeam(roles: string[], memberLimit: number | null) {
+    this.teamRoles = {
+      employee: roles.includes('employee'),
+      salesman: roles.includes('salesman'),
+      accountant: roles.includes('accountant'),
+    };
+    this.teamMemberLimit = memberLimit ?? null;
+  }
+
+  private initTeamOverride(t: any) {
+    const team = t?.settings?.team;
+    if (team && Array.isArray(team.roles)) {
+      this.teamOverrideActive.set(true);
+      this.applyTeam(team.roles, team.memberLimit ?? null);
+    } else {
+      this.teamOverrideActive.set(false);
+      this.applyTeam(this.planTeam.roles, this.planTeam.memberLimit);
+    }
+  }
+
+  private selectedTeamRoles(): string[] {
+    return this.teamRoleOptions.map((r) => r.key).filter((k) => this.teamRoles[k]);
+  }
+
+  saveTeam() {
+    this.savingTeam.set(true);
+    this.subscriptionService.setTenantTeam(this.tenantId, { roles: this.selectedTeamRoles(), memberLimit: this.teamMemberLimit ?? null }).subscribe({
+      next: () => { this.savingTeam.set(false); this.teamOverrideActive.set(true); this.toast('success', 'Team override saved'); this.loadTenant(); },
+      error: (e) => { this.savingTeam.set(false); this.toast('error', e?.error?.message || 'Could not save team override'); },
+    });
+  }
+
+  clearTeamOverride() {
+    this.savingTeam.set(true);
+    this.subscriptionService.setTenantTeam(this.tenantId, { clear: true }).subscribe({
+      next: () => { this.savingTeam.set(false); this.teamOverrideActive.set(false); this.applyTeam(this.planTeam.roles, this.planTeam.memberLimit); this.toast('success', 'Reverted to plan default'); this.loadTenant(); },
+      error: (e) => { this.savingTeam.set(false); this.toast('error', e?.error?.message || 'Could not clear override'); },
     });
   }
 
@@ -830,8 +945,9 @@ export class TenantDetailComponent implements OnInit {
       name: '',
       description: '',
       monthlyPrice: 0,
-      limits: { conversationLimit: null, productLimit: null, userLimit: null } as Record<string, any>,
+      limits: { conversationLimit: null, productLimit: null, userLimit: null, teamMemberLimit: null } as Record<string, any>,
       features: Object.fromEntries(Object.keys(FEATURE_LABELS).map(k => [k, true])),
+      teamRoles: { employee: true, salesman: true, accountant: true } as Record<string, boolean>,
     };
   }
 
@@ -846,7 +962,11 @@ export class TenantDetailComponent implements OnInit {
       monthlyPrice: this.customPlan.monthlyPrice || 0,
       yearlyPrice: (this.customPlan.monthlyPrice || 0) * 10,
       pricePerConversation: 0,
-      limits: this.customPlan.limits,
+      limits: {
+        ...this.customPlan.limits,
+        teamRoles: this.teamRoleOptions.map((r) => r.key).filter((k) => this.customPlan.teamRoles[k]),
+        teamMemberLimit: this.customPlan.limits['teamMemberLimit'] ?? null,
+      },
       features: this.customPlan.features,
       isActive: false, // Don't show in public listing
       sortOrder: 99,

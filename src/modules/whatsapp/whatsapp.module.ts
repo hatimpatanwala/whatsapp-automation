@@ -35,14 +35,21 @@ import { ErpReminderController } from './erp-reminder.controller';
 import { ErpReminderCron } from './erp-reminder.cron';
 import { DocDeliveryService } from './doc-delivery.service';
 import { DocDeliveryController } from './doc-delivery.controller';
+import { TeamService } from './team.service';
+import { StaffWhatsAppService } from './staff-whatsapp.service';
+import { StaffCommandService } from './staff-command.service';
+import { OrderModule } from '../order/order.module';
 
 @Module({
-  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, QuoteModule, PromotionsModule, CustomFieldModule, ErpModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
+  imports: [forwardRef(() => TenantModule), forwardRef(() => WorkflowModule), forwardRef(() => WabaModule), BuilderModule, QuoteModule, PromotionsModule, CustomFieldModule, ErpModule, OrderModule, TypeOrmModule.forFeature([Tenant, WabaAccount, PhoneNumber])],
   controllers: [WhatsAppWebhookController, ErpReminderController, DocDeliveryController],
   providers: [
     BuilderNotificationListener,
     LoyaltyNotificationListener,
     DocDeliveryService,
+    TeamService,
+    StaffWhatsAppService,
+    StaffCommandService,
     WhatsAppApiService,
     WhatsAppMessageService,
     WebhookProcessorService,
@@ -62,6 +69,6 @@ import { DocDeliveryController } from './doc-delivery.controller';
     ErpReminderService,
     ErpReminderCron,
   ],
-  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService, InvoiceService],
+  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService, InvoiceService, TeamService, StaffWhatsAppService],
 })
 export class WhatsAppModule {}

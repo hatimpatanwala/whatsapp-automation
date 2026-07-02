@@ -150,6 +150,25 @@ import { SubscriptionService } from '../../../core/services/subscription.service
             </div>
           </div>
 
+          <!-- Team roles -->
+          <div class="bg-white rounded-xl p-6 border border-gray-200">
+            <h3 class="text-base font-semibold text-gray-900 mb-1">Team Roles</h3>
+            <p class="text-xs text-gray-400 mb-4">Which staff roles tenants on this plan can assign, and the total team-member cap.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              @for (r of teamRoleOptions; track r.key) {
+                <label class="flex items-center gap-2 p-3 border border-gray-200 rounded-lg cursor-pointer">
+                  <input type="checkbox" [(ngModel)]="teamRoles[r.key]" [ngModelOptions]="{standalone: true}" />
+                  <span class="text-sm text-gray-700">{{ r.label }}</span>
+                </label>
+              }
+            </div>
+            <div class="flex flex-col gap-1 max-w-xs">
+              <label class="text-sm font-medium text-gray-700">Max team members</label>
+              <p-inputnumber formControlName="teamMemberLimit" [min]="0" placeholder="Unlimited" styleClass="w-full" inputStyleClass="w-full" />
+              <p class="text-[11px] text-gray-400">Leave blank for unlimited. Applies to staff (owner excluded).</p>
+            </div>
+          </div>
+
           <!-- Feature flags -->
           <div class="bg-white rounded-xl p-6 border border-gray-200">
             <h3 class="text-base font-semibold text-gray-900 mb-4">Feature Access</h3>
@@ -213,6 +232,13 @@ export class PlanFormComponent implements OnInit {
     { label: 'Custom', value: 'custom' },
   ];
 
+  teamRoleOptions = [
+    { key: 'employee', label: 'Employee' },
+    { key: 'salesman', label: 'Salesman' },
+    { key: 'accountant', label: 'Accountant' },
+  ];
+  teamRoles: Record<string, boolean> = { employee: false, salesman: false, accountant: false };
+
   featureFlags = [
     { key: 'deliveries', label: 'Deliveries', desc: 'Delivery tracking and courier management' },
     { key: 'customers', label: 'Customers', desc: 'Customer management, segments and tagging' },
@@ -241,6 +267,7 @@ export class PlanFormComponent implements OnInit {
     productLimit: [null as number | null],
     campaignLimit: [null as number | null],
     userLimit: [null as number | null],
+    teamMemberLimit: [null as number | null],
     // Feature flags
     deliveries: [true],
     customers: [true],
@@ -283,6 +310,7 @@ export class PlanFormComponent implements OnInit {
           productLimit: plan.limits?.productLimit ?? null,
           campaignLimit: plan.limits?.campaignLimit ?? null,
           userLimit: plan.limits?.userLimit ?? null,
+          teamMemberLimit: plan.limits?.teamMemberLimit ?? null,
           // Feature flags from JSONB
           deliveries: plan.features?.deliveries ?? false,
           customers: plan.features?.customers ?? false,
@@ -299,6 +327,8 @@ export class PlanFormComponent implements OnInit {
           isActive: plan.isActive,
           sortOrder: plan.sortOrder,
         });
+        const tr: string[] = plan.limits?.teamRoles ?? [];
+        this.teamRoles = { employee: tr.includes('employee'), salesman: tr.includes('salesman'), accountant: tr.includes('accountant') };
         this.enableOverage = (plan.pricePerConversation ?? 0) > 0;
         this.loadingPlan.set(false);
       },
@@ -342,6 +372,8 @@ export class PlanFormComponent implements OnInit {
         productLimit: v.productLimit ?? null,
         campaignLimit: v.campaignLimit ?? null,
         userLimit: v.userLimit ?? null,
+        teamRoles: this.teamRoleOptions.map((r) => r.key).filter((k) => this.teamRoles[k]),
+        teamMemberLimit: v.teamMemberLimit ?? null,
       },
       features: {
         deliveries: v.deliveries ?? false,

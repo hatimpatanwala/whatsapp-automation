@@ -119,4 +119,18 @@ export class OrderController {
   ) {
     return this.orderService.updateOrder(req.tenantContext.schemaName, id, body);
   }
+
+  /** Employees the owner can assign orders to (for the assign picker). */
+  @Get('meta/assignable-employees')
+  @Roles('owner', 'seller')
+  async assignableEmployees(@Req() req: Request) {
+    return this.orderService.listAssignableEmployees(req.tenantContext.schemaName);
+  }
+
+  /** Assign this order to an employee — notifies them on WhatsApp to start prepping. */
+  @Post(':id/assign')
+  @Roles('owner', 'seller')
+  async assign(@Req() req: Request, @Param('id') id: string, @Body() body: { employeeId: string }) {
+    return this.orderService.assignOrder(req.tenantContext.schemaName, id, body.employeeId);
+  }
 }

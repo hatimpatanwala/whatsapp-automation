@@ -17,16 +17,25 @@ function transformKeys(obj: any, seen = new WeakSet()): any {
   if (obj instanceof Date) return obj;
   if (Buffer.isBuffer(obj)) return obj;
 
-  // Prevent circular reference infinite recursion
+  // Circular-reference guard: `seen` tracks only the CURRENT path (ancestors).
+  // We add on the way down and REMOVE on the way back up, so a reference shared
+  // between siblings (e.g. `planFeatures` === `subscriptionPlan.features`) is
+  // transformed each time instead of being silently dropped, while a true cycle
+  // (an ancestor pointing back at itself) is still caught.
   if (seen.has(obj)) return undefined;
   seen.add(obj);
 
-  if (Array.isArray(obj)) return obj.map(item => transformKeys(item, seen));
-
-  const result: Record<string, any> = {};
-  for (const key of Object.keys(obj)) {
-    result[snakeToCamel(key)] = transformKeys(obj[key], seen);
+  let result: any;
+  if (Array.isArray(obj)) {
+    result = obj.map((item) => transformKeys(item, seen));
+  } else {
+    result = {};
+    for (const key of Object.keys(obj)) {
+      result[snakeToCamel(key)] = transformKeys(obj[key], seen);
+    }
   }
+
+  seen.delete(obj);
   return result;
 }
 

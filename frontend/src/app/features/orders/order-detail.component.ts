@@ -287,6 +287,30 @@ interface EditItem {
               </div>
             </div>
 
+            <!-- Assignment -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <h3 class="text-base font-semibold text-gray-900 mb-3">Assigned to</h3>
+              @if (order().assignedToName) {
+                <p class="text-sm text-gray-800 mb-3"><i class="pi pi-user mr-1.5 text-primary-600"></i>{{ order().assignedToName }}</p>
+              } @else {
+                <p class="text-sm text-gray-400 mb-3">Not assigned yet.</p>
+              }
+              <div class="flex items-center gap-2">
+                <select [(ngModel)]="assigneeId" class="flex-1 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200">
+                  <option value="">{{ order().assignedToName ? 'Reassign to…' : 'Select employee…' }}</option>
+                  @for (e of employees(); track e.id) {
+                    <option [value]="e.id" [disabled]="!e.whatsappVerified">{{ e.name }}{{ e.whatsappVerified ? '' : ' (unverified)' }}</option>
+                  }
+                </select>
+                <button pButton label="Assign" class="p-button-sm" [disabled]="!assigneeId || assigning()" (click)="assign()"></button>
+              </div>
+              @if (!employees().length) {
+                <p class="text-xs text-gray-400 mt-2">No employees yet. Add them in Settings → Team.</p>
+              } @else {
+                <p class="text-xs text-gray-400 mt-2">The employee gets a WhatsApp ping to start preparing.</p>
+              }
+            </div>
+
             <!-- Payment -->
             <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 class="text-base font-semibold text-gray-900 mb-3">Payment</h3>
@@ -390,6 +414,11 @@ export class OrderDetailComponent implements OnInit {
   // move the order to Processing in one action.
   generatingDoc = signal(false);
   orderDocs = signal<any[]>([]); // documents already issued for this order
+
+  // Order assignment (admin → employee)
+  employees = signal<{ id: string; name: string; whatsappVerified: boolean }[]>([]);
+  assigneeId = '';
+  assigning = signal(false);
 
   static readonly DOC_TYPES = [
     { type: 'tax_invoice', label: 'Tax Invoice', icon: 'pi pi-receipt' },
@@ -518,6 +547,29 @@ export class OrderDetailComponent implements OnInit {
 
   ngOnInit() {
     this.loadOrder();
+    this.orderService.getAssignableEmployees().subscribe({
+      next: (list) => this.employees.set(list || []),
+      error: () => this.employees.set([]),
+    });
+  }
+
+  /** Assign this order to the selected employee (pings them on WhatsApp). */
+  assign() {
+    const id = this.route.snapshot.paramMap.get('id');
+    if (!id || !this.assigneeId || this.assigning()) return;
+    this.assigning.set(true);
+    this.orderService.assign(id, this.assigneeId).subscribe({
+      next: (r) => {
+        this.assigning.set(false);
+        this.assigneeId = '';
+        this.order.update((o: any) => ({ ...o, assignedTo: r.assignedTo, assignedToName: r.employeeName }));
+        this.messageService.add({ severity: 'success', summary: 'Order assigned', detail: `${r.employeeName} was notified on WhatsApp to start preparing.` });
+      },
+      error: (e) => {
+        this.assigning.set(false);
+        this.messageService.add({ severity: 'error', summary: 'Could not assign', detail: e?.error?.message || 'Please try again.' });
+      },
+    });
   }
 
   private loadOrder() {
@@ -554,6 +606,8 @@ export class OrderDetailComponent implements OnInit {
           address: addressStr,
           deliveryMethod: o.delivery?.providerName || o.delivery?.provider_name || 'Standard Delivery',
           notes: o.notes || '',
+          assignedTo: o.assignedTo || o.assigned_to || null,
+          assignedToName: o.assignedToName || o.assigned_to_name || null,
           customer: {
             name: custName,
             initials,

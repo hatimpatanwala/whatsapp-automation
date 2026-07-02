@@ -10,6 +10,7 @@ import { PlanFeatureService } from '../erp/common/plan-feature.service';
 import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
 import { ErpDocumentService } from '../erp/invoicing/erp-document.service';
 import { ErpReminderService } from './erp-reminder.service';
+import { OrderService } from '../order/order.service';
 
 interface AdminState {
   flow: string;
@@ -56,6 +57,7 @@ export class AdminCommandService {
     @Optional() private readonly erpDocuments: ErpDocumentService,
     @Optional() private readonly erpReminders: ErpReminderService,
     @Optional() private readonly quoteService?: QuoteService,
+    @Optional() private readonly orderService?: OrderService,
   ) {}
 
   // ─── Entry point ────────────────────────────────────────────────────────────
@@ -403,6 +405,12 @@ export class AdminCommandService {
       const sep = rest.lastIndexOf('_');
       return this.updateOrderStatus(tenant, to, rest.slice(0, sep), rest.slice(sep + 1));
     }
+    if (id.startsWith('oassignto_')) {
+      const rest = id.slice('oassignto_'.length);
+      const sep = rest.lastIndexOf('_');
+      return this.assignOrderToEmployee(tenant, to, rest.slice(0, sep), rest.slice(sep + 1));
+    }
+    if (id.startsWith('oassign_')) return this.showAssignEmployees(tenant, to, id.slice('oassign_'.length));
     if (id.startsWith('quote_')) return this.showQuote(tenant, to, id.slice('quote_'.length));
     if (id.startsWith('qstatus_')) {
       const rest = id.slice('qstatus_'.length);
@@ -617,11 +625,38 @@ export class AdminCommandService {
     const lines = items.map((i: any) => `• ${i.product_name} ×${i.quantity} — ${o.currency || '₹'}${i.total_price}`).join('\n');
     const body = `📦 *Order #${o.order_number}*\nStatus: *${this.titleCase(o.status)}*\n\n${lines || 'No items'}\n\n*Total: ${o.currency || '₹'}${o.total}*`;
 
-    await this.sendList(tenant, to, body, 'Update status',
-      [{ title: 'Set status to', rows: this.ORDER_STATUSES.map((s) => ({ id: `ostatus_${o.id}_${s.id}`, title: s.title })) }]);
+    await this.sendList(tenant, to, body, 'Manage order', [
+      { title: 'Set status to', rows: this.ORDER_STATUSES.map((s) => ({ id: `ostatus_${o.id}_${s.id}`, title: s.title })) },
+      { title: 'Staff', rows: [{ id: `oassign_${o.id}`, title: '👤 Assign to staff', description: o.assigned_to ? 'Reassign this order' : 'Send it to an employee' }] },
+    ]);
     // Open the full order in the portal (logged in).
     await this.createPortalEditLink(tenant, to, `/orders/${orderId}`, '📦 Open order',
       `📦 *Order #${o.order_number}*\n\nTap below to open the full order in your portal. This link opens once and lasts 15 minutes.`);
+  }
+
+  /** List employees the order can be handed to (from the order's Assign row). */
+  private async showAssignEmployees(tenant: any, to: string, orderId: string): Promise<void> {
+    if (!this.orderService) return this.send(tenant, to, 'Assignment is unavailable right now.');
+    const employees = await this.orderService.listAssignableEmployees(tenant.schemaName);
+    const ready = employees.filter((e) => e.whatsappVerified);
+    if (!ready.length) {
+      const pending = employees.length ? '\n\n(Some employees still need to verify their WhatsApp number.)' : '';
+      return this.send(tenant, to, `👥 No verified employees yet. Add one in *Settings → Team* and verify their WhatsApp.${pending}`);
+    }
+    await this.sendList(tenant, to, `👤 *Assign order*\nWho should prepare this order?`, 'Choose employee', [
+      { title: 'Employees', rows: ready.slice(0, 10).map((e) => ({ id: `oassignto_${orderId}_${e.id}`, title: e.name })) },
+    ]);
+  }
+
+  /** Assign the order → OrderService emits the event → employee is pinged on WhatsApp. */
+  private async assignOrderToEmployee(tenant: any, to: string, orderId: string, employeeId: string): Promise<void> {
+    if (!this.orderService) return this.send(tenant, to, 'Assignment is unavailable right now.');
+    try {
+      const res = await this.orderService.assignOrder(tenant.schemaName, orderId, employeeId);
+      await this.send(tenant, to, `✅ Assigned to *${res.employeeName}*. They’ve been notified on WhatsApp to start preparing.`);
+    } catch (err: any) {
+      await this.send(tenant, to, `⚠️ ${err?.message || 'Could not assign this order.'} Send *menu*.`);
+    }
   }
 
   private async updateOrderStatus(tenant: any, to: string, orderId: string, status: string): Promise<void> {

@@ -108,6 +108,18 @@ export class TenantController {
    * Get tenant's schema settings (workflow, business config etc.)
    * Does NOT return customer/order data.
    */
+  /**
+   * Set (or clear) the per-tenant TEAM override: which staff roles this tenant may
+   * assign and how many members. Overrides the plan's team config. Send
+   * `{ clear: true }` to remove the override and fall back to the plan.
+   */
+  @Patch(':id/team')
+  @Roles('admin')
+  async setTeam(@Param('id') id: string, @Body() body: { roles?: string[]; memberLimit?: number | null; clear?: boolean }) {
+    if (body?.clear) return this.tenantService.setTeamConfig(id, null);
+    return this.tenantService.setTeamConfig(id, { roles: body?.roles || [], memberLimit: body?.memberLimit ?? null });
+  }
+
   @Get(':id/settings')
   @Roles('admin', 'support')
   async getSettings(@Param('id') id: string) {

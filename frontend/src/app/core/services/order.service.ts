@@ -124,4 +124,14 @@ export class OrderService {
   getByCustomer(customerId: string, params?: QueryParams): Observable<PaginatedResponse<Order>> {
     return this.api.get<PaginatedResponse<Order>>(`/customers/${customerId}/orders`, params);
   }
+
+  /** Employees an order can be assigned to (verified staff with the 'employee' role). */
+  getAssignableEmployees(): Observable<{ id: string; name: string; whatsappVerified: boolean }[]> {
+    return this.api.get<{ id: string; name: string; whatsappVerified: boolean }[]>('/orders/meta/assignable-employees');
+  }
+
+  /** Assign an order to an employee — the employee is pinged on WhatsApp to start prepping. */
+  assign(id: string, employeeId: string): Observable<{ id: string; assignedTo: string; employeeName: string }> {
+    return this.api.post<{ id: string; assignedTo: string; employeeName: string }>(`/orders/${id}/assign`, { employeeId });
+  }
 }

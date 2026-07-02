@@ -64,6 +64,19 @@ export class TenantService {
     return tenant;
   }
 
+  /**
+   * Set (or clear) the per-tenant TEAM override in tenant.settings.team. Passing
+   * null removes the override so the plan's team config applies again.
+   */
+  async setTeamConfig(id: string, team: { roles: string[]; memberLimit: number | null } | null): Promise<{ team: any }> {
+    const tenant = await this.findById(id);
+    const settings = { ...(tenant.settings || {}) };
+    if (team === null) delete settings.team;
+    else settings.team = { roles: Array.isArray(team.roles) ? team.roles : [], memberLimit: team.memberLimit ?? null };
+    await this.tenantRepository.update(id, { settings });
+    return { team: settings.team ?? null };
+  }
+
   async suspend(id: string): Promise<void> {
     await this.tenantRepository.update(id, { status: 'suspended' });
     const tenant = await this.findById(id);

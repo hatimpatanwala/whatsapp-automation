@@ -22,6 +22,7 @@ import { ComplianceMonitorService } from '../waba/compliance/compliance-monitor.
 import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { AdminCommandService } from './admin-command.service';
+import { StaffCommandService } from './staff-command.service';
 import { SmartNotificationService } from './smart-notification.service';
 import { CustomFieldService } from '../custom-field/custom-field.service';
 import { BuilderService } from '../builder/builder.service';
@@ -53,6 +54,7 @@ export class WebhookProcessorService {
     private readonly commerceSettings: CommerceSettingsHelper,
     private readonly configService: ConfigService,
     @Optional() private readonly adminCommandService: AdminCommandService,
+    @Optional() private readonly staffCommandService: StaffCommandService,
     @Optional() private readonly smartNotification: SmartNotificationService,
     @Optional() private readonly customFieldService: CustomFieldService,
     @Optional() private readonly builderService: BuilderService,
@@ -190,6 +192,17 @@ export class WebhookProcessorService {
       this.logger.warn(`[FLOW] ${from} matches the admin number for ${schema} but it is NOT verified — treated as customer. Verify it in Settings → Admin WhatsApp.`);
     }
 
+    // Staff (accountant/employee/salesman) run the store over WhatsApp with a
+    // role-scoped menu. Recognise them by their number, like the admin. Pending
+    // (unverified) staff are still resolved so we can catch their OTP reply.
+    const staffMember = !isAdmin && this.staffCommandService
+      ? await this.staffCommandService.resolveStaff(tenant, from).catch(() => null)
+      : null;
+    const isStaff = !!staffMember;
+    if (isStaff) {
+      this.logger.log(`[FLOW] Message from STAFF ${from} (${staffMember!.role}) for ${schema}`);
+    }
+
     // Idempotency check
     const dedupKey = `webhook:dedup:${schema}:${messageId}`;
     const exists = await this.redis.set(dedupKey, '1', 'EX', 86400, 'NX');
@@ -209,12 +222,21 @@ export class WebhookProcessorService {
     // Emit domain event
     this.eventBus.emit(new WhatsAppMessageReceivedEvent(schema, messageId, from, type, message));
 
+    // Staff messages are handled by the role-scoped command service — never the
+    // customer workflows / catalog fallback handlers.
+    if (isStaff && this.staffCommandService) {
+      await this.staffCommandService
+        .handle(tenant, staffMember!, message)
+        .catch((e: any) => this.logger.error(`Staff command failed: ${e.message}`, e.stack));
+      return;
+    }
+
     // Get customer name from contacts
     const contactName = contacts?.find((c: any) => c.wa_id === from)?.profile?.name;
 
     // ─── METERING: Track conversation session + enforce quotas ────────
     // (Admin control messages don't count against customer conversation quota.)
-    if (!isAdmin && this.meteringService && tenant.id) {
+    if (!isAdmin && !isStaff && this.meteringService && tenant.id) {
       try {
         const meteringResult = await this.meteringService.meterConversation({
           tenantId: tenant.id,

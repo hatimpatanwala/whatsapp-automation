@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Subscription } from '../../database/entities/public/subscription.entity';
 import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';
+import { Tenant } from '../../database/entities/public/tenant.entity';
 import { ErpController } from './erp.controller';
 import { PlanFeatureService } from './common/plan-feature.service';
+import { TeamEntitlementService } from './common/team-entitlement.service';
 import { ErpSequenceService } from './common/erp-sequence.service';
 import { ErpProvisioningService } from './provisioning/erp-provisioning.service';
 import { ErpFeatureGuard } from '../../common/guards/erp-feature.guard';
@@ -46,7 +48,7 @@ import { ErpExportService } from './export/erp-export.service';
  * schema-per-tenant isolation is preserved.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Subscription, SubscriptionPlan])],
+  imports: [TypeOrmModule.forFeature([Subscription, SubscriptionPlan, Tenant])],
   controllers: [
     ErpController,
     // invoicing
@@ -91,6 +93,7 @@ import { ErpExportService } from './export/erp-export.service';
   ],
   providers: [
     PlanFeatureService,
+    TeamEntitlementService,
     ErpSequenceService,
     ErpProvisioningService,
     ErpFeatureGuard,
@@ -127,6 +130,7 @@ import { ErpExportService } from './export/erp-export.service';
   ],
   exports: [
     PlanFeatureService,
+    TeamEntitlementService,
     ErpSequenceService,
     ErpProvisioningService,
     PaymentModeService,

@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { EventBusService } from '../events/event-bus.service';
-import { OrderCreatedEvent, OrderStatusChangedEvent } from '../events/domain-events';
+import { OrderCreatedEvent, OrderStatusChangedEvent, OrderAssignedEvent } from '../events/domain-events';
 import { PaginationDto, PaginatedResponse } from '../../common/dto/pagination.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { randomBytes } from 'crypto';
@@ -82,6 +82,7 @@ export class OrderService {
                 o.delivery_fee, o.tax_amount, o.total as total_amount, o.currency, o.notes,
                 o.cancelled_reason as cancel_reason,
                 o.placed_at, o.confirmed_at, o.delivered_at,
+                o.assigned_to, o.assigned_at, u.name as assigned_to_name,
                 o.created_at, o.updated_at,
                 json_build_object(
                   'id', c.id,
@@ -100,6 +101,7 @@ export class OrderService {
          FROM orders o
          JOIN customers c ON c.id = o.customer_id
          LEFT JOIN addresses a ON a.id = o.address_id
+         LEFT JOIN users u ON u.id = o.assigned_to
          WHERE o.id = $1`,
         [id],
       );
@@ -212,6 +214,7 @@ export class OrderService {
       deliveryFee?: number;
       taxAmount?: number;
       addressId?: string;
+      createdByUserId?: string;
     },
   ): Promise<any> {
     return this.connectionManager.executeInTransaction(schema, async (qr) => {
@@ -228,9 +231,9 @@ export class OrderService {
       const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
 
       const order = await qr.query(
-        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes, address_id)
-         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null, data.addressId || null],
+        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes, address_id, created_by_user_id)
+         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null, data.addressId || null, data.createdByUserId || null],
       );
 
       for (const it of data.items) {
@@ -249,6 +252,45 @@ export class OrderService {
       this.eventBus.emit(new OrderCreatedEvent(schema, order[0].id, data.customerId, orderNumber, total));
       return order[0];
     });
+  }
+
+  /** Verified employees a store owner can hand an order to (for the assign picker). */
+  async listAssignableEmployees(schema: string): Promise<{ id: string; name: string; whatsappVerified: boolean }[]> {
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `SELECT id, name, whatsapp_verified FROM users
+          WHERE is_active = true AND role = 'employee' ORDER BY name ASC`,
+      );
+      return rows.map((r: any) => ({ id: r.id, name: r.name, whatsappVerified: !!r.whatsapp_verified }));
+    });
+  }
+
+  /**
+   * Assign an order to an employee. Sets assigned_to/assigned_at and emits
+   * OrderAssignedEvent so the employee is notified on WhatsApp to start prepping.
+   */
+  async assignOrder(schema: string, orderId: string, employeeId: string): Promise<any> {
+    const result = await this.connectionManager.executeInTransaction(schema, async (qr) => {
+      const order = (await qr.query(`SELECT id, order_number, customer_id FROM orders WHERE id = $1 FOR UPDATE`, [orderId]))[0];
+      if (!order) throw new NotFoundException('Order not found');
+      const emp = (await qr.query(`SELECT id, name, whatsapp_number, whatsapp_verified, role FROM users WHERE id = $1 AND is_active = true`, [employeeId]))[0];
+      if (!emp || emp.role !== 'employee') throw new NotFoundException('Employee not found');
+
+      await qr.query(`UPDATE orders SET assigned_to = $1, assigned_at = NOW(), updated_at = NOW() WHERE id = $2`, [employeeId, orderId]);
+      return { order, emp };
+    });
+
+    this.eventBus.emit(new OrderAssignedEvent(
+      schema,
+      result.order.id,
+      result.order.order_number,
+      result.order.customer_id,
+      result.emp.id,
+      result.emp.name,
+      result.emp.whatsapp_verified ? result.emp.whatsapp_number : '',
+    ));
+
+    return { id: orderId, assignedTo: employeeId, employeeName: result.emp.name };
   }
 
   async updateStatus(schema: string, orderId: string, newStatus: string, reason?: string): Promise<any> {

@@ -2024,6 +2024,35 @@ const migration058QuoteItemDiscount: TenantMigration = {
   },
 };
 
+/**
+ * Sales/staff module — foundation.
+ *  - users gain a verifiable WhatsApp identity so staff (accountant/employee/
+ *    salesman) can operate the store over WhatsApp with role-scoped menus.
+ *  - orders gain assignment (admin → employee) + the salesman who created them.
+ */
+const migration059SalesRoles: TenantMigration = {
+  name: '059_sales_roles',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(20)`);
+    await qr.query(`ALTER TABLE "${schema}".users ADD COLUMN IF NOT EXISTS whatsapp_verified BOOLEAN NOT NULL DEFAULT false`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_users_whatsapp ON "${schema}".users (whatsapp_number) WHERE whatsapp_number IS NOT NULL`);
+
+    await qr.query(`ALTER TABLE "${schema}".orders ADD COLUMN IF NOT EXISTS assigned_to UUID`);
+    await qr.query(`ALTER TABLE "${schema}".orders ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`);
+    await qr.query(`ALTER TABLE "${schema}".orders ADD COLUMN IF NOT EXISTS created_by_user_id UUID`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_orders_assigned_to ON "${schema}".orders (assigned_to) WHERE assigned_to IS NOT NULL`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_orders_assigned_to`);
+    await qr.query(`ALTER TABLE "${schema}".orders DROP COLUMN IF EXISTS created_by_user_id`);
+    await qr.query(`ALTER TABLE "${schema}".orders DROP COLUMN IF EXISTS assigned_at`);
+    await qr.query(`ALTER TABLE "${schema}".orders DROP COLUMN IF EXISTS assigned_to`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".idx_users_whatsapp`);
+    await qr.query(`ALTER TABLE "${schema}".users DROP COLUMN IF EXISTS whatsapp_verified`);
+    await qr.query(`ALTER TABLE "${schema}".users DROP COLUMN IF EXISTS whatsapp_number`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2083,4 +2112,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration056TaxRatePercent,
   migration057AdminNotifications,
   migration058QuoteItemDiscount,
+  migration059SalesRoles,
 ];
