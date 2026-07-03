@@ -248,7 +248,18 @@ export class ErpInvoiceService {
       const series = (input.series || '').trim().toUpperCase().slice(0, 6);
       const basePrefix = (await this.getSetting<string>(qr, schema, 'erp_invoice_prefix')) ?? 'INV';
       const prefix = series ? `${basePrefix}-${series}` : basePrefix;
-      const { formatted } = await this.sequences.next(schema, series ? `invoice_${series}` : 'invoice', { year, prefix }, qr);
+      const seqKey = series ? `invoice_${series}` : 'invoice';
+      // Collision-aware numbering: invoices synced down from the cloud carry THEIR
+      // numbers, but the local sequence counter is not replicated — a fresh node can
+      // generate an already-taken number. Walk the sequence until it's free (the
+      // increments live in THIS transaction, so a rollback can't wedge the counter
+      // on the same colliding value forever).
+      let formatted = (await this.sequences.next(schema, seqKey, { year, prefix }, qr)).formatted;
+      for (let guard = 0; guard < 10_000; guard++) {
+        const clash = await qr.query(`SELECT 1 FROM "${schema}".invoices WHERE invoice_number = $1`, [formatted]);
+        if (!clash.length) break;
+        formatted = (await this.sequences.next(schema, seqKey, { year, prefix }, qr)).formatted;
+      }
 
       // Stock deduction (Miracle bills reduce stock immediately): billed + FREE qty,
       // in base units (baseQty rides along when the line was entered in an alt unit).
