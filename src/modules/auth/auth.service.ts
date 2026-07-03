@@ -29,6 +29,13 @@ export class AuthService {
    * Unified login: checks super_admins first, then searches all tenant schemas for the email.
    */
   async unifiedLogin(email: string, password: string): Promise<UnifiedLoginResult> {
+    // 0. Desktop hybrid auth: when ONLINE the cloud account is the source of truth —
+    //    a successful cloud login is mirrored into the local DB (user row + bcrypt of
+    //    the typed password), so the SAME credentials keep working OFFLINE later.
+    //    Unreachable cloud (offline) or a cloud reject both fall through to the local
+    //    check — local-only accounts (provisioned owner, test users) stay valid.
+    await this.desktopCloudMirrorLogin(email, password);
+
     // 1. Check super_admins table
     const admin = await this.adminRepository.findOne({ where: { email } });
     if (admin) {
@@ -184,6 +191,86 @@ export class AuthService {
       }
     }
     return null;
+  }
+
+  /**
+   * Desktop-mode online-first auth (no-op unless DESKTOP_MODE=1 + DESKTOP_CLOUD_API).
+   * Tries the cloud /auth/login with a short timeout:
+   *   - cloud OK      → upsert the local mirror user with a fresh hash of the typed
+   *                     password (the offline credential cache), so the local login
+   *                     below succeeds; the sync relay then reconciles the data.
+   *   - cloud reject  → do nothing; the local check decides (local-only accounts).
+   *   - unreachable   → do nothing; offline login runs on the cached credentials.
+   */
+  private async desktopCloudMirrorLogin(email: string, password: string): Promise<void> {
+    const base = process.env.DESKTOP_MODE === '1' ? process.env.DESKTOP_CLOUD_API : '';
+    if (!base || !email || !password) return;
+
+    let cloudUser: any = null;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(`${base}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) return; // cloud says no — let the local check decide
+      try {
+        const body = (await res.json()) as any;
+        cloudUser = body?.data?.user ?? body?.user ?? null;
+      } catch {
+        /* body optional */
+      }
+    } catch {
+      return; // offline / cloud unreachable — cached local credentials decide
+    }
+
+    // Cloud accepted → refresh the local credential cache.
+    try {
+      const hash = await bcrypt.hash(password, 12);
+      const tenants = await this.tenantRepository.find({
+        where: { status: 'active' },
+        select: ['id', 'schemaName', 'slug'],
+      });
+
+      for (const tenant of tenants) {
+        const done = await this.connectionManager.executeInTenantContext(tenant.schemaName, async (qr) => {
+          const row = (await qr.query(`SELECT id, password_hash FROM users WHERE email = $1`, [email]))[0];
+          if (!row) return false;
+          // Only rewrite when the cached hash no longer matches (password changed in cloud).
+          if (!(await bcrypt.compare(password, row.password_hash || ''))) {
+            await qr.query(`UPDATE users SET password_hash = $2, is_active = true WHERE id = $1`, [row.id, hash]);
+          }
+          return true;
+        });
+        if (done) return;
+      }
+
+      // First login of a cloud account on this device: create the mirror user in the
+      // tenant this install syncs (SYNC_TENANT_SLUG), falling back to the first tenant.
+      const slug = process.env.SYNC_TENANT_SLUG;
+      const target = (slug && tenants.find((t) => t.slug === slug)) || tenants[0];
+      if (!target) return;
+      await this.connectionManager.executeInTenantContext(target.schemaName, async (qr) => {
+        await qr.query(
+          `INSERT INTO users (phone, name, email, password_hash, role)
+           VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+          [
+            cloudUser?.phone || null,
+            cloudUser?.name || email.split('@')[0],
+            email,
+            hash,
+            cloudUser?.role || 'owner',
+          ],
+        );
+      });
+    } catch (err) {
+      // The mirror is a convenience — never block login on it.
+      console.error('[desktop-auth] cloud mirror failed:', (err as Error).message);
+    }
   }
 
   /** Is this email already used by a super-admin? (social signup should not shadow admins) */

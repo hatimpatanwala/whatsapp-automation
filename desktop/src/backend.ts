@@ -3,7 +3,7 @@ import { spawn, execSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
 import { backendEntry, frontendDir } from './paths';
-import { LOCAL_PORT, PG_PORT, PG_USER, PG_PASSWORD, DB_NAME, DB_MODE, DOCKER_PG_PORT, DOCKER_REDIS_PORT } from './config';
+import { LOCAL_PORT, PG_PORT, PG_USER, PG_PASSWORD, DB_NAME, DB_MODE, DOCKER_PG_PORT, DOCKER_REDIS_PORT, CLOUD_API_URL } from './config';
 import { getSecrets } from './secrets';
 
 let child: ChildProcess | null = null;
@@ -69,6 +69,9 @@ export function backendEnv(): NodeJS.ProcessEnv {
     SESSION_SECRET: secrets.sessionSecret,
     TOKEN_ENCRYPTION_KEY: secrets.tokenEncryptionKey,
     SYNC_LOCAL_KEY: secrets.syncLocalKey,
+    // Online-first login: the local backend tries this cloud /auth/login first and
+    // mirrors accepted credentials locally (offline cache). See AuthService.
+    DESKTOP_CLOUD_API: CLOUD_API_URL,
   };
 }
 
