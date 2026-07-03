@@ -1,6 +1,7 @@
 import { Component, HostListener, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { filter } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 
@@ -10,6 +11,7 @@ interface MenuEntry {
   query?: Record<string, string>;
   key?: string;
   divider?: boolean;
+  action?: 'logout' | 'quit';
 }
 interface MenuGroup {
   title: string;
@@ -30,7 +32,7 @@ interface MenuGroup {
 @Component({
   selector: 'wa-tally-layout',
   standalone: true,
-  imports: [RouterOutlet, DatePipe],
+  imports: [RouterOutlet, DatePipe, FormsModule],
   template: `
     <div class="mcl-root" (click)="openMenu.set(null)">
       <!-- Title bar -->
@@ -85,7 +87,8 @@ interface MenuGroup {
       <footer class="mcl-status">
         <span><b>Enter</b> Next</span>
         <span><b>Esc</b> Back</span>
-        <span><b>Ctrl+A</b> Save</span>
+        <span><b>Ctrl+Enter</b> Save</span>
+        <span><b>F9</b> Calc</span>
         <span><b>Ins</b> +Row</span>
         <span><b>Ctrl+Del</b> −Row</span>
         <span><b>Alt+P</b> Party</span>
@@ -96,7 +99,21 @@ interface MenuGroup {
         <span class="mcl-status-right" (click)="exitToPortal()">Web Portal ⤴</span>
       </footer>
 
-      <!-- Shortcut help overlay (Alt+H) — the full Miracle keymap in one card. -->
+      <!-- F9 inline calculator (Miracle): evaluate an expression into the focused field. -->
+      @if (calcOpen()) {
+        <div class="mcl-calc-backdrop" (mousedown)="closeCalc(false)">
+          <div class="mcl-calc" (mousedown)="$event.stopPropagation()">
+            <div class="mcl-calc-title">🖩 Calculator <span>Enter apply · Esc cancel</span></div>
+            <input data-calc-input [(ngModel)]="calcExpr" (keydown)="onCalcKey($event)"
+                   placeholder="e.g. 250*12-5%…" autocomplete="off" spellcheck="false" />
+            <div class="mcl-calc-result" [class.mcl-calc-err]="calcResult() === null">
+              = {{ calcResult() !== null ? calcResult() : '…' }}
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Shortcut help overlay (Alt+H / F1) — the full Miracle keymap in one card. -->
       @if (helpOpen()) {
         <div class="mcl-help-backdrop" (mousedown)="closeHelp()">
           <div class="mcl-help" tabindex="-1" data-help-box
@@ -213,6 +230,20 @@ interface MenuGroup {
         padding: 1px 6px; white-space: nowrap; color: #14456e; min-width: 58px; text-align: center;
       }
       .mcl-help-row span { color: #333; font-size: 12px; }
+
+      .mcl-calc-backdrop { position: fixed; inset: 0; z-index: 800; background: rgba(20,40,70,.25);
+        display: flex; align-items: flex-start; justify-content: center; padding-top: 22vh; }
+      .mcl-calc { background: #fff; border: 1px solid #7da2ce; box-shadow: 4px 6px 18px rgba(0,0,0,.35);
+        width: 320px; padding: 10px 12px; }
+      .mcl-calc-title { font-weight: 700; color: #14456e; font-size: 13px; margin-bottom: 8px;
+        display: flex; justify-content: space-between; }
+      .mcl-calc-title span { font-weight: 400; font-size: 10.5px; color: #888; }
+      .mcl-calc input { width: 100%; box-sizing: border-box; border: 1px solid #9db6d8; padding: 6px 8px;
+        font-size: 15px; font-family: Consolas, monospace; text-align: right; }
+      .mcl-calc input:focus { outline: none; background: #fdf6d8; border-color: #d9a520; }
+      .mcl-calc-result { margin-top: 6px; text-align: right; font-family: Consolas, monospace;
+        font-size: 14px; font-weight: 700; color: #14456e; }
+      .mcl-calc-err { color: #b91c1c; font-weight: 400; }
     `,
   ],
 })
@@ -259,19 +290,24 @@ export class TallyLayoutComponent {
     {
       title: 'Inside an entry',
       keys: [
-        ['Enter / Tab', 'Next field'], ['Shift+Enter', 'Previous field'], ['Ctrl+A', 'Save voucher'],
+        ['Enter / Tab', 'Next field'], ['Shift+Enter', 'Previous field'],
+        ['Ctrl+Enter', 'Save voucher (Miracle)'], ['Ctrl+A', 'Save voucher'],
+        ['F9', 'Calculator in any field — Enter applies the result'],
         ['Ins', 'Insert row'], ['Ctrl+Del', 'Delete row'], ['↑ ↓', 'Move rows / pick from list'],
         ['Alt+P', 'Party details (outstanding, credit, history)'], ['Alt+I', 'Item details (stock, rates, last rate)'],
         ['Alt+L', 'Last rates to THIS party — Enter applies to the line'],
+        ['Shift+F1', 'Narration recall list (in the narration field)'],
+        ['Ctrl+R', 'Repeat last narration'],
         ['Esc', 'Close list / back'],
       ],
     },
     {
       title: 'Reports & more',
       keys: [
-        ['F9', 'Day Book'], ['F10', 'Trial Balance'], ['F11', 'Price & Credit Masters'], ['F12', 'Settings'],
+        ['F9', 'Day Book (outside a field)'], ['F10', 'Trial Balance'], ['F11', 'Price & Credit Masters'], ['F12', 'Settings'],
         ['Ctrl+P', 'Print current screen'], ['PgUp / PgDn', 'Prev / next (print & registers)'],
-        ['Alt+M/T/G/R/U/S', 'Open module menus'], ['Alt+H', 'This help'],
+        ['Alt+M/T/G/R/U/S/E', 'Open module menus (E = Exit)'], ['Ctrl+U', 'Utility menu'],
+        ['F1 / Alt+H', 'This help'],
       ],
     },
   ];
@@ -293,6 +329,62 @@ export class TallyLayoutComponent {
 
   onHelpKey(e: KeyboardEvent): void {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeHelp(); }
+  }
+
+  /** F1 (via the keyboard service) and the Electron Help menu open the same overlay. */
+  @HostListener('document:wa-help')
+  onHelpEvent(): void {
+    if (!this.helpOpen()) this.openHelp();
+  }
+
+  // ─── F9 inline calculator (Miracle) ─────────────────────────────────────────
+  readonly calcOpen = signal(false);
+  calcExpr = '';
+  private calcTarget: HTMLInputElement | null = null;
+
+  @HostListener('document:keydown', ['$event'])
+  onCalcShortcut(e: KeyboardEvent): void {
+    if (e.key !== 'F9' || this.calcOpen()) return;
+    const el = e.target as HTMLElement | null;
+    if (!el || el.tagName !== 'INPUT') return; // F9 outside a field = Day Book (global key)
+    e.preventDefault();
+    e.stopPropagation();
+    this.calcTarget = el as HTMLInputElement;
+    this.calcExpr = this.calcTarget.value || '';
+    this.calcOpen.set(true);
+    setTimeout(() => {
+      const box = document.querySelector('[data-calc-input]') as HTMLInputElement | null;
+      box?.focus(); box?.select();
+    });
+  }
+
+  onCalcKey(e: KeyboardEvent): void {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); this.closeCalc(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); this.closeCalc(false); }
+  }
+
+  closeCalc(apply: boolean): void {
+    const target = this.calcTarget;
+    const result = this.calcResult();
+    this.calcOpen.set(false);
+    this.calcTarget = null;
+    setTimeout(() => {
+      if (!target) return;
+      if (apply && result !== null) {
+        target.value = String(result);
+        // Let Angular's ngModel see the programmatic write.
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      target.focus();
+      target.select();
+    });
+  }
+
+  /** Result of the current expression, or null when invalid/incomplete. */
+  calcResult(): number | null {
+    const v = evalExpression(this.calcExpr);
+    return v === null || !isFinite(v) ? null : Math.round((v + Number.EPSILON) * 10000) / 10000;
   }
 
   closeHelp(): void {
@@ -373,6 +465,15 @@ export class TallyLayoutComponent {
         { label: 'Business Settings', route: '/settings' },
       ],
     },
+    {
+      // Miracle's Exit menu (Alt+E): leave the ERP without hunting for buttons.
+      title: 'Exit',
+      entries: [
+        { label: 'Web Portal (dashboard)', route: '/dashboard' },
+        { label: 'Logout', action: 'logout' },
+        { label: 'Quit', action: 'quit' },
+      ],
+    },
   ];
 
   readonly toolbar: MenuEntry[] = [
@@ -420,6 +521,17 @@ export class TallyLayoutComponent {
 
   go(e: MenuEntry): void {
     this.openMenu.set(null);
+    if (e.action === 'logout') {
+      this.auth.logout().subscribe({
+        next: () => void this.router.navigate(['/auth/login']),
+        error: () => void this.router.navigate(['/auth/login']),
+      });
+      return;
+    }
+    if (e.action === 'quit') {
+      window.close();
+      return;
+    }
     if (!e.route) return;
     void this.router.navigate([e.route], e.query ? { queryParams: e.query } : {});
   }
@@ -433,12 +545,81 @@ export class TallyLayoutComponent {
     if (this.openMenu() !== null) this.openMenu.set(null);
   }
 
-  /** Alt+M/T/G/R/U/S from the keyboard service — open the corresponding module menu. */
+  /** Alt+M/T/G/R/U/S/E from the keyboard service — open the corresponding module menu. */
   @HostListener('document:wa-menubar', ['$event'])
   onMenubarKey(e: Event): void {
     const idx = (e as CustomEvent<number>).detail;
     if (idx >= 0 && idx < this.menus.length) {
       this.openMenu.set(this.openMenu() === idx ? null : idx);
     }
+  }
+}
+
+/**
+ * Tiny safe arithmetic parser for the F9 calculator — + − × ÷ ( ) unary minus and
+ * calculator-style percent (`250-5%` = 237.5, `250*5%` = 12.5). No eval/Function.
+ */
+function evalExpression(src: string): number | null {
+  const s = (src || '').replace(/\s+/g, '');
+  if (!s) return null;
+  let pos = 0;
+
+  interface Val { v: number; pct: boolean; }
+
+  function parseNumber(): Val | null {
+    const m = /^\d*\.?\d+/.exec(s.slice(pos));
+    if (!m) return null;
+    pos += m[0].length;
+    return withPercent({ v: parseFloat(m[0]), pct: false });
+  }
+
+  function withPercent(val: Val): Val {
+    if (s[pos] === '%') { pos++; return { v: val.v, pct: true }; }
+    return val;
+  }
+
+  function parseUnary(): Val | null {
+    if (s[pos] === '-') { pos++; const inner = parseUnary(); return inner && { v: -inner.v, pct: inner.pct }; }
+    if (s[pos] === '(') {
+      pos++;
+      const inner = parseAdd();
+      if (!inner || s[pos] !== ')') return null;
+      pos++;
+      return withPercent({ v: inner.v, pct: false });
+    }
+    return parseNumber();
+  }
+
+  function parseMul(): Val | null {
+    let acc = parseUnary();
+    while (acc && (s[pos] === '*' || s[pos] === '/' || s[pos] === 'x')) {
+      const op = s[pos]; pos++;
+      const rhs = parseUnary();
+      if (!rhs) return null;
+      const rv = rhs.pct ? rhs.v / 100 : rhs.v;
+      acc = { v: op === '/' ? acc.v / rv : acc.v * rv, pct: false };
+    }
+    return acc;
+  }
+
+  function parseAdd(): Val | null {
+    let acc = parseMul();
+    while (acc && (s[pos] === '+' || s[pos] === '-')) {
+      const op = s[pos]; pos++;
+      const rhs = parseMul();
+      if (!rhs) return null;
+      // "a - b%" means b percent OF a — how billing people use a calculator.
+      const rv = rhs.pct ? (acc.v * rhs.v) / 100 : rhs.v;
+      acc = { v: op === '+' ? acc.v + rv : acc.v - rv, pct: false };
+    }
+    return acc;
+  }
+
+  try {
+    const out = parseAdd();
+    if (!out || pos !== s.length) return null;
+    return out.v;
+  } catch {
+    return null;
   }
 }

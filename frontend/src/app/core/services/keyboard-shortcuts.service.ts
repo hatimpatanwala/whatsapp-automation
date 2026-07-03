@@ -55,14 +55,21 @@ export class KeyboardShortcutsService {
       return;
     }
 
-    // Alt+M/T/G/R/U/S — open the Miracle module menus (handled by the ERP layout).
+    // Alt+M/T/G/R/U/S/E — open the Miracle module menus (handled by the ERP layout).
     if (e.altKey && !e.ctrlKey) {
-      const menuIdx = { m: 0, t: 1, g: 2, r: 3, u: 4, s: 5 }[e.key.toLowerCase()];
+      const menuIdx = { m: 0, t: 1, g: 2, r: 3, u: 4, s: 5, e: 6 }[e.key.toLowerCase()];
       if (menuIdx !== undefined) {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('wa-menubar', { detail: menuIdx }));
         return;
       }
+    }
+
+    // Ctrl+U — open Utility (Miracle global key).
+    if (e.ctrlKey && !e.altKey && (e.key === 'u' || e.key === 'U')) {
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent('wa-menubar', { detail: 4 }));
+      return;
     }
 
     const command = this.keyToCommand(e);
@@ -80,8 +87,8 @@ export class KeyboardShortcutsService {
   private keyToCommand(e: KeyboardEvent): string | null {
     if (e.ctrlKey || e.altKey || e.metaKey) return null;
     switch (e.key) {
-      // Miracle keymap
-      case 'F1': return 'gateway';
+      // Miracle keymap (F1 = context help, as in Miracle; F3 opens the Gateway)
+      case 'F1': return 'help';
       case 'F2': return 'voucher:sales';
       case 'F3': return 'gateway';
       case 'F4': return 'voucher:contra';
@@ -101,6 +108,10 @@ export class KeyboardShortcutsService {
   private run(command: string): void {
     if (command === 'back') {
       history.back();
+      return;
+    }
+    if (command === 'help') {
+      document.dispatchEvent(new CustomEvent('wa-help'));
       return;
     }
     const route = this.routeMap[command];

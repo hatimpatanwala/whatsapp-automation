@@ -2,7 +2,7 @@ import { Component, ElementRef, HostListener, inject, signal } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { EntryService, ItemMasterRow } from '../../core/services/entry.service';
 
-const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'hsn', 'gst', 'pRate', 'sRate', 'mrp', 'minStock', 'stockQty'] as const;
+const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'hsn', 'barcode', 'gst', 'pRate', 'sRate', 'mrp', 'minStock', 'stockQty'] as const;
 type Field = (typeof FIELDS)[number];
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -99,6 +99,10 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               <input data-cell="hsn" [(ngModel)]="hsn" (keydown)="onFieldKey($event, 'hsn')"
                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
             </label>
+            <label class="text-sm">Barcode / alias <span class="text-slate-400">(searchable)</span>
+              <input data-cell="barcode" [(ngModel)]="barcode" (keydown)="onFieldKey($event, 'barcode')"
+                     class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+            </label>
             <label class="text-sm">GST %
               <input data-cell="gst" type="number" [(ngModel)]="gst" (keydown)="onFieldKey($event, 'gst')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
@@ -169,6 +173,7 @@ export class ItemMasterComponent {
   altUnit = '';
   factor: number | null = null;
   hsn = '';
+  barcode = '';
   gst: number | null = null;
   pRate: number | null = null;
   sRate: number | null = null;
@@ -209,6 +214,7 @@ export class ItemMasterComponent {
     this.altUnit = it.altUom || '';
     this.factor = it.uomFactor != null ? Number(it.uomFactor) : null;
     this.hsn = it.hsnCode || '';
+    this.barcode = it.barcode || '';
     this.gst = it.gstRate != null ? Number(it.gstRate) : null;
     this.pRate = it.purchasePrice != null ? Number(it.purchasePrice) : null;
     this.sRate = Number(it.basePrice ?? it.salePrice) || null;
@@ -224,7 +230,7 @@ export class ItemMasterComponent {
   startNew(): void {
     this.editId.set(null);
     this.name = ''; this.unit = ''; this.altUnit = ''; this.factor = null;
-    this.hsn = ''; this.gst = null; this.pRate = null; this.sRate = null;
+    this.hsn = ''; this.barcode = ''; this.gst = null; this.pRate = null; this.sRate = null;
     this.mrp = null; this.minStock = null; this.stockQty = null;
     this.curStock.set(0);
     this.saved.set(null);
@@ -244,6 +250,13 @@ export class ItemMasterComponent {
     if (e.key === 'Escape') { e.stopPropagation(); this.focus('search'); }
   }
 
+  /** Miracle: Ctrl+Enter accepts/saves the voucher from anywhere (alias of Ctrl+A). */
+
+  @HostListener('document:keydown.control.enter', ['$event'])
+
+  onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
+
+
   @HostListener('document:keydown.control.a', ['$event'])
   onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
 
@@ -262,6 +275,7 @@ export class ItemMasterComponent {
       basePrice: money(Number(this.sRate) || 0),
       gstRate: this.gst != null ? Number(this.gst) : undefined,
       hsnCode: this.hsn.trim() || undefined,
+      barcode: this.barcode.trim() || undefined,
       uom: this.unit.trim() || undefined,
       altUom: this.altUnit.trim() || undefined,
       uomFactor: this.factor != null ? Number(this.factor) : undefined,

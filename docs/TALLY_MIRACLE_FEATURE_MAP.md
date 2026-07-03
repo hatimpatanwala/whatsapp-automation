@@ -1,5 +1,62 @@
 # Tally / Miracle Feature Map → Desktop ERP
 
+## AUDIT vs desktop/Miracle_behaviour.md (full published behaviour) — 2026-07-04
+
+### §1 Shortcut keys
+
+| Miracle key | Spec action | Ours | Status |
+|---|---|---|---|
+| F2 (menu level) | Change financial year | F2 = Sales Invoice (Tally-style voucher keys) | ⚠️ deviation — FY shown in title bar; period change = date fields/PgUp-PgDn in registers |
+| F3 / F4 (menu) | Add / edit company | F3 = Gateway; company = tenant (portal onboarding); Business Settings edits it | ⚠️ deviation — multi-company is multi-tenant, not a desktop concern |
+| Ctrl+I / Ctrl+M / Ctrl+G | company index/combine/group | — | ⬜ N/A (multi-company) |
+| Ctrl+U | Utility menu | **Ctrl+U opens Utility** | ✅ added |
+| Alt+M/T/G/R/S | module menus | Alt+M/T/G/R/U/S | ✅ |
+| Alt+E | Exit menu | **Exit menu (Web Portal / Logout / Quit) + Alt+E** | ✅ added |
+| Enter | commit + auto-advance | ✅ everywhere | ✅ |
+| Tab | exit grid to header/footer | Tab = next field; Enter on blank row exits grid | ⚠️ deviation (documented) |
+| **Ctrl+Enter** | save from anywhere | **added on all 10 entry screens** (Ctrl+A also kept) | ✅ added |
+| Esc | cancel field/popup, keep lines | ✅ | ✅ |
+| **Shift+F1** | narration recall list | **added (sales narration field, last 10 saved)** | ✅ added |
+| **Ctrl+R** | repeat previous narration | **added (sales narration field)** | ✅ added |
+| **F9** | inline calculator in numeric fields | **added — F9 in any field opens calculator; Enter writes result; % aware (250-5%)** | ✅ added |
+| F1 | context help | **F1 now opens the shortcut-help overlay** (was Gateway; F3 covers Gateway) | ✅ added |
+
+### §2 Sales-invoice walkthrough (steps 1–13)
+
+| Step | Status |
+|---|---|
+| Alt+T → voucher list → cursor on Party | ✅ (auto-focus) |
+| Party picker auto-fills GSTIN/address/state/credit/outstanding | ✅ |
+| Date defaults / override | ✅ |
+| Invoice number: automatic series **or manual** | ✅ manual "No." field added (duplicate rejected) |
+| Item picker auto-fills HSN/UOM/last-rate/GST; Enter walk; auto new row | ✅ |
+| **GST auto CGST/SGST vs IGST from PoS vs company state** | ✅ added (seller state from invoice settings/GSTIN; override stays manual) |
+| Footer charges + round-off | ✅ |
+| Narration recall/repeat | ✅ added |
+| Ctrl+Enter save | ✅ added |
+| **Post-save tray**: Print / e-Invoice IRN / e-Way / Share | ⚠️ partial — Print ✅, **e-Invoice button added** (IRP payload/IRN via /gst/einvoice); e-Way = portal module; WhatsApp share = portal |
+| Stock deducted on save | ✅ |
+
+### §4 Field reference gaps
+
+| Field | Status |
+|---|---|
+| Order/reference no. (quote → invoice) | ✅ **Quotation Register Enter = Convert to Invoice** (carries party+lines+ref) |
+| Salesman/agent | ✅ (broker + commission) |
+| Godown/branch per voucher & per line | ⬜ pending (single-godown billing; stock journal is godown-aware) |
+| Batch/serial per line | ⬜ pending |
+| TCS on footer | ⬜ pending (TDS/TCS batch) |
+| Bank details + T&C on print | ⬜ pending (needs settings keys) |
+| Quote validity/status/convert | ✅ (validity, status chip, convert) |
+| e-Invoice schema (buyer URP, ShipDtls, doc types) | ✅ payload builder (IRP push needs GSP creds) |
+| e-Way bill fields | ⚠️ module exists (portal UI); not in desktop entry tray |
+| Item master: code/name/alias-barcode/category/brand | ✅ **barcode/alias added (searchable in billing grids)**; category/brand via portal Products |
+| Dual units + factor | ✅ |
+| Opening stock/rate, reorder level | ✅ (opening stock, min stock; opening *rate* ⬜) |
+| Rate tiers (MRP/wholesale/retail) | ✅ (MRP + price levels per party) |
+| Batch/expiry, serial/IMEI flags | ⬜ pending |
+| Item image/specs | ✅ portal Products page |
+
 ## MIRACLE FIELD/BEHAVIOUR PARITY (sales/purchase entry) — status after 2026-07-03
 
 | Miracle field / behaviour | Ours | Status |

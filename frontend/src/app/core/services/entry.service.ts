@@ -49,6 +49,8 @@ export interface CreateInvoiceBody {
   shipTo?: InvoiceAddress;
   /** Voucher series (Miracle multi-series numbering). */
   series?: string;
+  /** Manual voucher number (Miracle manual series) — blank/undefined = automatic. */
+  invoiceNumber?: string;
 }
 
 export interface InvoiceAddress {
@@ -80,6 +82,8 @@ export class EntryService {
   }
 
   createInvoice(body: CreateInvoiceBody): Observable<any> { return this.api.post<any>('/erp/invoices', body); }
+  quoteById(id: string): Observable<any> { return this.api.get<any>(`/quotes/${id}`); }
+  generateIrn(invoiceId: string): Observable<any> { return this.api.post<any>(`/gst/einvoice/${invoiceId}`, {}); }
   invoice(id: string): Observable<any> { return this.api.get<any>(`/erp/invoices/${id}`); }
   invoices(limit = 50): Observable<any> { return this.api.get<any>('/erp/invoices', { limit: String(limit) }); }
   sellerProfile(): Observable<any> { return this.api.get<any>('/gst/seller-profile'); }
@@ -182,11 +186,12 @@ export interface ItemMasterRow {
   id: string; name: string; uom?: string; altUom?: string | null; uomFactor?: number | null;
   hsnCode?: string; gstRate?: number; basePrice?: number; salePrice?: number;
   purchasePrice?: number | null; mrp?: number | null; minStock?: number; stock?: number;
+  barcode?: string | null;
 }
 export interface ProductMasterBody {
   name?: string; basePrice?: number; salePrice?: number; gstRate?: number; hsnCode?: string;
   uom?: string; altUom?: string; uomFactor?: number; purchasePrice?: number; mrp?: number;
-  lowStockThreshold?: number; initialStock?: number; sku?: string;
+  lowStockThreshold?: number; initialStock?: number; sku?: string; barcode?: string;
 }
 
 export interface PriceLevel { id: string; name: string; rateCount?: number; }

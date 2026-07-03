@@ -52,7 +52,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
         <input [(ngModel)]="filter" (ngModelChange)="apply()" placeholder="Filter party / number…"
                data-autofocus data-cell="filter"
                class="border rounded px-2 py-1 text-sm focus:bg-amber-50 focus:outline-none" autocomplete="off" />
-        <span class="ml-auto text-xs text-slate-500">↑↓ move · Enter open · PgUp/PgDn month · Esc back</span>
+        <span class="ml-auto text-xs text-slate-500">↑↓ move · Enter {{ kind() === 'quote' ? 'convert to invoice' : 'open' }} · PgUp/PgDn month · Esc back</span>
       </div>
 
       @if (loading()) {
@@ -238,6 +238,8 @@ export class RegistersComponent {
 
   open(r: RegRow): void {
     if (this.kind() === 'sales') void this.router.navigate(['/print/invoice', r.id]);
+    // Miracle "convert to invoice": Enter on a quotation carries it into the sales screen.
+    else if (this.kind() === 'quote') void this.router.navigate(['/entry/sales'], { queryParams: { fromQuote: r.id } });
   }
 
   private shiftMonth(delta: number): void {

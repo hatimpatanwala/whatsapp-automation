@@ -168,8 +168,8 @@ function buildMenu(): void {
     {
       label: 'Company',
       submenu: [
-        { label: 'Gateway (F1)', accelerator: 'F1', click: () => sendMenuCommand('gateway') },
-        { label: 'Select Period (F2)', accelerator: 'F2', click: () => sendMenuCommand('period') },
+        { label: 'Gateway (F3)', accelerator: 'F3', click: () => sendMenuCommand('gateway') },
+        { label: 'Help (F1)', accelerator: 'F1', click: () => sendMenuCommand('help') },
         { type: 'separator' },
         { label: 'Features (F11)', accelerator: 'F11', click: () => sendMenuCommand('features') },
         { label: 'Configure (F12)', accelerator: 'F12', click: () => sendMenuCommand('configure') },

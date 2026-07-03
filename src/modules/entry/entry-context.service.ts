@@ -52,7 +52,8 @@ export class EntryContextService {
            SELECT SUM(quantity) AS qty
            FROM "${schema}".erp_stock s WHERE s.product_id = p.id
          ) ws ON true
-         WHERE p.is_active = true AND p.deleted_at IS NULL AND p.name ILIKE $1
+         WHERE p.is_active = true AND p.deleted_at IS NULL
+           AND (p.name ILIKE $1 OR p.metadata->>'barcode' ILIKE $1)
          ORDER BY p.name
          LIMIT $2`,
         [like, Math.min(25, limit)],
@@ -346,6 +347,7 @@ export class EntryContextService {
         `SELECT p.id, p.name, p.uom, p.alt_uom, p.uom_factor, p.hsn_code,
                 COALESCE(p.gst_rate, 0) AS gst_rate,
                 p.base_price, p.sale_price, p.purchase_price, p.mrp,
+                p.metadata->>'barcode' AS barcode,
                 COALESCE(i.low_stock_threshold, 5) AS min_stock,
                 COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
          FROM "${schema}".products p

@@ -1,5 +1,5 @@
 import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -70,6 +70,10 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
           <input [(ngModel)]="series" placeholder="—" maxlength="6"
                  class="ml-1 w-14 border rounded px-2 py-1 uppercase focus:bg-amber-50 focus:outline-none" title="Voucher series (e.g. A, B, RET)" autocomplete="off" />
         </label>
+        <label class="text-sm text-slate-600">No.
+          <input [(ngModel)]="manualNo" placeholder="auto"
+                 class="ml-1 w-24 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" title="Manual voucher number — leave blank for automatic" autocomplete="off" />
+        </label>
         <label class="text-sm text-slate-600">Due days
           <input type="number" [(ngModel)]="dueDays" [disabled]="memoType === 'cash'"
                  class="ml-1 w-16 border rounded px-2 py-1 text-right focus:bg-amber-50 focus:outline-none" />
@@ -89,6 +93,13 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
           </span>
           @if (savedId()) {
             <button (click)="printSaved()" class="text-sm px-3 py-1 rounded bg-slate-800 text-white hover:bg-slate-700">🖨 Print</button>
+            <button (click)="genIrn()" [disabled]="irnBusy()"
+                    class="text-sm px-3 py-1 rounded bg-indigo-700 text-white hover:bg-indigo-600 disabled:opacity-50">
+              {{ irnBusy() ? '…' : '⚡ e-Invoice' }}
+            </button>
+            @if (irnMsg()) {
+              <span class="text-xs" [class.text-emerald-700]="irnOk()" [class.text-red-600]="!irnOk()">{{ irnMsg() }}</span>
+            }
           }
         }
       </div>
@@ -112,7 +123,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <textarea [(ngModel)]="billTo.address" placeholder="Address" rows="2" class="w-full border rounded px-2 py-1 mb-1"></textarea>
             <div class="flex gap-2">
               <input [(ngModel)]="billTo.city" placeholder="City" class="flex-1 border rounded px-2 py-1" autocomplete="off" />
-              <input [(ngModel)]="billTo.stateCode" placeholder="State code" class="w-24 border rounded px-2 py-1" autocomplete="off" />
+              <input [(ngModel)]="billTo.stateCode" (ngModelChange)="autoInterstate()" placeholder="State code" class="w-24 border rounded px-2 py-1" autocomplete="off" />
               <input [(ngModel)]="billTo.pincode" placeholder="PIN" class="w-24 border rounded px-2 py-1" autocomplete="off" />
             </div>
             <input [(ngModel)]="billTo.gstin" placeholder="GSTIN (optional)" class="w-full border rounded px-2 py-1 mt-1" autocomplete="off" />
@@ -135,7 +146,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               <textarea [(ngModel)]="shipTo.address" placeholder="Delivery address" rows="2" class="w-full border rounded px-2 py-1 mb-1"></textarea>
               <div class="flex gap-2">
                 <input [(ngModel)]="shipTo.city" placeholder="City" class="flex-1 border rounded px-2 py-1" autocomplete="off" />
-                <input [(ngModel)]="shipTo.stateCode" placeholder="State code" class="w-24 border rounded px-2 py-1" autocomplete="off" />
+                <input [(ngModel)]="shipTo.stateCode" (ngModelChange)="autoInterstate()" placeholder="State code" class="w-24 border rounded px-2 py-1" autocomplete="off" />
                 <input [(ngModel)]="shipTo.pincode" placeholder="PIN" class="w-24 border rounded px-2 py-1" autocomplete="off" />
               </div>
               <input [(ngModel)]="shipTo.gstin" placeholder="Consignee GSTIN (optional)" class="w-full border rounded px-2 py-1 mt-1" autocomplete="off" />
@@ -313,9 +324,18 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                   </div>
                 }
               </div>
-              <label class="text-sm block">Narration
+              <label class="text-sm block relative">Narration
+                <span class="text-xs text-slate-400">(Shift+F1 recall · Ctrl+R repeat)</span>
                 <input data-cell="note" [(ngModel)]="note" (keydown)="onNoteKey($event)"
                        class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                @if (narrList(); as nl) {
+                  <div class="absolute bottom-full left-0 z-50 w-full bg-white border rounded-t shadow-lg max-h-48 overflow-auto">
+                    @for (n of nl; track $index; let i = $index) {
+                      <div (mousedown)="pickNarration(i)" class="px-2 py-1.5 text-sm cursor-pointer truncate"
+                           [class.bg-amber-100]="i === narrIdx()">{{ n }}</div>
+                    }
+                  </div>
+                }
               </label>
             </div>
 
@@ -391,6 +411,87 @@ export class SalesInvoiceEntryComponent {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+
+  /** Manual voucher number (Miracle manual series) — blank = automatic sequence. */
+  manualNo = '';
+  /** Seller's state code (from invoice settings / GSTIN) — drives auto CGST/SGST vs IGST. */
+  private sellerStateCode = '';
+
+  constructor() {
+    this.entry.sellerProfile().subscribe({
+      next: (p: any) => {
+        this.sellerStateCode = String(p?.invoiceStateCode || p?.invoice_state_code || '').trim()
+          || String(p?.invoiceGstin || p?.invoice_gstin || '').slice(0, 2);
+      },
+      error: () => { /* no seller profile yet — manual IGST toggle still works */ },
+    });
+    // Quote → Invoice conversion (Miracle "carry forward"): /entry/sales?fromQuote=<id>
+    const quoteId = this.route.snapshot.queryParamMap.get('fromQuote');
+    if (quoteId) this.loadFromQuote(quoteId);
+  }
+
+  /** CGST/SGST vs IGST from Place of Supply vs the seller's state — user can override. */
+  autoInterstate(): void {
+    const pos = (this.shipSame ? this.billTo.stateCode : (this.shipTo.stateCode || this.billTo.stateCode)) || '';
+    if (!this.sellerStateCode || !pos.trim()) return;
+    this.isInterstate = pos.trim().padStart(2, '0') !== this.sellerStateCode.padStart(2, '0');
+  }
+
+  private loadFromQuote(id: string): void {
+    this.entry.quoteById(id).subscribe((q: any) => {
+      if (!q) return;
+      if (q.customerId) this.pickCustomer({ id: q.customerId, name: q.customerName || '', phone: q.customerPhone || '' });
+      this.rows = (q.items || []).map((it: any) => ({
+        productId: it.productId || undefined,
+        name: it.productName || it.description || '',
+        hsn: '', uom: 'pcs',
+        qty: Number(it.quantity) || null, free: null,
+        rate: Number(it.unitPrice) || null,
+        d1: Number(it.discount) || null, d2: null, gstRate: null,
+      }));
+      this.rows.push(this.blankRow());
+      this.note = `Ref: ${q.quoteNumber || 'quotation'}`;
+      // Enrich converted lines with the item master (HSN/UOM/GST/stock).
+      this.rows.forEach((row, r) => {
+        if (!row.productId) return;
+        this.entry.itemContext(row.productId, q.customerId || undefined).subscribe((ctx: any) => {
+          row.gstRate = row.gstRate ?? (Number(ctx.gstRate) || 0);
+          row.hsn = ctx.hsnCode || '';
+          row.uom = ctx.uom || 'pcs';
+          row.stock = Number(ctx.stock) || 0;
+          row.lastToCustomer = ctx.lastToCustomer || null;
+          this.tick.update((t) => t + 1);
+        });
+      });
+      this.tick.update((t) => t + 1);
+    });
+  }
+
+  // ─── Post-save e-Invoice (IRN) ──────────────────────────────────────────────
+  readonly irnBusy = signal(false);
+  readonly irnMsg = signal<string | null>(null);
+  readonly irnOk = signal(false);
+
+  genIrn(): void {
+    const id = this.savedId();
+    if (!id || this.irnBusy()) return;
+    this.irnBusy.set(true);
+    this.irnMsg.set(null);
+    this.entry.generateIrn(id).subscribe({
+      next: (r: any) => {
+        this.irnBusy.set(false);
+        const irn = r?.irn || r?.Irn || r?.data?.irn;
+        this.irnOk.set(!!irn);
+        this.irnMsg.set(irn ? `IRN: ${String(irn).slice(0, 22)}…` : (r?.message || 'e-Invoice payload prepared'));
+      },
+      error: (err) => {
+        this.irnBusy.set(false);
+        this.irnOk.set(false);
+        this.irnMsg.set(err?.error?.message || 'e-Invoice failed');
+      },
+    });
+  }
 
   readonly tick = signal(0);
   readonly more = signal(false);
@@ -487,6 +588,7 @@ export class SalesInvoiceEntryComponent {
         if (def) {
           this.billTo = { ...this.billTo, address: def.fullAddress, city: def.city, state: def.state, pincode: def.pincode };
         }
+        this.autoInterstate();
         this.tick.update((t) => t + 1);
       });
       for (let r = 0; r < this.rows.length; r++) if (this.rows[r].productId) this.loadItemContext(r);
@@ -606,7 +708,51 @@ export class SalesInvoiceEntryComponent {
   }
 
   onNoteKey(e: KeyboardEvent): void {
+    const list = this.narrList();
+    if (list) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); this.narrIdx.set(Math.min(this.narrIdx() + 1, list.length - 1)); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); this.narrIdx.set(Math.max(this.narrIdx() - 1, 0)); return; }
+      if (e.key === 'Enter') { e.preventDefault(); this.pickNarration(this.narrIdx()); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.narrList.set(null); return; }
+    }
+    // Miracle: Shift+F1 recalls frequently-used narrations, Ctrl+R repeats the last one.
+    if (e.key === 'F1' && e.shiftKey) {
+      e.preventDefault();
+      const all = this.savedNarrations();
+      if (all.length) { this.narrList.set(all); this.narrIdx.set(0); }
+      return;
+    }
+    if ((e.key === 'r' || e.key === 'R') && e.ctrlKey) {
+      e.preventDefault();
+      const last = this.savedNarrations()[0];
+      if (last) { this.note = last; this.tick.update((t) => t + 1); }
+      return;
+    }
     if (e.key === 'Enter') { e.preventDefault(); this.save(); }
+  }
+
+  // ─── Narration recall (Miracle Shift+F1 / Ctrl+R) ──────────────────────────
+  readonly narrList = signal<string[] | null>(null);
+  readonly narrIdx = signal(0);
+
+  pickNarration(i: number): void {
+    const list = this.narrList();
+    if (list?.[i] !== undefined) { this.note = list[i]; this.tick.update((t) => t + 1); }
+    this.narrList.set(null);
+    this.focusNote();
+  }
+
+  private savedNarrations(): string[] {
+    try { return JSON.parse(localStorage.getItem('wa-narrations') || '[]'); } catch { return []; }
+  }
+
+  private rememberNarration(text: string): void {
+    const t = (text || '').trim();
+    if (!t) return;
+    try {
+      const list = [t, ...this.savedNarrations().filter((n) => n !== t)].slice(0, 10);
+      localStorage.setItem('wa-narrations', JSON.stringify(list));
+    } catch { /* storage full/blocked — recall is a convenience */ }
   }
 
   private focusNext(r: number, col: Col): void {
@@ -631,6 +777,13 @@ export class SalesInvoiceEntryComponent {
   private focusNote(): void {
     (this.host.nativeElement.querySelector('[data-cell="note"]') as HTMLInputElement | null)?.focus();
   }
+
+  /** Miracle: Ctrl+Enter accepts/saves the voucher from anywhere (alias of Ctrl+A). */
+
+  @HostListener('document:keydown.control.enter', ['$event'])
+
+  onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
+
 
   @HostListener('document:keydown.control.a', ['$event'])
   onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
@@ -735,12 +888,14 @@ export class SalesInvoiceEntryComponent {
       mrpRate: Number(r.rate) || 0,
     })) as any;
     try {
+      this.rememberNarration(this.note);
       const inv = await firstValueFrom(this.entry.createInvoice({
         customerId: this.customer()?.id,
         items,
         taxRate: 0,
         discount: this.billDiscount(),
         note: this.note || undefined,
+        invoiceNumber: this.manualNo.trim() || undefined,
         isInterstate: this.isInterstate,
         issueDate: this.voucherDate || undefined,
         isCash: this.memoType === 'cash',
@@ -765,8 +920,9 @@ export class SalesInvoiceEntryComponent {
 
       this.savedNumber.set(inv?.invoiceNumber || 'invoice');
       this.savedId.set(inv?.id || null);
+      this.irnMsg.set(null);
       this.rows = [this.blankRow(), this.blankRow()];
-      this.note = ''; this.customerQuery = ''; this.customer.set(null);
+      this.note = ''; this.manualNo = ''; this.customerQuery = ''; this.customer.set(null);
       this.billDiscPct = null; this.billDiscAmt = null; this.receivedNow = null; this.dueDays = null;
       this.billTo = {}; this.shipTo = {}; this.shipSame = true; this.savedAddresses.set([]);
       this.broker = ''; this.commissionPct = null; this.transportName = ''; this.lrNo = ''; this.vehicleNo = '';

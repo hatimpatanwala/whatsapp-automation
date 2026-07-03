@@ -271,6 +271,13 @@ export class PricingMastersComponent {
     el?.focus(); el?.select();
   }
 
+  /** Miracle: Ctrl+Enter accepts/saves the voucher from anywhere (alias of Ctrl+A). */
+
+  @HostListener('document:keydown.control.enter', ['$event'])
+
+  onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
+
+
   @HostListener('document:keydown.control.a', ['$event'])
   onSaveKey(e: Event): void {
     e.preventDefault();
