@@ -37,10 +37,16 @@ export class SyncService {
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
   ) {}
 
-  /** The single active tenant — used to resolve the local desktop node's schema. */
+  /**
+   * The local desktop node's tenant schema. With an imported multi-tenant dump the
+   * "first active tenant" is arbitrary — SYNC_TENANT_SLUG pins which tenant syncs.
+   */
   async singleTenantSchema(): Promise<string> {
-    const t = await this.tenants.findOne({ where: { status: 'active' } });
-    if (!t) throw new BadRequestException('No active tenant to sync');
+    const slug = process.env.SYNC_TENANT_SLUG;
+    const t = slug
+      ? await this.tenants.findOne({ where: { slug } })
+      : await this.tenants.findOne({ where: { status: 'active' } });
+    if (!t) throw new BadRequestException(slug ? `No tenant with slug '${slug}' to sync` : 'No active tenant to sync');
     return t.schemaName;
   }
 

@@ -30,6 +30,13 @@ if (process.env.DESKTOP_DEBUG === '1') {
   app.commandLine.appendSwitch('remote-debugging-port', process.env.DESKTOP_DEBUG_PORT || '9222');
 }
 
+// Google OAuth rejects embedded browsers by user-agent sniffing ("disallowed_useragent").
+// Electron IS real Chromium, so drop the Electron/app tokens and present the plain
+// Chrome UA — Google sign-in then works in the app window (same-window redirect flow).
+app.userAgentFallback = app.userAgentFallback
+  .replace(/ ?wacommerce-desktop\/[\d.]+/i, '')
+  .replace(/ ?Electron\/[\d.]+/, '');
+
 // ─── Single-instance lock ──────────────────────────────────────────────────
 // A desktop ERP must never run twice against the same local data / Postgres cluster.
 const gotLock = app.requestSingleInstanceLock();
