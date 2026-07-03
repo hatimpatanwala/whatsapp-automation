@@ -33,26 +33,39 @@ const defaultJobOpts = (roc = 100, rof = 500, att = 3, bo?: any) => ({
         const url = config.get<string>('REDIS_URL');
         const logger = new Logger('QueueModule');
 
+        // Desktop (offline) mode runs without Redis: queue commands must fail fast
+        // instead of hanging (maxRetriesPerRequest: null waits forever), and the
+        // client must not endlessly reconnect. Queue-backed features are cloud-only.
+        const isDesktop = config.get<string>('DESKTOP_MODE') === '1';
+        const desktopOpts = isDesktop
+          ? {
+              maxRetriesPerRequest: 1,
+              enableOfflineQueue: false,
+              retryStrategy: () => null as unknown as number,
+              connectTimeout: 1500,
+            }
+          : { maxRetriesPerRequest: null as unknown as number };
+
         if (url) {
           logger.log('BullMQ connecting to Upstash Redis');
           return {
             connection: {
               url,
               tls: { rejectUnauthorized: false },
-              maxRetriesPerRequest: null,
               enableReadyCheck: false,
               connectTimeout: 10000,
+              ...desktopOpts,
             },
           };
         }
 
-        logger.log('BullMQ connecting to localhost Redis');
+        logger.log(isDesktop ? 'BullMQ in desktop mode (no Redis — queues disabled)' : 'BullMQ connecting to localhost Redis');
         return {
           connection: {
             host: config.get<string>('QUEUE_REDIS_HOST', config.get<string>('REDIS_HOST', 'localhost')),
             port: config.get<number>('QUEUE_REDIS_PORT', config.get<number>('REDIS_PORT', 6379)),
             password: config.get<string>('REDIS_PASSWORD', undefined),
-            maxRetriesPerRequest: null,
+            ...desktopOpts,
           },
         };
       },

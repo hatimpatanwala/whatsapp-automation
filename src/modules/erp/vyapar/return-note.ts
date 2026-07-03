@@ -8,6 +8,8 @@ import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { ErpFeatureGuard } from '../../../common/guards/erp-feature.guard';
 import { RequiresFeature } from '../../../common/decorators/requires-feature.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { EventBusService } from '../../events/event-bus.service';
+import { CreditNoteCreatedEvent, DebitNoteCreatedEvent } from '../../events/domain-events';
 
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 interface LineInput { description: string; quantity: number; unitPrice: number; }
@@ -55,13 +57,13 @@ abstract class ReturnNoteBase {
 @Injectable()
 export class CreditNoteService extends ReturnNoteBase {
   protected table = 'credit_notes'; protected docType = 'credit_note'; protected prefix = 'CN';
-  constructor(cm: TenantConnectionManager, sequences: ErpSequenceService) { super(cm, sequences); }
+  constructor(cm: TenantConnectionManager, sequences: ErpSequenceService, private readonly eventBus: EventBusService) { super(cm, sequences); }
 
   async create(schema: string, input: { invoiceId?: string; customerId?: string; customerName?: string; customerPhone?: string; items: LineInput[]; taxRate?: number; discount?: number; reason?: string }) {
     if (!input.items?.length) throw new BadRequestException('A credit note needs at least one line item');
     const { lines, subtotal, disc, totalTax, total } = this.computeTotals(input.items, input.taxRate, input.discount);
     const year = new Date().getFullYear();
-    return this.cm.executeInTransaction(schema, async (qr) => {
+    const note = await this.cm.executeInTransaction(schema, async (qr) => {
       const { formatted } = await this.sequences.next(schema, this.docType, { year, prefix: this.prefix }, qr);
       return firstRow(await qr.query(
         `INSERT INTO "${schema}".credit_notes (note_number, year, invoice_id, customer_id, customer_name, customer_phone, subtotal, tax_rate, total_tax, discount, total, reason, items)
@@ -69,19 +71,22 @@ export class CreditNoteService extends ReturnNoteBase {
         [formatted, year, input.invoiceId ?? null, input.customerId ?? null, input.customerName ?? null, input.customerPhone ?? null, subtotal, input.taxRate ?? 0, totalTax, disc, total, input.reason ?? null, JSON.stringify(lines)],
       ));
     });
+    // Auto-post: Dr Sales Returns + Output Tax, Cr Customer. Best-effort.
+    if (note?.id) this.eventBus.emit(new CreditNoteCreatedEvent(schema, note.id, note.customer_id ?? null, Number(note.total) || 0));
+    return note;
   }
 }
 
 @Injectable()
 export class DebitNoteService extends ReturnNoteBase {
   protected table = 'debit_notes'; protected docType = 'debit_note'; protected prefix = 'DN';
-  constructor(cm: TenantConnectionManager, sequences: ErpSequenceService) { super(cm, sequences); }
+  constructor(cm: TenantConnectionManager, sequences: ErpSequenceService, private readonly eventBus: EventBusService) { super(cm, sequences); }
 
   async create(schema: string, input: { supplierId?: string; items: LineInput[]; taxRate?: number; discount?: number; reason?: string }) {
     if (!input.items?.length) throw new BadRequestException('A debit note needs at least one line item');
     const { lines, subtotal, disc, totalTax, total } = this.computeTotals(input.items, input.taxRate, input.discount);
     const year = new Date().getFullYear();
-    return this.cm.executeInTransaction(schema, async (qr) => {
+    const note = await this.cm.executeInTransaction(schema, async (qr) => {
       const { formatted } = await this.sequences.next(schema, this.docType, { year, prefix: this.prefix }, qr);
       return firstRow(await qr.query(
         `INSERT INTO "${schema}".debit_notes (note_number, year, supplier_id, subtotal, tax_rate, total_tax, discount, total, reason, items)
@@ -89,6 +94,9 @@ export class DebitNoteService extends ReturnNoteBase {
         [formatted, year, input.supplierId ?? null, subtotal, input.taxRate ?? 0, totalTax, disc, total, input.reason ?? null, JSON.stringify(lines)],
       ));
     });
+    // Auto-post: Dr Supplier, Cr Purchase Returns + Input Tax. Best-effort.
+    if (note?.id) this.eventBus.emit(new DebitNoteCreatedEvent(schema, note.id, note.supplier_id ?? null, Number(note.total) || 0));
+    return note;
   }
 }
 

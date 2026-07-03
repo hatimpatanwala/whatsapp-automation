@@ -22,6 +22,79 @@ export const routes: Routes = [
     loadChildren: () => import('./features/super-admin/admin.routes').then(m => m.ADMIN_ROUTES),
   },
   {
+    // GST tax-invoice print format — chrome-free (PgUp/PgDn browse, ?print=1 auto-print).
+    path: 'print/invoice/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/entry/print-invoice.component').then(m => m.PrintInvoiceComponent),
+  },
+  {
+    // Tally-style keyboard ERP (desktop-first): full-screen chrome with F-key rail.
+    // Sits OUTSIDE the web portal's sidebar layout — the web portal stays untouched.
+    path: '',
+    canActivate: [authGuard, onboardingGuard],
+    loadComponent: () => import('./features/entry/tally-layout.component').then(m => m.TallyLayoutComponent),
+    children: [
+      {
+        path: 'gateway',
+        loadComponent: () => import('./features/entry/gateway.component').then(m => m.GatewayComponent),
+      },
+      {
+        path: 'entry/sales',
+        loadComponent: () => import('./features/entry/sales-invoice-entry.component').then(m => m.SalesInvoiceEntryComponent),
+      },
+      {
+        path: 'entry/purchase',
+        loadComponent: () => import('./features/entry/purchase-entry.component').then(m => m.PurchaseEntryComponent),
+      },
+      {
+        path: 'entry/receipt',
+        loadComponent: () => import('./features/entry/receipt-entry.component').then(m => m.ReceiptEntryComponent),
+      },
+      {
+        path: 'entry/payment',
+        loadComponent: () => import('./features/entry/payment-entry.component').then(m => m.PaymentEntryComponent),
+      },
+      {
+        path: 'entry/quote',
+        loadComponent: () => import('./features/entry/quote-entry.component').then(m => m.QuoteEntryComponent),
+      },
+      {
+        path: 'entry/order',
+        loadComponent: () => import('./features/entry/order-entry.component').then(m => m.OrderEntryComponent),
+      },
+      {
+        path: 'entry/returns',
+        loadComponent: () => import('./features/entry/returns-entry.component').then(m => m.ReturnsEntryComponent),
+      },
+      {
+        path: 'entry/stock',
+        loadComponent: () => import('./features/entry/stock-journal.component').then(m => m.StockJournalComponent),
+      },
+      {
+        path: 'entry/masters',
+        loadComponent: () => import('./features/entry/pricing-masters.component').then(m => m.PricingMastersComponent),
+      },
+      {
+        // Item master — Miracle Add Item / Add Stock (dual units, HSN, rates, min stock).
+        path: 'entry/items',
+        loadComponent: () => import('./features/entry/item-master.component').then(m => m.ItemMasterComponent),
+      },
+      {
+        // Document registers — Sales / Purchase / Quotation / Order (Miracle report style).
+        path: 'entry/registers/:kind',
+        loadComponent: () => import('./features/entry/registers.component').then(m => m.RegistersComponent),
+      },
+      {
+        path: 'accounting',
+        loadChildren: () => import('./features/accounting/accounting.routes').then(m => m.ACCOUNTING_ROUTES),
+      },
+      {
+        path: 'gst',
+        loadComponent: () => import('./features/gst/gst-returns.component').then(m => m.GstReturnsComponent),
+      },
+    ],
+  },
+  {
     path: '',
     canActivate: [authGuard, onboardingGuard],
     loadComponent: () => import('./layout/main-layout.component').then(m => m.MainLayoutComponent),

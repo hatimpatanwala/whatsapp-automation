@@ -84,6 +84,59 @@ export class StockReservedEvent extends DomainEvent {
   }
 }
 
+// Purchase events
+export class PurchaseRecordedEvent extends DomainEvent {
+  readonly eventName = 'purchase.recorded';
+  constructor(
+    schema: string,
+    public readonly supplierOrderId: string,
+    public readonly supplierId: string | null,
+    public readonly orderNumber: string,
+    public readonly total: number,
+  ) {
+    super(schema);
+  }
+}
+
+export class SupplierPaymentRecordedEvent extends DomainEvent {
+  readonly eventName = 'supplier_payment.recorded';
+  constructor(
+    schema: string,
+    public readonly paymentId: string,
+    public readonly supplierOrderId: string,
+    public readonly supplierId: string | null,
+    public readonly amount: number,
+    public readonly method: string,
+  ) {
+    super(schema);
+  }
+}
+
+// Return-note events
+export class CreditNoteCreatedEvent extends DomainEvent {
+  readonly eventName = 'credit_note.created';
+  constructor(
+    schema: string,
+    public readonly creditNoteId: string,
+    public readonly customerId: string | null,
+    public readonly total: number,
+  ) {
+    super(schema);
+  }
+}
+
+export class DebitNoteCreatedEvent extends DomainEvent {
+  readonly eventName = 'debit_note.created';
+  constructor(
+    schema: string,
+    public readonly debitNoteId: string,
+    public readonly supplierId: string | null,
+    public readonly total: number,
+  ) {
+    super(schema);
+  }
+}
+
 // Invoice / document events
 export class InvoiceCreatedEvent extends DomainEvent {
   readonly eventName = 'invoice.created';

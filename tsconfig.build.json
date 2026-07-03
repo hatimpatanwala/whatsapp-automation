@@ -1,7 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // deleteOutDir wipes dist every build, but a stale .tsbuildinfo makes tsc skip
+    // re-emitting "unchanged" files into the now-empty dist → dist/main.js missing.
+    "incremental": false
   },
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }

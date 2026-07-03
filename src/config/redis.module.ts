@@ -17,9 +17,17 @@ const logger = new Logger('RedisModule');
         const port = configService.get<number>('REDIS_PORT', 6379);
         const password = configService.get<string>('REDIS_PASSWORD', undefined);
 
+        // Desktop (offline) mode: Redis is absent by design — commands must fail fast
+        // (health checks would otherwise hang forever on maxRetriesPerRequest: null)
+        // and the client must not enter an endless reconnect storm.
+        const isDesktop = configService.get<string>('DESKTOP_MODE') === '1';
+        const desktopOpts = isDesktop
+          ? { maxRetriesPerRequest: 1, enableOfflineQueue: false, retryStrategy: () => null as unknown as number }
+          : { maxRetriesPerRequest: null as unknown as number };
+
         const client = url
-          ? new Redis(url, { tls: { rejectUnauthorized: false }, maxRetriesPerRequest: null, enableReadyCheck: false })
-          : new Redis({ host, port, password, maxRetriesPerRequest: null });
+          ? new Redis(url, { tls: { rejectUnauthorized: false }, enableReadyCheck: false, ...desktopOpts })
+          : new Redis({ host, port, password, ...desktopOpts });
 
         client.on('connect', () => logger.log(`Redis connected to ${url ? 'Upstash' : host + ':' + port}`));
         client.on('error', () => {}); // Suppress — patch-ioredis handles logging

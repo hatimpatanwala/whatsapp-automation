@@ -16,11 +16,12 @@ async function main() {
   const slug = getArg('--slug');
   const phone = getArg('--phone');
   const ownerPhone = getArg('--owner-phone');
+  const ownerEmail = getArg('--owner-email');
   const ownerPassword = getArg('--owner-password');
   const plan = getArg('--plan') || 'starter';
 
   if (!name || !slug) {
-    console.error('Usage: npx ts-node scripts/create-tenant.ts --name "Store Name" --slug store-name [--phone +91xxx] [--owner-phone +91xxx] [--owner-password pass] [--plan starter]');
+    console.error('Usage: npx ts-node scripts/create-tenant.ts --name "Store Name" --slug store-name [--phone +91xxx] [--owner-phone +91xxx] [--owner-email a@b.com] [--owner-password pass] [--plan starter]');
     process.exit(1);
   }
 
@@ -30,6 +31,9 @@ async function main() {
       slug,
       phoneNumberId: phone,
       ownerPhone,
+      ownerEmail,
+      // Desktop/offline logins authenticate by email, so pre-verify the seeded owner.
+      ownerEmailVerified: !!ownerEmail,
       ownerPassword,
       ownerName: name,
       plan,

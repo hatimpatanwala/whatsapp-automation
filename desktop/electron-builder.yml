@@ -1,0 +1,62 @@
+appId: com.beatroute.wacommerce.erp
+productName: WhatsApp Commerce ERP
+copyright: Copyright © BeatRoute
+
+directories:
+  output: release
+  buildResources: build
+
+# The Electron app itself (main/preload/etc.).
+files:
+  - dist/**/*
+  - package.json
+
+# embedded-postgres ships real Postgres binaries that must live on disk (not inside
+# app.asar) so they can be spawned.
+asarUnpack:
+  - '**/node_modules/embedded-postgres/**'
+  - '**/node_modules/@embedded-postgres/**'
+
+# Bundle the NestJS backend + the Angular build under resources/backend so paths.ts
+# (packaged branch → process.resourcesPath/backend) resolves them.
+extraResources:
+  - from: ../dist
+    to: backend/dist
+  - from: ../node_modules
+    to: backend/node_modules
+    filter:
+      - '**/*'
+      - '!**/*.map'
+      - '!**/*.md'
+      - '!**/test/**'
+      - '!**/tests/**'
+  - from: ../package.json
+    to: backend/package.json
+  - from: ../frontend/dist/wa-commerce/browser
+    to: backend/frontend/dist/wa-commerce/browser
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+  # Code signing: electron-builder reads CSC_LINK (cert path/URL) + CSC_KEY_PASSWORD from
+  # the environment. For an EV cert on a token, set win.certificateSubjectName instead.
+  # signingHashAlgorithms: ['sha256']
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WhatsApp Commerce ERP
+
+# Auto-update feed (npm run release publishes here). Swap provider to `github` to use
+# GitHub Releases instead.
+publish:
+  - provider: generic
+    url: https://downloads.example.com/wacommerce-desktop/

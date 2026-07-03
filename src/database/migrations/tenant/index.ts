@@ -2024,6 +2024,597 @@ const migration058QuoteItemDiscount: TenantMigration = {
   },
 };
 
+/**
+ * 059 — Offline-sync infrastructure (Phase 2, master-data slice).
+ *
+ * Installs, per tenant schema, the machinery the desktop app uses to sync a local
+ * (embedded-Postgres) copy with the cloud:
+ *   - sync columns on each syncable table: updated_at, sync_version, origin_node, deleted_at
+ *   - a per-schema monotonic sequence `sync_seq` (all syncable tables share it, so
+ *     sync_version is globally ordered within the schema — pull can page across tables)
+ *   - `sync_stamp` BEFORE trigger: stamps updated_at + sync_version on writes. When a
+ *     remote change is being applied (GUC sync.apply='on') it preserves the incoming
+ *     updated_at/origin_node and only re-stamps sync_version in this node's local space.
+ *   - `sync_enqueue` AFTER trigger: appends local (non-apply) mutations to `sync_outbox`
+ *     so the push loop knows what changed here. Remote-applied rows are NOT enqueued
+ *     (prevents echo/ping-pong).
+ *   - `sync_outbox` (local change log, push cursor) + `sync_state` (cursors + node id).
+ *
+ * Idempotent. The syncable table list is mirrored in src/modules/sync/sync.constants.ts.
+ */
+const SYNC_TABLES_059 = [
+  'customers',
+  'categories',
+  'brands',
+  'products',
+  'product_variants',
+  'suppliers',
+  'erp_tax_rates',
+  'erp_warehouses',
+];
+
+const migration059SyncInfrastructure: TenantMigration = {
+  name: '059_sync_infrastructure',
+  async up(qr, schema) {
+    // Shared monotonic version sequence for this schema.
+    await qr.query(`CREATE SEQUENCE IF NOT EXISTS "${schema}".sync_seq`);
+
+    // Local append-only change log (drives the push cursor).
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".sync_outbox (
+        id BIGSERIAL PRIMARY KEY,
+        table_name TEXT NOT NULL,
+        row_id UUID NOT NULL,
+        op CHAR(1) NOT NULL,
+        sync_version BIGINT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Cursors + stable node identity for this database.
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".sync_state (
+        peer TEXT PRIMARY KEY,
+        last_pull_version BIGINT NOT NULL DEFAULT 0,
+        last_push_outbox_id BIGINT NOT NULL DEFAULT 0,
+        node_id UUID,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      INSERT INTO "${schema}".sync_state (peer, node_id)
+      VALUES ('_self', gen_random_uuid())
+      ON CONFLICT (peer) DO NOTHING
+    `);
+
+    // Trigger functions (schema-specific, so the schema is baked in).
+    await qr.query(`
+      CREATE OR REPLACE FUNCTION "${schema}".sync_stamp() RETURNS trigger AS $$
+      BEGIN
+        IF current_setting('sync.apply', true) = 'on' THEN
+          NEW.sync_version := nextval('"${schema}".sync_seq');
+        ELSE
+          NEW.updated_at := NOW();
+          NEW.sync_version := nextval('"${schema}".sync_seq');
+        END IF;
+        RETURN NEW;
+      END; $$ LANGUAGE plpgsql
+    `);
+    await qr.query(`
+      CREATE OR REPLACE FUNCTION "${schema}".sync_enqueue() RETURNS trigger AS $$
+      BEGIN
+        -- Skip echo of remote-applied changes.
+        IF current_setting('sync.apply', true) = 'on' THEN RETURN NULL; END IF;
+        -- Only local nodes accumulate an outbox to push; the cloud never does
+        -- (it is set via ALTER DATABASE ... SET sync.role='node' on desktop installs).
+        IF current_setting('sync.role', true) IS DISTINCT FROM 'node' THEN RETURN NULL; END IF;
+        IF TG_OP = 'DELETE' THEN
+          INSERT INTO "${schema}".sync_outbox(table_name, row_id, op, sync_version)
+            VALUES (TG_TABLE_NAME, OLD.id, 'D', nextval('"${schema}".sync_seq'));
+        ELSE
+          INSERT INTO "${schema}".sync_outbox(table_name, row_id, op, sync_version)
+            VALUES (TG_TABLE_NAME, NEW.id, CASE WHEN TG_OP='INSERT' THEN 'I' ELSE 'U' END, NEW.sync_version);
+        END IF;
+        RETURN NULL;
+      END; $$ LANGUAGE plpgsql
+    `);
+
+    for (const t of SYNC_TABLES_059) {
+      const exists = await qr.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+        [schema, t],
+      );
+      if (!exists.length) continue;
+
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS origin_node UUID`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+      await qr.query(`CREATE INDEX IF NOT EXISTS idx_${t}_sync_version ON "${schema}".${t}(sync_version)`);
+
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`CREATE TRIGGER trg_${t}_sync_stamp BEFORE INSERT OR UPDATE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_stamp()`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+      await qr.query(`CREATE TRIGGER trg_${t}_sync_enqueue AFTER INSERT OR UPDATE OR DELETE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_enqueue()`);
+    }
+
+    // Backfill existing rows with a distinct sync_version so they replicate on first
+    // pull. apply-mode preserves real updated_at and keeps the outbox clean.
+    await qr.query(`SET sync.apply = 'on'`);
+    try {
+      for (const t of SYNC_TABLES_059) {
+        const exists = await qr.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+          [schema, t],
+        );
+        if (!exists.length) continue;
+        await qr.query(`UPDATE "${schema}".${t} SET updated_at = updated_at WHERE sync_version = 0`);
+      }
+    } finally {
+      await qr.query(`RESET sync.apply`);
+    }
+  },
+  async down(qr, schema) {
+    for (const t of SYNC_TABLES_059) {
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+    }
+    await qr.query(`DROP FUNCTION IF EXISTS "${schema}".sync_stamp() CASCADE`);
+    await qr.query(`DROP FUNCTION IF EXISTS "${schema}".sync_enqueue() CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".sync_outbox`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".sync_state`);
+    await qr.query(`DROP SEQUENCE IF EXISTS "${schema}".sync_seq`);
+  },
+};
+
+/**
+ * 060 — Extend offline sync to transactional documents (Phase 2, slice 2).
+ * Reuses the trigger functions + outbox/state created by 059; just wires sync columns
+ * and triggers onto the transaction tables. Applied on schemas that already ran 059.
+ */
+const SYNC_TABLES_060 = [
+  'orders',
+  'order_items',
+  'invoices',
+  'quotes',
+  'quote_items',
+  'payments',
+  'deliveries',
+];
+
+const migration060SyncTransactional: TenantMigration = {
+  name: '060_sync_transactional',
+  async up(qr, schema) {
+    for (const t of SYNC_TABLES_060) {
+      const exists = await qr.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+        [schema, t],
+      );
+      if (!exists.length) continue;
+
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS origin_node UUID`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+      await qr.query(`CREATE INDEX IF NOT EXISTS idx_${t}_sync_version ON "${schema}".${t}(sync_version)`);
+
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`CREATE TRIGGER trg_${t}_sync_stamp BEFORE INSERT OR UPDATE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_stamp()`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+      await qr.query(`CREATE TRIGGER trg_${t}_sync_enqueue AFTER INSERT OR UPDATE OR DELETE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_enqueue()`);
+    }
+
+    await qr.query(`SET sync.apply = 'on'`);
+    try {
+      for (const t of SYNC_TABLES_060) {
+        const exists = await qr.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+          [schema, t],
+        );
+        if (!exists.length) continue;
+        await qr.query(`UPDATE "${schema}".${t} SET updated_at = updated_at WHERE sync_version = 0`);
+      }
+    } finally {
+      await qr.query(`RESET sync.apply`);
+    }
+  },
+  async down(qr, schema) {
+    for (const t of SYNC_TABLES_060) {
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+    }
+  },
+};
+
+/**
+ * 061 — Double-entry accounting core (Phase 4).
+ *
+ * Tally-style ledger accounting: account groups (with a fundamental `nature`), ledger
+ * accounts (chart of accounts), vouchers, and their debit/credit entries. Seeds the
+ * standard primary groups + a handful of default ledgers so the books work out of the box.
+ * Idempotent (IF NOT EXISTS + ON CONFLICT DO NOTHING).
+ */
+const ACCT_PRIMARY_GROUPS: Array<[string, string]> = [
+  // [name, nature]
+  ['Capital Account', 'liability'],
+  ['Loans (Liability)', 'liability'],
+  ['Current Liabilities', 'liability'],
+  ['Duties & Taxes', 'liability'],
+  ['Sundry Creditors', 'liability'],
+  ['Fixed Assets', 'asset'],
+  ['Investments', 'asset'],
+  ['Current Assets', 'asset'],
+  ['Sundry Debtors', 'asset'],
+  ['Cash-in-hand', 'asset'],
+  ['Bank Accounts', 'asset'],
+  ['Sales Accounts', 'income'],
+  ['Direct Incomes', 'income'],
+  ['Indirect Incomes', 'income'],
+  ['Purchase Accounts', 'expense'],
+  ['Direct Expenses', 'expense'],
+  ['Indirect Expenses', 'expense'],
+];
+
+const ACCT_DEFAULT_LEDGERS: Array<[string, string]> = [
+  // [ledger name, group name]
+  ['Cash', 'Cash-in-hand'],
+  ['Bank', 'Bank Accounts'],
+  ['Sales', 'Sales Accounts'],
+  ['Purchase', 'Purchase Accounts'],
+  ['CGST Payable', 'Duties & Taxes'],
+  ['SGST Payable', 'Duties & Taxes'],
+  ['IGST Payable', 'Duties & Taxes'],
+  ['Output Tax', 'Duties & Taxes'],
+  ['Round Off', 'Indirect Expenses'],
+  ['Opening Balance', 'Capital Account'],
+];
+
+const migration061AccountingCore: TenantMigration = {
+  name: '061_accounting_core',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".ledger_groups (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(120) NOT NULL UNIQUE,
+        parent_id UUID REFERENCES "${schema}".ledger_groups(id),
+        nature VARCHAR(12) NOT NULL CHECK (nature IN ('asset','liability','income','expense')),
+        is_primary BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".ledger_accounts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(160) NOT NULL UNIQUE,
+        group_id UUID NOT NULL REFERENCES "${schema}".ledger_groups(id),
+        opening_balance NUMERIC(16,2) NOT NULL DEFAULT 0,
+        opening_type CHAR(2) NOT NULL DEFAULT 'dr' CHECK (opening_type IN ('dr','cr')),
+        gstin VARCHAR(20),
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_ledger_accounts_group ON "${schema}".ledger_accounts(group_id)`);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".vouchers (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        voucher_type VARCHAR(20) NOT NULL,
+        number VARCHAR(40) NOT NULL,
+        date DATE NOT NULL DEFAULT CURRENT_DATE,
+        narration TEXT,
+        party_ledger_id UUID REFERENCES "${schema}".ledger_accounts(id),
+        amount NUMERIC(16,2) NOT NULL DEFAULT 0,
+        reference VARCHAR(80),
+        status VARCHAR(12) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_date ON "${schema}".vouchers(date)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_type ON "${schema}".vouchers(voucher_type)`);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".voucher_entries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        voucher_id UUID NOT NULL REFERENCES "${schema}".vouchers(id) ON DELETE CASCADE,
+        ledger_id UUID NOT NULL REFERENCES "${schema}".ledger_accounts(id),
+        debit NUMERIC(16,2) NOT NULL DEFAULT 0,
+        credit NUMERIC(16,2) NOT NULL DEFAULT 0,
+        narration TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_voucher_entries_voucher ON "${schema}".voucher_entries(voucher_id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_voucher_entries_ledger ON "${schema}".voucher_entries(ledger_id)`);
+
+    // Seed primary groups.
+    for (const [name, nature] of ACCT_PRIMARY_GROUPS) {
+      await qr.query(
+        `INSERT INTO "${schema}".ledger_groups (name, nature, is_primary) VALUES ($1, $2, true) ON CONFLICT (name) DO NOTHING`,
+        [name, nature],
+      );
+    }
+    // Seed default ledgers under their groups.
+    for (const [name, groupName] of ACCT_DEFAULT_LEDGERS) {
+      await qr.query(
+        `INSERT INTO "${schema}".ledger_accounts (name, group_id)
+         SELECT $1, g.id FROM "${schema}".ledger_groups g WHERE g.name = $2
+         ON CONFLICT (name) DO NOTHING`,
+        [name, groupName],
+      );
+    }
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".voucher_entries CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".vouchers CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".ledger_accounts CASCADE`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".ledger_groups CASCADE`);
+  },
+};
+
+/**
+ * 062 — Accounting auto-posting links (Phase 4). Adds source linkage so vouchers can be
+ * traced back to (and de-duplicated against) the invoice/payment that created them, and
+ * so ledgers can map 1:1 to a customer/supplier. Idempotent.
+ */
+const migration062AccountingLinks: TenantMigration = {
+  name: '062_accounting_links',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".ledger_accounts ADD COLUMN IF NOT EXISTS source_type VARCHAR(20)`);
+    await qr.query(`ALTER TABLE "${schema}".ledger_accounts ADD COLUMN IF NOT EXISTS source_id UUID`);
+    await qr.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_source ON "${schema}".ledger_accounts(source_type, source_id) WHERE source_id IS NOT NULL`,
+    );
+    await qr.query(`ALTER TABLE "${schema}".vouchers ADD COLUMN IF NOT EXISTS source_type VARCHAR(20)`);
+    await qr.query(`ALTER TABLE "${schema}".vouchers ADD COLUMN IF NOT EXISTS source_id UUID`);
+    await qr.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_voucher_source ON "${schema}".vouchers(source_type, source_id) WHERE source_id IS NOT NULL`,
+    );
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".uq_voucher_source`);
+    await qr.query(`DROP INDEX IF EXISTS "${schema}".uq_ledger_source`);
+    await qr.query(`ALTER TABLE "${schema}".vouchers DROP COLUMN IF EXISTS source_type, DROP COLUMN IF EXISTS source_id`);
+    await qr.query(`ALTER TABLE "${schema}".ledger_accounts DROP COLUMN IF EXISTS source_type, DROP COLUMN IF EXISTS source_id`);
+  },
+};
+
+/**
+ * 063 — E-invoice (IRN) fields on invoices (Phase 5). Stores the IRP response so an
+ * invoice can carry its government IRN / acknowledgement / signed QR. Idempotent.
+ */
+const migration063EInvoiceFields: TenantMigration = {
+  name: '063_einvoice_fields',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS irn VARCHAR(64)`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS ack_no VARCHAR(40)`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS ack_date TIMESTAMPTZ`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS einvoice_qr TEXT`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS einvoice_status VARCHAR(20) NOT NULL DEFAULT 'none'`);
+  },
+  async down(qr, schema) {
+    await qr.query(
+      `ALTER TABLE "${schema}".invoices
+         DROP COLUMN IF EXISTS irn, DROP COLUMN IF EXISTS ack_no, DROP COLUMN IF EXISTS ack_date,
+         DROP COLUMN IF EXISTS einvoice_qr, DROP COLUMN IF EXISTS einvoice_status`,
+    );
+  },
+};
+
+/**
+ * 064 — GSTR-2B reconciliation store (Phase 5). Holds the inward-supply lines imported
+ * from the GST portal's GSTR-2B JSON so they can be reconciled against the local purchase
+ * register (supplier_orders). Adds an optional supplier_invoice_no to purchases for exact
+ * matching. Idempotent.
+ */
+const migration064Gstr2b: TenantMigration = {
+  name: '064_gstr2b',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".gstr2b_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        period VARCHAR(6) NOT NULL,
+        supplier_gstin VARCHAR(20),
+        supplier_name VARCHAR(255),
+        invoice_number VARCHAR(40),
+        invoice_date DATE,
+        taxable_value NUMERIC(14,2) NOT NULL DEFAULT 0,
+        igst NUMERIC(14,2) NOT NULL DEFAULT 0,
+        cgst NUMERIC(14,2) NOT NULL DEFAULT 0,
+        sgst NUMERIC(14,2) NOT NULL DEFAULT 0,
+        total_tax NUMERIC(14,2) NOT NULL DEFAULT 0,
+        invoice_value NUMERIC(14,2) NOT NULL DEFAULT 0,
+        raw JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_gstr2b_period ON "${schema}".gstr2b_records(period)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_gstr2b_gstin ON "${schema}".gstr2b_records(supplier_gstin)`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS supplier_invoice_no VARCHAR(40)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".gstr2b_records`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders DROP COLUMN IF EXISTS supplier_invoice_no`);
+  },
+};
+
+/**
+ * 065 — Purchase-side GST + accounting fields (Phase 7, purchase grid).
+ * Tally's purchase voucher requires the supplier's bill no./date (also used for GSTR-2B
+ * matching) and per-line GST with an interstate split; purchases post Dr Input Tax.
+ * Idempotent.
+ */
+const migration065PurchaseGst: TenantMigration = {
+  name: '065_purchase_gst_fields',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS supplier_invoice_date DATE`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS cgst NUMERIC(14,2) NOT NULL DEFAULT 0`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS sgst NUMERIC(14,2) NOT NULL DEFAULT 0`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS igst NUMERIC(14,2) NOT NULL DEFAULT 0`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS is_interstate BOOLEAN NOT NULL DEFAULT false`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_order_items ADD COLUMN IF NOT EXISTS gst_rate NUMERIC(6,2) NOT NULL DEFAULT 0`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_order_items ADD COLUMN IF NOT EXISTS hsn VARCHAR(15)`);
+    // Input-side GST ledger (purchases debit this; Output Tax handles sales credit side).
+    await qr.query(`
+      INSERT INTO "${schema}".ledger_accounts (name, group_id)
+      SELECT 'Input Tax', g.id FROM "${schema}".ledger_groups g WHERE g.name = 'Duties & Taxes'
+      ON CONFLICT (name) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(
+      `ALTER TABLE "${schema}".supplier_orders
+         DROP COLUMN IF EXISTS supplier_invoice_date, DROP COLUMN IF EXISTS cgst,
+         DROP COLUMN IF EXISTS sgst, DROP COLUMN IF EXISTS igst, DROP COLUMN IF EXISTS is_interstate`,
+    );
+    await qr.query(
+      `ALTER TABLE "${schema}".supplier_order_items DROP COLUMN IF EXISTS gst_rate, DROP COLUMN IF EXISTS hsn`,
+    );
+  },
+};
+
+/**
+ * 066 — Supplier payments + return-note ledgers (Phase 7).
+ * Payables get the same bill-wise reconciliation as receivables: payments can attach to
+ * a supplier order, which tracks amount_paid. Seeds the Sales/Purchase Returns ledgers
+ * so credit/debit notes post into the books. Idempotent.
+ */
+const migration066SupplierPayments: TenantMigration = {
+  name: '066_supplier_payments',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(14,2) NOT NULL DEFAULT 0`);
+    await qr.query(`ALTER TABLE "${schema}".payments ADD COLUMN IF NOT EXISTS supplier_order_id UUID REFERENCES "${schema}".supplier_orders(id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_payments_supplier_order ON "${schema}".payments(supplier_order_id) WHERE supplier_order_id IS NOT NULL`);
+    await qr.query(`
+      INSERT INTO "${schema}".ledger_accounts (name, group_id)
+      SELECT 'Sales Returns', g.id FROM "${schema}".ledger_groups g WHERE g.name = 'Sales Accounts'
+      ON CONFLICT (name) DO NOTHING
+    `);
+    await qr.query(`
+      INSERT INTO "${schema}".ledger_accounts (name, group_id)
+      SELECT 'Purchase Returns', g.id FROM "${schema}".ledger_groups g WHERE g.name = 'Purchase Accounts'
+      ON CONFLICT (name) DO NOTHING
+    `);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".payments DROP COLUMN IF EXISTS supplier_order_id`);
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders DROP COLUMN IF EXISTS amount_paid`);
+  },
+};
+
+/**
+ * 067 — Price levels + credit limits (Phase 7 masters).
+ * Tally "price levels" / Miracle "rate structures": named rate lists (Retail/Wholesale/…)
+ * with per-product rates, assigned per customer. Credit control: per-customer credit
+ * limit + credit days, used for billing-time warnings and overdue detection. Idempotent.
+ */
+const migration067PriceLevels: TenantMigration = {
+  name: '067_price_levels_credit',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".price_levels (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(80) NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".price_list_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        price_level_id UUID NOT NULL REFERENCES "${schema}".price_levels(id) ON DELETE CASCADE,
+        product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+        rate NUMERIC(14,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_price_list UNIQUE (price_level_id, product_id)
+      )
+    `);
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS price_level_id UUID REFERENCES "${schema}".price_levels(id)`);
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(14,2)`);
+    await qr.query(`ALTER TABLE "${schema}".customers ADD COLUMN IF NOT EXISTS credit_days INT`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".customers DROP COLUMN IF EXISTS price_level_id, DROP COLUMN IF EXISTS credit_limit, DROP COLUMN IF EXISTS credit_days`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".price_list_items`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".price_levels`);
+  },
+};
+
+/**
+ * 068 — Miracle trade-billing fields (Phase 7 field parity).
+ * Cash memo (Dr Cash, auto-settled), Add/Less charges with their own GST, broker +
+ * commission, transport details (name/LR/vehicle). Line-level Disc-1/Disc-2/free-qty
+ * live inside the items JSONB; bill discount + round_off + due_date already exist.
+ */
+const migration068TradeFields: TenantMigration = {
+  name: '068_trade_fields',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS is_cash BOOLEAN NOT NULL DEFAULT false`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS charges JSONB NOT NULL DEFAULT '[]'`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS broker VARCHAR(120)`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(6,2)`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS transport JSONB`);
+  },
+  async down(qr, schema) {
+    await qr.query(
+      `ALTER TABLE "${schema}".invoices
+         DROP COLUMN IF EXISTS is_cash, DROP COLUMN IF EXISTS charges, DROP COLUMN IF EXISTS broker,
+         DROP COLUMN IF EXISTS commission_pct, DROP COLUMN IF EXISTS transport`,
+    );
+  },
+};
+
+/**
+ * 069 — Bill To / Ship To on invoices (GST dispatch details; feeds e-invoice ShipDtls
+ * and place-of-supply). Each is {name, address, city, state, stateCode, pincode, gstin,
+ * phone}. Idempotent.
+ */
+const migration069BillShipTo: TenantMigration = {
+  name: '069_bill_ship_to',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS bill_to JSONB`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS ship_to JSONB`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices DROP COLUMN IF EXISTS bill_to, DROP COLUMN IF EXISTS ship_to`);
+  },
+};
+
+/**
+ * 070 — Remaining Miracle tail: purchase-side Add/Less charges, dual units on the
+ * product master (alt unit + conversion factor, e.g. 1 bag = 50 kg). Idempotent.
+ */
+const migration070PurchaseChargesUnits: TenantMigration = {
+  name: '070_purchase_charges_units',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders ADD COLUMN IF NOT EXISTS charges JSONB NOT NULL DEFAULT '[]'`);
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS alt_uom VARCHAR(20)`);
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS uom_factor NUMERIC(12,4)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".supplier_orders DROP COLUMN IF EXISTS charges`);
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS alt_uom, DROP COLUMN IF EXISTS uom_factor`);
+  },
+};
+
+/**
+ * 071 — Item-master rates (Miracle): dedicated purchase rate and MRP columns on the
+ * product master, so the Add Item screen carries Purchase Rate / Sale Rate / MRP the
+ * way Miracle's item master does. Idempotent.
+ */
+const migration071ItemMasterRates: TenantMigration = {
+  name: '071_item_master_rates',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(12,2)`);
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS mrp NUMERIC(12,2)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS purchase_price, DROP COLUMN IF EXISTS mrp`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2083,4 +2674,17 @@ export const tenantMigrations: TenantMigration[] = [
   migration056TaxRatePercent,
   migration057AdminNotifications,
   migration058QuoteItemDiscount,
+  migration059SyncInfrastructure,
+  migration060SyncTransactional,
+  migration061AccountingCore,
+  migration062AccountingLinks,
+  migration063EInvoiceFields,
+  migration064Gstr2b,
+  migration065PurchaseGst,
+  migration066SupplierPayments,
+  migration067PriceLevels,
+  migration068TradeFields,
+  migration069BillShipTo,
+  migration070PurchaseChargesUnits,
+  migration071ItemMasterRates,
 ];

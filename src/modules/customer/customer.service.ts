@@ -6,6 +6,29 @@ import { PaginationDto, PaginatedResponse } from '../../common/dto/pagination.dt
 export class CustomerService {
   constructor(private readonly connectionManager: TenantConnectionManager) {}
 
+  /**
+   * Miracle-style on-the-fly master creation from the entry screens. Phone is the
+   * natural key — an existing phone returns that customer (updating a missing name)
+   * instead of erroring, so double-Enter in the entry grid stays harmless.
+   */
+  async quickCreate(schema: string, input: { name: string; phone: string }): Promise<any> {
+    const name = (input?.name || '').trim();
+    const phone = (input?.phone || '').trim();
+    if (!name || !phone) throw new NotFoundException('Customer quick-create needs a name and phone');
+    return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `INSERT INTO "${schema}".customers (phone, name, display_name)
+         VALUES ($1, $2, $2)
+         ON CONFLICT (phone) DO UPDATE SET
+           name = COALESCE("${schema}".customers.name, EXCLUDED.name),
+           display_name = COALESCE("${schema}".customers.display_name, EXCLUDED.display_name)
+         RETURNING id, COALESCE(display_name, name) AS name, phone`,
+        [phone, name],
+      );
+      return rows[0];
+    });
+  }
+
   /** Common SELECT columns + derived activity/cart fields (c = customers alias). */
   private readonly customerCols = `
     c.id, c.phone as whatsapp_phone, c.name as whatsapp_name, c.display_name, c.email,

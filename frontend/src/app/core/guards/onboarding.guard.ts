@@ -14,6 +14,12 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
   const router = inject(Router);
   const onboardingService = inject(OnboardingService);
 
+  // Desktop ERP shell: WABA/WhatsApp onboarding is a cloud concept — a local tenant
+  // may never have a phone number wired up, and the ERP must still work offline.
+  if ((window as { desktop?: unknown }).desktop) {
+    return true;
+  }
+
   try {
     const status = await firstValueFrom(onboardingService.getStatus());
     if (status.currentStep === 'completed') {

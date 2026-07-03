@@ -27,6 +27,13 @@ export class CustomerController {
     return this.customerService.findAll(req.tenantContext.schemaName, pagination, search, segment);
   }
 
+  /** Quick-create (Miracle-style on-the-fly master from the entry screens). */
+  @Post()
+  @Roles('owner', 'seller')
+  async create(@Req() req: Request, @Body() body: { name: string; phone: string }) {
+    return this.customerService.quickCreate(req.tenantContext.schemaName, body);
+  }
+
   @Get('stats')
   @Roles('owner', 'seller')
   async getStats(@Req() req: Request) {

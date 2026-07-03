@@ -1,0 +1,11 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+const ctx = browser.contexts()[0];
+const page = ctx.pages()[0] ?? await ctx.newPage();
+page.on('response', (r) => { if (r.status() >= 400) console.log(r.status(), r.url().slice(0, 110)); });
+page.on('pageerror', (e) => console.log('PAGEERROR:', String(e).slice(0, 300)));
+await page.goto('http://127.0.0.1:43110/entry/receipt', { waitUntil: 'networkidle' }).catch(() => {});
+await page.waitForTimeout(2500);
+console.log('app-root children:', await page.evaluate(() => document.querySelector('wa-root')?.children.length));
+console.log('router-outlet present:', await page.evaluate(() => !!document.querySelector('router-outlet')));
+await browser.close();

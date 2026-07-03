@@ -24,3 +24,7 @@ order-detail-before.png
 .shoptok
 .cookies.txt
 *.png
+
+# Desktop local artifacts (data dumps, diagnostics)
+desktop/cloud.sql
+desktop/dump-err.txt

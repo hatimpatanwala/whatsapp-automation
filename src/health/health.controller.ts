@@ -22,6 +22,11 @@ export class HealthController {
     private readonly webhookQueue: Queue,
   ) {}
 
+  /** Desktop (offline) mode has no Redis — its checks would hang, so they're skipped. */
+  private get isDesktop(): boolean {
+    return process.env.DESKTOP_MODE === '1';
+  }
+
   @Get()
   async check() {
     const checks: Record<string, string | number> = {};
@@ -34,32 +39,38 @@ export class HealthController {
       checks.database = 'unhealthy';
     }
 
-    // Redis check
-    try {
-      await this.redis.ping();
-      checks.redis = 'healthy';
-    } catch {
-      checks.redis = 'unhealthy';
-    }
-
-    // Queue depth checks
-    if (this.outboundQueue) {
+    if (this.isDesktop) {
+      checks.redis = 'disabled';
+      checks.outboundQueue = 'disabled';
+      checks.webhookQueue = 'disabled';
+    } else {
+      // Redis check
       try {
-        const waiting = await this.outboundQueue.getWaitingCount();
-        checks.outboundQueueDepth = waiting;
-        checks.outboundQueue = waiting < 50000 ? 'healthy' : 'backpressure';
+        await this.redis.ping();
+        checks.redis = 'healthy';
       } catch {
-        checks.outboundQueue = 'unknown';
+        checks.redis = 'unhealthy';
       }
-    }
 
-    if (this.webhookQueue) {
-      try {
-        const waiting = await this.webhookQueue.getWaitingCount();
-        checks.webhookQueueDepth = waiting;
-        checks.webhookQueue = waiting < 5000 ? 'healthy' : 'backpressure';
-      } catch {
-        checks.webhookQueue = 'unknown';
+      // Queue depth checks
+      if (this.outboundQueue) {
+        try {
+          const waiting = await this.outboundQueue.getWaitingCount();
+          checks.outboundQueueDepth = waiting;
+          checks.outboundQueue = waiting < 50000 ? 'healthy' : 'backpressure';
+        } catch {
+          checks.outboundQueue = 'unknown';
+        }
+      }
+
+      if (this.webhookQueue) {
+        try {
+          const waiting = await this.webhookQueue.getWaitingCount();
+          checks.webhookQueueDepth = waiting;
+          checks.webhookQueue = waiting < 5000 ? 'healthy' : 'backpressure';
+        } catch {
+          checks.webhookQueue = 'unknown';
+        }
       }
     }
 
@@ -81,14 +92,18 @@ export class HealthController {
     }
 
     // Meta API health (cached — don't call on every health check)
-    try {
-      const metaHealth = await this.redis.get('health:meta_api');
-      checks.metaApi = metaHealth || 'unknown';
-    } catch {
+    if (this.isDesktop) {
       checks.metaApi = 'unknown';
+    } else {
+      try {
+        const metaHealth = await this.redis.get('health:meta_api');
+        checks.metaApi = metaHealth || 'unknown';
+      } catch {
+        checks.metaApi = 'unknown';
+      }
     }
 
-    const coreHealthy = checks.database === 'healthy' && checks.redis === 'healthy';
+    const coreHealthy = checks.database === 'healthy' && (this.isDesktop || checks.redis === 'healthy');
     const allHealthy = coreHealthy
       && checks.outboundQueue !== 'backpressure'
       && checks.webhookQueue !== 'backpressure'
@@ -111,7 +126,7 @@ export class HealthController {
   async readiness() {
     try {
       await this.dataSource.query('SELECT 1');
-      await this.redis.ping();
+      if (!this.isDesktop) await this.redis.ping();
       return { status: 'ready' };
     } catch {
       return { status: 'not_ready' };

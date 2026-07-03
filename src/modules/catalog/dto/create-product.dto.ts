@@ -64,6 +64,27 @@ export class CreateProductDto {
   @IsString()
   uom?: string;
 
+  // Dual units (Miracle): alternate unit + conversion factor (1 altUom = uomFactor × uom).
+  @IsOptional()
+  @IsString()
+  altUom?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  uomFactor?: number;
+
+  // Item-master rates (Miracle): purchase rate and MRP alongside the sale rate.
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  mrp?: number;
+
   @IsOptional()
   @IsString()
   barcode?: string;

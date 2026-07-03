@@ -1,4 +1,7 @@
-@import './tailwind-generated.css';
+/* Tailwind is generated AT BUILD TIME by @tailwindcss/postcss from tailwind-input.css
+   (@source scans all .ts/.html). Never import a pre-generated snapshot here — a stale
+   snapshot silently strips styling from every component written after it was frozen. */
+@import './tailwind-input.css';
 @import 'primeicons/primeicons.css';
 
 :root {

@@ -1,4 +1,5 @@
-// Patch ioredis BEFORE any other imports (suppresses ECONNREFUSED spam)
+// Patch ioredis BEFORE any other imports (suppresses ECONNREFUSED spam in desktop mode)
+import './patch-ioredis';
 
 // OpenTelemetry must be initialized before any other imports
 import './telemetry';
@@ -48,8 +49,11 @@ async function bootstrap() {
     }),
   );
 
-  // Security
-  app.use(helmet());
+  // Security. Desktop mode serves the SPA itself over http://127.0.0.1 — helmet's
+  // default CSP (script-src 'self', script-src-attr 'none') breaks the app there;
+  // the local single-user app doesn't need a CSP.
+  const isDesktopEnv = configService.get<string>('DESKTOP_MODE') === '1';
+  app.use(helmet(isDesktopEnv ? { contentSecurityPolicy: false } : {}));
 
   // CORS: never combine a wildcard origin with credentials (cookie auth). Require
   // an explicit allowlist in production; reflect origin only in development.
@@ -137,17 +141,21 @@ async function bootstrap() {
   }
   if (!sessionSecret) sessionSecret = 'dev-insecure-session-secret';
 
+  // Desktop mode serves the app over plain http://127.0.0.1 — a Secure cookie would
+  // never be stored there, silently breaking every authenticated request after login.
+  const isDesktopMode = configService.get<string>('DESKTOP_MODE') === '1';
+
   app.use(
     session({
       ...(sessionStore ? { store: sessionStore } : {}),
       secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
-      proxy: isProduction,
+      proxy: isProduction && !isDesktopMode,
       cookie: {
         maxAge: configService.get<number>('SESSION_TTL', 86400) * 1000,
         httpOnly: true,
-        secure: isProduction,
+        secure: isProduction && !isDesktopMode,
         // 'lax' blocks cross-site credentialed requests (CSRF defense). The SPA is
         // served same-origin with the API, so lax is sufficient. Override with
         // SESSION_COOKIE_SAMESITE=none only if the frontend is on a different site.
@@ -155,6 +163,29 @@ async function bootstrap() {
       },
     }),
   );
+  // Desktop mode: serve the built Angular SPA same-origin with the API so session
+  // cookies work on 127.0.0.1. Enabled only when SERVE_STATIC_DIR points at the
+  // Angular build (frontend/dist/wa-commerce/browser). Cloud deploys leave it unset.
+  const staticDir = configService.get<string>('SERVE_STATIC_DIR');
+  if (staticDir) {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const express = require('express');
+    const { join } = require('path');
+    const httpInstance = app.getHttpAdapter().getInstance();
+    // Hashed assets may cache long; the SPA shell must always revalidate, otherwise a
+    // stale index.html references old hashed files → 404 → the app renders unstyled.
+    httpInstance.use(express.static(staticDir, { index: false, maxAge: '1h' }));
+    // SPA fallback: non-API GETs without a file extension → index.html (Angular router).
+    httpInstance.use((req: any, res: any, next: any) => {
+      if (req.method !== 'GET') return next();
+      const p: string = req.path;
+      if (p.startsWith('/api') || p.startsWith('/health') || p.includes('.')) return next();
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.sendFile(join(staticDir, 'index.html'));
+    });
+    logger.log(`Desktop mode: serving Angular SPA from ${staticDir}`);
+  }
+
   // Enable graceful shutdown hooks (drain queues, close connections)
   app.enableShutdownHooks();
 
