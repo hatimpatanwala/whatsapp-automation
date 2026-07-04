@@ -86,9 +86,6 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
         <button (click)="more.set(!more())" class="text-sm text-blue-700 hover:underline">
           {{ more() ? 'Less ▴' : 'More ▾' }} (broker/transport)
         </button>
-        <button (click)="showAddr.set(!showAddr())" class="text-sm text-blue-700 hover:underline">
-          {{ showAddr() ? 'Bill/Ship ▴' : 'Bill/Ship ▾' }}
-        </button>
         <label class="ml-auto flex items-center gap-2 text-sm">
           <input type="checkbox" [(ngModel)]="isInterstate" /> Interstate (IGST)
         </label>
@@ -139,49 +136,6 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
         </div>
       }
 
-      @if (showAddr()) {
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2 text-sm bg-slate-50 border rounded px-3 py-2">
-          <div>
-            <div class="font-medium text-slate-600 mb-1">Bill To</div>
-            <input [(ngModel)]="billTo.name" placeholder="Name" class="w-full border rounded px-2 py-1 mb-1" autocomplete="off" />
-            <textarea [(ngModel)]="billTo.address" placeholder="Address" rows="2" class="w-full border rounded px-2 py-1 mb-1"></textarea>
-            <div class="flex gap-2">
-              <input [(ngModel)]="billTo.city" placeholder="City" class="flex-1 border rounded px-2 py-1" autocomplete="off" />
-              <input [(ngModel)]="billTo.stateCode" (ngModelChange)="autoInterstate()" placeholder="State code" class="w-24 border rounded px-2 py-1" autocomplete="off" />
-              <input [(ngModel)]="billTo.pincode" placeholder="PIN" class="w-24 border rounded px-2 py-1" autocomplete="off" />
-            </div>
-            <input [(ngModel)]="billTo.gstin" placeholder="GSTIN (optional)" class="w-full border rounded px-2 py-1 mt-1" autocomplete="off" />
-          </div>
-          <div>
-            <div class="font-medium text-slate-600 mb-1 flex items-center gap-3">
-              Ship To
-              <label class="font-normal"><input type="checkbox" [(ngModel)]="shipSame" /> same as Bill To</label>
-              @if (!shipSame && savedAddresses().length) {
-                <select (change)="applySavedAddress($any($event.target).value)" class="border rounded px-1 py-0.5 text-xs">
-                  <option value="">— saved address —</option>
-                  @for (a of savedAddresses(); track a.id) {
-                    <option [value]="a.id">{{ a.label || 'addr' }} · {{ a.city || a.fullAddress.slice(0, 24) }}</option>
-                  }
-                </select>
-              }
-            </div>
-            @if (!shipSame) {
-              <input [(ngModel)]="shipTo.name" placeholder="Consignee name" class="w-full border rounded px-2 py-1 mb-1" autocomplete="off" />
-              <textarea [(ngModel)]="shipTo.address" placeholder="Delivery address" rows="2" class="w-full border rounded px-2 py-1 mb-1"></textarea>
-              <div class="flex gap-2">
-                <input [(ngModel)]="shipTo.city" placeholder="City" class="flex-1 border rounded px-2 py-1" autocomplete="off" />
-                <input [(ngModel)]="shipTo.stateCode" (ngModelChange)="autoInterstate()" placeholder="State code" class="w-24 border rounded px-2 py-1" autocomplete="off" />
-                <input [(ngModel)]="shipTo.pincode" placeholder="PIN" class="w-24 border rounded px-2 py-1" autocomplete="off" />
-              </div>
-              <input [(ngModel)]="shipTo.gstin" placeholder="Consignee GSTIN (optional)" class="w-full border rounded px-2 py-1 mt-1" autocomplete="off" />
-              <p class="text-xs text-slate-400 mt-1">Ship-To state code drives Place of Supply (GST).</p>
-            } @else {
-              <p class="text-xs text-slate-400">Goods dispatched to the billing address.</p>
-            }
-          </div>
-        </div>
-      }
-
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div class="lg:col-span-3">
           <!-- Party -->
@@ -222,6 +176,56 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                 </span>
               }
             }
+          </div>
+
+          <!-- Bill To / Ship To — always visible; picking a party fills BOTH; Enter walks every field -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2 text-sm bg-slate-50 border rounded px-3 py-2">
+            <div>
+              <div class="font-medium text-slate-600 mb-1">Bill To</div>
+              <input data-cell="bt-name" [(ngModel)]="billTo.name" (keydown)="onAddrKey($event, 'bt-name')" placeholder="Name"
+                     class="w-full border rounded px-2 py-1 mb-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              <input data-cell="bt-addr" [(ngModel)]="billTo.address" (keydown)="onAddrKey($event, 'bt-addr')" placeholder="Address"
+                     class="w-full border rounded px-2 py-1 mb-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              <div class="flex gap-2">
+                <input data-cell="bt-city" [(ngModel)]="billTo.city" (keydown)="onAddrKey($event, 'bt-city')" placeholder="City"
+                       class="flex-1 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                <input data-cell="bt-state" [(ngModel)]="billTo.stateCode" (ngModelChange)="autoInterstate()" (keydown)="onAddrKey($event, 'bt-state')"
+                       placeholder="State code" class="w-24 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                <input data-cell="bt-pin" [(ngModel)]="billTo.pincode" (keydown)="onAddrKey($event, 'bt-pin')" placeholder="PIN"
+                       class="w-24 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              </div>
+              <input data-cell="bt-gstin" [(ngModel)]="billTo.gstin" (keydown)="onAddrKey($event, 'bt-gstin')" placeholder="GSTIN (optional)"
+                     class="w-full border rounded px-2 py-1 mt-1 font-mono uppercase focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+            </div>
+            <div>
+              <div class="font-medium text-slate-600 mb-1 flex items-center gap-3">
+                Ship To
+                <span class="text-xs font-normal text-slate-400">prefilled from party — edit if dispatch differs</span>
+                @if (savedAddresses().length) {
+                  <select (change)="applySavedAddress($any($event.target).value)" class="border rounded px-1 py-0.5 text-xs ml-auto">
+                    <option value="">— saved address —</option>
+                    @for (a of savedAddresses(); track a.id) {
+                      <option [value]="a.id">{{ a.label || 'addr' }} · {{ a.city || a.fullAddress.slice(0, 24) }}</option>
+                    }
+                  </select>
+                }
+              </div>
+              <input data-cell="st-name" [(ngModel)]="shipTo.name" (keydown)="onAddrKey($event, 'st-name')" placeholder="Consignee name"
+                     class="w-full border rounded px-2 py-1 mb-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              <input data-cell="st-addr" [(ngModel)]="shipTo.address" (keydown)="onAddrKey($event, 'st-addr')" placeholder="Delivery address"
+                     class="w-full border rounded px-2 py-1 mb-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              <div class="flex gap-2">
+                <input data-cell="st-city" [(ngModel)]="shipTo.city" (keydown)="onAddrKey($event, 'st-city')" placeholder="City"
+                       class="flex-1 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                <input data-cell="st-state" [(ngModel)]="shipTo.stateCode" (ngModelChange)="autoInterstate()" (keydown)="onAddrKey($event, 'st-state')"
+                       placeholder="State code" class="w-24 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                <input data-cell="st-pin" [(ngModel)]="shipTo.pincode" (keydown)="onAddrKey($event, 'st-pin')" placeholder="PIN"
+                       class="w-24 border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              </div>
+              <input data-cell="st-gstin" [(ngModel)]="shipTo.gstin" (keydown)="onAddrKey($event, 'st-gstin')" placeholder="Consignee GSTIN (optional)"
+                     class="w-full border rounded px-2 py-1 mt-1 font-mono uppercase focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              <p class="text-xs text-slate-400 mt-1">Enter next field · <b>PgDn</b> jump to items · Ship-To state drives Place of Supply</p>
+            </div>
           </div>
 
           @if (creditExceeded()) {
@@ -473,9 +477,36 @@ export class SalesInvoiceEntryComponent {
 
   /** CGST/SGST vs IGST from Place of Supply vs the seller's state — user can override. */
   autoInterstate(): void {
-    const pos = (this.shipSame ? this.billTo.stateCode : (this.shipTo.stateCode || this.billTo.stateCode)) || '';
+    const pos = (this.shipTo.stateCode || this.billTo.stateCode) || '';
     if (!this.sellerStateCode || !pos.trim()) return;
     this.isInterstate = pos.trim().padStart(2, '0') !== this.sellerStateCode.padStart(2, '0');
+  }
+
+  // ─── Bill/Ship keyboard chain (Enter walks every field, PgDn jumps to items) ─
+  private static readonly ADDR_FIELDS = [
+    'bt-name', 'bt-addr', 'bt-city', 'bt-state', 'bt-pin', 'bt-gstin',
+    'st-name', 'st-addr', 'st-city', 'st-state', 'st-pin', 'st-gstin',
+  ] as const;
+
+  onAddrKey(e: KeyboardEvent, field: string): void {
+    const fields = SalesInvoiceEntryComponent.ADDR_FIELDS as readonly string[];
+    const i = fields.indexOf(field);
+    if (e.key === 'PageDown') { e.preventDefault(); this.focusCell(0, 'name'); return; }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        if (i > 0) this.focusField(fields[i - 1]);
+        else this.focusParty();
+        return;
+      }
+      if (i < fields.length - 1) this.focusField(fields[i + 1]);
+      else this.focusCell(0, 'name'); // last address field → item grid
+    }
+  }
+
+  private focusField(cell: string): void {
+    const el = this.host.nativeElement.querySelector(`[data-cell="${cell}"]`) as HTMLInputElement | null;
+    el?.focus(); el?.select();
   }
 
   private loadFromQuote(id: string): void {
@@ -573,11 +604,9 @@ export class SalesInvoiceEntryComponent {
 
   readonly tick = signal(0);
   readonly more = signal(false);
-  readonly showAddr = signal(false);
   readonly savedAddresses = signal<SavedAddress[]>([]);
   billTo: InvoiceAddress = {};
   shipTo: InvoiceAddress = {};
-  shipSame = true;
 
   // header
   memoType: 'credit' | 'cash' = 'credit';
@@ -659,25 +688,30 @@ export class SalesInvoiceEntryComponent {
       this.customer.set(ctx);
       // Miracle prefills the party's agreed credit period.
       if (ctx.creditDays && this.dueDays === null) this.dueDays = Number(ctx.creditDays);
-      // Party master prefills Bill To: GSTIN, state (drives auto-IGST), address, PIN.
-      this.billTo = {
+      // Party master prefills BOTH Bill To and Ship To (edit Ship To if dispatch differs).
+      const partyAddr: InvoiceAddress = {
         name: ctx.name, phone: ctx.phone, gstin: ctx.gstin || undefined,
         stateCode: ctx.stateCode || undefined, state: ctx.state || undefined,
         address: ctx.billingAddress || undefined, pincode: ctx.pincode || undefined,
       };
+      this.billTo = { ...partyAddr };
+      this.shipTo = { ...partyAddr };
       this.autoInterstate();
       this.entry.customerAddresses(hit.id).subscribe((addrs) => {
         this.savedAddresses.set(addrs || []);
         const def = (addrs || [])[0];
         if (def) {
-          this.billTo = { ...this.billTo, address: def.fullAddress, city: def.city, state: def.state, pincode: def.pincode };
+          const detail = { address: def.fullAddress, city: def.city, state: def.state, pincode: def.pincode };
+          this.billTo = { ...this.billTo, ...detail };
+          this.shipTo = { ...this.shipTo, ...detail };
         }
         this.autoInterstate();
         this.tick.update((t) => t + 1);
       });
       for (let r = 0; r < this.rows.length; r++) if (this.rows[r].productId) this.loadItemContext(r);
     });
-    setTimeout(() => this.focusCell(0, 'name'));
+    // Party picked → cursor lands on Bill To (Enter walks the addresses, PgDn skips to items).
+    setTimeout(() => this.focusField('bt-name'));
   }
 
   // ─── Item typeahead ─────────────────────────────────────────────────────────
@@ -963,9 +997,8 @@ export class SalesInvoiceEntryComponent {
   }
 
   private effShipTo(): InvoiceAddress | undefined {
-    const bill = this.effBillTo();
-    if (this.shipSame) return bill;
-    return Object.values(this.shipTo).some((v) => v) ? this.shipTo : bill;
+    // Ship To stands on its own (prefilled from the party); empty → dispatch = billing.
+    return Object.values(this.shipTo).some((v) => v) ? this.shipTo : this.effBillTo();
   }
   private effBillTo(): InvoiceAddress | undefined {
     return Object.values(this.billTo).some((v) => v) ? this.billTo : undefined;
@@ -1032,7 +1065,7 @@ export class SalesInvoiceEntryComponent {
       this.rows = [this.blankRow(), this.blankRow()];
       this.note = ''; this.manualNo = ''; this.customerQuery = ''; this.customer.set(null);
       this.billDiscPct = null; this.billDiscAmt = null; this.receivedNow = null; this.dueDays = null; this.tcsPct = null;
-      this.billTo = {}; this.shipTo = {}; this.shipSame = true; this.savedAddresses.set([]);
+      this.billTo = {}; this.shipTo = {}; this.savedAddresses.set([]);
       this.broker = ''; this.commissionPct = null; this.transportName = ''; this.lrNo = ''; this.vehicleNo = '';
       this.chargeRows = [
         { label: 'Freight', amount: null, gstRate: null },
