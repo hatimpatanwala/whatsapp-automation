@@ -29,6 +29,11 @@ interface Row {
   lastToCustomer?: { price: number; at: string } | null;
   lastOverall?: { price: number; at: string } | null;
   levelPrice?: { price: number; levelName: string } | null;
+  /** Optional per-line trade details (Alt+B): batch/expiry/godown ride along in JSONB. */
+  batchNo?: string;
+  expiry?: string;
+  godown?: string;
+  showBatch?: boolean;
 }
 
 interface Charge {
@@ -97,12 +102,31 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                     class="text-sm px-3 py-1 rounded bg-indigo-700 text-white hover:bg-indigo-600 disabled:opacity-50">
               {{ irnBusy() ? '…' : '⚡ e-Invoice' }}
             </button>
+            <button (click)="ewayOpen.set(!ewayOpen())"
+                    class="text-sm px-3 py-1 rounded bg-amber-700 text-white hover:bg-amber-600">🚚 e-Way</button>
             @if (irnMsg()) {
               <span class="text-xs" [class.text-emerald-700]="irnOk()" [class.text-red-600]="!irnOk()">{{ irnMsg() }}</span>
             }
           }
         }
       </div>
+
+      <!-- Post-save e-Way Bill (Miracle action tray): vehicle + transporter is all it needs -->
+      @if (ewayOpen() && savedId()) {
+        <div class="flex flex-wrap items-center gap-3 mb-2 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2">
+          <span class="font-medium">🚚 e-Way Bill for {{ savedNumber() }}</span>
+          <label>Vehicle <input [(ngModel)]="ewayVehicle" placeholder="GJ01AB1234" class="ml-1 border rounded px-2 py-1 w-28" autocomplete="off" /></label>
+          <label>Transporter <input [(ngModel)]="ewayTransporter" class="ml-1 border rounded px-2 py-1 w-32" autocomplete="off" /></label>
+          <label>Distance km <input type="number" [(ngModel)]="ewayDistance" class="ml-1 border rounded px-2 py-1 w-20 text-right" /></label>
+          <button (click)="genEway()" [disabled]="ewayBusy()"
+                  class="px-3 py-1 rounded bg-amber-700 text-white disabled:opacity-50">{{ ewayBusy() ? '…' : 'Generate' }}</button>
+          @if (ewayNo()) {
+            <span class="text-emerald-700 font-medium">EWB {{ ewayNo() }}</span>
+            <button (click)="ewayPdf()" class="px-2 py-1 rounded border text-xs">PDF</button>
+          }
+          @if (ewayErr()) { <span class="text-red-600 text-xs">{{ ewayErr() }}</span> }
+        </div>
+      }
 
       <!-- More: broker / transport -->
       @if (more()) {
@@ -288,6 +312,16 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                   </td>
                   <td class="border border-slate-300 px-2 text-right font-medium">{{ fmt(lineAmount(row)) }}</td>
                 </tr>
+                @if (row.showBatch) {
+                  <tr><td class="border-x border-slate-300"></td>
+                    <td colspan="10" class="px-2 py-1 border-x border-slate-300 bg-slate-50">
+                      <span class="text-xs text-slate-500 mr-2">Batch / Godown:</span>
+                      <input [(ngModel)]="row.batchNo" placeholder="Batch no" class="border rounded px-2 py-0.5 text-xs w-28 mr-2 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      <input type="date" [(ngModel)]="row.expiry" class="border rounded px-2 py-0.5 text-xs mr-2 focus:bg-amber-50 focus:outline-none" title="Expiry" />
+                      <input [(ngModel)]="row.godown" placeholder="Godown" class="border rounded px-2 py-0.5 text-xs w-28 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      <span class="text-xs text-slate-400 ml-2">(Alt+B toggles)</span>
+                    </td></tr>
+                }
                 @if (row.productId && (row.levelPrice || row.lastToCustomer || row.lastOverall || row.stock !== undefined)) {
                   <tr>
                     <td></td>
@@ -349,6 +383,12 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               } @else {
                 <div class="flex justify-between"><span class="text-slate-500">CGST</span><span>{{ fmt(totalTax() / 2) }}</span></div>
                 <div class="flex justify-between"><span class="text-slate-500">SGST</span><span>{{ fmt(totalTax() / 2) }}</span></div>
+              }
+              <div class="flex justify-between items-center"><span class="text-slate-500">TCS %</span>
+                <input type="number" [(ngModel)]="tcsPct" class="w-16 border rounded px-2 py-0.5 text-right focus:bg-amber-50 focus:outline-none" title="TCS collected on invoice value (206C)" />
+              </div>
+              @if (tcsAmt() > 0) {
+                <div class="flex justify-between"><span class="text-slate-500">TCS</span><span>+ {{ fmt(tcsAmt()) }}</span></div>
               }
               <div class="flex justify-between"><span class="text-slate-500">Round off</span><span>{{ roundOff() >= 0 ? '+' : '' }}{{ fmt(roundOff()) }}</span></div>
               <div class="flex justify-between font-semibold text-base border-t pt-1"><span>Total</span><span>₹{{ fmt(grandTotal()) }}</span></div>
@@ -468,6 +508,44 @@ export class SalesInvoiceEntryComponent {
     });
   }
 
+  // ─── Post-save e-Way Bill ───────────────────────────────────────────────────
+  readonly ewayOpen = signal(false);
+  readonly ewayBusy = signal(false);
+  readonly ewayNo = signal<string | null>(null);
+  readonly ewayErr = signal<string | null>(null);
+  private ewayId: string | null = null;
+  ewayVehicle = '';
+  ewayTransporter = '';
+  ewayDistance: number | null = null;
+
+  genEway(): void {
+    const id = this.savedId();
+    if (!id || this.ewayBusy()) return;
+    this.ewayBusy.set(true);
+    this.ewayErr.set(null);
+    this.entry.createEway({
+      invoiceId: id,
+      vehicleNumber: this.ewayVehicle.trim() || undefined,
+      transporter: this.ewayTransporter.trim() || undefined,
+      distanceKm: this.ewayDistance !== null ? Number(this.ewayDistance) : undefined,
+    }).subscribe({
+      next: (r: any) => {
+        const doc = r?.data ?? r;
+        this.ewayBusy.set(false);
+        this.ewayNo.set(doc?.ewayNumber || doc?.eway_number || null);
+        this.ewayId = doc?.id || null;
+      },
+      error: (err) => {
+        this.ewayBusy.set(false);
+        this.ewayErr.set(err?.error?.message || 'e-Way generation failed');
+      },
+    });
+  }
+
+  ewayPdf(): void {
+    if (this.ewayId && this.ewayNo()) this.entry.downloadEwayPdf(this.ewayId, this.ewayNo()!);
+  }
+
   // ─── Post-save e-Invoice (IRN) ──────────────────────────────────────────────
   readonly irnBusy = signal(false);
   readonly irnMsg = signal<string | null>(null);
@@ -534,6 +612,7 @@ export class SalesInvoiceEntryComponent {
     { label: 'Other', amount: null, gstRate: null },
   ];
   receivedNow: number | null = null;
+  tcsPct: number | null = null;
   note = '';
 
   readonly saving = signal(false);
@@ -784,6 +863,18 @@ export class SalesInvoiceEntryComponent {
 
   onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
 
+  /** Alt+B — toggle the batch/expiry/godown strip for the line under the cursor. */
+  @HostListener('document:keydown.alt.b', ['$event'])
+  onBatchKey(e: Event): void {
+    e.preventDefault();
+    const dc = (document.activeElement as HTMLElement | null)?.getAttribute?.('data-cell') || '';
+    const m = /^(\d+):/.exec(dc);
+    const r = m ? +m[1] : this.rows.findIndex((row) => row.productId);
+    if (r < 0 || !this.rows[r]) return;
+    this.rows[r].showBatch = !this.rows[r].showBatch;
+    this.tick.update((t) => t + 1);
+  }
+
 
   @HostListener('document:keydown.control.a', ['$event'])
   onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
@@ -822,7 +913,11 @@ export class SalesInvoiceEntryComponent {
     const chargeTax = this.liveCharges().reduce((s, c) => s + (c.amount * c.gstRate) / 100, 0);
     return money(lineTax + chargeTax);
   }
-  rawTotal(): number { return money(this.taxableLines() + this.chargesAmt() + this.totalTax()); }
+  /** TCS (206C-style) on the tax-inclusive value — mirrors the backend computation. */
+  tcsAmt(): number {
+    return money((this.taxableLines() + this.chargesAmt() + this.totalTax()) * ((Number(this.tcsPct) || 0) / 100));
+  }
+  rawTotal(): number { return money(this.taxableLines() + this.chargesAmt() + this.totalTax() + this.tcsAmt()); }
   grandTotal(): number { return Math.round(this.rawTotal()); }
   roundOff(): number { return money(this.grandTotal() - this.rawTotal()); }
 
@@ -886,6 +981,9 @@ export class SalesInvoiceEntryComponent {
       d1: Number(r.d1) || 0,
       d2: Number(r.d2) || 0,
       mrpRate: Number(r.rate) || 0,
+      batchNo: r.batchNo?.trim() || undefined,
+      expiry: r.expiry || undefined,
+      godown: r.godown?.trim() || undefined,
     })) as any;
     try {
       this.rememberNarration(this.note);
@@ -896,6 +994,7 @@ export class SalesInvoiceEntryComponent {
         discount: this.billDiscount(),
         note: this.note || undefined,
         invoiceNumber: this.manualNo.trim() || undefined,
+        tcsPct: this.tcsPct !== null ? Number(this.tcsPct) : undefined,
         isInterstate: this.isInterstate,
         issueDate: this.voucherDate || undefined,
         isCash: this.memoType === 'cash',
@@ -921,9 +1020,10 @@ export class SalesInvoiceEntryComponent {
       this.savedNumber.set(inv?.invoiceNumber || 'invoice');
       this.savedId.set(inv?.id || null);
       this.irnMsg.set(null);
+      this.ewayOpen.set(false); this.ewayNo.set(null); this.ewayErr.set(null); this.ewayId = null;
       this.rows = [this.blankRow(), this.blankRow()];
       this.note = ''; this.manualNo = ''; this.customerQuery = ''; this.customer.set(null);
-      this.billDiscPct = null; this.billDiscAmt = null; this.receivedNow = null; this.dueDays = null;
+      this.billDiscPct = null; this.billDiscAmt = null; this.receivedNow = null; this.dueDays = null; this.tcsPct = null;
       this.billTo = {}; this.shipTo = {}; this.shipSame = true; this.savedAddresses.set([]);
       this.broker = ''; this.commissionPct = null; this.transportName = ''; this.lrNo = ''; this.vehicleNo = '';
       this.chargeRows = [

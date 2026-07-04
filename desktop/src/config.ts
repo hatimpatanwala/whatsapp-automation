@@ -14,8 +14,8 @@
 /** Port the embedded NestJS backend listens on (127.0.0.1). */
 export const LOCAL_PORT = 43110;
 
-/** URL the window loads once the local backend is healthy. */
-export const LOCAL_APP_URL = `http://127.0.0.1:${LOCAL_PORT}`;
+/** URL the window loads once the local backend is healthy (ERP Home dashboard). */
+export const LOCAL_APP_URL = `http://127.0.0.1:${LOCAL_PORT}/home`;
 
 // ─── Local database mode ─────────────────────────────────────────────────────
 /**

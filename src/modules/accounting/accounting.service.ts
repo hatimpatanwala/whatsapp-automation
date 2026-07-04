@@ -151,6 +151,19 @@ export class AccountingService {
     return ins[0]?.id ?? this.namedLedgerId(qr, schema, name);
   }
 
+  /** Find or create a Duties & Taxes ledger by name (e.g. "TCS Payable"). */
+  private async ensureDutyLedger(qr: QueryRunner, schema: string, name: string): Promise<string | null> {
+    const existing = await this.namedLedgerId(qr, schema, name);
+    if (existing) return existing;
+    const ins = await qr.query(
+      `INSERT INTO "${schema}".ledger_accounts (name, group_id)
+       SELECT $1, g.id FROM "${schema}".ledger_groups g WHERE g.name = 'Duties & Taxes'
+       ON CONFLICT (name) DO NOTHING RETURNING id`,
+      [name.slice(0, 160)],
+    );
+    return ins[0]?.id ?? this.namedLedgerId(qr, schema, name);
+  }
+
   /** Cancel a voucher (register action): excluded from every report; entries retained. */
   async cancelVoucher(schema: string, id: string) {
     return this.cm.executeInTenantContext(schema, async (qr) => {
@@ -259,8 +272,15 @@ export class AccountingService {
         }
       }
 
+      // TCS collected rides on the invoice value — its own liability, never Round Off.
+      const tcs = round2(num(inv.tcs_amount));
+      if (tcs > 0) {
+        const tcsId = await this.ensureDutyLedger(qr, schema, 'TCS Payable');
+        if (tcsId) entries.push({ ledgerId: tcsId, debit: 0, credit: tcs });
+      }
+
       // Absorb rounding into Round Off so the voucher balances exactly.
-      const creditSum = round2(taxable + chargesAmt + taxCredited);
+      const creditSum = round2(taxable + chargesAmt + taxCredited + tcs);
       const diff = round2(total - creditSum);
       const roundId = await this.namedLedgerId(qr, schema, 'Round Off');
       if (Math.abs(diff) >= 0.01 && roundId) {

@@ -85,6 +85,12 @@ export class CreateProductDto {
   @Min(0)
   mrp?: number;
 
+  // Opening stock valuation rate (Miracle item master).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  openingRate?: number;
+
   @IsOptional()
   @IsString()
   barcode?: string;

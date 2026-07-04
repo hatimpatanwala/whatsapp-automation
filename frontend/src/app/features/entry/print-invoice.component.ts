@@ -99,7 +99,11 @@ function amountInWords(n: number): string {
             @for (it of items(); track $index; let i = $index) {
               <tr>
                 <td>{{ i + 1 }}</td>
-                <td class="l">{{ it.description }}</td>
+                <td class="l">{{ it.description }}
+                  @if (it.batchNo || it.godown) {
+                    <span class="pi-batch">{{ it.batchNo ? 'Batch ' + it.batchNo : '' }}{{ it.expiry ? ' · exp ' + it.expiry : '' }}{{ it.godown ? ' · ' + it.godown : '' }}</span>
+                  }
+                </td>
                 <td>{{ it.hsn }}</td>
                 <td>{{ it.quantity }}</td>
                 <td>{{ it.freeQty || '' }}</td>
@@ -138,12 +142,24 @@ function amountInWords(n: number): string {
               <tr><td>SGST</td><td class="r">{{ fmt(v.sgst) }}</td></tr>
             }
             @if (num(v.discount)) { <tr><td>Bill Discount</td><td class="r">− {{ fmt(v.discount) }}</td></tr> }
+            @if (num(v.tcsAmount)) { <tr><td>TCS {{ v.tcsPct ? '@' + v.tcsPct + '%' : '' }}</td><td class="r">{{ fmt(v.tcsAmount) }}</td></tr> }
             <tr><td>Round Off</td><td class="r">{{ fmt(v.roundOff) }}</td></tr>
             <tr class="pi-grand"><td>TOTAL</td><td class="r">₹{{ fmt(v.total) }}</td></tr>
             <tr><td>Paid</td><td class="r">{{ fmt(v.amountPaid) }}</td></tr>
             <tr><td>Balance</td><td class="r">{{ fmt(v.balanceDue) }}</td></tr>
           </table>
         </div>
+
+        @if (seller()?.bankDetails || seller()?.terms) {
+          <div class="pi-foot">
+            @if (seller()?.bankDetails) {
+              <div class="pi-foot-block"><b>Bank details</b><br />{{ seller()!.bankDetails }}</div>
+            }
+            @if (seller()?.terms) {
+              <div class="pi-foot-block"><b>Terms &amp; conditions</b><br />{{ seller()!.terms }}</div>
+            }
+          </div>
+        }
 
         <div class="pi-sign">
           <div>Receiver's signature</div>
@@ -167,6 +183,9 @@ function amountInWords(n: number): string {
         padding: 10mm 12mm; box-shadow: 0 2px 12px rgba(0,0,0,.25); font-size: 12.5px;
       }
       .pi-title { text-align: center; font-weight: 700; letter-spacing: 2px; border: 1.5px solid #111; padding: 4px; margin-bottom: 8px; }
+      .pi-batch { display: block; font-size: 10px; color: #555; }
+      .pi-foot { display: flex; gap: 16px; margin-top: 10px; font-size: 11px; color: #333; }
+      .pi-foot-block { flex: 1; border: 1px solid #bbb; padding: 6px 8px; white-space: pre-line; }
       .pi-head { display: flex; justify-content: space-between; gap: 12px; border: 1px solid #111; padding: 8px; }
       .pi-seller-name { font-size: 16px; font-weight: 700; }
       .pi-meta { text-align: right; min-width: 60mm; }

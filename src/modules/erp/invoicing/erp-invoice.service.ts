@@ -60,6 +60,8 @@ export interface CreateInvoiceInput {
   series?: string;
   /** Manual voucher number (Miracle manual series) — omitted = automatic sequence. */
   invoiceNumber?: string;
+  /** TCS % collected on the invoice value (206C-style) — added on top of GST. */
+  tcsPct?: number;
 }
 
 export interface InvoiceAddress {
@@ -222,8 +224,12 @@ export class ErpInvoiceService {
       const cgst = interstate ? 0 : money(totalTax / 2);
       const sgst = interstate ? 0 : money(totalTax - cgst);
 
+      // TCS (206C-style): collected on the tax-inclusive invoice value, on top of GST.
+      const tcsPct = Math.max(0, Number(input.tcsPct) || 0);
+      const tcsAmount = money(((taxableWithCharges + totalTax) * tcsPct) / 100);
+
       // Auto round-off to the nearest rupee (Miracle default), tracked separately.
-      let total = money(taxableWithCharges + totalTax);
+      let total = money(taxableWithCharges + totalTax + tcsAmount);
       let roundOff = 0;
       if (input.autoRound !== false) {
         const rounded = Math.round(total);
@@ -303,11 +309,13 @@ export class ErpInvoiceService {
             subtotal, discount, taxable_value, total_tax, total, currency, exchange_rate, base_total, items,
             amount_paid, balance_due, payment_status, due_date, note, status, branch_id, issued_at,
             cgst, sgst, igst, is_interstate, buyer_gstin, place_of_supply,
-            round_off, is_cash, charges, broker, commission_pct, transport, bill_to, ship_to)
+            round_off, is_cash, charges, broker, commission_pct, transport, bill_to, ship_to,
+            tcs_pct, tcs_amount)
          VALUES ($1,'tax_invoice',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,
                  $27,$15,$28,$16,$17,$18,$19,COALESCE($26::timestamptz, NOW()),
                  $20,$21,$22,$23,$24,$25,
-                 $29,$30,$31::jsonb,$32,$33,$34::jsonb,$35::jsonb,$36::jsonb)
+                 $29,$30,$31::jsonb,$32,$33,$34::jsonb,$35::jsonb,$36::jsonb,
+                 $37,$38)
          RETURNING *`,
         [
           formatted, year, input.customerId ?? null, customerName, customerPhone,
@@ -325,6 +333,7 @@ export class ErpInvoiceService {
           input.transport ? JSON.stringify(input.transport) : null,
           input.billTo ? JSON.stringify(input.billTo) : null,
           input.shipTo ? JSON.stringify(input.shipTo) : null,
+          tcsPct || null, tcsAmount || null,
         ],
       );
       return rows[0];

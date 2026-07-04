@@ -43,16 +43,16 @@
 |---|---|
 | Order/reference no. (quote → invoice) | ✅ **Quotation Register Enter = Convert to Invoice** (carries party+lines+ref) |
 | Salesman/agent | ✅ (broker + commission) |
-| Godown/branch per voucher & per line | ⬜ pending (single-godown billing; stock journal is godown-aware) |
-| Batch/serial per line | ⬜ pending |
-| TCS on footer | ⬜ pending (TDS/TCS batch) |
-| Bank details + T&C on print | ⬜ pending (needs settings keys) |
+| Godown/branch per voucher & per line | ✅ Alt+B line strip (batch/expiry/godown ride in line JSONB + print); stock still moves on base inventory (godown-wise movement pending) |
+| Batch/serial per line | ✅ Alt+B batch no + expiry per line (sales & purchase, shown on print/detail); serial/IMEI tracking pending |
+| TCS on footer | ✅ TCS % field → collected on invoice value, posts to "TCS Payable" (Duties & Taxes), on print |
+| Bank details + T&C on print | ✅ prints settings keys invoice_bank / invoice_terms when set |
 | Quote validity/status/convert | ✅ (validity, status chip, convert) |
 | e-Invoice schema (buyer URP, ShipDtls, doc types) | ✅ payload builder (IRP push needs GSP creds) |
-| e-Way bill fields | ⚠️ module exists (portal UI); not in desktop entry tray |
+| e-Way bill fields | ✅ post-save 🚚 e-Way tray (vehicle/transporter/distance → EWB no + PDF; local EWB, NIC push needs creds) |
 | Item master: code/name/alias-barcode/category/brand | ✅ **barcode/alias added (searchable in billing grids)**; category/brand via portal Products |
 | Dual units + factor | ✅ |
-| Opening stock/rate, reorder level | ✅ (opening stock, min stock; opening *rate* ⬜) |
+| Opening stock/rate, reorder level | ✅ (opening stock, opening rate, min stock) |
 | Rate tiers (MRP/wholesale/retail) | ✅ (MRP + price levels per party) |
 | Batch/expiry, serial/IMEI flags | ⬜ pending |
 | Item image/specs | ✅ portal Products page |

@@ -2615,6 +2615,23 @@ const migration071ItemMasterRates: TenantMigration = {
   },
 };
 
+/**
+ * 072 — Miracle audit tail: TCS on the sales footer (206C-style, collected on the
+ * invoice value) and opening rate on the item master (stock valuation). Idempotent.
+ */
+const migration072TcsOpeningRate: TenantMigration = {
+  name: '072_tcs_opening_rate',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS tcs_pct NUMERIC(6,3)`);
+    await qr.query(`ALTER TABLE "${schema}".invoices ADD COLUMN IF NOT EXISTS tcs_amount NUMERIC(12,2)`);
+    await qr.query(`ALTER TABLE "${schema}".products ADD COLUMN IF NOT EXISTS opening_rate NUMERIC(12,2)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".invoices DROP COLUMN IF EXISTS tcs_pct, DROP COLUMN IF EXISTS tcs_amount`);
+    await qr.query(`ALTER TABLE "${schema}".products DROP COLUMN IF EXISTS opening_rate`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2687,4 +2704,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration069BillShipTo,
   migration070PurchaseChargesUnits,
   migration071ItemMasterRates,
+  migration072TcsOpeningRate,
 ];

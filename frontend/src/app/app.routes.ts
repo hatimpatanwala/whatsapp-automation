@@ -35,6 +35,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/entry/tally-layout.component').then(m => m.TallyLayoutComponent),
     children: [
       {
+        // ERP Home — the admin's business-overview dashboard (desktop landing page).
+        path: 'home',
+        loadComponent: () => import('./features/entry/erp-home.component').then(m => m.ErpHomeComponent),
+      },
+      {
         path: 'gateway',
         loadComponent: () => import('./features/entry/gateway.component').then(m => m.GatewayComponent),
       },

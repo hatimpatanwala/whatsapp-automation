@@ -42,6 +42,7 @@ export class ProductService {
       uomFactor: row.uom_factor != null ? Number(row.uom_factor) : null,
       purchasePrice: row.purchase_price != null ? Number(row.purchase_price) : null,
       mrp: row.mrp != null ? Number(row.mrp) : null,
+      openingRate: row.opening_rate != null ? Number(row.opening_rate) : null,
       imageUrls: row.images || [],
       thumbnail: row.thumbnail,
       status: row.is_active ? 'active' : 'draft',
@@ -152,8 +153,8 @@ export class ProductService {
       const slug = dto.sku || dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const product = await qr.query(
-        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom, custom_fields, alt_uom, uom_factor, purchase_price, mrp)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom, custom_fields, alt_uom, uom_factor, purchase_price, mrp, opening_rate)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
          RETURNING *`,
         [
           dto.name, slug, dto.description, dto.categoryId,
@@ -165,7 +166,7 @@ export class ProductService {
           (dto.uom || 'pcs').trim() || 'pcs',
           JSON.stringify(dto.customFields || {}),
           dto.altUom?.trim() || null, dto.uomFactor ?? null,
-          dto.purchasePrice ?? null, dto.mrp ?? null,
+          dto.purchasePrice ?? null, dto.mrp ?? null, dto.openingRate ?? null,
         ],
       );
 
@@ -214,6 +215,7 @@ export class ProductService {
       if (dto.uomFactor !== undefined) { fields.push(`uom_factor = $${paramIndex++}`); params.push(dto.uomFactor ?? null); }
       if (dto.purchasePrice !== undefined) { fields.push(`purchase_price = $${paramIndex++}`); params.push(dto.purchasePrice ?? null); }
       if (dto.mrp !== undefined) { fields.push(`mrp = $${paramIndex++}`); params.push(dto.mrp ?? null); }
+      if (dto.openingRate !== undefined) { fields.push(`opening_rate = $${paramIndex++}`); params.push(dto.openingRate ?? null); }
 
       const images = dto.images || dto.imageUrls;
       if (images) { fields.push(`images = $${paramIndex++}`); params.push(images); }

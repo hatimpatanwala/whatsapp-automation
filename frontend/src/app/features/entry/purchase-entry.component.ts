@@ -25,6 +25,11 @@ interface Row {
   salePrice?: number;
   lastFromSupplier?: { price: number; at: string } | null;
   lastOverall?: { price: number; at: string } | null;
+  /** Optional per-line trade details (Alt+B): batch/expiry/godown ride along in JSONB. */
+  batchNo?: string;
+  expiry?: string;
+  godown?: string;
+  showBatch?: boolean;
 }
 
 const COLS = ['name', 'qty', 'free', 'rate', 'd1', 'd2', 'gstRate'] as const;
@@ -176,6 +181,16 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                   </td>
                   <td class="border border-slate-300 px-2 text-right font-medium">{{ fmt(lineAmount(row)) }}</td>
                 </tr>
+                @if (row.showBatch) {
+                  <tr><td class="border-x border-slate-300"></td>
+                    <td colspan="10" class="px-2 py-1 border-x border-slate-300 bg-slate-50">
+                      <span class="text-xs text-slate-500 mr-2">Batch / Godown:</span>
+                      <input [(ngModel)]="row.batchNo" placeholder="Batch no" class="border rounded px-2 py-0.5 text-xs w-28 mr-2 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      <input type="date" [(ngModel)]="row.expiry" class="border rounded px-2 py-0.5 text-xs mr-2 focus:bg-amber-50 focus:outline-none" title="Expiry" />
+                      <input [(ngModel)]="row.godown" placeholder="Godown" class="border rounded px-2 py-0.5 text-xs w-28 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      <span class="text-xs text-slate-400 ml-2">(Alt+B toggles)</span>
+                    </td></tr>
+                }
                 @if (row.productId) {
                   <tr>
                     <td></td>
@@ -490,6 +505,17 @@ export class PurchaseEntryComponent {
 
   onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
 
+  /** Alt+B — toggle the batch/expiry/godown strip for the line under the cursor. */
+  @HostListener('document:keydown.alt.b', ['$event'])
+  onBatchKey(e: Event): void {
+    e.preventDefault();
+    const dc = (document.activeElement as HTMLElement | null)?.getAttribute?.('data-cell') || '';
+    const m = /^(\d+):/.exec(dc);
+    const r = m ? +m[1] : this.rows.findIndex((row) => row.productId);
+    if (r < 0 || !this.rows[r]) return;
+    this.rows[r].showBatch = !this.rows[r].showBatch;
+    this.tick.update((t) => t + 1);
+  }
 
   @HostListener('document:keydown.control.a', ['$event'])
   onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
@@ -542,6 +568,9 @@ export class PurchaseEntryComponent {
       d1: Number(r.d1) || 0,
       d2: Number(r.d2) || 0,
       mrpRate: Number(r.rate) || 0,
+      batchNo: r.batchNo?.trim() || undefined,
+      expiry: r.expiry || undefined,
+      godown: r.godown?.trim() || undefined,
     })) as any;
     this.entry
       .createPurchase({

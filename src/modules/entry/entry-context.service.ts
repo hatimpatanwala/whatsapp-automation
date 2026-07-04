@@ -346,7 +346,7 @@ export class EntryContextService {
       qr.query(
         `SELECT p.id, p.name, p.uom, p.alt_uom, p.uom_factor, p.hsn_code,
                 COALESCE(p.gst_rate, 0) AS gst_rate,
-                p.base_price, p.sale_price, p.purchase_price, p.mrp,
+                p.base_price, p.sale_price, p.purchase_price, p.mrp, p.opening_rate,
                 p.metadata->>'barcode' AS barcode,
                 COALESCE(i.low_stock_threshold, 5) AS min_stock,
                 COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock

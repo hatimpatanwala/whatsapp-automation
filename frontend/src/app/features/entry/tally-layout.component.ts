@@ -454,6 +454,7 @@ export class TallyLayoutComponent {
     {
       title: 'Utility',
       entries: [
+        { label: 'Home (Business Overview)', route: '/home' },
         { label: 'Gateway (keyboard hub)', route: '/gateway', key: 'F3' },
         { label: 'Web Portal (WhatsApp, campaigns…)', route: '/dashboard' },
       ],
@@ -477,6 +478,7 @@ export class TallyLayoutComponent {
   ];
 
   readonly toolbar: MenuEntry[] = [
+    { key: '', label: 'Home', route: '/home' },
     { key: 'F2', label: 'Sales', route: '/entry/sales' },
     { key: 'F8', label: 'Purchase', route: '/entry/purchase' },
     { key: 'F5', label: 'Receipt', route: '/entry/receipt' },

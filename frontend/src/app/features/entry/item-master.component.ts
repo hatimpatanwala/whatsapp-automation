@@ -2,7 +2,7 @@ import { Component, ElementRef, HostListener, inject, signal } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { EntryService, ItemMasterRow } from '../../core/services/entry.service';
 
-const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'hsn', 'barcode', 'gst', 'pRate', 'sRate', 'mrp', 'minStock', 'stockQty'] as const;
+const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'hsn', 'barcode', 'gst', 'pRate', 'sRate', 'mrp', 'oRate', 'minStock', 'stockQty'] as const;
 type Field = (typeof FIELDS)[number];
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -119,6 +119,10 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               <input data-cell="mrp" type="number" [(ngModel)]="mrp" (keydown)="onFieldKey($event, 'mrp')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
+            <label class="text-sm">Opening rate ₹ <span class="text-slate-400">(stock valuation)</span>
+              <input data-cell="oRate" type="number" [(ngModel)]="oRate" (keydown)="onFieldKey($event, 'oRate')"
+                     class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
+            </label>
             <label class="text-sm">Min stock <span class="text-slate-400">(reorder alert)</span>
               <input data-cell="minStock" type="number" [(ngModel)]="minStock" (keydown)="onFieldKey($event, 'minStock')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
@@ -178,6 +182,7 @@ export class ItemMasterComponent {
   pRate: number | null = null;
   sRate: number | null = null;
   mrp: number | null = null;
+  oRate: number | null = null;
   minStock: number | null = null;
   stockQty: number | null = null;
 
@@ -219,6 +224,7 @@ export class ItemMasterComponent {
     this.pRate = it.purchasePrice != null ? Number(it.purchasePrice) : null;
     this.sRate = Number(it.basePrice ?? it.salePrice) || null;
     this.mrp = it.mrp != null ? Number(it.mrp) : null;
+    this.oRate = it.openingRate != null ? Number(it.openingRate) : null;
     this.minStock = it.minStock != null ? Number(it.minStock) : null;
     this.curStock.set(Number(it.stock) || 0);
     this.stockQty = null;
@@ -231,7 +237,7 @@ export class ItemMasterComponent {
     this.editId.set(null);
     this.name = ''; this.unit = ''; this.altUnit = ''; this.factor = null;
     this.hsn = ''; this.barcode = ''; this.gst = null; this.pRate = null; this.sRate = null;
-    this.mrp = null; this.minStock = null; this.stockQty = null;
+    this.mrp = null; this.oRate = null; this.minStock = null; this.stockQty = null;
     this.curStock.set(0);
     this.saved.set(null);
     this.error.set(null);
@@ -281,6 +287,7 @@ export class ItemMasterComponent {
       uomFactor: this.factor != null ? Number(this.factor) : undefined,
       purchasePrice: this.pRate != null ? Number(this.pRate) : undefined,
       mrp: this.mrp != null ? Number(this.mrp) : undefined,
+      openingRate: this.oRate != null ? Number(this.oRate) : undefined,
       lowStockThreshold: this.minStock != null ? Number(this.minStock) : undefined,
     };
     const id = this.editId();

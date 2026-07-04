@@ -9,6 +9,10 @@ export interface SellerProfile {
   pin: number;
   state: string;
   stateCode: string;
+  /** Bank details block printed on invoices (multiline: bank / A/c / IFSC). */
+  bankDetails: string;
+  /** Terms & conditions block printed on invoices (multiline). */
+  terms: string;
 }
 
 /**
@@ -40,6 +44,8 @@ export class SellerProfileService {
       pin: Number(raw['invoice_pin']) || 999999,
       state: raw['invoice_state'] || '',
       stateCode: String(raw['invoice_state_code'] || (gstin ? gstin.slice(0, 2) : '')),
+      bankDetails: String(raw['invoice_bank'] || ''),
+      terms: String(raw['invoice_terms'] || ''),
     };
   }
 }

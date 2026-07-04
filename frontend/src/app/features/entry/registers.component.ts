@@ -16,6 +16,12 @@ interface RegRow {
   balance: number | null;
 }
 
+interface DocLine { name: string; qty: number; rate: number; amount: number; batch?: string; }
+interface DocDetail {
+  id: string; no: string; date: string; party: string; status: string;
+  total: number; balance: number | null; lines: DocLine[];
+}
+
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 /** Local yyyy-MM-dd (toISOString would shift IST dates back a day). */
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -71,7 +77,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
           </thead>
           <tbody>
             @for (r of visible(); track r.id; let i = $index) {
-              <tr (click)="sel.set(i)" (dblclick)="open(r)" class="cursor-pointer"
+              <tr (click)="sel.set(i); open(r)" class="cursor-pointer"
                   [class.bg-amber-100]="i === sel()">
                 <td class="border border-slate-300 px-2 py-1">{{ r.date | date: 'dd-MM-yy' }}</td>
                 <td class="border border-slate-300 px-2 py-1 font-mono text-xs">{{ r.number }}</td>
@@ -101,8 +107,74 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
           </tfoot>
         </table>
       }
+
+      <!-- Document detail (click / Enter on any row) -->
+      @if (detail(); as d) {
+        <div class="rg-backdrop" (mousedown)="closeDetail()">
+          <div class="rg-box" tabindex="-1" data-detail-box
+               (mousedown)="$event.stopPropagation()" (keydown)="onDetailKey($event)">
+            <div class="rg-title">
+              {{ d.no }} <span class="rg-sub">{{ d.party }} · {{ d.date | date: 'dd-MM-yyyy' }} · {{ d.status }}</span>
+            </div>
+            @if (detailLoading()) {
+              <p class="rg-none">Loading…</p>
+            } @else {
+              <table class="rg-lines">
+                <thead><tr><th>#</th><th>Item</th><th class="rg-r">Qty</th><th class="rg-r">Rate</th><th class="rg-r">Amount</th></tr></thead>
+                <tbody>
+                  @for (l of d.lines; track $index; let i = $index) {
+                    <tr>
+                      <td>{{ i + 1 }}</td>
+                      <td>{{ l.name }}@if (l.batch) { <span class="rg-batch">batch {{ l.batch }}</span> }</td>
+                      <td class="rg-r">{{ l.qty }}</td>
+                      <td class="rg-r">{{ fmt(l.rate) }}</td>
+                      <td class="rg-r">{{ fmt(l.amount) }}</td>
+                    </tr>
+                  } @empty { <tr><td colspan="5" class="rg-none">No line items recorded.</td></tr> }
+                </tbody>
+                <tfoot>
+                  <tr><td colspan="4" class="rg-r rg-tot">TOTAL</td><td class="rg-r rg-tot">₹{{ fmt(d.total) }}</td></tr>
+                  @if (d.balance !== null) {
+                    <tr><td colspan="4" class="rg-r">Balance</td><td class="rg-r" [class.rg-bad]="d.balance > 0">{{ fmt(d.balance) }}</td></tr>
+                  }
+                </tfoot>
+              </table>
+              <div class="rg-actions">
+                @if (kind() === 'sales') {
+                  <button class="rg-btn rg-btn-dark" (click)="printDetail()">🖨 Print (Enter)</button>
+                }
+                @if (kind() === 'quote') {
+                  <button class="rg-btn rg-btn-dark" (click)="convertDetail()">→ Convert to Invoice (Enter)</button>
+                }
+                <button class="rg-btn" (click)="closeDetail()">Close (Esc)</button>
+              </div>
+            }
+          </div>
+        </div>
+      }
     </div>
   `,
+  styles: [
+    `
+      .rg-backdrop { position: fixed; inset: 0; z-index: 600; background: rgba(20,40,70,.45);
+        display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh; }
+      .rg-box { background: #fff; border: 1px solid #7da2ce; box-shadow: 4px 6px 18px rgba(0,0,0,.35);
+        width: 640px; max-width: 94vw; max-height: 74vh; overflow: auto; padding: 12px 14px; outline: none; font-size: 13px; }
+      .rg-title { font-weight: 700; color: #14456e; font-size: 14px; margin-bottom: 8px; font-family: Consolas, monospace; }
+      .rg-sub { font-weight: 400; font-family: 'Segoe UI', sans-serif; font-size: 12px; color: #778; }
+      .rg-lines { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      .rg-lines th { text-align: left; color: #789; font-weight: 600; font-size: 11px; border-bottom: 1px solid #dfe5ee; padding: 3px 6px; }
+      .rg-lines td { border-bottom: 1px solid #eef1f6; padding: 4px 6px; }
+      .rg-r { text-align: right !important; }
+      .rg-tot { font-weight: 700; color: #14456e; }
+      .rg-bad { color: #b91c1c; font-weight: 600; }
+      .rg-batch { margin-left: 6px; font-size: 10.5px; color: #889; background: #f2f5fa; border: 1px solid #dfe5ee; padding: 0 4px; border-radius: 3px; }
+      .rg-none { color: #9aa; text-align: center; padding: 10px; }
+      .rg-actions { display: flex; gap: 8px; margin-top: 12px; }
+      .rg-btn { border: 1px solid #b5b19f; background: #f4f2e8; padding: 6px 14px; cursor: pointer; font-size: 12.5px; }
+      .rg-btn-dark { background: #1d5c8f; border-color: #14456e; color: #fff; }
+    `,
+  ],
 })
 export class RegistersComponent {
   private readonly entry = inject(EntryService);
@@ -236,10 +308,130 @@ export class RegistersComponent {
   isGood(status: string): boolean { return ['paid', 'completed', 'delivered', 'accepted', 'confirmed', 'received'].includes((status || '').toLowerCase()); }
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }
 
+  // ─── Document detail (click / Enter on a row) ───────────────────────────────
+  readonly detail = signal<DocDetail | null>(null);
+  readonly detailLoading = signal(false);
+  private detailPrevFocus: HTMLElement | null = null;
+
   open(r: RegRow): void {
-    if (this.kind() === 'sales') void this.router.navigate(['/print/invoice', r.id]);
-    // Miracle "convert to invoice": Enter on a quotation carries it into the sales screen.
-    else if (this.kind() === 'quote') void this.router.navigate(['/entry/sales'], { queryParams: { fromQuote: r.id } });
+    this.detailPrevFocus = document.activeElement as HTMLElement | null;
+    this.detail.set({ id: r.id, no: r.number, date: r.date, party: r.party, status: r.status, total: r.total, balance: r.balance, lines: [] });
+    this.detailLoading.set(true);
+    setTimeout(() => (document.querySelector('[data-detail-box]') as HTMLElement | null)?.focus());
+
+    const unwrap = (res: any) => res?.data ?? res;
+    const money = (v: unknown) => Number(v) || 0;
+    const done = (lines: DocLine[], total?: number, balance?: number | null) => {
+      const d = this.detail();
+      if (!d || d.id !== r.id) return;
+      this.detail.set({ ...d, lines, total: total ?? d.total, balance: balance !== undefined ? balance : d.balance });
+      this.detailLoading.set(false);
+    };
+    const fail = () => this.detailLoading.set(false);
+
+    switch (this.kind()) {
+      case 'sales':
+        this.entry.invoice(r.id).subscribe({
+          next: (res) => {
+            const inv = unwrap(res);
+            const items = Array.isArray(inv?.items) ? inv.items : [];
+            done(
+              items.map((it: any) => ({
+                name: it.description || it.productName || '—',
+                qty: money(it.quantity) + (money(it.freeQty) ? money(it.freeQty) : 0),
+                rate: money(it.unitPrice),
+                amount: money(it.lineTotal) || money(it.quantity) * money(it.unitPrice),
+                batch: it.batchNo || undefined,
+              })),
+              money(inv?.total), money(inv?.balanceDue),
+            );
+          },
+          error: fail,
+        });
+        return;
+      case 'purchase':
+        this.entry.supplierOrderById(r.id).subscribe({
+          next: (res) => {
+            const so = unwrap(res);
+            const items = Array.isArray(so?.items) ? so.items : [];
+            done(
+              items.map((it: any) => ({
+                name: it.description || '—',
+                qty: money(it.quantity),
+                rate: money(it.unitPrice),
+                amount: money(it.lineTotal) || money(it.quantity) * money(it.unitPrice),
+                batch: it.batchNo || undefined,
+              })),
+              money(so?.total), money(so?.total) - money(so?.amountPaid),
+            );
+          },
+          error: fail,
+        });
+        return;
+      case 'quote':
+        this.entry.quoteById(r.id).subscribe({
+          next: (res) => {
+            const q = unwrap(res);
+            const items = Array.isArray(q?.items) ? q.items : [];
+            done(
+              items.map((it: any) => {
+                const qty = money(it.quantity);
+                const rate = money(it.unitPrice);
+                const disc = money(it.discount);
+                return { name: it.productName || it.description || '—', qty, rate, amount: qty * rate * (1 - disc / 100) };
+              }),
+              money(q?.totalAmount), null,
+            );
+          },
+          error: fail,
+        });
+        return;
+      case 'order':
+        this.entry.orderById(r.id).subscribe({
+          next: (res) => {
+            const o = unwrap(res);
+            const items = Array.isArray(o?.items) ? o.items : [];
+            done(
+              items.map((it: any) => ({
+                name: it.productName || it.description || '—',
+                qty: money(it.quantity),
+                rate: money(it.unitPrice),
+                amount: money(it.totalPrice) || money(it.lineTotal) || money(it.quantity) * money(it.unitPrice),
+              })),
+              money(o?.total), null,
+            );
+          },
+          error: fail,
+        });
+        return;
+    }
+  }
+
+  onDetailKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeDetail(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault(); e.stopPropagation();
+      if (this.kind() === 'sales') this.printDetail();
+      else if (this.kind() === 'quote') this.convertDetail();
+    }
+  }
+
+  printDetail(): void {
+    const d = this.detail();
+    if (d) void this.router.navigate(['/print/invoice', d.id]);
+  }
+
+  /** Miracle "convert to invoice": carries the quotation into the sales screen. */
+  convertDetail(): void {
+    const d = this.detail();
+    if (d) void this.router.navigate(['/entry/sales'], { queryParams: { fromQuote: d.id } });
+  }
+
+  closeDetail(): void {
+    this.detail.set(null);
+    const back = this.detailPrevFocus;
+    this.detailPrevFocus = null;
+    setTimeout(() => back?.focus());
   }
 
   private shiftMonth(delta: number): void {
@@ -253,6 +445,7 @@ export class RegistersComponent {
 
   @HostListener('document:keydown', ['$event'])
   onKey(e: KeyboardEvent): void {
+    if (this.detail()) return; // the detail popup owns the keyboard
     const el = e.target as HTMLElement | null;
     // The filter box is the home cell — arrows/Enter still drive the row selection from it.
     const inFilter = el?.getAttribute?.('data-cell') === 'filter';
