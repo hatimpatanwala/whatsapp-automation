@@ -88,6 +88,7 @@ export class GatewayComponent {
     {
       title: 'Masters',
       items: [
+        { label: 'Party Master (GST ledger-party)', route: '/entry/party' },
         { label: 'Item Master (Add Item / Stock)', route: '/entry/items' },
         { label: 'Ledgers (Chart of Accounts)', route: '/accounting/ledgers' },
         { label: 'Price Levels & Credit Limits', route: '/entry/masters' },

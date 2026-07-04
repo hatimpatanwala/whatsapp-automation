@@ -80,6 +80,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/entry/pricing-masters.component').then(m => m.PricingMastersComponent),
       },
       {
+        // Party Master — unified GST ledger-party (PARTY_MASTER_README.md).
+        path: 'entry/party',
+        loadComponent: () => import('./features/entry/party-master.component').then(m => m.PartyMasterComponent),
+      },
+      {
         // Item master — Miracle Add Item / Add Stock (dual units, HSN, rates, min stock).
         path: 'entry/items',
         loadComponent: () => import('./features/entry/item-master.component').then(m => m.ItemMasterComponent),

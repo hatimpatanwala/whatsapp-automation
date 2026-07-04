@@ -67,7 +67,8 @@ export class EntryContextService {
       const customer = (
         await qr.query(
           `SELECT c.id, COALESCE(c.display_name, c.name) AS name, c.phone, c.email,
-                  c.gstin, c.company,
+                  c.gstin, c.company, c.state, c.state_code, c.place_of_supply,
+                  c.billing_address, c.pincode, c.default_discount_pct, c.gst_registration_type,
                   c.total_orders, c.total_spent, c.last_order_at,
                   c.price_level_id, pl.name AS price_level_name,
                   c.credit_limit, c.credit_days

@@ -2632,6 +2632,67 @@ const migration072TcsOpeningRate: TenantMigration = {
   },
 };
 
+/**
+ * 073 — Party Master (PARTY_MASTER_README.md): the full GST party/ledger field set on
+ * BOTH role tables. The spec's single-party model is realised as a unified layer —
+ * account_group (Sundry Debtor → customers, Sundry Creditor → suppliers) decides where
+ * the row lives, and the ledger layer is where the roles meet. Idempotent.
+ */
+const migration073PartyMaster: TenantMigration = {
+  name: '073_party_master',
+  async up(qr, schema) {
+    const partyCols = `
+      ADD COLUMN IF NOT EXISTS gst_registration_type VARCHAR(20) NOT NULL DEFAULT 'consumer',
+      ADD COLUMN IF NOT EXISTS pan VARCHAR(10),
+      ADD COLUMN IF NOT EXISTS state VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS state_code VARCHAR(2),
+      ADD COLUMN IF NOT EXISTS place_of_supply VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS reverse_charge BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS tds_applicable BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS tds_section VARCHAR(10),
+      ADD COLUMN IF NOT EXISTS alias VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS party_code VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS contact_person VARCHAR(120),
+      ADD COLUMN IF NOT EXISTS pincode VARCHAR(10),
+      ADD COLUMN IF NOT EXISTS opening_balance NUMERIC(15,2),
+      ADD COLUMN IF NOT EXISTS opening_dr_cr CHAR(2),
+      ADD COLUMN IF NOT EXISTS bill_by_bill BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS default_discount_pct NUMERIC(5,2),
+      ADD COLUMN IF NOT EXISTS bank_name VARCHAR(120),
+      ADD COLUMN IF NOT EXISTS account_number VARCHAR(34),
+      ADD COLUMN IF NOT EXISTS ifsc VARCHAR(11),
+      ADD COLUMN IF NOT EXISTS upi_id VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS salesman VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS route VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS area VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS tags JSONB,
+      ADD COLUMN IF NOT EXISTS user_defined_fields JSONB,
+      ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`;
+    await qr.query(`ALTER TABLE "${schema}".customers ${partyCols}`);
+    await qr.query(`ALTER TABLE "${schema}".suppliers ${partyCols},
+      ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(15,2),
+      ADD COLUMN IF NOT EXISTS credit_days INT,
+      ADD COLUMN IF NOT EXISTS email VARCHAR(120),
+      ADD COLUMN IF NOT EXISTS billing_address TEXT,
+      ADD COLUMN IF NOT EXISTS price_level_id UUID,
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+  },
+  async down(qr, schema) {
+    for (const t of ['customers', 'suppliers']) {
+      await qr.query(`ALTER TABLE "${schema}".${t}
+        DROP COLUMN IF EXISTS gst_registration_type, DROP COLUMN IF EXISTS pan, DROP COLUMN IF EXISTS state,
+        DROP COLUMN IF EXISTS state_code, DROP COLUMN IF EXISTS place_of_supply, DROP COLUMN IF EXISTS reverse_charge,
+        DROP COLUMN IF EXISTS tds_applicable, DROP COLUMN IF EXISTS tds_section, DROP COLUMN IF EXISTS alias,
+        DROP COLUMN IF EXISTS party_code, DROP COLUMN IF EXISTS contact_person, DROP COLUMN IF EXISTS pincode,
+        DROP COLUMN IF EXISTS opening_balance, DROP COLUMN IF EXISTS opening_dr_cr, DROP COLUMN IF EXISTS bill_by_bill,
+        DROP COLUMN IF EXISTS default_discount_pct, DROP COLUMN IF EXISTS bank_name, DROP COLUMN IF EXISTS account_number,
+        DROP COLUMN IF EXISTS ifsc, DROP COLUMN IF EXISTS upi_id, DROP COLUMN IF EXISTS salesman,
+        DROP COLUMN IF EXISTS route, DROP COLUMN IF EXISTS area, DROP COLUMN IF EXISTS tags,
+        DROP COLUMN IF EXISTS user_defined_fields, DROP COLUMN IF EXISTS is_active`);
+    }
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2705,4 +2766,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration070PurchaseChargesUnits,
   migration071ItemMasterRates,
   migration072TcsOpeningRate,
+  migration073PartyMaster,
 ];

@@ -659,8 +659,13 @@ export class SalesInvoiceEntryComponent {
       this.customer.set(ctx);
       // Miracle prefills the party's agreed credit period.
       if (ctx.creditDays && this.dueDays === null) this.dueDays = Number(ctx.creditDays);
-      // Party GSTIN lands on Bill To automatically (feeds e-invoice BuyerDtls).
-      this.billTo = { name: ctx.name, phone: ctx.phone, gstin: ctx.gstin || undefined };
+      // Party master prefills Bill To: GSTIN, state (drives auto-IGST), address, PIN.
+      this.billTo = {
+        name: ctx.name, phone: ctx.phone, gstin: ctx.gstin || undefined,
+        stateCode: ctx.stateCode || undefined, state: ctx.state || undefined,
+        address: ctx.billingAddress || undefined, pincode: ctx.pincode || undefined,
+      };
+      this.autoInterstate();
       this.entry.customerAddresses(hit.id).subscribe((addrs) => {
         this.savedAddresses.set(addrs || []);
         const def = (addrs || [])[0];
@@ -698,6 +703,9 @@ export class SalesInvoiceEntryComponent {
     row.gstRate = Number(hit.gstRate) || 0;
     row.rate = Number(hit.salePrice ?? hit.basePrice) || null;
     row.stock = Number(hit.stock) || 0;
+    // Party master: default discount % prefills D1 (still editable per line).
+    const partyDisc = Number(this.customer()?.defaultDiscountPct) || 0;
+    if (partyDisc > 0 && row.d1 === null) row.d1 = partyDisc;
     this.productHits.set([]); this.searchRow.set(null);
     this.loadItemContext(r, true);
     setTimeout(() => this.focusCell(r, 'qty'));

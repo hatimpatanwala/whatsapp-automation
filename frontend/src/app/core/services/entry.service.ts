@@ -19,6 +19,8 @@ export interface ItemContext extends ProductHit {
 }
 export interface CustomerContext {
   id: string; name: string; phone: string; email?: string; gstin?: string; company?: string;
+  state?: string; stateCode?: string; placeOfSupply?: string; billingAddress?: string;
+  pincode?: string; defaultDiscountPct?: number | null; gstRegistrationType?: string;
   totalOrders: number; totalSpent: number; lastOrderAt?: string;
   outstanding: number; openInvoices: number;
   /** Credit control (Tally credit limit/days). */
@@ -156,6 +158,24 @@ export class EntryService {
     items: Array<{ productId?: string; productName?: string; quantity: number; unitPrice: number }>;
     notes?: string; discount?: number; deliveryFee?: number; taxAmount?: number;
   }): Observable<any> { return this.api.post<any>('/orders', body); }
+
+  // ─── Party Master (unified GST ledger-party — PARTY_MASTER_README.md) ───────
+  parties(q = '', group?: 'debtor' | 'creditor'): Observable<any[]> {
+    return this.api.get<any[]>('/entry/party', { q, ...(group ? { group } : {}) });
+  }
+  party(group: string, id: string): Observable<any> { return this.api.get<any>(`/entry/party/${group}/${id}`); }
+  createParty(body: any): Observable<any> { return this.api.post<any>('/entry/party', body); }
+  updateParty(group: string, id: string, body: any): Observable<any> { return this.api.patch<any>(`/entry/party/${group}/${id}`, body); }
+  deleteParty(group: string, id: string): Observable<any> { return this.api.delete<any>(`/entry/party/${group}/${id}`); }
+  checkGstin(gstin: string, exclude?: string): Observable<{ exists: boolean; parties?: string[] }> {
+    return this.api.get<{ exists: boolean; parties?: string[] }>('/entry/party/check-gstin', { gstin, ...(exclude ? { exclude } : {}) });
+  }
+  addPartyAddress(customerId: string, body: { label?: string; fullAddress: string; city?: string; state?: string; pincode?: string; isDefault?: boolean }): Observable<any> {
+    return this.api.post<any>(`/entry/party/debtor/${customerId}/addresses`, body);
+  }
+  removePartyAddress(customerId: string, addressId: string): Observable<any> {
+    return this.api.delete<any>(`/entry/party/debtor/${customerId}/addresses/${addressId}`);
+  }
 
   // ─── Item master (Miracle Add Item / Add Stock) ─────────────────────────────
   items(q = ''): Observable<ItemMasterRow[]> { return this.api.get<ItemMasterRow[]>('/entry/items', q ? { q } : undefined); }
