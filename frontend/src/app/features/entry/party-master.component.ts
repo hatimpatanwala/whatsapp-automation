@@ -132,10 +132,18 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
               <div class="text-xs font-semibold text-slate-500 uppercase mb-2">GST &amp; statutory</div>
               <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <label>GSTIN {{ gstinRequired() ? '*' : '' }}
-                  <input [(ngModel)]="f.gstin" (ngModelChange)="onGstin()" maxlength="15"
-                         class="mt-1 w-full border rounded px-2 py-1.5 font-mono uppercase" autocomplete="off" />
+                  <div class="flex gap-1 mt-1">
+                    <input [(ngModel)]="f.gstin" (ngModelChange)="onGstin()" maxlength="15"
+                           class="w-full border rounded px-2 py-1.5 font-mono uppercase" autocomplete="off" />
+                    <button (click)="fetchGstin()" [disabled]="fetching()" title="Fetch party details from the GST number"
+                            class="px-2 rounded bg-indigo-700 text-white text-xs whitespace-nowrap disabled:opacity-50">
+                      {{ fetching() ? '…' : '⇩ Fetch' }}
+                    </button>
+                  </div>
                   @if (errors()['gstin']) { <p class="err">{{ errors()['gstin'] }}</p> }
                   @if (dupWarn()) { <p class="warn">⚠ GSTIN already on: {{ dupWarn() }}</p> }
+                  @if (fetchNote()) { <p class="warn">{{ fetchNote() }}</p> }
+                  @if (fetchOk()) { <p class="ok">✓ {{ fetchOk() }}</p> }
                 </label>
                 <label>PAN
                   <input [(ngModel)]="f.pan" maxlength="10" (ngModelChange)="revalidate()"
@@ -270,6 +278,7 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
       label { display: block; color: #334; font-size: 12.5px; }
       .err { color: #b91c1c; font-size: 11px; margin-top: 2px; }
       .warn { color: #92600a; font-size: 11px; margin-top: 2px; }
+      .ok { color: #1d7a4f; font-size: 11px; margin-top: 2px; }
     `,
   ],
 })
@@ -334,9 +343,50 @@ export class PartyMasterComponent {
         this.entry.checkGstin(g, this.editId() || undefined).subscribe((r) => {
           this.dupWarn.set(r?.exists ? (r.parties || []).join(', ') : null);
         });
-      }, 300);
-    } else this.dupWarn.set(null);
+        // Auto-fetch the party's details the moment a checksum-valid GSTIN lands.
+        if (gstinChecksumOk(g)) this.fetchGstin();
+      }, 400);
+    } else { this.dupWarn.set(null); this.fetchOk.set(null); this.fetchNote.set(null); }
     this.revalidate();
+  }
+
+  // ─── GSTIN auto-fetch ───────────────────────────────────────────────────────
+  readonly fetching = signal(false);
+  readonly fetchOk = signal<string | null>(null);
+  readonly fetchNote = signal<string | null>(null);
+
+  fetchGstin(): void {
+    const g = (this.f.gstin || '').toUpperCase();
+    if (!GSTIN_RE.test(g) || !gstinChecksumOk(g) || this.fetching()) return;
+    this.fetching.set(true);
+    this.fetchOk.set(null);
+    this.fetchNote.set(null);
+    this.entry.gstinLookup(g).subscribe({
+      next: (d: any) => {
+        this.fetching.set(false);
+        if (!d) return;
+        // Fill blanks only — never stomp what the operator already typed.
+        if (d.legalName && !this.f.partyName?.trim()) this.f.partyName = d.legalName;
+        if (d.tradeName && !this.f.alias?.trim()) this.f.alias = d.tradeName;
+        if (d.address && !this.f.billingAddress?.trim()) this.f.billingAddress = d.address;
+        if (d.pincode && !this.f.pincode?.trim()) this.f.pincode = d.pincode;
+        if (d.pan && !this.f.pan?.trim()) this.f.pan = d.pan;
+        if (d.stateCode) { this.f.stateCode = d.stateCode; this.onState(); }
+        if (d.registrationType) this.f.gstRegistrationType = d.registrationType;
+        if (d.source === 'gst-portal') {
+          this.fetchOk.set(`Fetched from GST records${d.legalName ? ': ' + d.legalName : ''}${d.status ? ' (' + d.status + ')' : ''}`);
+        } else {
+          this.fetchOk.set(`Derived from GSTIN: ${[d.state, d.entityType].filter(Boolean).join(' · ')}`);
+          if (d.note) this.fetchNote.set(d.note);
+        }
+        this.revalidate();
+        this.tick.update((t) => t + 1);
+      },
+      error: (err) => {
+        this.fetching.set(false);
+        this.fetchNote.set(err?.error?.error?.errors?.gstin || err?.error?.message || 'Lookup failed');
+      },
+    });
   }
 
   onState(): void {

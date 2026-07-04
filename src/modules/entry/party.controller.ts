@@ -24,6 +24,13 @@ export class PartyController {
     return this.parties.gstinExists(this.schema(req), gstin, exclude);
   }
 
+  /** GSTIN auto-fetch: portal details when a provider is configured, offline-derived always. */
+  @Get('gstin-lookup')
+  gstinLookup(@Req() req: Request, @Query('gstin') gstin = '') {
+    this.schema(req); // auth only — the lookup itself is tenant-independent
+    return this.parties.gstinLookup(gstin);
+  }
+
   @Get(':group/:id')
   get(@Req() req: Request, @Param('group') group: PartyGroup, @Param('id') id: string) {
     return this.parties.get(this.schema(req), group, id);

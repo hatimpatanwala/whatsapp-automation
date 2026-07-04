@@ -170,6 +170,7 @@ export class EntryService {
   checkGstin(gstin: string, exclude?: string): Observable<{ exists: boolean; parties?: string[] }> {
     return this.api.get<{ exists: boolean; parties?: string[] }>('/entry/party/check-gstin', { gstin, ...(exclude ? { exclude } : {}) });
   }
+  gstinLookup(gstin: string): Observable<any> { return this.api.get<any>('/entry/party/gstin-lookup', { gstin }); }
   addPartyAddress(customerId: string, body: { label?: string; fullAddress: string; city?: string; state?: string; pincode?: string; isDefault?: boolean }): Observable<any> {
     return this.api.post<any>(`/entry/party/debtor/${customerId}/addresses`, body);
   }

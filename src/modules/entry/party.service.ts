@@ -278,6 +278,80 @@ export class PartyService {
     });
   }
 
+  /**
+   * GSTIN auto-fetch: type a GST number → party details fill themselves.
+   * Provider-pluggable (official-API-shaped JSON):
+   *   - GSTIN_LOOKUP_URL env: a URL template with {gstin} (self-hosted/GSP proxy), or
+   *   - GSTIN_LOOKUP_KEY env: the gstincheck.co.in free-tier API.
+   * With no provider (or offline) it still derives everything the number itself
+   * encodes: state (code→name), PAN, and the entity type from the PAN's 4th char.
+   */
+  async gstinLookup(gstin: string) {
+    const g = (gstin || '').trim().toUpperCase();
+    if (!GSTIN_RE.test(g) || !gstinChecksumOk(g)) {
+      throw new BadRequestException({ message: 'Validation failed', errors: { gstin: 'Enter a valid GSTIN first' } });
+    }
+
+    const offline = this.deriveFromGstin(g);
+    const url = process.env.GSTIN_LOOKUP_URL
+      ? process.env.GSTIN_LOOKUP_URL.replace('{gstin}', g)
+      : process.env.GSTIN_LOOKUP_KEY
+        ? `https://sheet.gstincheck.co.in/check/${process.env.GSTIN_LOOKUP_KEY}/${g}`
+        : null;
+    if (!url) return { ...offline, source: 'offline', note: 'Set GSTIN_LOOKUP_KEY (or GSTIN_LOOKUP_URL) for full portal auto-fill' };
+
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return { ...offline, source: 'offline', note: `Lookup provider returned ${res.status}` };
+      const body: any = await res.json();
+      const d = body?.data ?? body?.taxpayerInfo ?? body;
+      if (!d || body?.flag === false) return { ...offline, source: 'offline', note: body?.message || 'Provider had no record' };
+
+      const addr = d?.pradr?.addr ?? {};
+      const addressParts = [addr.bno, addr.bnm, addr.st, addr.loc, addr.dst].filter(Boolean);
+      return {
+        ...offline,
+        source: 'gst-portal',
+        legalName: d.lgnm || offline.legalName,
+        tradeName: d.tradeNam || d.tradeName || '',
+        address: addressParts.join(', ') || undefined,
+        pincode: addr.pncd || undefined,
+        registrationType: /composition/i.test(d.dty || '') ? 'composition' : 'regular',
+        status: d.sts || undefined,
+      };
+    } catch {
+      return { ...offline, source: 'offline', note: 'Lookup provider unreachable — filled what the GSTIN itself encodes' };
+    }
+  }
+
+  private deriveFromGstin(g: string) {
+    const STATE_NAMES: Record<string, string> = {
+      '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand',
+      '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim',
+      '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura',
+      '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh',
+      '23': 'Madhya Pradesh', '24': 'Gujarat', '26': 'Dadra & Nagar Haveli and Daman & Diu', '27': 'Maharashtra',
+      '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry',
+      '35': 'Andaman & Nicobar', '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh', '97': 'Other Territory',
+    };
+    const ENTITY: Record<string, string> = {
+      C: 'Private/Public Limited Company', P: 'Proprietorship / Individual', F: 'Partnership Firm', H: 'HUF',
+      A: 'Association of Persons', T: 'Trust', B: 'Body of Individuals', L: 'Local Authority',
+      J: 'Artificial Juridical Person', G: 'Government',
+    };
+    return {
+      gstin: g,
+      pan: g.slice(2, 12),
+      stateCode: g.slice(0, 2),
+      state: STATE_NAMES[g.slice(0, 2)] || '',
+      entityType: ENTITY[g[5]] || undefined,
+      legalName: '',
+    };
+  }
+
   /** Shipping addresses (debtors): 1 party → many ship-to rows (spec §2.3). */
   async addAddress(schema: string, customerId: string, a: { label?: string; fullAddress: string; city?: string; state?: string; pincode?: string; isDefault?: boolean }) {
     if (!a?.fullAddress?.trim()) throw new BadRequestException({ message: 'Validation failed', errors: { fullAddress: 'Address is required' } });
