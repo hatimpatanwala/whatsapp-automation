@@ -141,7 +141,7 @@ function amountInWords(n: number): string {
               <tr><td>CGST</td><td class="r">{{ fmt(v.cgst) }}</td></tr>
               <tr><td>SGST</td><td class="r">{{ fmt(v.sgst) }}</td></tr>
             }
-            @if (num(v.discount)) { <tr><td>Bill Discount</td><td class="r">− {{ fmt(v.discount) }}</td></tr> }
+            @if (num(v.discount)) { <tr><td>Cash Discount (CD)</td><td class="r">− {{ fmt(v.discount) }}</td></tr> }
             @if (num(v.tcsAmount)) { <tr><td>TCS {{ v.tcsPct ? '@' + v.tcsPct + '%' : '' }}</td><td class="r">{{ fmt(v.tcsAmount) }}</td></tr> }
             <tr><td>Round Off</td><td class="r">{{ fmt(v.roundOff) }}</td></tr>
             <tr class="pi-grand"><td>TOTAL</td><td class="r">₹{{ fmt(v.total) }}</td></tr>

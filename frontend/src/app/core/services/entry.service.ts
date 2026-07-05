@@ -90,7 +90,10 @@ export class EntryService {
   generateIrn(invoiceId: string): Observable<any> { return this.api.post<any>(`/gst/einvoice/${invoiceId}`, {}); }
   supplierOrderById(id: string): Observable<any> { return this.api.get<any>(`/erp/supplier-orders/${id}`); }
   orderById(id: string): Observable<any> { return this.api.get<any>(`/orders/${id}`); }
-  createEway(body: { invoiceId: string; vehicleNumber?: string; transporter?: string; distanceKm?: number }): Observable<any> {
+  createEway(body: {
+    invoiceId: string; transportMode?: string; vehicleNumber?: string; transporter?: string;
+    fromPlace?: string; toPlace?: string; distanceKm?: number;
+  }): Observable<any> {
     return this.api.post<any>('/erp/eway-bills', body);
   }
   downloadEwayPdf(id: string, ewayNumber: string): void {

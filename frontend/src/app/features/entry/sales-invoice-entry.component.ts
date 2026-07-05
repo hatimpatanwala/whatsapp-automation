@@ -89,39 +89,64 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
         <label class="ml-auto flex items-center gap-2 text-sm">
           <input type="checkbox" [(ngModel)]="isInterstate" /> Interstate (IGST)
         </label>
-        @if (savedNumber()) {
-          <span class="text-sm px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-            ✓ {{ savedNumber() }} saved & posted
-          </span>
-          @if (savedId()) {
+      </div>
+
+      <!-- POST-SAVE TRAY — a clearly separate card: these actions belong to the invoice
+           that was JUST SAVED, not to the fresh entry form below it. -->
+      @if (savedNumber() && savedId()) {
+        <div class="mb-3 border-2 border-emerald-400 bg-emerald-50 rounded-lg px-3 py-2 shadow-sm">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-bold text-emerald-800">✓ {{ savedNumber() }}</span>
+            <span class="text-xs text-emerald-700 mr-2">saved &amp; posted — actions for this invoice:</span>
             <button (click)="printSaved()" class="text-sm px-3 py-1 rounded bg-slate-800 text-white hover:bg-slate-700">🖨 Print</button>
             <button (click)="genIrn()" [disabled]="irnBusy()"
                     class="text-sm px-3 py-1 rounded bg-indigo-700 text-white hover:bg-indigo-600 disabled:opacity-50">
-              {{ irnBusy() ? '…' : '⚡ e-Invoice' }}
+              {{ irnBusy() ? '…' : '⚡ e-Invoice (IRN)' }}
             </button>
             <button (click)="ewayOpen.set(!ewayOpen())"
-                    class="text-sm px-3 py-1 rounded bg-amber-700 text-white hover:bg-amber-600">🚚 e-Way</button>
+                    class="text-sm px-3 py-1 rounded text-white"
+                    [class.bg-amber-700]="!ewayOpen()" [class.bg-amber-900]="ewayOpen()">
+              🚚 e-Way Bill {{ ewayOpen() ? '▴' : '▾' }}
+            </button>
             @if (irnMsg()) {
               <span class="text-xs" [class.text-emerald-700]="irnOk()" [class.text-red-600]="!irnOk()">{{ irnMsg() }}</span>
             }
-          }
-        }
-      </div>
+            <button (click)="dismissSaved()" title="Dismiss — continue with the next bill"
+                    class="ml-auto text-emerald-800 hover:text-emerald-950 text-sm px-2">✕</button>
+          </div>
 
-      <!-- Post-save e-Way Bill (Miracle action tray): vehicle + transporter is all it needs -->
-      @if (ewayOpen() && savedId()) {
-        <div class="flex flex-wrap items-center gap-3 mb-2 text-sm bg-amber-50 border border-amber-200 rounded px-3 py-2">
-          <span class="font-medium">🚚 e-Way Bill for {{ savedNumber() }}</span>
-          <label>Vehicle <input [(ngModel)]="ewayVehicle" placeholder="GJ01AB1234" class="ml-1 border rounded px-2 py-1 w-28" autocomplete="off" /></label>
-          <label>Transporter <input [(ngModel)]="ewayTransporter" class="ml-1 border rounded px-2 py-1 w-32" autocomplete="off" /></label>
-          <label>Distance km <input type="number" [(ngModel)]="ewayDistance" class="ml-1 border rounded px-2 py-1 w-20 text-right" /></label>
-          <button (click)="genEway()" [disabled]="ewayBusy()"
-                  class="px-3 py-1 rounded bg-amber-700 text-white disabled:opacity-50">{{ ewayBusy() ? '…' : 'Generate' }}</button>
-          @if (ewayNo()) {
-            <span class="text-emerald-700 font-medium">EWB {{ ewayNo() }}</span>
-            <button (click)="ewayPdf()" class="px-2 py-1 rounded border text-xs">PDF</button>
+          @if (ewayOpen()) {
+            <div class="flex flex-wrap items-end gap-3 text-sm border-t border-emerald-200 mt-2 pt-2">
+              <label class="text-xs text-slate-600">Mode
+                <select [(ngModel)]="ewayMode" class="block border rounded px-2 py-1 mt-0.5">
+                  <option value="road">Road</option><option value="rail">Rail</option>
+                  <option value="air">Air</option><option value="ship">Ship</option>
+                </select>
+              </label>
+              <label class="text-xs text-slate-600">Vehicle no.
+                <input [(ngModel)]="ewayVehicle" placeholder="GJ01AB1234" class="block border rounded px-2 py-1 mt-0.5 w-28 uppercase" autocomplete="off" />
+              </label>
+              <label class="text-xs text-slate-600">Transporter
+                <input [(ngModel)]="ewayTransporter" class="block border rounded px-2 py-1 mt-0.5 w-32" autocomplete="off" />
+              </label>
+              <label class="text-xs text-slate-600">From (dispatch)
+                <input [(ngModel)]="ewayFrom" placeholder="seller city" class="block border rounded px-2 py-1 mt-0.5 w-28" autocomplete="off" />
+              </label>
+              <label class="text-xs text-slate-600">To (delivery)
+                <input [(ngModel)]="ewayTo" placeholder="consignee city" class="block border rounded px-2 py-1 mt-0.5 w-28" autocomplete="off" />
+              </label>
+              <label class="text-xs text-slate-600">Distance km
+                <input type="number" [(ngModel)]="ewayDistance" class="block border rounded px-2 py-1 mt-0.5 w-20 text-right" />
+              </label>
+              <button (click)="genEway()" [disabled]="ewayBusy()"
+                      class="px-3 py-1.5 rounded bg-amber-700 text-white disabled:opacity-50">{{ ewayBusy() ? '…' : 'Generate EWB' }}</button>
+              @if (ewayNo()) {
+                <span class="text-emerald-700 font-semibold">EWB {{ ewayNo() }}</span>
+                <button (click)="ewayPdf()" class="px-2 py-1 rounded border text-xs bg-white">PDF</button>
+              }
+              @if (ewayErr()) { <span class="text-red-600 text-xs">{{ ewayErr() }}</span> }
+            </div>
           }
-          @if (ewayErr()) { <span class="text-red-600 text-xs">{{ ewayErr() }}</span> }
         </div>
       }
 
@@ -348,7 +373,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <div class="flex-1 min-w-72">
               <div class="text-sm bg-slate-50 border rounded px-3 py-2 mb-2">
                 <div class="flex items-center gap-3 mb-1">
-                  <span class="font-medium text-slate-600">Bill discount:</span>
+                  <span class="font-medium text-slate-600" title="Cash Discount — bill-level, on top of line D1/D2">CD (Cash Disc):</span>
                   <label>% <input type="number" [(ngModel)]="billDiscPct" class="w-16 border rounded px-1.5 py-0.5 text-right" /></label>
                   <label>₹ <input type="number" [(ngModel)]="billDiscAmt" class="w-24 border rounded px-1.5 py-0.5 text-right" /></label>
                   <span class="text-slate-400">= ₹{{ fmt(billDiscount()) }}</span>
@@ -380,7 +405,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <div class="text-sm w-72 space-y-1">
               <div class="flex justify-between"><span class="text-slate-500">Gross</span><span>{{ fmt(gross()) }}</span></div>
               <div class="flex justify-between"><span class="text-slate-500">Line disc (D1+D2)</span><span>− {{ fmt(lineDiscTotal()) }}</span></div>
-              <div class="flex justify-between"><span class="text-slate-500">Bill discount</span><span>− {{ fmt(billDiscount()) }}</span></div>
+              <div class="flex justify-between"><span class="text-slate-500">CD (cash disc)</span><span>− {{ fmt(billDiscount()) }}</span></div>
               <div class="flex justify-between"><span class="text-slate-500">Charges</span><span>+ {{ fmt(chargesAmt()) }}</span></div>
               @if (isInterstate) {
                 <div class="flex justify-between"><span class="text-slate-500">IGST</span><span>{{ fmt(totalTax()) }}</span></div>
@@ -437,7 +462,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <p class="text-slate-400">Select a party — or switch to <b>Cash Memo</b> for a walk-in sale.</p>
           }
           <div class="mt-4 pt-3 border-t text-xs text-slate-400 leading-5">
-            <b class="text-slate-500">Keys:</b> Enter next · Ins +row · Ctrl+Del −row · Esc close · <b>Ctrl+A save</b>
+            <b class="text-slate-500">Keys:</b> Enter next · <b>PgDn items</b> · Ins +row · Ctrl+Del −row · Esc close · <b>Ctrl+Enter save</b>
           </div>
         </div>
       </div>
@@ -467,6 +492,8 @@ export class SalesInvoiceEntryComponent {
       next: (p: any) => {
         this.sellerStateCode = String(p?.invoiceStateCode || p?.invoice_state_code || '').trim()
           || String(p?.invoiceGstin || p?.invoice_gstin || '').slice(0, 2);
+        // Dispatch-from city prefills the e-Way "From" field.
+        this.ewayFrom = String(p?.city || p?.invoiceCity || p?.invoice_city || '').trim();
       },
       error: () => { /* no seller profile yet — manual IGST toggle still works */ },
     });
@@ -545,9 +572,21 @@ export class SalesInvoiceEntryComponent {
   readonly ewayNo = signal<string | null>(null);
   readonly ewayErr = signal<string | null>(null);
   private ewayId: string | null = null;
+  ewayMode: 'road' | 'rail' | 'air' | 'ship' = 'road';
   ewayVehicle = '';
   ewayTransporter = '';
+  ewayFrom = '';
+  ewayTo = '';
   ewayDistance: number | null = null;
+
+  /** Dismiss the post-save tray and get back to billing. */
+  dismissSaved(): void {
+    this.savedNumber.set(null);
+    this.savedId.set(null);
+    this.ewayOpen.set(false);
+    this.irnMsg.set(null);
+    setTimeout(() => this.focusParty());
+  }
 
   genEway(): void {
     const id = this.savedId();
@@ -556,10 +595,13 @@ export class SalesInvoiceEntryComponent {
     this.ewayErr.set(null);
     this.entry.createEway({
       invoiceId: id,
-      vehicleNumber: this.ewayVehicle.trim() || undefined,
+      transportMode: this.ewayMode,
+      vehicleNumber: this.ewayVehicle.trim().toUpperCase() || undefined,
       transporter: this.ewayTransporter.trim() || undefined,
+      fromPlace: this.ewayFrom.trim() || undefined,
+      toPlace: this.ewayTo.trim() || undefined,
       distanceKm: this.ewayDistance !== null ? Number(this.ewayDistance) : undefined,
-    }).subscribe({
+    } as any).subscribe({
       next: (r: any) => {
         const doc = r?.data ?? r;
         this.ewayBusy.set(false);
@@ -905,6 +947,23 @@ export class SalesInvoiceEntryComponent {
 
   onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
 
+  /**
+   * PgDn from ANYWHERE on the sales screen jumps to the item grid (Miracle: the
+   * operator never has to walk fields they don't need — party and addresses are
+   * optional stops, items are the destination).
+   */
+  @HostListener('document:keydown.pagedown', ['$event'])
+  onGlobalPgDn(e: Event): void {
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest?.('[data-lookup-box],[data-detail-box]')) return; // popups own their keys
+    const cell = active?.getAttribute?.('data-cell') || '';
+    if (/^\d+:/.test(cell)) return; // already in the grid
+    e.preventDefault();
+    // Land on the first EMPTY row so billing continues, not overwrites.
+    const r = Math.max(0, this.rows.findIndex((row) => !row.name));
+    this.focusCell(r === -1 ? this.rows.length - 1 : r, 'name');
+  }
+
   /** Alt+B — toggle the batch/expiry/godown strip for the line under the cursor. */
   @HostListener('document:keydown.alt.b', ['$event'])
   onBatchKey(e: Event): void {
@@ -1062,6 +1121,10 @@ export class SalesInvoiceEntryComponent {
       this.savedId.set(inv?.id || null);
       this.irnMsg.set(null);
       this.ewayOpen.set(false); this.ewayNo.set(null); this.ewayErr.set(null); this.ewayId = null;
+      // e-Way "To" prefills from the just-billed dispatch destination (before the form resets).
+      this.ewayTo = this.effShipTo()?.city || this.effBillTo()?.city || '';
+      this.ewayVehicle = this.vehicleNo || this.ewayVehicle;
+      this.ewayTransporter = this.transportName || this.ewayTransporter;
       this.rows = [this.blankRow(), this.blankRow()];
       this.note = ''; this.manualNo = ''; this.customerQuery = ''; this.customer.set(null);
       this.billDiscPct = null; this.billDiscAmt = null; this.receivedNow = null; this.dueDays = null; this.tcsPct = null;
