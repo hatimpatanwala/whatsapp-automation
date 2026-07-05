@@ -88,6 +88,9 @@ export class EntryService {
   createInvoice(body: CreateInvoiceBody): Observable<any> { return this.api.post<any>('/erp/invoices', body); }
   quoteById(id: string): Observable<any> { return this.api.get<any>(`/quotes/${id}`); }
   generateIrn(invoiceId: string): Observable<any> { return this.api.post<any>(`/gst/einvoice/${invoiceId}`, {}); }
+  downloadEinvoicePayload(invoiceId: string, invoiceNo: string): void {
+    this.api.downloadFile(`/gst/einvoice/${invoiceId}/payload`, `einvoice-${invoiceNo.replace(/[^\w-]/g, '_')}.json`);
+  }
   supplierOrderById(id: string): Observable<any> { return this.api.get<any>(`/erp/supplier-orders/${id}`); }
   orderById(id: string): Observable<any> { return this.api.get<any>(`/orders/${id}`); }
   createEway(body: {

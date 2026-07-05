@@ -311,6 +311,9 @@ export class MainLayoutComponent implements OnInit {
       title: 'Overview',
       items: [
         { label: 'Dashboard', icon: 'pi-home', route: '/dashboard' },
+        // Back into the keyboard-first ERP chrome (Miracle view) — the reverse of
+        // the ERP status bar's "Web Portal ⤴" link.
+        { label: 'ERP (Keyboard view)', icon: 'pi-table', route: '/home', featureKey: 'erp' },
         { label: 'Business Overview', icon: 'pi-chart-bar', route: '/erp/dashboard', featureKey: 'erp' },
         { label: 'Reports & Analytics', icon: 'pi-chart-line', route: '/erp/reports', featureKey: 'erp' },
         // Downgraded tenants: a single entry to view & download their preserved ERP data.

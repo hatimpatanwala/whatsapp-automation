@@ -108,8 +108,13 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                     [class.bg-amber-700]="!ewayOpen()" [class.bg-amber-900]="ewayOpen()">
               🚚 e-Way Bill {{ ewayOpen() ? '▴' : '▾' }}
             </button>
+            @if (irnPayloadReady()) {
+              <button (click)="downloadIrnPayload()" class="text-xs px-2 py-1 rounded border bg-white">⇣ payload JSON</button>
+            }
             @if (irnMsg()) {
-              <span class="text-xs" [class.text-emerald-700]="irnOk()" [class.text-red-600]="!irnOk()">{{ irnMsg() }}</span>
+              <span class="text-xs max-w-md" [class.text-emerald-700]="irnOk()"
+                    [class.text-amber-700]="!irnOk() && irnPayloadReady()"
+                    [class.text-red-600]="!irnOk() && !irnPayloadReady()">{{ irnMsg() }}</span>
             }
             <button (click)="dismissSaved()" title="Dismiss — continue with the next bill"
                     class="ml-auto text-emerald-800 hover:text-emerald-950 text-sm px-2">✕</button>
@@ -624,17 +629,33 @@ export class SalesInvoiceEntryComponent {
   readonly irnMsg = signal<string | null>(null);
   readonly irnOk = signal(false);
 
+  readonly irnPayloadReady = signal(false);
+
   genIrn(): void {
     const id = this.savedId();
     if (!id || this.irnBusy()) return;
     this.irnBusy.set(true);
     this.irnMsg.set(null);
+    this.irnPayloadReady.set(false);
     this.entry.generateIrn(id).subscribe({
       next: (r: any) => {
         this.irnBusy.set(false);
-        const irn = r?.irn || r?.Irn || r?.data?.irn;
-        this.irnOk.set(!!irn);
-        this.irnMsg.set(irn ? `IRN: ${String(irn).slice(0, 22)}…` : (r?.message || 'e-Invoice payload prepared'));
+        const doc = r?.data ?? r;
+        const irn = doc?.irn || doc?.Irn;
+        if (irn) {
+          this.irnOk.set(true);
+          this.irnMsg.set(`IRN: ${String(irn).slice(0, 22)}…`);
+          return;
+        }
+        if (doc?.status === 'unconfigured') {
+          // No GSP creds — that's a setup state, not a failure: hand over the payload.
+          this.irnOk.set(false);
+          this.irnPayloadReady.set(true);
+          this.irnMsg.set('IRP not connected — download the payload JSON and upload it on the e-invoice portal (or set EINVOICE_API_URL + EINVOICE_AUTH_TOKEN from your GSP).');
+          return;
+        }
+        this.irnOk.set(false);
+        this.irnMsg.set(doc?.message || 'e-Invoice failed');
       },
       error: (err) => {
         this.irnBusy.set(false);
@@ -642,6 +663,11 @@ export class SalesInvoiceEntryComponent {
         this.irnMsg.set(err?.error?.message || 'e-Invoice failed');
       },
     });
+  }
+
+  downloadIrnPayload(): void {
+    const id = this.savedId();
+    if (id) this.entry.downloadEinvoicePayload(id, this.savedNumber() || 'invoice');
   }
 
   readonly tick = signal(0);

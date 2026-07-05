@@ -55,9 +55,24 @@ export class KeyboardShortcutsService {
       return;
     }
 
-    // Alt+M/T/G/R/U/S/E — open the Miracle module menus (handled by the ERP layout).
     if (e.altKey && !e.ctrlKey) {
-      const menuIdx = { m: 0, t: 1, g: 2, r: 3, u: 4, s: 5, e: 6 }[e.key.toLowerCase()];
+      const k = e.key.toLowerCase();
+
+      // Alt screen jumps — the documents/masters/reports that have no free F-key:
+      // Q Quote · O Order · N Returns (notes) · J Stock Journal · K Items ·
+      // V Registers (vouchers) · A Outstanding (ageing).
+      const altRoute = {
+        q: '/entry/quote', o: '/entry/order', n: '/entry/returns', j: '/entry/stock',
+        k: '/entry/items', v: '/entry/registers/sales', a: '/accounting/reports/ageing',
+      }[k];
+      if (altRoute) {
+        e.preventDefault();
+        void this.router.navigate([altRoute]);
+        return;
+      }
+
+      // Alt+M/T/G/R/U/S/E — open the Miracle module menus (handled by the ERP layout).
+      const menuIdx = { m: 0, t: 1, g: 2, r: 3, u: 4, s: 5, e: 6 }[k];
       if (menuIdx !== undefined) {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('wa-menubar', { detail: menuIdx }));
@@ -65,10 +80,15 @@ export class KeyboardShortcutsService {
       }
     }
 
-    // Ctrl+U — open Utility (Miracle global key).
+    // Ctrl+U — open Utility (Miracle global key). Ctrl+G — GST returns.
     if (e.ctrlKey && !e.altKey && (e.key === 'u' || e.key === 'U')) {
       e.preventDefault();
       document.dispatchEvent(new CustomEvent('wa-menubar', { detail: 4 }));
+      return;
+    }
+    if (e.ctrlKey && !e.altKey && (e.key === 'g' || e.key === 'G')) {
+      e.preventDefault();
+      void this.router.navigate(['/gst']);
       return;
     }
 
