@@ -38,6 +38,9 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <input data-cell="search" data-autofocus [(ngModel)]="query" (ngModelChange)="reload()" (keydown)="onListKey($event)"
                    class="flex-1 border rounded px-2 py-1.5 text-sm focus:bg-amber-50 focus:outline-none"
                    placeholder="Search items…" autocomplete="off" />
+            <label class="flex items-center gap-1 text-xs whitespace-nowrap" title="Only items at or below min stock">
+              <input type="checkbox" [(ngModel)]="lowOnly" /> low stock
+            </label>
             <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New (Ins)</button>
           </div>
           <table class="w-full text-sm" style="border-collapse: collapse">
@@ -50,7 +53,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               </tr>
             </thead>
             <tbody>
-              @for (it of list(); track it.id; let i = $index) {
+              @for (it of visibleItems(); track it.id; let i = $index) {
                 <tr (click)="pick(it)" class="cursor-pointer border-t border-slate-100"
                     [class.bg-amber-100]="i === idx()" [class.bg-white]="i !== idx()">
                   <td class="px-2 py-1">{{ it.name }}
@@ -196,6 +199,14 @@ export class ItemMasterComponent {
     this.reload(true);
   }
 
+  lowOnly = false;
+
+  /** Optional low-stock filter over the loaded list. */
+  visibleItems(): ItemMasterRow[] {
+    const items = this.list();
+    return this.lowOnly ? items.filter((it) => (Number(it.stock) || 0) <= (Number(it.minStock) || 0)) : items;
+  }
+
   reload(now = false): void {
     clearTimeout(this.debounce);
     const run = () => this.entry.items(this.query.trim()).subscribe((rows) => {
@@ -206,7 +217,7 @@ export class ItemMasterComponent {
   }
 
   onListKey(e: KeyboardEvent): void {
-    const items = this.list();
+    const items = this.visibleItems();
     if (e.key === 'ArrowDown') { e.preventDefault(); this.idx.set(Math.min(this.idx() + 1, items.length - 1)); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); this.idx.set(Math.max(this.idx() - 1, 0)); return; }
     if (e.key === 'Enter' && items.length) { e.preventDefault(); this.pick(items[this.idx()]); return; }

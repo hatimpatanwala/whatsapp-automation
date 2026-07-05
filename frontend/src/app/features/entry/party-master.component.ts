@@ -66,6 +66,9 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
             <select [(ngModel)]="filterGroup" (ngModelChange)="reload()" class="border rounded px-1 py-1.5 text-xs">
               <option value="">All</option><option value="debtor">Debtors</option><option value="creditor">Creditors</option>
             </select>
+            <label class="flex items-center gap-1 text-xs whitespace-nowrap">
+              <input type="checkbox" [(ngModel)]="activeOnly" /> active
+            </label>
             <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New</button>
           </div>
           <table class="w-full text-sm">
@@ -74,7 +77,7 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
               <th class="px-2 py-1 text-left w-32">GSTIN</th><th class="px-2 py-1 w-12"></th>
             </tr></thead>
             <tbody>
-              @for (p of list(); track p.id) {
+              @for (p of visibleParties(); track p.id) {
                 <tr (click)="pick(p)" class="cursor-pointer border-t border-slate-100 hover:bg-amber-50"
                     [class.bg-amber-100]="editId() === p.id" [class.opacity-50]="p.isActive === false">
                   <td class="px-2 py-1">{{ p.partyName }} @if (p.alias) { <span class="text-xs text-slate-400">({{ p.alias }})</span> }</td>
@@ -299,6 +302,12 @@ export class PartyMasterComponent {
   readonly states = GST_STATES;
   query = '';
   filterGroup = '';
+  activeOnly = false;
+
+  visibleParties(): any[] {
+    const rows = this.list();
+    return this.activeOnly ? rows.filter((p) => p.isActive !== false) : rows;
+  }
   group: 'debtor' | 'creditor' = 'debtor';
   tagsText = '';
   newAddr: ShipAddr = { fullAddress: '' };

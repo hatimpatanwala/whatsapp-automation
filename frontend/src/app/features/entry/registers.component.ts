@@ -49,16 +49,47 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
                     [class.bg-slate-800]="kind() === k.kind" [class.text-white]="kind() === k.kind">{{ k.label }}</button>
           }
         </div>
-        <label class="text-sm">From
-          <input type="date" [(ngModel)]="from" (ngModelChange)="apply()" class="ml-1 border rounded px-2 py-1" />
+        <span class="ml-auto text-xs text-slate-500">↑↓ move · Enter {{ kind() === 'quote' ? 'convert to invoice' : 'open' }} · PgUp/PgDn month · Esc back</span>
+      </div>
+
+      <!-- Filter bar: period presets, dates, text, status, amount range, due-only -->
+      <div class="flex items-center gap-3 mb-3 flex-wrap text-sm">
+        <select [(ngModel)]="preset" (ngModelChange)="applyPreset()" class="border rounded px-1 py-1" title="Quick period">
+          <option value="month">This month</option>
+          <option value="today">Today</option>
+          <option value="week">Last 7 days</option>
+          <option value="fy">This F.Y.</option>
+          <option value="all">All dates</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <label>From
+          <input type="date" [(ngModel)]="from" (ngModelChange)="preset = 'custom'; apply()" class="ml-1 border rounded px-2 py-1" />
         </label>
-        <label class="text-sm">To
-          <input type="date" [(ngModel)]="to" (ngModelChange)="apply()" class="ml-1 border rounded px-2 py-1" />
+        <label>To
+          <input type="date" [(ngModel)]="to" (ngModelChange)="preset = 'custom'; apply()" class="ml-1 border rounded px-2 py-1" />
         </label>
         <input [(ngModel)]="filter" (ngModelChange)="apply()" placeholder="Filter party / number…"
                data-autofocus data-cell="filter"
-               class="border rounded px-2 py-1 text-sm focus:bg-amber-50 focus:outline-none" autocomplete="off" />
-        <span class="ml-auto text-xs text-slate-500">↑↓ move · Enter {{ kind() === 'quote' ? 'convert to invoice' : 'open' }} · PgUp/PgDn month · Esc back</span>
+               class="border rounded px-2 py-1 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+        <select [(ngModel)]="statusFilter" (ngModelChange)="apply()" class="border rounded px-1 py-1" title="Status">
+          <option value="">Any status</option>
+          @for (s of statuses(); track s) { <option [value]="s">{{ s }}</option> }
+        </select>
+        <label class="text-xs text-slate-500">₹
+          <input type="number" [(ngModel)]="minAmt" (ngModelChange)="apply()" placeholder="min"
+                 class="border rounded px-1 py-1 w-20 text-right" />
+          –
+          <input type="number" [(ngModel)]="maxAmt" (ngModelChange)="apply()" placeholder="max"
+                 class="border rounded px-1 py-1 w-20 text-right" />
+        </label>
+        @if (hasBalance()) {
+          <label class="flex items-center gap-1 text-xs">
+            <input type="checkbox" [(ngModel)]="onlyDue" (ngModelChange)="apply()" /> with balance only
+          </label>
+        }
+        @if (filterCount()) {
+          <button (click)="clearFilters()" class="text-xs text-blue-700 hover:underline">clear filters ({{ filterCount() }})</button>
+        }
       </div>
 
       @if (loading()) {
@@ -67,12 +98,12 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
         <table class="w-full text-sm border border-slate-300" style="border-collapse: collapse">
           <thead>
             <tr class="bg-slate-100 text-slate-600">
-              <th class="border border-slate-300 px-2 py-1 w-24 text-left">Date</th>
-              <th class="border border-slate-300 px-2 py-1 w-36 text-left">No.</th>
-              <th class="border border-slate-300 px-2 py-1 text-left">Party</th>
-              <th class="border border-slate-300 px-2 py-1 w-28 text-left">Status</th>
-              <th class="border border-slate-300 px-2 py-1 w-28 text-right">Amount</th>
-              <th class="border border-slate-300 px-2 py-1 w-28 text-right">{{ balanceHead() }}</th>
+              <th (click)="sortBy('date')" class="border border-slate-300 px-2 py-1 w-24 text-left cursor-pointer select-none">Date {{ arrow('date') }}</th>
+              <th (click)="sortBy('number')" class="border border-slate-300 px-2 py-1 w-36 text-left cursor-pointer select-none">No. {{ arrow('number') }}</th>
+              <th (click)="sortBy('party')" class="border border-slate-300 px-2 py-1 text-left cursor-pointer select-none">Party {{ arrow('party') }}</th>
+              <th (click)="sortBy('status')" class="border border-slate-300 px-2 py-1 w-28 text-left cursor-pointer select-none">Status {{ arrow('status') }}</th>
+              <th (click)="sortBy('total')" class="border border-slate-300 px-2 py-1 w-28 text-right cursor-pointer select-none">Amount {{ arrow('total') }}</th>
+              <th (click)="sortBy('balance')" class="border border-slate-300 px-2 py-1 w-28 text-right cursor-pointer select-none">{{ balanceHead() }} {{ arrow('balance') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -197,6 +228,53 @@ export class RegistersComponent {
   from = '';
   to = '';
   filter = '';
+  preset = 'month';
+  statusFilter = '';
+  minAmt: number | null = null;
+  maxAmt: number | null = null;
+  onlyDue = false;
+  private sortKey: keyof RegRow = 'date';
+  private sortDir: 1 | -1 = -1;
+
+  /** Distinct statuses present in the loaded register — the status dropdown adapts per tab. */
+  statuses(): string[] {
+    return [...new Set(this.all.map((r) => r.status).filter(Boolean))].sort();
+  }
+
+  applyPreset(): void {
+    const now = new Date();
+    switch (this.preset) {
+      case 'today': this.from = ymd(now); this.to = ymd(now); break;
+      case 'week': this.from = ymd(new Date(now.getTime() - 6 * 86400_000)); this.to = ymd(now); break;
+      case 'month': this.from = ymd(new Date(now.getFullYear(), now.getMonth(), 1)); this.to = ymd(now); break;
+      case 'fy': {
+        const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+        this.from = `${y}-04-01`; this.to = ymd(now); break;
+      }
+      case 'all': this.from = ''; this.to = ''; break;
+    }
+    this.apply();
+  }
+
+  sortBy(key: keyof RegRow): void {
+    if (this.sortKey === key) this.sortDir = (this.sortDir * -1) as 1 | -1;
+    else { this.sortKey = key; this.sortDir = key === 'date' || key === 'total' || key === 'balance' ? -1 : 1; }
+    this.apply();
+  }
+
+  arrow(key: string): string {
+    return this.sortKey === key ? (this.sortDir === 1 ? '▲' : '▼') : '';
+  }
+
+  filterCount(): number {
+    return [this.filter.trim(), this.statusFilter, this.minAmt, this.maxAmt, this.onlyDue ? 1 : null]
+      .filter((v) => v !== '' && v !== null && v !== undefined).length;
+  }
+
+  clearFilters(): void {
+    this.filter = ''; this.statusFilter = ''; this.minAmt = null; this.maxAmt = null; this.onlyDue = false;
+    this.apply();
+  }
 
   constructor() {
     const now = new Date();
@@ -293,13 +371,29 @@ export class RegistersComponent {
     const f = this.filter.trim().toLowerCase();
     const from = this.from ? new Date(this.from + 'T00:00:00') : null;
     const to = this.to ? new Date(this.to + 'T23:59:59') : null;
-    this.visible.set(this.all.filter((r) => {
+    const min = this.minAmt !== null && this.minAmt !== ('' as any) ? Number(this.minAmt) : null;
+    const max = this.maxAmt !== null && this.maxAmt !== ('' as any) ? Number(this.maxAmt) : null;
+
+    const rows = this.all.filter((r) => {
       const d = r.date ? new Date(r.date) : null;
       if (from && d && d < from) return false;
       if (to && d && d > to) return false;
       if (f && !(`${r.number} ${r.party}`.toLowerCase().includes(f))) return false;
+      if (this.statusFilter && r.status !== this.statusFilter) return false;
+      if (min !== null && r.total < min) return false;
+      if (max !== null && r.total > max) return false;
+      if (this.onlyDue && !((r.balance ?? 0) > 0)) return false;
       return true;
-    }));
+    });
+
+    const key = this.sortKey, dir = this.sortDir;
+    rows.sort((a, b) => {
+      const av = a[key] ?? '', bv = b[key] ?? '';
+      if (typeof av === 'number' || typeof bv === 'number') return ((Number(av) || 0) - (Number(bv) || 0)) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+
+    this.visible.set(rows);
     this.sel.set(0);
   }
 
@@ -435,6 +529,8 @@ export class RegistersComponent {
   }
 
   private shiftMonth(delta: number): void {
+    if (!this.from) return; // "All dates" — nothing to shift
+    this.preset = 'custom';
     const f = new Date(this.from + 'T00:00:00');
     const start = new Date(f.getFullYear(), f.getMonth() + delta, 1);
     const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
