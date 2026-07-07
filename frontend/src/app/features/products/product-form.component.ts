@@ -72,9 +72,9 @@ import { ApiService } from '../../core/services/api.service';
 
                 <div class="grid grid-cols-2 gap-4">
                   <div class="flex flex-col gap-1">
-                    <label class="text-sm font-medium text-gray-700">Unit of Measurement *</label>
-                    <select formControlName="uom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
-                      @for (u of uomOptions; track u.value) { <option [value]="u.value">{{ u.label }}</option> }
+                    <label class="text-sm font-medium text-gray-700">Item Type</label>
+                    <select formControlName="itemType" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+                      @for (t of itemTypeOptions; track t.value) { <option [value]="t.value">{{ t.label }}</option> }
                     </select>
                   </div>
                   <div class="flex flex-col gap-1">
@@ -83,10 +83,37 @@ import { ApiService } from '../../core/services/api.service';
                   </div>
                 </div>
 
+                <div class="grid grid-cols-3 gap-4">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Unit of Measurement *</label>
+                    <select formControlName="uom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+                      @for (u of uomOptions; track u.value) { <option [value]="u.value">{{ u.label }}</option> }
+                    </select>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Alt Unit <span class="text-xs text-gray-400">(e.g. box)</span></label>
+                    <select formControlName="altUom" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+                      <option value="">— none —</option>
+                      @for (u of uomOptions; track u.value) { <option [value]="u.value">{{ u.label }}</option> }
+                    </select>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Conversion <span class="text-xs text-gray-400">(1 alt = ? base)</span></label>
+                    <p-inputnumber formControlName="uomFactor" [min]="0" [maxFractionDigits]="4" placeholder="e.g. 12" styleClass="w-full" inputStyleClass="w-full" />
+                  </div>
+                </div>
+
                 <div class="grid grid-cols-2 gap-4">
                   <div class="flex flex-col gap-1">
                     <label class="text-sm font-medium text-gray-700">Barcode</label>
                     <input pInputText formControlName="barcode" placeholder="123456789" class="w-full" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">UQC <span class="text-xs text-gray-400">(GST unit code)</span></label>
+                    <select formControlName="uqc" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+                      <option value="">— auto —</option>
+                      @for (u of uqcOptions; track u.value) { <option [value]="u.value">{{ u.label }}</option> }
+                    </select>
                   </div>
                 </div>
 
@@ -152,6 +179,48 @@ import { ApiService } from '../../core/services/api.service';
                   <label class="text-sm font-medium text-gray-700">Compare-at Price (\u20B9)</label>
                   <p-inputnumber formControlName="compareAtPrice" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
                 </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">MRP (\u20B9)</label>
+                  <p-inputnumber formControlName="mrp" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Purchase Rate (\u20B9)</label>
+                  <p-inputnumber formControlName="purchasePrice" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Wholesale Price (\u20B9)</label>
+                  <p-inputnumber formControlName="wholesalePrice" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Wholesale Min Qty</label>
+                  <p-inputnumber formControlName="wholesaleMinQty" [min]="0" placeholder="e.g. 10" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Default Sale Discount %</label>
+                  <p-inputnumber formControlName="saleDiscountPct" [min]="0" [max]="100" [maxFractionDigits]="2" placeholder="0" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Cess %</label>
+                  <p-inputnumber formControlName="cessPct" [min]="0" [maxFractionDigits]="2" placeholder="0" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Min Sale Price (\u20B9) <span class="text-xs text-gray-400">(floor)</span></label>
+                  <p-inputnumber formControlName="minSalePrice" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm font-medium text-gray-700">Max Sale Price (\u20B9) <span class="text-xs text-gray-400">(cap)</span></label>
+                  <p-inputnumber formControlName="maxSalePrice" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-6 mt-4">
+                <label class="inline-flex items-center gap-2">
+                  <p-toggleswitch formControlName="priceIncludesTax" />
+                  <span class="text-sm text-gray-700">Price includes tax <span class="text-xs text-gray-400">(billing derives the exclusive rate)</span></span>
+                </label>
+                <label class="inline-flex items-center gap-2">
+                  <p-toggleswitch formControlName="taxExempt" />
+                  <span class="text-sm text-gray-700">Tax exempt / Nil-rated</span>
+                </label>
               </div>
             </div>
 
@@ -162,7 +231,7 @@ import { ApiService } from '../../core/services/api.service';
                 <p-toggleswitch formControlName="trackInventory" />
                 <span class="text-sm text-gray-700">Track inventory for this product</span>
               </div>
-              @if (productForm.get('trackInventory')?.value) {
+              @if (productForm.get('trackInventory')?.value && productForm.get('itemType')?.value !== 'service') {
                 <div class="grid grid-cols-2 gap-4">
                   <div class="flex flex-col gap-1">
                     <label class="text-sm font-medium text-gray-700">Stock Quantity</label>
@@ -172,6 +241,33 @@ import { ApiService } from '../../core/services/api.service';
                     <label class="text-sm font-medium text-gray-700">Low Stock Threshold</label>
                     <p-inputnumber formControlName="lowStockThreshold" [min]="0" styleClass="w-full" inputStyleClass="w-full" />
                   </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Max Stock <span class="text-xs text-gray-400">(over-stock alert)</span></label>
+                    <p-inputnumber formControlName="maxStock" [min]="0" styleClass="w-full" inputStyleClass="w-full" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Rack / Shelf Location</label>
+                    <input pInputText formControlName="rackLocation" placeholder="e.g. A-12" class="w-full" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Opening Stock Rate (₹) <span class="text-xs text-gray-400">(valuation)</span></label>
+                    <p-inputnumber formControlName="openingRate" mode="currency" currency="INR" locale="en-IN" placeholder="0.00" styleClass="w-full" inputStyleClass="w-full" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-sm font-medium text-gray-700">Opening Stock Date</label>
+                    <input type="date" formControlName="openingStockDate" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1 mt-4">
+                  <label class="text-sm font-medium text-gray-700">Stock Tracking</label>
+                  <div class="flex gap-4">
+                    @for (t of trackingOptions; track t.value) {
+                      <label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
+                        <input type="radio" formControlName="trackingMode" [value]="t.value" class="accent-green-600" /> {{ t.label }}
+                      </label>
+                    }
+                  </div>
+                  <p class="text-xs text-gray-400">Batch tracking enables MRP-wise lots in purchases and billing (same as the ERP item master).</p>
                 </div>
               }
             </div>
@@ -375,7 +471,40 @@ export class ProductFormComponent implements OnInit {
     hsnCode: [''],
     gstRate: [null as number | null],
     syncToWhatsApp: [true],
+    // ERP item-master parity — same field set as the keyboard-view Item Master.
+    itemType: ['product'],
+    uqc: [''],
+    altUom: [''],
+    uomFactor: [null as number | null],
+    purchasePrice: [null as number | null],
+    mrp: [null as number | null],
+    wholesalePrice: [null as number | null],
+    wholesaleMinQty: [null as number | null],
+    saleDiscountPct: [null as number | null],
+    priceIncludesTax: [false],
+    minSalePrice: [null as number | null],
+    maxSalePrice: [null as number | null],
+    cessPct: [null as number | null],
+    taxExempt: [false],
+    openingRate: [null as number | null],
+    openingStockDate: [''],
+    maxStock: [null as number | null],
+    rackLocation: [''],
+    trackingMode: ['none'],
   });
+
+  itemTypeOptions = [
+    { label: 'Product (goods, tracks stock)', value: 'product' },
+    { label: 'Service (no stock)', value: 'service' },
+  ];
+  trackingOptions = [
+    { label: 'None', value: 'none' },
+    { label: 'Batch / MRP-wise lots', value: 'batch' },
+    { label: 'Serial numbers', value: 'serial' },
+  ];
+  uqcOptions: { label: string; value: string }[] =
+    ['BAG','BAL','BDL','BOX','BTL','CAN','CTN','DOZ','DRM','GMS','KGS','KLR','LTR','MTR','MTS','NOS','PAC','PCS','PRS','QTL','ROL','SET','SQF','SQM','TBS','TON','UNT']
+      .map((c) => ({ label: c, value: c }));
 
   get f() { return this.productForm.controls; }
 
@@ -482,6 +611,31 @@ export class ProductFormComponent implements OnInit {
     this.onSubmit();
   }
 
+  /** ERP item-master parity fields, shared by the create and update payloads. */
+  private parityFields(v: ReturnType<typeof this.productForm.getRawValue>) {
+    return {
+      itemType: v.itemType ?? 'product',
+      uqc: v.uqc || undefined,
+      altUom: v.altUom || undefined,
+      uomFactor: v.uomFactor ?? undefined,
+      purchasePrice: v.purchasePrice ?? undefined,
+      mrp: v.mrp ?? undefined,
+      wholesalePrice: v.wholesalePrice ?? undefined,
+      wholesaleMinQty: v.wholesaleMinQty ?? undefined,
+      saleDiscountPct: v.saleDiscountPct ?? undefined,
+      priceIncludesTax: v.priceIncludesTax ?? false,
+      minSalePrice: v.minSalePrice ?? undefined,
+      maxSalePrice: v.maxSalePrice ?? undefined,
+      cessPct: v.cessPct ?? undefined,
+      taxExempt: v.taxExempt ?? false,
+      openingRate: v.openingRate ?? undefined,
+      openingStockDate: v.openingStockDate || undefined,
+      maxStock: v.maxStock ?? undefined,
+      rackLocation: v.rackLocation || undefined,
+      trackingMode: v.trackingMode ?? 'none',
+    };
+  }
+
   onSubmit() {
     if (this.productForm.invalid) {
       this.productForm.markAllAsTouched();
@@ -511,6 +665,7 @@ export class ProductFormComponent implements OnInit {
         lowStockThreshold: formValue.lowStockThreshold ?? undefined,
         tags: formValue.tags ?? undefined,
         customFields: this.customFieldValues,
+        ...this.parityFields(formValue),
       };
 
       this.productService.update(this.productId, payload).subscribe({
@@ -556,6 +711,7 @@ export class ProductFormComponent implements OnInit {
         lowStockThreshold: formValue.lowStockThreshold ?? 10,
         tags: formValue.tags ?? [],
         customFields: this.customFieldValues,
+        ...this.parityFields(formValue),
       };
 
       this.productService.create(payload).subscribe({
@@ -607,6 +763,25 @@ export class ProductFormComponent implements OnInit {
           hsnCode: (product as any).hsnCode ?? '',
           gstRate: (product as any).gstRate ?? null,
           tags: product.tags ?? [],
+          itemType: (product as any).itemType ?? 'product',
+          uqc: (product as any).uqc ?? '',
+          altUom: (product as any).altUom ?? '',
+          uomFactor: (product as any).uomFactor ?? null,
+          purchasePrice: (product as any).purchasePrice ?? null,
+          mrp: (product as any).mrp ?? null,
+          wholesalePrice: (product as any).wholesalePrice ?? null,
+          wholesaleMinQty: (product as any).wholesaleMinQty ?? null,
+          saleDiscountPct: (product as any).saleDiscountPct ?? null,
+          priceIncludesTax: (product as any).priceIncludesTax ?? false,
+          minSalePrice: (product as any).minSalePrice ?? null,
+          maxSalePrice: (product as any).maxSalePrice ?? null,
+          cessPct: (product as any).cessPct ?? null,
+          taxExempt: (product as any).taxExempt ?? false,
+          openingRate: (product as any).openingRate ?? null,
+          openingStockDate: ((product as any).openingStockDate || '').slice(0, 10),
+          maxStock: (product as any).maxStock ?? null,
+          rackLocation: (product as any).rackLocation ?? '',
+          trackingMode: (product as any).trackingMode ?? 'none',
         });
         this.syncTaxSelection();
 

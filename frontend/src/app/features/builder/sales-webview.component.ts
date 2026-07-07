@@ -5,23 +5,24 @@ import { HttpBackend, HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
 
-type Tab = 'home' | 'customers' | 'pending' | 'followups';
+type Tab = 'home' | 'catalog' | 'offers' | 'customers' | 'pending' | 'followups';
 
 const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.data : r) as T;
 
 /**
  * Salesman field app (`/m/sales`) — token-secured WhatsApp webview. The admin
- * shares a wa.me link; the salesman opens it inside WhatsApp and can: see the
- * day's collection targets, search customers with outstanding, punch orders on
- * their behalf, collect payments (cash / cheque no+date / UPI / online + txn ref)
- * and record promise-to-pay follow-ups when the customer can't pay today.
+ * shares a wa.me link; the salesman opens it inside WhatsApp and can: browse the
+ * product catalog (images, MRP, wholesale, stock, live scheme badges), pitch the
+ * running offers, build an order for a customer with automatic scheme savings,
+ * see pending bills, collect payments (cash / cheque no+date / UPI / online) and
+ * record promise-to-pay follow-ups when the customer can't pay today.
  */
 @Component({
   selector: 'wa-sales-webview',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="min-h-screen bg-gray-50 text-gray-900 pb-24">
+    <div class="min-h-screen bg-gray-50 text-gray-900 pb-28">
       <header class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-100 shadow-sm">
         <div class="max-w-2xl mx-auto px-4 py-2.5 flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -71,6 +72,18 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 <p class="text-[11px] text-gray-400">{{ home()?.collectedToday?.count || 0 }} receipt(s)</p>
               </div>
             </div>
+            <div class="grid grid-cols-2 gap-3 mt-3">
+              <button (click)="go('catalog')" class="bg-indigo-600 text-white rounded-2xl p-4 text-left">
+                <i class="pi pi-shopping-bag"></i>
+                <p class="text-sm font-bold mt-1">Take an order</p>
+                <p class="text-[11px] opacity-80">Browse items, build the cart</p>
+              </button>
+              <button (click)="go('offers')" class="bg-amber-500 text-white rounded-2xl p-4 text-left">
+                <i class="pi pi-percentage"></i>
+                <p class="text-sm font-bold mt-1">Running offers</p>
+                <p class="text-[11px] opacity-90">{{ schemes().length || '…' }} scheme(s) to pitch</p>
+              </button>
+            </div>
             <h2 class="text-[13px] font-bold text-gray-500 uppercase mt-5 mb-2">Promises due today</h2>
             @if (!home()?.promisesDue?.length) {
               <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">No follow-ups due. 🎉</p>
@@ -90,6 +103,83 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 </div>
               </div>
             }
+          }
+
+          <!-- ── CATALOG ──────────────────────────────────────────── -->
+          @if (view() === 'catalog') {
+            @if (cartCustomer()) {
+              <div class="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 mb-3">
+                <i class="pi pi-user text-indigo-500 text-sm"></i>
+                <p class="text-[13px] font-semibold text-indigo-800 flex-1 truncate">Ordering for {{ cartCustomer()?.name }}</p>
+                <button (click)="cartCustomer.set(null)" class="text-[11px] font-semibold text-indigo-600">Change</button>
+              </div>
+            }
+            <input [(ngModel)]="prodQ" (ngModelChange)="searchProducts()" placeholder="Search items / barcode…"
+              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm mb-3 bg-white" />
+            <div class="grid grid-cols-2 gap-3">
+              @for (p of products(); track p.id) {
+                <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+                  <div class="relative aspect-[4/3] bg-gray-50 flex items-center justify-center">
+                    @if (p.thumbnail) {
+                      <img [src]="p.thumbnail" class="w-full h-full object-cover" loading="lazy" />
+                    } @else {
+                      <i class="pi pi-box text-gray-200" style="font-size:2rem"></i>
+                    }
+                    @if (p.badge) {
+                      <span class="absolute top-1.5 left-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow">{{ p.badge }}</span>
+                    }
+                    <span class="absolute bottom-1.5 right-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                      [class.bg-emerald-100]="+p.stock > 0" [class.text-emerald-700]="+p.stock > 0"
+                      [class.bg-red-100]="+p.stock <= 0" [class.text-red-600]="+p.stock <= 0">
+                      {{ +p.stock > 0 ? fmtQty(p.stock) + ' ' + (p.uom || '') : 'No stock' }}
+                    </span>
+                  </div>
+                  <div class="p-2.5 flex-1 flex flex-col">
+                    <p class="text-[13px] font-semibold leading-snug line-clamp-2 flex-1">{{ p.name }}</p>
+                    <div class="flex items-baseline gap-1.5 mt-1">
+                      <p class="text-sm font-bold tabular-nums">₹{{ fmt(p.price) }}</p>
+                      @if (p.mrp && +p.mrp > +p.price) {
+                        <p class="text-[11px] text-gray-400 line-through tabular-nums">₹{{ fmt(p.mrp) }}</p>
+                      }
+                    </div>
+                    @if (p.wholesalePrice && p.wholesaleMinQty) {
+                      <p class="text-[10px] text-indigo-600">₹{{ fmt(p.wholesalePrice) }} for {{ p.wholesaleMinQty }}+</p>
+                    }
+                    @if (qtyOf(p.id); as q) {
+                      <div class="flex items-center gap-1 mt-2">
+                        <button (click)="step(p, -1)" class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 font-bold">−</button>
+                        <span class="flex-1 text-center text-sm font-bold tabular-nums">{{ q }}</span>
+                        <button (click)="step(p, 1)" class="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold">+</button>
+                      </div>
+                    } @else {
+                      <button (click)="step(p, 1)" class="mt-2 w-full py-1.5 rounded-lg bg-indigo-600 text-white text-[12px] font-bold">+ Add</button>
+                    }
+                  </div>
+                </div>
+              } @empty { <p class="col-span-2 text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">No items found.</p> }
+            </div>
+          }
+
+          <!-- ── OFFERS ───────────────────────────────────────────── -->
+          @if (view() === 'offers') {
+            @for (s of schemes(); track s.id) {
+              <div class="bg-white rounded-2xl border border-amber-200 p-4 mb-3">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="text-sm font-bold">{{ s.name }}</p>
+                    @if (s.description) { <p class="text-[12px] text-gray-500 mt-0.5">{{ s.description }}</p> }
+                  </div>
+                  <span class="shrink-0 bg-amber-500 text-white text-[11px] font-bold px-2 py-1 rounded-lg">{{ s.benefit }}</span>
+                </div>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-gray-500">
+                  <span><i class="pi pi-tag text-[10px]"></i> On {{ s.appliesTo }}</span>
+                  @if (s.minQty) { <span>Min qty {{ s.minQty }}</span> }
+                  @if (s.minCartValue) { <span>Orders above ₹{{ fmt(s.minCartValue) }}</span> }
+                  @if (s.validUntil) { <span>Till {{ s.validUntil | date:'d MMM' }}</span> }
+                  @if (s.combinable) { <span class="text-emerald-600">Stacks with other offers</span> }
+                </div>
+              </div>
+            } @empty { <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">No running schemes right now.</p> }
           }
 
           <!-- ── CUSTOMERS ────────────────────────────────────────── -->
@@ -112,7 +202,6 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 </button>
               }
             } @else {
-              <!-- customer detail -->
               <button (click)="customer.set(null)" class="text-[12px] font-semibold text-indigo-700 mb-2"><i class="pi pi-arrow-left mr-1"></i>All customers</button>
               <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-3">
                 <p class="text-base font-bold">{{ customer()?.name }}</p>
@@ -206,6 +295,101 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
         </main>
       }
 
+      <!-- ── STICKY CART BAR ────────────────────────────────────── -->
+      @if (authed() && cart().length && !cartOpen()) {
+        <button (click)="openCart()"
+          class="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-2rem)] max-w-2xl bg-indigo-600 text-white rounded-2xl px-4 py-3 shadow-xl flex items-center justify-between">
+          <span class="text-[13px] font-bold">{{ cartCount() }} item(s) · ₹{{ fmt(cartSubtotal()) }}</span>
+          @if (cartEval()?.discountTotal || cartEval()?.freeItems?.length) {
+            <span class="text-[11px] bg-white/20 rounded-lg px-2 py-0.5">offers applied 🎁</span>
+          }
+          <span class="text-[13px] font-bold">View cart ▸</span>
+        </button>
+      }
+
+      <!-- ── CART SHEET ─────────────────────────────────────────── -->
+      @if (cartOpen()) {
+        <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="cartOpen.set(false)">
+          <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[92vh] overflow-y-auto" (click)="$event.stopPropagation()">
+            <h3 class="text-base font-bold mb-3">Order cart</h3>
+
+            <!-- Customer -->
+            @if (cartCustomer()) {
+              <div class="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 mb-3">
+                <i class="pi pi-user text-indigo-500 text-sm"></i>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-semibold text-indigo-900 truncate">{{ cartCustomer()?.name }}</p>
+                  <p class="text-[11px] text-indigo-400">{{ cartCustomer()?.phone }}</p>
+                </div>
+                <button (click)="cartCustomer.set(null)" class="text-[11px] font-semibold text-indigo-600">Change</button>
+              </div>
+            } @else {
+              <p class="text-[12px] font-semibold text-gray-500 mb-1">Who is this order for?</p>
+              <input [(ngModel)]="cartCustQ" (ngModelChange)="searchCartCustomers()" placeholder="Search customer…"
+                class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm mb-2" />
+              @for (c of cartCustResults(); track c.id) {
+                <button (click)="pickCartCustomer(c)" class="w-full text-left flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 mb-1">
+                  <span class="text-[13px] font-medium truncate">{{ c.name }}</span>
+                  <span class="text-[11px] text-gray-400 shrink-0">{{ c.phone }}</span>
+                </button>
+              }
+            }
+
+            <!-- Lines -->
+            @for (l of cart(); track l.productId) {
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-9 h-9 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                  @if (l.thumbnail) { <img [src]="l.thumbnail" class="w-full h-full object-cover" /> }
+                  @else { <i class="pi pi-box text-gray-300 text-sm"></i> }
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-medium truncate">{{ l.productName }}</p>
+                  <p class="text-[11px] text-gray-400 tabular-nums">₹{{ fmt(l.unitPrice) }} × {{ l.quantity }} = ₹{{ fmt(l.unitPrice * l.quantity) }}</p>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button (click)="stepLine(l, -1)" class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-sm">−</button>
+                  <span class="w-7 text-center text-sm font-bold tabular-nums">{{ l.quantity }}</span>
+                  <button (click)="stepLine(l, 1)" class="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-sm">+</button>
+                </div>
+              </div>
+            }
+
+            <!-- Savings -->
+            @if (cartEval(); as ev) {
+              @if (ev.discountTotal || ev.freeItems?.length) {
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 my-3">
+                  <p class="text-[12px] font-bold text-emerald-800 mb-1">🎁 Offers applied</p>
+                  @for (a of appliedSchemes(); track a.schemeId) {
+                    <p class="text-[11px] text-emerald-700">{{ a.name }} — {{ a.label }}</p>
+                  }
+                  @for (f of ev.freeItems || []; track f.productId) {
+                    <p class="text-[11px] text-emerald-700">+ {{ f.quantity }} × {{ f.name }} FREE</p>
+                  }
+                  @if (ev.discountTotal) {
+                    <p class="text-[12px] font-bold text-emerald-800 mt-1">Discount −₹{{ fmt(ev.discountTotal) }}</p>
+                  }
+                </div>
+              }
+            }
+
+            <!-- Totals -->
+            <div class="border-t border-gray-100 pt-2 mt-2 text-[13px] space-y-1">
+              <div class="flex justify-between text-gray-500"><span>Subtotal</span><span class="tabular-nums">₹{{ fmt(cartSubtotal()) }}</span></div>
+              @if (cartEval()?.discountTotal) {
+                <div class="flex justify-between text-emerald-600"><span>Scheme discount</span><span class="tabular-nums">−₹{{ fmt(cartEval()?.discountTotal) }}</span></div>
+              }
+              <div class="flex justify-between font-bold text-base"><span>Total</span><span class="tabular-nums">₹{{ fmt(cartSubtotal() - (cartEval()?.discountTotal || 0)) }}</span></div>
+            </div>
+
+            @if (sheetError()) { <p class="text-[12px] text-red-600 my-2">{{ sheetError() }}</p> }
+            <button (click)="submitOrder()" [disabled]="busy() || !cart().length || !cartCustomer()"
+              class="mt-3 w-full bg-indigo-600 text-white font-bold rounded-xl py-3 disabled:opacity-50">
+              {{ busy() ? 'Placing…' : (cartCustomer() ? 'Place order' : 'Pick a customer first') }}
+            </button>
+          </div>
+        </div>
+      }
+
       <!-- ── COLLECT SHEET ──────────────────────────────────────── -->
       @if (collectFor(); as bill) {
         <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="collectFor.set(null)">
@@ -264,40 +448,6 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
         </div>
       }
 
-      <!-- ── ORDER SHEET ────────────────────────────────────────── -->
-      @if (orderSheet()) {
-        <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="orderSheet.set(false)">
-          <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
-            <h3 class="text-base font-bold mb-1">New order — {{ customer()?.name }}</h3>
-            <input [(ngModel)]="prodQ" (ngModelChange)="searchProducts()" placeholder="Search item…"
-              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm my-3" />
-            @for (p of products(); track p.id) {
-              <button (click)="addLine(p)" class="w-full text-left flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 mb-1">
-                <span class="text-[13px] font-medium truncate">{{ p.name }}</span>
-                <span class="text-[12px] text-gray-500 tabular-nums shrink-0">₹{{ fmt(p.salePrice ?? p.basePrice) }}</span>
-              </button>
-            }
-            @if (lines().length) {
-              <h4 class="text-[12px] font-bold text-gray-500 uppercase mt-3 mb-1">Cart</h4>
-              @for (l of lines(); track $index) {
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="text-[13px] flex-1 truncate">{{ l.productName }}</span>
-                  <input type="number" [(ngModel)]="l.quantity" class="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-right" />
-                  <input type="number" [(ngModel)]="l.unitPrice" class="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-right" />
-                  <button (click)="removeLine($index)" class="text-red-500 px-1"><i class="pi pi-times"></i></button>
-                </div>
-              }
-              <p class="text-right text-sm font-bold tabular-nums mb-3">Total ₹{{ fmt(orderTotal()) }}</p>
-            }
-            @if (sheetError()) { <p class="text-[12px] text-red-600 mb-2">{{ sheetError() }}</p> }
-            <button (click)="submitOrder()" [disabled]="busy() || !lines().length"
-              class="w-full bg-indigo-600 text-white font-bold rounded-xl py-3 disabled:opacity-50">
-              {{ busy() ? 'Placing…' : 'Place order' }}
-            </button>
-          </div>
-        </div>
-      }
-
       @if (toast()) {
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-xl shadow-lg">
           {{ toast() }}
@@ -313,6 +463,8 @@ export class SalesWebviewComponent implements OnInit {
 
   readonly tabs: { id: Tab; label: string }[] = [
     { id: 'home', label: '🏠 Today' },
+    { id: 'catalog', label: '🛒 Items' },
+    { id: 'offers', label: '🎁 Offers' },
     { id: 'customers', label: '👥 Customers' },
     { id: 'pending', label: '₹ Pending' },
     { id: 'followups', label: '📅 Follow-ups' },
@@ -331,21 +483,35 @@ export class SalesWebviewComponent implements OnInit {
   readonly promiseList = signal<any[]>([]);
   readonly promiseScope = signal('due');
   readonly products = signal<any[]>([]);
-  readonly lines = signal<any[]>([]);
+  readonly schemes = signal<any[]>([]);
   readonly collectFor = signal<any>(null);
   readonly promiseSheet = signal(false);
   readonly promiseBill = signal<any>(null);
-  readonly orderSheet = signal(false);
   readonly colMethod = signal('cash');
   readonly busy = signal(false);
   readonly sheetError = signal('');
   readonly toast = signal('');
-  custQ = ''; prodQ = '';
+
+  // Cart (global — built from the catalog, checked out per customer)
+  readonly cart = signal<Array<{ productId: string; productName: string; quantity: number; unitPrice: number; thumbnail?: string }>>([]);
+  readonly cartCustomer = signal<any>(null);
+  readonly cartOpen = signal(false);
+  readonly cartEval = signal<any>(null);
+  readonly cartCustResults = signal<any[]>([]);
+  readonly cartCount = computed(() => this.cart().reduce((s, l) => s + l.quantity, 0));
+  readonly cartSubtotal = computed(() => this.cart().reduce((s, l) => s + l.quantity * l.unitPrice, 0));
+  readonly appliedSchemes = computed(() => {
+    const ev = this.cartEval();
+    if (!ev) return [];
+    return (ev.applicable || []).filter((a: any) => (ev.recommendedIds || []).includes(a.schemeId));
+  });
+  private evalTimer: any = null;
+
+  custQ = ''; prodQ = ''; cartCustQ = '';
   colAmount: number | null = null; colInstrument = ''; colInstrumentDate = ''; colNote = '';
   private colPromiseId: string | null = null;
   private colCustomerId: string | null = null;
   prAmount: number | null = null; prDate = ''; prNote = '';
-  readonly orderTotal = computed(() => this.lines().reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0));
 
   constructor() { this.http = new HttpClient(inject(HttpBackend)); }
 
@@ -355,7 +521,11 @@ export class SalesWebviewComponent implements OnInit {
     this.token = qp.get('token') || '';
     if (!this.t || !this.token) { this.loadError.set('Missing or invalid link.'); return; }
     this.get('me').subscribe({
-      next: (r) => { const d = unwrap<any>(r); this.me.set(d.salesman); this.home.set(d); this.authed.set(true); },
+      next: (r) => {
+        const d = unwrap<any>(r);
+        this.me.set(d.salesman); this.home.set(d); this.authed.set(true);
+        this.get('schemes').subscribe((s) => this.schemes.set(unwrap(s)));
+      },
       error: (e) => this.loadError.set(e?.error?.message || 'Link expired or deactivated.'),
     });
   }
@@ -369,6 +539,8 @@ export class SalesWebviewComponent implements OnInit {
   go(t: Tab) {
     this.view.set(t);
     if (t === 'home') this.refreshHome();
+    if (t === 'catalog' && !this.products().length) this.searchProducts();
+    if (t === 'offers') this.get('schemes').subscribe((r) => this.schemes.set(unwrap(r)));
     if (t === 'customers' && !this.customers().length) this.searchCustomers();
     if (t === 'pending') this.get('pending').subscribe((r) => this.pending.set(unwrap(r)));
     if (t === 'followups') this.loadPromises();
@@ -388,7 +560,79 @@ export class SalesWebviewComponent implements OnInit {
     this.get('promises', { scope: this.promiseScope() }).subscribe((r) => this.promiseList.set(unwrap(r)));
   }
 
-  // Collect
+  // ─── Catalog + cart ─────────────────────────────────────────────────────────
+  searchProducts() {
+    this.get('products', { q: this.prodQ }).subscribe((r) => this.products.set(unwrap(r)));
+  }
+  qtyOf(productId: string): number {
+    return this.cart().find((l) => l.productId === productId)?.quantity || 0;
+  }
+  step(p: any, delta: number) {
+    this.cart.update((ls) => {
+      const i = ls.findIndex((l) => l.productId === p.id);
+      if (i < 0) {
+        if (delta <= 0) return ls;
+        return [...ls, { productId: p.id, productName: p.name, quantity: delta, unitPrice: Number(p.price) || 0, thumbnail: p.thumbnail }];
+      }
+      const q = ls[i].quantity + delta;
+      if (q <= 0) return ls.filter((_, x) => x !== i);
+      const next = [...ls]; next[i] = { ...next[i], quantity: q };
+      return next;
+    });
+    this.scheduleEval();
+  }
+  stepLine(l: any, delta: number) {
+    const p = { id: l.productId, name: l.productName, price: l.unitPrice, thumbnail: l.thumbnail };
+    this.step(p, delta);
+  }
+  /** Debounced scheme evaluation — savings preview stays live as the cart changes. */
+  private scheduleEval() {
+    clearTimeout(this.evalTimer);
+    if (!this.cart().length) { this.cartEval.set(null); return; }
+    this.evalTimer = setTimeout(() => {
+      this.post('cart', { customerId: this.cartCustomer()?.id, items: this.cart() }).subscribe({
+        next: (r) => this.cartEval.set(unwrap(r)),
+        error: () => this.cartEval.set(null),
+      });
+    }, 350);
+  }
+  openCart() {
+    this.sheetError.set('');
+    this.cartOpen.set(true);
+    this.scheduleEval();
+    if (!this.cartCustomer()) this.searchCartCustomers();
+  }
+  searchCartCustomers() {
+    this.get('customers', { q: this.cartCustQ }).subscribe((r) => this.cartCustResults.set((unwrap<any[]>(r) || []).slice(0, 6)));
+  }
+  pickCartCustomer(c: any) {
+    this.cartCustomer.set(c);
+    this.scheduleEval(); // customer-specific schemes may now apply
+  }
+  startOrder() {
+    this.cartCustomer.set(this.customer());
+    this.go('catalog');
+  }
+  submitOrder() {
+    if (!this.cartCustomer()?.id || !this.cart().length) return;
+    this.busy.set(true);
+    this.post('orders', { customerId: this.cartCustomer().id, items: this.cart() }).subscribe({
+      next: (r: any) => {
+        const d = unwrap<any>(r);
+        this.busy.set(false); this.cartOpen.set(false);
+        this.cart.set([]); this.cartEval.set(null);
+        const saved = Number(d?.schemeDiscount) || 0;
+        const free = (d?.freeItems || []).reduce((s: number, f: any) => s + Number(f.quantity), 0);
+        let msg = `✅ Order ${d?.orderNumber || 'placed'}`;
+        if (saved) msg += ` · saved ₹${saved}`;
+        if (free) msg += ` · ${free} free item(s)`;
+        this.showToast(msg);
+      },
+      error: (e) => { this.busy.set(false); this.sheetError.set(e?.error?.message || 'Could not place order.'); },
+    });
+  }
+
+  // ─── Collect ────────────────────────────────────────────────────────────────
   openCollect(bill: any) {
     this.collectFor.set(bill);
     this.colAmount = Number(bill.balanceDue) || null;
@@ -423,7 +667,7 @@ export class SalesWebviewComponent implements OnInit {
     });
   }
 
-  // Promise
+  // ─── Promise ────────────────────────────────────────────────────────────────
   openPromise(bill: any) {
     this.promiseBill.set(bill);
     this.colCustomerId = this.customer()?.id || bill?.customerId || null;
@@ -461,30 +705,7 @@ export class SalesWebviewComponent implements OnInit {
     });
   }
 
-  // Order
-  startOrder() {
-    this.lines.set([]); this.prodQ = ''; this.products.set([]); this.sheetError.set('');
-    this.orderSheet.set(true); this.searchProducts();
-  }
-  searchProducts() {
-    this.get('products', { q: this.prodQ }).subscribe((r) => this.products.set(unwrap(r)));
-  }
-  addLine(p: any) {
-    this.lines.update((ls) => [...ls, { productId: p.id, productName: p.name, quantity: 1, unitPrice: Number(p.salePrice ?? p.basePrice) || 0 }]);
-  }
-  removeLine(i: number) { this.lines.update((ls) => ls.filter((_, x) => x !== i)); }
-  submitOrder() {
-    this.busy.set(true);
-    this.post('orders', { customerId: this.customer()?.id, items: this.lines() }).subscribe({
-      next: (r: any) => {
-        const d = unwrap<any>(r);
-        this.busy.set(false); this.orderSheet.set(false);
-        this.showToast(`✅ Order ${d?.orderNumber || 'placed'}`);
-      },
-      error: (e) => { this.busy.set(false); this.sheetError.set(e?.error?.message || 'Could not place order.'); },
-    });
-  }
-
   fmt(n: any) { return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  showToast(msg: string) { this.toast.set(msg); setTimeout(() => this.toast.set(''), 2500); }
+  fmtQty(n: any) { return (Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
+  showToast(msg: string) { this.toast.set(msg); setTimeout(() => this.toast.set(''), 3000); }
 }

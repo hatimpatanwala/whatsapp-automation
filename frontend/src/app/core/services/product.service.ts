@@ -39,6 +39,26 @@ export interface CreateProductPayload {
   variants?: Omit<ProductVariant, 'id'>[];
   tags?: string[];
   customFields?: Record<string, any>;
+  // ERP item-master parity (same field set as /entry/items)
+  itemType?: string;
+  uqc?: string;
+  altUom?: string;
+  uomFactor?: number;
+  purchasePrice?: number;
+  mrp?: number;
+  wholesalePrice?: number;
+  wholesaleMinQty?: number;
+  saleDiscountPct?: number;
+  priceIncludesTax?: boolean;
+  minSalePrice?: number;
+  maxSalePrice?: number;
+  cessPct?: number;
+  taxExempt?: boolean;
+  openingRate?: number;
+  openingStockDate?: string;
+  maxStock?: number;
+  rackLocation?: string;
+  trackingMode?: string;
 }
 
 export interface UpdateProductPayload extends Partial<CreateProductPayload> {}

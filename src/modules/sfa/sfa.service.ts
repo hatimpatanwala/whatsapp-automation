@@ -5,6 +5,7 @@ import { firstRow } from '../erp/common/sql-result.util';
 import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
 import { OrderService } from '../order/order.service';
 import { EntryContextService } from '../entry/entry-context.service';
+import { PromotionsEngine, CartItemInput } from '../promotions/promotions-engine.service';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -24,6 +25,7 @@ export class SfaService {
     private readonly invoices: ErpInvoiceService,
     private readonly orders: OrderService,
     private readonly ctx: EntryContextService,
+    private readonly promos: PromotionsEngine,
   ) {}
 
   // ─── Admin: manage salesmen ─────────────────────────────────────────────────
@@ -142,8 +144,77 @@ export class SfaService {
     });
   }
 
-  products(schema: string, q: string) {
-    return this.ctx.searchProducts(schema, q, 20);
+  /** Catalog cards for the field app: image, prices (MRP/wholesale), live stock, scheme badge. */
+  async products(schema: string, q: string) {
+    const [rows, badges] = await Promise.all([
+      this.cm.executeInTenantContext(schema, (qr) =>
+        qr.query(
+          `SELECT p.id, p.name, p.thumbnail, p.uom, p.category_id, p.brand_id,
+                  COALESCE(p.sale_price, p.base_price) AS price, p.base_price, p.mrp,
+                  p.wholesale_price, p.wholesale_min_qty, p.sale_discount_pct,
+                  COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
+           FROM "${schema}".products p
+           LEFT JOIN LATERAL (
+             SELECT SUM(stock_quantity - reserved_quantity) AS available
+             FROM "${schema}".inventory i WHERE i.product_id = p.id
+           ) inv ON true
+           LEFT JOIN LATERAL (
+             SELECT SUM(quantity) AS qty FROM "${schema}".erp_stock s WHERE s.product_id = p.id
+           ) ws ON true
+           WHERE p.is_active = true AND p.deleted_at IS NULL AND COALESCE(p.item_type, 'product') <> 'service'
+             AND ($1 = '%%' OR p.name ILIKE $1 OR p.metadata->>'barcode' ILIKE $1)
+           ORDER BY p.name LIMIT 60`,
+          [`%${q}%`],
+        ),
+      ),
+      this.promos.productBadges(schema),
+    ]);
+    return rows.map((r: any) => ({
+      ...r,
+      badge: badges.products[r.id] || (r.category_id && badges.categories[r.category_id]) || (r.brand_id && badges.brands[r.brand_id]) || badges.all || null,
+    }));
+  }
+
+  /** Active schemes, summarized in the salesman's language (what to pitch to the customer). */
+  schemes(schema: string) {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `SELECT s.*,
+                CASE WHEN s.scope = 'product' THEN (SELECT array_agg(p.name) FROM "${schema}".products p WHERE p.id = ANY(s.scope_ids))
+                     WHEN s.scope = 'category' THEN (SELECT array_agg(c.name) FROM "${schema}".categories c WHERE c.id = ANY(s.scope_ids))
+                     WHEN s.scope = 'brand' THEN (SELECT array_agg(b.name) FROM "${schema}".brands b WHERE b.id = ANY(s.scope_ids))
+                END AS scope_names
+         FROM "${schema}".schemes s
+         WHERE s.status = 'active' AND s.type = 'instant'
+           AND (s.valid_from IS NULL OR s.valid_from <= NOW())
+           AND (s.valid_until IS NULL OR s.valid_until >= NOW())
+         ORDER BY s.weight DESC, s.created_at DESC`,
+      );
+      return rows.map((s: any) => {
+        const cfg = typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {});
+        let benefit = '';
+        if (s.action === 'discount' || s.action === 'qty_discount') {
+          benefit = cfg.discountType === 'amount' ? `₹${cfg.discountValue} off` : `${Number(cfg.discountValue) || 0}% off`;
+          if (cfg.minQty) benefit += ` on ${cfg.minQty}+ qty`;
+          if (cfg.minCartValue) benefit += ` on orders above ₹${cfg.minCartValue}`;
+        } else if (s.action === 'buy_x_get_x_free') {
+          benefit = `Buy ${cfg.buyQty || 1}, get ${cfg.getQty || 1} free`;
+        } else if (s.action === 'buy_x_get_y_free') {
+          benefit = `Buy ${cfg.buyQty || 1}, get a free gift`;
+        }
+        const on = s.scope === 'all' ? 'everything' : (s.scope_names || []).filter(Boolean).join(', ') || s.scope;
+        return {
+          id: s.id, name: s.name, description: s.description, action: s.action,
+          benefit, appliesTo: on, combinable: s.combinable,
+          validUntil: s.valid_until, minQty: cfg.minQty || null, minCartValue: cfg.minCartValue || null,
+        };
+      });
+    });
+  }
+
+  /** Live cart evaluation — savings preview while the salesman builds the order. */
+  evaluate(schema: string, customerId: string | undefined, items: CartItemInput[]) {
+    return this.promos.evaluateCart(schema, items || [], customerId);
   }
 
   /** Every open bill across customers, oldest due first — the collection run. */
@@ -160,15 +231,40 @@ export class SfaService {
     );
   }
 
-  /** Punch an order on the customer's behalf — lands as a normal pending order. */
+  /**
+   * Punch an order on the customer's behalf. Active schemes apply automatically:
+   * the recommended set's discount lands on the order and free goods ride along
+   * as ₹0 lines — the same maths the storefront cart uses.
+   */
   async takeOrder(schema: string, salesman: any, body: { customerId: string; items: Array<{ productId?: string; productName?: string; quantity: number; unitPrice: number }>; notes?: string }) {
     if (!body?.customerId || !body?.items?.length) throw new BadRequestException('Customer and items are required');
+
+    const evalRes = await this.promos.evaluateCart(schema, body.items as CartItemInput[], body.customerId);
+    const applied = evalRes.applicable.filter((a) => evalRes.recommendedIds.includes(a.schemeId));
+    const freeLines = evalRes.freeItems.map((f) => ({
+      productId: f.productId,
+      productName: `${f.name} (FREE — scheme)`,
+      quantity: f.quantity,
+      unitPrice: 0,
+    }));
+
+    const noteBits = [`SFA order by ${salesman.name}`];
+    if (applied.length) noteBits.push(`Schemes: ${applied.map((a) => `${a.name} (${a.label})`).join('; ')}`);
+    if (body.notes) noteBits.push(body.notes);
+
     const order = await this.orders.createDirect(schema, {
       customerId: body.customerId,
-      items: body.items,
-      notes: `SFA order by ${salesman.name}${body.notes ? ' — ' + body.notes : ''}`,
+      items: [...body.items, ...freeLines],
+      discount: evalRes.discountTotal || 0,
+      notes: noteBits.join(' — '),
     } as any);
-    return { id: order?.id, orderNumber: order?.order_number ?? order?.orderNumber };
+    return {
+      id: order?.id,
+      orderNumber: order?.order_number ?? order?.orderNumber,
+      schemeDiscount: evalRes.discountTotal || 0,
+      freeItems: evalRes.freeItems,
+      appliedSchemes: applied.map((a) => ({ name: a.name, label: a.label, saving: a.saving })),
+    };
   }
 
   /** Collect against an invoice — cash / cheque(no+date) / UPI / online(txn ref). */

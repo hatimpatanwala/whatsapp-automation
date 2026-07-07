@@ -77,6 +77,18 @@ export class SfaController {
     return this.sfa.products(t, q || '');
   }
 
+  @Public() @Get('m/schemes')
+  async schemes(@Query('t') t: string, @Query('token') token: string) {
+    await this.guard(t, token);
+    return this.sfa.schemes(t);
+  }
+
+  @Public() @Post('m/cart')
+  async cart(@Query('t') t: string, @Query('token') token: string, @Body() body: { customerId?: string; items: any[] }) {
+    await this.guard(t, token);
+    return this.sfa.evaluate(t, body?.customerId, body?.items || []);
+  }
+
   @Public() @Get('m/pending')
   async pending(@Query('t') t: string, @Query('token') token: string) {
     await this.guard(t, token);
