@@ -43,6 +43,20 @@ export class ProductService {
       purchasePrice: row.purchase_price != null ? Number(row.purchase_price) : null,
       mrp: row.mrp != null ? Number(row.mrp) : null,
       openingRate: row.opening_rate != null ? Number(row.opening_rate) : null,
+      itemType: row.item_type || 'product',
+      uqc: row.uqc || null,
+      priceIncludesTax: !!row.price_includes_tax,
+      saleDiscountPct: row.sale_discount_pct != null ? Number(row.sale_discount_pct) : null,
+      wholesalePrice: row.wholesale_price != null ? Number(row.wholesale_price) : null,
+      wholesaleMinQty: row.wholesale_min_qty != null ? Number(row.wholesale_min_qty) : null,
+      minSalePrice: row.min_sale_price != null ? Number(row.min_sale_price) : null,
+      maxSalePrice: row.max_sale_price != null ? Number(row.max_sale_price) : null,
+      cessPct: row.cess_pct != null ? Number(row.cess_pct) : null,
+      taxExempt: !!row.tax_exempt,
+      openingStockDate: row.opening_stock_date || null,
+      maxStock: row.max_stock != null ? Number(row.max_stock) : null,
+      rackLocation: row.rack_location || null,
+      trackingMode: row.tracking_mode || 'none',
       imageUrls: row.images || [],
       thumbnail: row.thumbnail,
       status: row.is_active ? 'active' : 'draft',
@@ -153,8 +167,10 @@ export class ProductService {
       const slug = dto.sku || dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const product = await qr.query(
-        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom, custom_fields, alt_uom, uom_factor, purchase_price, mrp, opening_rate)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        `INSERT INTO products (name, slug, description, category_id, base_price, sale_price, currency, images, thumbnail, has_variants, is_active, translations, metadata, brand_id, hsn_code, gst_rate, uom, custom_fields, alt_uom, uom_factor, purchase_price, mrp, opening_rate,
+                               item_type, uqc, price_includes_tax, sale_discount_pct, wholesale_price, wholesale_min_qty, min_sale_price, max_sale_price, cess_pct, tax_exempt, opening_stock_date, max_stock, rack_location, tracking_mode)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+                 $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
          RETURNING *`,
         [
           dto.name, slug, dto.description, dto.categoryId,
@@ -167,6 +183,13 @@ export class ProductService {
           JSON.stringify(dto.customFields || {}),
           dto.altUom?.trim() || null, dto.uomFactor ?? null,
           dto.purchasePrice ?? null, dto.mrp ?? null, dto.openingRate ?? null,
+          dto.itemType === 'service' ? 'service' : 'product', dto.uqc?.trim() || null,
+          !!dto.priceIncludesTax, dto.saleDiscountPct ?? null,
+          dto.wholesalePrice ?? null, dto.wholesaleMinQty ?? null,
+          dto.minSalePrice ?? null, dto.maxSalePrice ?? null,
+          dto.cessPct ?? null, !!dto.taxExempt, dto.openingStockDate || null,
+          dto.maxStock ?? null, dto.rackLocation?.trim() || null,
+          ['batch', 'serial'].includes(dto.trackingMode || '') ? dto.trackingMode : 'none',
         ],
       );
 
@@ -216,6 +239,21 @@ export class ProductService {
       if (dto.purchasePrice !== undefined) { fields.push(`purchase_price = $${paramIndex++}`); params.push(dto.purchasePrice ?? null); }
       if (dto.mrp !== undefined) { fields.push(`mrp = $${paramIndex++}`); params.push(dto.mrp ?? null); }
       if (dto.openingRate !== undefined) { fields.push(`opening_rate = $${paramIndex++}`); params.push(dto.openingRate ?? null); }
+      if (dto.itemType !== undefined) { fields.push(`item_type = $${paramIndex++}`); params.push(dto.itemType === 'service' ? 'service' : 'product'); }
+      if (dto.uqc !== undefined) { fields.push(`uqc = $${paramIndex++}`); params.push(dto.uqc?.trim() || null); }
+      if (dto.priceIncludesTax !== undefined) { fields.push(`price_includes_tax = $${paramIndex++}`); params.push(!!dto.priceIncludesTax); }
+      if (dto.saleDiscountPct !== undefined) { fields.push(`sale_discount_pct = $${paramIndex++}`); params.push(dto.saleDiscountPct ?? null); }
+      if (dto.wholesalePrice !== undefined) { fields.push(`wholesale_price = $${paramIndex++}`); params.push(dto.wholesalePrice ?? null); }
+      if (dto.wholesaleMinQty !== undefined) { fields.push(`wholesale_min_qty = $${paramIndex++}`); params.push(dto.wholesaleMinQty ?? null); }
+      if (dto.minSalePrice !== undefined) { fields.push(`min_sale_price = $${paramIndex++}`); params.push(dto.minSalePrice ?? null); }
+      if (dto.maxSalePrice !== undefined) { fields.push(`max_sale_price = $${paramIndex++}`); params.push(dto.maxSalePrice ?? null); }
+      if (dto.cessPct !== undefined) { fields.push(`cess_pct = $${paramIndex++}`); params.push(dto.cessPct ?? null); }
+      if (dto.taxExempt !== undefined) { fields.push(`tax_exempt = $${paramIndex++}`); params.push(!!dto.taxExempt); }
+      if (dto.openingStockDate !== undefined) { fields.push(`opening_stock_date = $${paramIndex++}`); params.push(dto.openingStockDate || null); }
+      if (dto.maxStock !== undefined) { fields.push(`max_stock = $${paramIndex++}`); params.push(dto.maxStock ?? null); }
+      if (dto.rackLocation !== undefined) { fields.push(`rack_location = $${paramIndex++}`); params.push(dto.rackLocation?.trim() || null); }
+      if (dto.trackingMode !== undefined) { fields.push(`tracking_mode = $${paramIndex++}`); params.push(['batch', 'serial'].includes(dto.trackingMode || '') ? dto.trackingMode : 'none'); }
+      if (dto.thumbnail !== undefined) { fields.push(`thumbnail = $${paramIndex++}`); params.push(dto.thumbnail || null); }
 
       const images = dto.images || dto.imageUrls;
       if (images) { fields.push(`images = $${paramIndex++}`); params.push(images); }

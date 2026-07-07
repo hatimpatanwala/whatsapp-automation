@@ -2693,6 +2693,62 @@ const migration073PartyMaster: TenantMigration = {
   },
 };
 
+/**
+ * 074 — Item Master field parity (ITEM_MASTER_FIELDS_README.md, Vyapar × Miracle):
+ * type/UQC/pricing tiers/tax flags/stock levels on products, plus the item_batches
+ * registry powering MRP-wise batches (§3F.1 — one item, many batches, never a
+ * duplicate item). Idempotent.
+ */
+const migration074ItemMasterParity: TenantMigration = {
+  name: '074_item_master_parity',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".products
+      ADD COLUMN IF NOT EXISTS item_type VARCHAR(10) NOT NULL DEFAULT 'product',
+      ADD COLUMN IF NOT EXISTS uqc VARCHAR(8),
+      ADD COLUMN IF NOT EXISTS price_includes_tax BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS sale_discount_pct NUMERIC(5,2),
+      ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC(12,2),
+      ADD COLUMN IF NOT EXISTS wholesale_min_qty NUMERIC(12,2),
+      ADD COLUMN IF NOT EXISTS min_sale_price NUMERIC(12,2),
+      ADD COLUMN IF NOT EXISTS max_sale_price NUMERIC(12,2),
+      ADD COLUMN IF NOT EXISTS cess_pct NUMERIC(6,3),
+      ADD COLUMN IF NOT EXISTS tax_exempt BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS opening_stock_date DATE,
+      ADD COLUMN IF NOT EXISTS max_stock NUMERIC(12,2),
+      ADD COLUMN IF NOT EXISTS rack_location VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS tracking_mode VARCHAR(10) NOT NULL DEFAULT 'none'`);
+
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".item_batches (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      product_id UUID NOT NULL REFERENCES "${schema}".products(id) ON DELETE CASCADE,
+      batch_no VARCHAR(60) NOT NULL,
+      mfg_date DATE,
+      expiry_date DATE,
+      mrp NUMERIC(12,2),
+      selling_price NUMERIC(12,2),
+      purchase_cost NUMERIC(12,2),
+      qty NUMERIC(14,3) NOT NULL DEFAULT 0,
+      godown VARCHAR(80),
+      model_no VARCHAR(60),
+      size VARCHAR(40),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_item_batches_lot
+      ON "${schema}".item_batches (product_id, batch_no, COALESCE(godown, ''))`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_item_batches_product ON "${schema}".item_batches (product_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".item_batches`);
+    await qr.query(`ALTER TABLE "${schema}".products
+      DROP COLUMN IF EXISTS item_type, DROP COLUMN IF EXISTS uqc, DROP COLUMN IF EXISTS price_includes_tax,
+      DROP COLUMN IF EXISTS sale_discount_pct, DROP COLUMN IF EXISTS wholesale_price, DROP COLUMN IF EXISTS wholesale_min_qty,
+      DROP COLUMN IF EXISTS min_sale_price, DROP COLUMN IF EXISTS max_sale_price, DROP COLUMN IF EXISTS cess_pct,
+      DROP COLUMN IF EXISTS tax_exempt, DROP COLUMN IF EXISTS opening_stock_date, DROP COLUMN IF EXISTS max_stock,
+      DROP COLUMN IF EXISTS rack_location, DROP COLUMN IF EXISTS tracking_mode`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2767,4 +2823,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration071ItemMasterRates,
   migration072TcsOpeningRate,
   migration073PartyMaster,
+  migration074ItemMasterParity,
 ];

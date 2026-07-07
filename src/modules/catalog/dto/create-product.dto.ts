@@ -91,6 +91,22 @@ export class CreateProductDto {
   @Min(0)
   openingRate?: number;
 
+  // ─── Item Master field parity (ITEM_MASTER_FIELDS_README.md) ───────────────
+  @IsOptional() @IsString() itemType?: string; // 'product' | 'service'
+  @IsOptional() @IsString() uqc?: string; // GST Unit Quantity Code
+  @IsOptional() @IsBoolean() priceIncludesTax?: boolean;
+  @IsOptional() @IsNumber() @Min(0) saleDiscountPct?: number;
+  @IsOptional() @IsNumber() @Min(0) wholesalePrice?: number;
+  @IsOptional() @IsNumber() @Min(0) wholesaleMinQty?: number;
+  @IsOptional() @IsNumber() @Min(0) minSalePrice?: number;
+  @IsOptional() @IsNumber() @Min(0) maxSalePrice?: number;
+  @IsOptional() @IsNumber() @Min(0) cessPct?: number;
+  @IsOptional() @IsBoolean() taxExempt?: boolean;
+  @IsOptional() @IsString() openingStockDate?: string;
+  @IsOptional() @IsNumber() @Min(0) maxStock?: number;
+  @IsOptional() @IsString() rackLocation?: string;
+  @IsOptional() @IsString() trackingMode?: string; // 'none' | 'batch' | 'serial'
+
   @IsOptional()
   @IsString()
   barcode?: string;

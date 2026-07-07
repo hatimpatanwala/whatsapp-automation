@@ -283,6 +283,17 @@ export class ErpInvoiceService {
       // in base units (baseQty rides along when the line was entered in an alt unit).
       for (const l of lines as any[]) {
         if (!l.productId) continue;
+        // §3F.1: a batch on the line depletes THAT lot only, keeping the other-MRP
+        // lots intact. Zero-qty batches are kept for history.
+        const soldBatch = String(l.batchNo || '').trim();
+        if (soldBatch) {
+          await qr.query(
+            `UPDATE "${schema}".item_batches
+             SET qty = GREATEST(0, qty - $1), updated_at = NOW()
+             WHERE product_id = $2 AND batch_no = $3`,
+            [(Number(l.quantity) || 0) + (Number(l.freeQty) || 0), l.productId, soldBatch],
+          );
+        }
         const deduct = (Number(l.baseQty) || l.quantity) + (Number(l.freeQty) || 0) * (Number(l.baseQty) && l.quantity ? (Number(l.baseQty) / l.quantity) : 1);
         if (deduct <= 0) continue;
         await qr.query(

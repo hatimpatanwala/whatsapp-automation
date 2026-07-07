@@ -2,19 +2,21 @@ import { Component, ElementRef, HostListener, inject, signal } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { EntryService, ItemMasterRow } from '../../core/services/entry.service';
 
-const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'hsn', 'barcode', 'gst', 'pRate', 'sRate', 'mrp', 'oRate', 'minStock', 'stockQty'] as const;
+const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'uqc', 'hsn', 'barcode', 'gst', 'pRate', 'sRate', 'mrp', 'saleDisc', 'oRate', 'minStock', 'stockQty'] as const;
 type Field = (typeof FIELDS)[number];
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+/** GST Unit Quantity Codes (returns need unit → UQC mapping). */
+const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM', 'SQF', 'BOX', 'BAG', 'SET', 'PAC', 'DOZ', 'ROL', 'TON', 'QTL', 'BDL', 'CAN', 'CTN', 'DRM', 'GRS', 'PRS', 'TUB', 'UNT'];
+
 /**
- * Item Master — Miracle "Add Item" + "Add Stock" in one screen.
- *
- * Left: live item browser (type to filter, ↑↓ move, Enter edit, Ins new item).
- * Right: the master form — Unit / Alt Unit + conversion factor (dual units),
- * HSN, GST%, Purchase Rate / Sale Rate / MRP, Min Stock — plus the stock box:
- * opening stock on a new item, ± Add Stock on an existing one (delta lands on
- * the same inventory row billing deducts from). Enter walks the fields,
- * Ctrl+A saves, Esc returns to the list.
+ * Item Master — full Vyapar × Miracle field parity (ITEM_MASTER_FIELDS_README.md):
+ * identification (type/SKU/barcode/HSN/category/classification), dual units + UQC,
+ * pricing tiers (sale w/ tax-incl toggle, purchase, wholesale, MRP, min/max, default
+ * sale discount), GST (rate/cess/exempt), stock (opening qty+rate+date, min/max,
+ * rack), batch/serial tracking mode with the MRP-wise batch registry (§3F.1), and a
+ * location-wise stock view. Low-priority fields live behind "Advanced ▾" so the
+ * default form stays clean. Enter walks the core fields, Ctrl+A/Ctrl+Enter saves.
  */
 @Component({
   selector: 'wa-item-master',
@@ -33,11 +35,11 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
       <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
         <!-- Item browser -->
-        <div class="lg:col-span-2 border rounded-lg overflow-hidden">
-          <div class="flex gap-2 p-2 bg-slate-50 border-b">
+        <div class="lg:col-span-2 border rounded-lg overflow-hidden self-start">
+          <div class="flex gap-2 p-2 bg-slate-50 border-b items-center">
             <input data-cell="search" data-autofocus [(ngModel)]="query" (ngModelChange)="reload()" (keydown)="onListKey($event)"
                    class="flex-1 border rounded px-2 py-1.5 text-sm focus:bg-amber-50 focus:outline-none"
-                   placeholder="Search items…" autocomplete="off" />
+                   placeholder="Search items / barcode…" autocomplete="off" />
             <label class="flex items-center gap-1 text-xs whitespace-nowrap" title="Only items at or below min stock">
               <input type="checkbox" [(ngModel)]="lowOnly" /> low stock
             </label>
@@ -57,10 +59,14 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                 <tr (click)="pick(it)" class="cursor-pointer border-t border-slate-100"
                     [class.bg-amber-100]="i === idx()" [class.bg-white]="i !== idx()">
                   <td class="px-2 py-1">{{ it.name }}
+                    @if (it.itemType === 'service') { <span class="text-xs text-indigo-500">(service)</span> }
+                    @if (it.trackingMode === 'batch') { <span class="text-xs text-amber-600">[batch]</span> }
                     @if (it.altUom) { <span class="text-xs text-slate-400">({{ it.altUom }} = {{ it.uomFactor }} {{ it.uom }})</span> }
                   </td>
                   <td class="px-2 py-1 text-right"
-                      [class.text-red-600]="(it.stock ?? 0) <= (it.minStock ?? 0)">{{ it.stock ?? 0 }}</td>
+                      [class.text-red-600]="it.itemType !== 'service' && (it.stock ?? 0) <= (it.minStock ?? 0)">
+                    {{ it.itemType === 'service' ? '—' : (it.stock ?? 0) }}
+                  </td>
                   <td class="px-2 py-1 text-right">{{ fmt(it.salePrice ?? it.basePrice) }}</td>
                   <td class="px-2 py-1 text-right text-slate-500">{{ it.gstRate ?? 0 }}</td>
                 </tr>
@@ -73,21 +79,35 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
         <!-- Master form -->
         <div class="lg:col-span-3 border rounded-lg p-4">
-          <h2 class="font-semibold text-sm mb-3">
+          <h2 class="font-semibold text-sm mb-3 flex items-center gap-3 flex-wrap">
             {{ editId() ? 'Edit Item' : 'Add Item' }}
-            @if (editId()) { <span class="text-slate-400 font-normal">— current stock <b class="text-slate-700">{{ curStock() }}</b> {{ unit || 'pcs' }}</span> }
+            <select [(ngModel)]="itemType" class="border rounded px-2 py-1 text-xs"
+                    [class.bg-indigo-50]="itemType === 'service'" title="Service items carry no stock">
+              <option value="product">Product</option>
+              <option value="service">Service</option>
+            </select>
+            @if (editId() && itemType !== 'service') {
+              <span class="text-slate-400 font-normal">— current stock <b class="text-slate-700">{{ curStock() }}</b> {{ unit || 'pcs' }}</span>
+            }
           </h2>
 
+          <!-- Identification + units -->
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <label class="text-sm col-span-2 md:col-span-3">Item name *
+            <label class="text-sm col-span-2">Item name *
               <input data-cell="name" [(ngModel)]="name" (keydown)="onFieldKey($event, 'name')"
                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+            </label>
+            <label class="text-sm">Category
+              <select [(ngModel)]="categoryId" class="mt-1 w-full border rounded px-2 py-1.5">
+                <option value="">—</option>
+                @for (c of cats(); track c.id) { <option [value]="c.id">{{ c.name }}</option> }
+              </select>
             </label>
             <label class="text-sm">Unit
               <input data-cell="unit" [(ngModel)]="unit" (keydown)="onFieldKey($event, 'unit')" placeholder="pcs / kg / box"
                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
             </label>
-            <label class="text-sm">Alt unit <span class="text-slate-400">(dual unit)</span>
+            <label class="text-sm">Alt unit <span class="text-slate-400">(dual)</span>
               <input data-cell="altUnit" [(ngModel)]="altUnit" (keydown)="onFieldKey($event, 'altUnit')" placeholder="bag / ctn"
                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
             </label>
@@ -98,14 +118,25 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                 <span class="text-xs text-slate-500">{{ unit || 'pcs' }}</span>
               </div>
             </label>
+            <label class="text-sm">UQC <span class="text-slate-400">(GST unit code)</span>
+              <select data-cell="uqc" [(ngModel)]="uqc" (keydown)="onFieldKey($event, 'uqc')" class="mt-1 w-full border rounded px-2 py-1.5">
+                <option value="">—</option>
+                @for (u of uqcList; track u) { <option [value]="u">{{ u }}</option> }
+              </select>
+            </label>
             <label class="text-sm">HSN / SAC
-              <input data-cell="hsn" [(ngModel)]="hsn" (keydown)="onFieldKey($event, 'hsn')"
+              <input data-cell="hsn" [(ngModel)]="hsn" (keydown)="onFieldKey($event, 'hsn')" maxlength="8"
                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+              @if (hsn && ![4,6,8].includes(hsn.trim().length)) { <p class="text-xs text-amber-600">HSN is normally 4, 6 or 8 digits</p> }
             </label>
             <label class="text-sm">Barcode / alias <span class="text-slate-400">(searchable)</span>
               <input data-cell="barcode" [(ngModel)]="barcode" (keydown)="onFieldKey($event, 'barcode')"
                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
             </label>
+          </div>
+
+          <!-- Tax + pricing -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
             <label class="text-sm">GST %
               <input data-cell="gst" type="number" [(ngModel)]="gst" (keydown)="onFieldKey($event, 'gst')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
@@ -117,37 +148,166 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <label class="text-sm">Sale rate ₹ *
               <input data-cell="sRate" type="number" [(ngModel)]="sRate" (keydown)="onFieldKey($event, 'sRate')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
+              <label class="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                <input type="checkbox" [(ngModel)]="priceIncludesTax" /> incl. tax
+              </label>
             </label>
             <label class="text-sm">MRP ₹
               <input data-cell="mrp" type="number" [(ngModel)]="mrp" (keydown)="onFieldKey($event, 'mrp')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
-            <label class="text-sm">Opening rate ₹ <span class="text-slate-400">(stock valuation)</span>
-              <input data-cell="oRate" type="number" [(ngModel)]="oRate" (keydown)="onFieldKey($event, 'oRate')"
+            <label class="text-sm">Sale discount %
+              <input data-cell="saleDisc" type="number" [(ngModel)]="saleDisc" (keydown)="onFieldKey($event, 'saleDisc')"
+                     class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" title="Default D1 on the sales grid" />
+            </label>
+            <label class="text-sm">Wholesale ₹
+              <input type="number" [(ngModel)]="wholesalePrice"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
-            <label class="text-sm">Min stock <span class="text-slate-400">(reorder alert)</span>
-              <input data-cell="minStock" type="number" [(ngModel)]="minStock" (keydown)="onFieldKey($event, 'minStock')"
+            <label class="text-sm">Wholesale min qty
+              <input type="number" [(ngModel)]="wholesaleMinQty"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
+            @if (itemType !== 'service') {
+              <label class="text-sm">Min stock <span class="text-slate-400">(reorder)</span>
+                <input data-cell="minStock" type="number" [(ngModel)]="minStock" (keydown)="onFieldKey($event, 'minStock')"
+                       class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
+              </label>
+            }
           </div>
 
-          <!-- Stock box -->
-          <div class="mt-4 border rounded p-3 bg-slate-50">
-            <div class="flex items-center gap-3 flex-wrap">
-              <span class="text-sm font-medium">{{ editId() ? 'Add Stock' : 'Opening Stock' }}</span>
-              <input data-cell="stockQty" type="number" [(ngModel)]="stockQty" (keydown)="onFieldKey($event, 'stockQty')"
-                     class="w-28 border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none"
-                     [placeholder]="editId() ? '± qty' : 'qty'" />
-              <span class="text-xs text-slate-500">{{ unit || 'pcs' }}</span>
-              @if (editId() && stockQty) {
-                <span class="text-sm text-slate-600">→ new stock <b>{{ curStock() + (+stockQty! || 0) }}</b></span>
-              }
-              @if (altUnit && factor && stockQty) {
-                <span class="text-xs text-slate-400">= {{ fmt((+stockQty! || 0) / (+factor! || 1)) }} {{ altUnit }}</span>
+          <!-- Stock box (products only — services skip stock) -->
+          @if (itemType !== 'service') {
+            <div class="mt-4 border rounded p-3 bg-slate-50">
+              <div class="flex items-center gap-3 flex-wrap">
+                <span class="text-sm font-medium">{{ editId() ? 'Add Stock' : 'Opening Stock' }}</span>
+                <input data-cell="stockQty" type="number" [(ngModel)]="stockQty" (keydown)="onFieldKey($event, 'stockQty')"
+                       class="w-24 border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none"
+                       [placeholder]="editId() ? '± qty' : 'qty'" />
+                <span class="text-xs text-slate-500">{{ unit || 'pcs' }}</span>
+                <label class="text-xs text-slate-500">&#64; rate ₹
+                  <input data-cell="oRate" type="number" [(ngModel)]="oRate" (keydown)="onFieldKey($event, 'oRate')"
+                         class="w-20 border rounded px-2 py-1 text-right focus:bg-amber-50 focus:outline-none ml-1" />
+                </label>
+                <label class="text-xs text-slate-500">as of
+                  <input type="date" [(ngModel)]="openingDate" class="border rounded px-2 py-1 ml-1" />
+                </label>
+                @if (editId() && stockQty) {
+                  <span class="text-sm text-slate-600">→ new stock <b>{{ curStock() + (+stockQty! || 0) }}</b></span>
+                }
+                @if (altUnit && factor && stockQty) {
+                  <span class="text-xs text-slate-400">= {{ fmt((+stockQty! || 0) / (+factor! || 1)) }} {{ altUnit }}</span>
+                }
+              </div>
+              @if (locations().length) {
+                <div class="mt-2 text-xs text-slate-600">
+                  <b>Stock by location:</b>
+                  @for (l of locations(); track l.location) {
+                    <span class="inline-block border rounded px-2 py-0.5 bg-white ml-1">{{ l.location }}: <b>{{ l.quantity }}</b></span>
+                  }
+                </div>
               }
             </div>
-          </div>
+
+            <!-- Tracking mode + batch registry (§3F.1) -->
+            <div class="mt-3 border rounded p-3">
+              <div class="flex items-center gap-4 text-sm flex-wrap">
+                <span class="font-medium">Tracking:</span>
+                <label class="flex items-center gap-1"><input type="radio" name="trk" value="none" [(ngModel)]="trackingMode" /> None</label>
+                <label class="flex items-center gap-1"><input type="radio" name="trk" value="batch" [(ngModel)]="trackingMode" /> Batch (MRP-wise lots)</label>
+                <label class="flex items-center gap-1"><input type="radio" name="trk" value="serial" [(ngModel)]="trackingMode" /> Serial / IMEI</label>
+                <span class="text-xs text-slate-400">one mode per item</span>
+              </div>
+              @if (trackingMode === 'batch' && editId()) {
+                <div class="mt-2">
+                  <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Batches — one item, many lots (old &amp; new MRP coexist)</div>
+                  <table class="w-full text-xs border border-slate-200" style="border-collapse: collapse">
+                    <thead><tr class="bg-slate-50 text-slate-500">
+                      <th class="border border-slate-200 px-2 py-0.5 text-left">Batch</th>
+                      <th class="border border-slate-200 px-2 py-0.5">Expiry</th>
+                      <th class="border border-slate-200 px-2 py-0.5 text-right">MRP</th>
+                      <th class="border border-slate-200 px-2 py-0.5 text-right">Sale ₹</th>
+                      <th class="border border-slate-200 px-2 py-0.5 text-right">Cost</th>
+                      <th class="border border-slate-200 px-2 py-0.5 text-right">Qty</th>
+                    </tr></thead>
+                    <tbody>
+                      @for (b of batches(); track b.id) {
+                        <tr [class.opacity-40]="!(+b.qty > 0)">
+                          <td class="border border-slate-200 px-2 py-0.5 font-mono">{{ b.batchNo }}</td>
+                          <td class="border border-slate-200 px-2 py-0.5 text-center">{{ b.expiryDate || '—' }}</td>
+                          <td class="border border-slate-200 px-2 py-0.5 text-right">{{ b.mrp ? fmt(b.mrp) : '—' }}</td>
+                          <td class="border border-slate-200 px-2 py-0.5 text-right">{{ b.sellingPrice ? fmt(b.sellingPrice) : '—' }}</td>
+                          <td class="border border-slate-200 px-2 py-0.5 text-right">{{ b.purchaseCost ? fmt(b.purchaseCost) : '—' }}</td>
+                          <td class="border border-slate-200 px-2 py-0.5 text-right font-semibold">{{ b.qty }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="6" class="px-2 py-2 text-center text-slate-400">No batches yet — record a Purchase (F8) and press Alt+B on the line to enter Batch no, MRP &amp; sale price.</td></tr>
+                      }
+                    </tbody>
+                    @if (batches().length) {
+                      <tfoot><tr class="bg-slate-50 font-semibold">
+                        <td colspan="5" class="border border-slate-200 px-2 py-0.5 text-right">Total (all batches)</td>
+                        <td class="border border-slate-200 px-2 py-0.5 text-right">{{ batchTotal() }}</td>
+                      </tr></tfoot>
+                    }
+                  </table>
+                </div>
+              }
+              @if (trackingMode === 'serial') {
+                <p class="text-xs text-slate-400 mt-1">Serial numbers are entered per line at billing/purchase time (Alt+B strip).</p>
+              }
+            </div>
+          }
+
+          <!-- Advanced (Low-priority fields stay behind this — spec §2.4) -->
+          <button (click)="advanced.set(!advanced())" class="mt-3 text-sm text-blue-700 hover:underline">
+            {{ advanced() ? 'Advanced ▴' : 'Advanced ▾' }} (description, classification, limits, cess…)
+          </button>
+          @if (advanced()) {
+            <div class="mt-2 border rounded p-3 bg-slate-50 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <label class="text-sm col-span-2">Description <span class="text-slate-400">(prints on invoice)</span>
+                <textarea [(ngModel)]="description" rows="2" class="mt-1 w-full border rounded px-2 py-1.5"></textarea>
+              </label>
+              <label class="text-sm col-span-2">Image URL
+                <input [(ngModel)]="thumbnail" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+              </label>
+              <label class="text-sm">Brand
+                <input [(ngModel)]="cfBrand" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+              </label>
+              <label class="text-sm">Colour
+                <input [(ngModel)]="cfColour" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+              </label>
+              <label class="text-sm">Size
+                <input [(ngModel)]="cfSize" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+              </label>
+              <label class="text-sm">Material
+                <input [(ngModel)]="cfMaterial" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+              </label>
+              <label class="text-sm">Min sale price ₹
+                <input type="number" [(ngModel)]="minSalePrice" class="mt-1 w-full border rounded px-2 py-1.5 text-right" />
+              </label>
+              <label class="text-sm">Max sale price ₹
+                <input type="number" [(ngModel)]="maxSalePrice" class="mt-1 w-full border rounded px-2 py-1.5 text-right" />
+              </label>
+              <label class="text-sm">Cess %
+                <input type="number" [(ngModel)]="cessPct" class="mt-1 w-full border rounded px-2 py-1.5 text-right" />
+              </label>
+              <label class="text-sm flex items-end gap-2 pb-1">
+                <input type="checkbox" [(ngModel)]="taxExempt" /> Tax exempt / nil-rated
+              </label>
+              @if (itemType !== 'service') {
+                <label class="text-sm">Max stock level
+                  <input type="number" [(ngModel)]="maxStock" class="mt-1 w-full border rounded px-2 py-1.5 text-right" />
+                </label>
+                <label class="text-sm">Rack / shelf / bin
+                  <input [(ngModel)]="rackLocation" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+                </label>
+              }
+              <label class="text-sm col-span-2">Internal notes <span class="text-slate-400">(not printed)</span>
+                <input [(ngModel)]="cfNotes" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+              </label>
+            </div>
+          }
 
           <div class="flex items-center gap-3 mt-4">
             <button (click)="save()" [disabled]="saving() || !canSave()"
@@ -173,21 +333,52 @@ export class ItemMasterComponent {
   readonly idx = signal(0);
   readonly editId = signal<string | null>(null);
   readonly curStock = signal(0);
+  readonly advanced = signal(false);
+  readonly cats = signal<any[]>([]);
+  readonly batches = signal<any[]>([]);
+  readonly locations = signal<Array<{ location: string; quantity: number }>>([]);
 
+  readonly uqcList = UQC_LIST;
   query = '';
+  lowOnly = false;
+
+  // core fields
   name = '';
+  itemType: 'product' | 'service' = 'product';
+  categoryId = '';
   unit = '';
   altUnit = '';
   factor: number | null = null;
+  uqc = '';
   hsn = '';
   barcode = '';
   gst: number | null = null;
   pRate: number | null = null;
   sRate: number | null = null;
+  priceIncludesTax = false;
   mrp: number | null = null;
+  saleDisc: number | null = null;
+  wholesalePrice: number | null = null;
+  wholesaleMinQty: number | null = null;
   oRate: number | null = null;
+  openingDate = '';
   minStock: number | null = null;
   stockQty: number | null = null;
+  trackingMode: 'none' | 'batch' | 'serial' = 'none';
+  // advanced
+  description = '';
+  thumbnail = '';
+  cfBrand = '';
+  cfColour = '';
+  cfSize = '';
+  cfMaterial = '';
+  cfNotes = '';
+  minSalePrice: number | null = null;
+  maxSalePrice: number | null = null;
+  cessPct: number | null = null;
+  taxExempt = false;
+  maxStock: number | null = null;
+  rackLocation = '';
 
   readonly saving = signal(false);
   readonly saved = signal<string | null>(null);
@@ -197,14 +388,17 @@ export class ItemMasterComponent {
 
   constructor() {
     this.reload(true);
+    this.entry.categories().subscribe({
+      next: (c: any) => this.cats.set(c?.data ?? c ?? []),
+      error: () => { /* categories are optional */ },
+    });
   }
 
-  lowOnly = false;
-
-  /** Optional low-stock filter over the loaded list. */
   visibleItems(): ItemMasterRow[] {
     const items = this.list();
-    return this.lowOnly ? items.filter((it) => (Number(it.stock) || 0) <= (Number(it.minStock) || 0)) : items;
+    return this.lowOnly
+      ? items.filter((it) => it.itemType !== 'service' && (Number(it.stock) || 0) <= (Number(it.minStock) || 0))
+      : items;
   }
 
   reload(now = false): void {
@@ -226,30 +420,67 @@ export class ItemMasterComponent {
   pick(it: ItemMasterRow): void {
     this.editId.set(it.id);
     this.name = it.name;
+    this.itemType = it.itemType === 'service' ? 'service' : 'product';
+    this.categoryId = it.categoryId || '';
     this.unit = it.uom || '';
     this.altUnit = it.altUom || '';
     this.factor = it.uomFactor != null ? Number(it.uomFactor) : null;
+    this.uqc = it.uqc || '';
     this.hsn = it.hsnCode || '';
     this.barcode = it.barcode || '';
     this.gst = it.gstRate != null ? Number(it.gstRate) : null;
     this.pRate = it.purchasePrice != null ? Number(it.purchasePrice) : null;
     this.sRate = Number(it.basePrice ?? it.salePrice) || null;
+    this.priceIncludesTax = !!it.priceIncludesTax;
     this.mrp = it.mrp != null ? Number(it.mrp) : null;
+    this.saleDisc = it.saleDiscountPct != null ? Number(it.saleDiscountPct) : null;
+    this.wholesalePrice = it.wholesalePrice != null ? Number(it.wholesalePrice) : null;
+    this.wholesaleMinQty = it.wholesaleMinQty != null ? Number(it.wholesaleMinQty) : null;
     this.oRate = it.openingRate != null ? Number(it.openingRate) : null;
+    this.openingDate = it.openingStockDate ? String(it.openingStockDate).slice(0, 10) : '';
     this.minStock = it.minStock != null ? Number(it.minStock) : null;
+    this.trackingMode = it.trackingMode === 'batch' || it.trackingMode === 'serial' ? (it.trackingMode as any) : 'none';
+    this.description = it.description || '';
+    this.thumbnail = it.thumbnail || '';
+    const cf = it.customFields || {};
+    this.cfBrand = cf['brand'] || '';
+    this.cfColour = cf['colour'] || '';
+    this.cfSize = cf['size'] || '';
+    this.cfMaterial = cf['material'] || '';
+    this.cfNotes = cf['notes'] || '';
+    this.minSalePrice = it.minSalePrice != null ? Number(it.minSalePrice) : null;
+    this.maxSalePrice = it.maxSalePrice != null ? Number(it.maxSalePrice) : null;
+    this.cessPct = it.cessPct != null ? Number(it.cessPct) : null;
+    this.taxExempt = !!it.taxExempt;
+    this.maxStock = it.maxStock != null ? Number(it.maxStock) : null;
+    this.rackLocation = it.rackLocation || '';
     this.curStock.set(Number(it.stock) || 0);
     this.stockQty = null;
     this.saved.set(null);
     this.error.set(null);
+    this.batches.set([]);
+    this.locations.set([]);
+    this.entry.itemBatches(it.id).subscribe((b) => this.batches.set(b || []));
+    this.entry.itemLocations(it.id).subscribe((l) => this.locations.set(l || []));
     setTimeout(() => this.focus('name'));
   }
 
   startNew(): void {
     this.editId.set(null);
-    this.name = ''; this.unit = ''; this.altUnit = ''; this.factor = null;
+    this.name = ''; this.itemType = 'product'; this.categoryId = '';
+    this.unit = ''; this.altUnit = ''; this.factor = null; this.uqc = '';
     this.hsn = ''; this.barcode = ''; this.gst = null; this.pRate = null; this.sRate = null;
-    this.mrp = null; this.oRate = null; this.minStock = null; this.stockQty = null;
+    this.priceIncludesTax = false; this.mrp = null; this.saleDisc = null;
+    this.wholesalePrice = null; this.wholesaleMinQty = null;
+    this.oRate = null; this.openingDate = ''; this.minStock = null; this.stockQty = null;
+    this.trackingMode = 'none';
+    this.description = ''; this.thumbnail = '';
+    this.cfBrand = ''; this.cfColour = ''; this.cfSize = ''; this.cfMaterial = ''; this.cfNotes = '';
+    this.minSalePrice = null; this.maxSalePrice = null; this.cessPct = null; this.taxExempt = false;
+    this.maxStock = null; this.rackLocation = '';
     this.curStock.set(0);
+    this.batches.set([]);
+    this.locations.set([]);
     this.saved.set(null);
     this.error.set(null);
     setTimeout(() => this.focus('name'));
@@ -268,11 +499,8 @@ export class ItemMasterComponent {
   }
 
   /** Miracle: Ctrl+Enter accepts/saves the voucher from anywhere (alias of Ctrl+A). */
-
   @HostListener('document:keydown.control.enter', ['$event'])
-
   onCtrlEnterSave(e: Event): void { this.onSaveKey(e as any); }
-
 
   @HostListener('document:keydown.control.a', ['$event'])
   onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
@@ -281,30 +509,55 @@ export class ItemMasterComponent {
   onInsKey(e: Event): void { e.preventDefault(); this.startNew(); }
 
   canSave(): boolean { return !!this.name.trim() && Number(this.sRate) > 0; }
+  batchTotal(): number { return money(this.batches().reduce((s, b) => s + (Number(b.qty) || 0), 0)); }
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }
 
   save(): void {
     if (!this.canSave() || this.saving()) return;
     this.saving.set(true);
     this.error.set(null);
+    const customFields: Record<string, any> = {};
+    if (this.cfBrand.trim()) customFields['brand'] = this.cfBrand.trim();
+    if (this.cfColour.trim()) customFields['colour'] = this.cfColour.trim();
+    if (this.cfSize.trim()) customFields['size'] = this.cfSize.trim();
+    if (this.cfMaterial.trim()) customFields['material'] = this.cfMaterial.trim();
+    if (this.cfNotes.trim()) customFields['notes'] = this.cfNotes.trim();
+
     const body = {
       name: this.name.trim(),
+      itemType: this.itemType,
+      categoryId: this.categoryId || undefined,
       basePrice: money(Number(this.sRate) || 0),
+      priceIncludesTax: this.priceIncludesTax,
       gstRate: this.gst != null ? Number(this.gst) : undefined,
       hsnCode: this.hsn.trim() || undefined,
       barcode: this.barcode.trim() || undefined,
       uom: this.unit.trim() || undefined,
       altUom: this.altUnit.trim() || undefined,
       uomFactor: this.factor != null ? Number(this.factor) : undefined,
+      uqc: this.uqc || undefined,
       purchasePrice: this.pRate != null ? Number(this.pRate) : undefined,
       mrp: this.mrp != null ? Number(this.mrp) : undefined,
+      saleDiscountPct: this.saleDisc != null ? Number(this.saleDisc) : undefined,
+      wholesalePrice: this.wholesalePrice != null ? Number(this.wholesalePrice) : undefined,
+      wholesaleMinQty: this.wholesaleMinQty != null ? Number(this.wholesaleMinQty) : undefined,
       openingRate: this.oRate != null ? Number(this.oRate) : undefined,
+      openingStockDate: this.openingDate || undefined,
       lowStockThreshold: this.minStock != null ? Number(this.minStock) : undefined,
+      trackingMode: this.trackingMode,
+      description: this.description.trim() || undefined,
+      thumbnail: this.thumbnail.trim() || undefined,
+      customFields: Object.keys(customFields).length ? customFields : undefined,
+      minSalePrice: this.minSalePrice != null ? Number(this.minSalePrice) : undefined,
+      maxSalePrice: this.maxSalePrice != null ? Number(this.maxSalePrice) : undefined,
+      cessPct: this.cessPct != null ? Number(this.cessPct) : undefined,
+      taxExempt: this.taxExempt,
+      maxStock: this.maxStock != null ? Number(this.maxStock) : undefined,
+      rackLocation: this.rackLocation.trim() || undefined,
     };
     const id = this.editId();
     if (!id) {
-      // New item: opening stock goes in with the create.
-      const opening = Number(this.stockQty) || 0;
+      const opening = this.itemType === 'service' ? 0 : Number(this.stockQty) || 0;
       this.entry.createProduct({ ...body, initialStock: opening }).subscribe({
         next: (p: any) => this.afterSave(`Item "${body.name}" created`, p?.id, opening),
         error: (err) => this.fail(err),
@@ -312,7 +565,7 @@ export class ItemMasterComponent {
     } else {
       this.entry.updateProduct(id, body).subscribe({
         next: () => {
-          const qty = Number(this.stockQty) || 0;
+          const qty = this.itemType === 'service' ? 0 : Number(this.stockQty) || 0;
           if (qty) {
             this.entry.addStock(id, qty).subscribe({
               next: (r) => this.afterSave(`"${body.name}" saved — stock now ${r?.stock ?? '?'}`, undefined, r?.stock),

@@ -148,6 +148,32 @@ export class SupplierOrderService {
               [l.productId, Math.round(add)],
             );
           }
+
+          // §3F.1 MRP-wise restock: a batch number on the purchase line lands in the
+          // batch registry as ITS OWN lot (new MRP/price/cost coexists with old lots —
+          // never a duplicate item). Re-purchasing the same batch adds qty and
+          // refreshes that lot's prices.
+          const batchNo = String((l as any).batchNo || '').trim();
+          if (batchNo) {
+            await qr.query(
+              `INSERT INTO "${schema}".item_batches
+                 (product_id, batch_no, godown, qty, purchase_cost, mrp, selling_price, expiry_date)
+               VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8::date)
+               ON CONFLICT (product_id, batch_no, COALESCE(godown, '')) DO UPDATE SET
+                 qty = "${schema}".item_batches.qty + EXCLUDED.qty,
+                 purchase_cost = EXCLUDED.purchase_cost,
+                 mrp = COALESCE(EXCLUDED.mrp, "${schema}".item_batches.mrp),
+                 selling_price = COALESCE(EXCLUDED.selling_price, "${schema}".item_batches.selling_price),
+                 expiry_date = COALESCE(EXCLUDED.expiry_date, "${schema}".item_batches.expiry_date),
+                 updated_at = NOW()`,
+              [
+                l.productId, batchNo, String((l as any).godown || '').trim(), add, l.unitPrice,
+                Number((l as any).batchMrp) || null,
+                Number((l as any).batchSale) || null,
+                (l as any).expiry || null,
+              ],
+            );
+          }
         }
       }
       row.items = lines;

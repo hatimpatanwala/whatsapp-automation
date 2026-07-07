@@ -42,6 +42,7 @@ export class EntryContextService {
         `SELECT p.id, p.name, p.uom, p.alt_uom, p.uom_factor, p.hsn_code,
                 COALESCE(p.gst_rate, 0) AS gst_rate,
                 p.sale_price, p.base_price, p.purchase_price, p.mrp,
+                p.tracking_mode, p.price_includes_tax, p.sale_discount_pct, p.item_type,
                 COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
          FROM "${schema}".products p
          LEFT JOIN LATERAL (
@@ -135,6 +136,9 @@ export class EntryContextService {
           `SELECT p.id, p.name, p.uom, p.alt_uom, p.uom_factor, p.hsn_code,
                   COALESCE(p.gst_rate, 0) AS gst_rate,
                   p.sale_price, p.base_price, p.purchase_price, p.mrp,
+                  p.tracking_mode, p.price_includes_tax, p.sale_discount_pct,
+                  p.wholesale_price, p.wholesale_min_qty, p.min_sale_price, p.max_sale_price,
+                  p.item_type, p.cess_pct, p.uqc,
                   COALESCE(ivm.low_stock_threshold, 5) AS min_stock,
                   COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
            FROM "${schema}".products p
@@ -155,6 +159,20 @@ export class EntryContextService {
       const lastToCustomer = customerId ? await this.lastSale(qr, schema, productId, customerId) : null;
       const lastOverall = await this.lastSale(qr, schema, productId);
 
+      // Batch-tracked items: live lots FIFO-ordered (oldest/soonest-expiry first) so
+      // the billing grid can suggest the old-MRP batch before the new one (§3F.1).
+      let batches: any[] = [];
+      if (product.tracking_mode === 'batch') {
+        batches = await qr.query(
+          `SELECT batch_no, expiry_date, mrp, selling_price, qty
+           FROM "${schema}".item_batches
+           WHERE product_id = $1 AND qty > 0
+           ORDER BY expiry_date ASC NULLS LAST, created_at ASC
+           LIMIT 8`,
+          [productId],
+        );
+      }
+
       // Price-level rate: if the customer is on a price list that defines this product,
       // that rate wins as the billing default (Tally price levels / Miracle rate A/B/C).
       let levelPrice: { price: number; levelName: string } | null = null;
@@ -170,7 +188,7 @@ export class EntryContextService {
         if (lp) levelPrice = { price: num(lp.rate), levelName: lp.level_name };
       }
 
-      return { ...product, lastToCustomer, lastOverall, levelPrice };
+      return { ...product, lastToCustomer, lastOverall, levelPrice, batches };
     });
   }
 
@@ -252,6 +270,9 @@ export class EntryContextService {
           `SELECT p.id, p.name, p.uom, p.alt_uom, p.uom_factor, p.hsn_code,
                   COALESCE(p.gst_rate, 0) AS gst_rate,
                   p.sale_price, p.base_price, p.purchase_price, p.mrp,
+                  p.tracking_mode, p.price_includes_tax, p.sale_discount_pct,
+                  p.wholesale_price, p.wholesale_min_qty, p.min_sale_price, p.max_sale_price,
+                  p.item_type, p.cess_pct, p.uqc,
                   COALESCE(ivm.low_stock_threshold, 5) AS min_stock,
                   COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
            FROM "${schema}".products p
@@ -349,6 +370,10 @@ export class EntryContextService {
                 COALESCE(p.gst_rate, 0) AS gst_rate,
                 p.base_price, p.sale_price, p.purchase_price, p.mrp, p.opening_rate,
                 p.metadata->>'barcode' AS barcode,
+                p.item_type, p.uqc, p.price_includes_tax, p.sale_discount_pct,
+                p.wholesale_price, p.wholesale_min_qty, p.min_sale_price, p.max_sale_price,
+                p.cess_pct, p.tax_exempt, p.opening_stock_date, p.max_stock, p.rack_location,
+                p.tracking_mode, p.category_id, p.description, p.thumbnail, p.custom_fields,
                 COALESCE(i.low_stock_threshold, 5) AS min_stock,
                 COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
          FROM "${schema}".products p
@@ -364,6 +389,37 @@ export class EntryContextService {
          ORDER BY p.name
          LIMIT 300`,
         [like],
+      ),
+    );
+  }
+
+  /**
+   * Batch registry (§3F.1 MRP-wise batches): one item, many lots — each with its own
+   * MRP / selling price / cost / qty. Zero-qty batches are kept for history.
+   */
+  itemBatches(schema: string, productId: string, liveOnly = false) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT id, batch_no, mfg_date, expiry_date, mrp, selling_price, purchase_cost,
+                qty, godown, model_no, size, created_at
+         FROM "${schema}".item_batches
+         WHERE product_id = $1 ${liveOnly ? 'AND qty > 0' : ''}
+         ORDER BY expiry_date ASC NULLS LAST, created_at ASC`,
+        [productId],
+      ),
+    );
+  }
+
+  /** Location-wise stock of one item (Group H view): godown rows from erp_stock. */
+  itemLocations(schema: string, productId: string) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT w.name AS location, s.quantity
+         FROM "${schema}".erp_stock s
+         JOIN "${schema}".erp_warehouses w ON w.id = s.warehouse_id
+         WHERE s.product_id = $1 AND s.quantity <> 0
+         ORDER BY w.name`,
+        [productId],
       ),
     );
   }

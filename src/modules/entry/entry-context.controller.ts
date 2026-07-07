@@ -94,4 +94,16 @@ export class EntryContextController {
   addStock(@Req() req: Request, @Param('id') id: string, @Body() body: { qty: number }) {
     return this.ctx.addStock(this.schema(req), id, Number(body?.qty) || 0);
   }
+
+  /** Batch registry of an item (§3F.1 MRP-wise batches). */
+  @Get('items/:id/batches')
+  itemBatches(@Req() req: Request, @Param('id') id: string, @Query('live') live?: string) {
+    return this.ctx.itemBatches(this.schema(req), id, live === '1');
+  }
+
+  /** Location-wise stock of an item (Group H view). */
+  @Get('items/:id/locations')
+  itemLocations(@Req() req: Request, @Param('id') id: string) {
+    return this.ctx.itemLocations(this.schema(req), id);
+  }
 }

@@ -30,6 +30,9 @@ interface Row {
   expiry?: string;
   godown?: string;
   showBatch?: boolean;
+  /** §3F.1 restock: this lot's own MRP + selling price (old & new MRP coexist). */
+  batchMrp?: number | null;
+  batchSale?: number | null;
 }
 
 const COLS = ['name', 'qty', 'free', 'rate', 'd1', 'd2', 'gstRate'] as const;
@@ -184,11 +187,17 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                 @if (row.showBatch) {
                   <tr><td class="border-x border-slate-300"></td>
                     <td colspan="10" class="px-2 py-1 border-x border-slate-300 bg-slate-50">
-                      <span class="text-xs text-slate-500 mr-2">Batch / Godown:</span>
+                      <span class="text-xs text-slate-500 mr-2">Batch:</span>
                       <input [(ngModel)]="row.batchNo" placeholder="Batch no" class="border rounded px-2 py-0.5 text-xs w-28 mr-2 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
                       <input type="date" [(ngModel)]="row.expiry" class="border rounded px-2 py-0.5 text-xs mr-2 focus:bg-amber-50 focus:outline-none" title="Expiry" />
-                      <input [(ngModel)]="row.godown" placeholder="Godown" class="border rounded px-2 py-0.5 text-xs w-28 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
-                      <span class="text-xs text-slate-400 ml-2">(Alt+B toggles)</span>
+                      <label class="text-xs text-slate-500 mr-2">MRP ₹
+                        <input type="number" [(ngModel)]="row.batchMrp" class="border rounded px-1 py-0.5 text-xs w-20 text-right ml-1 focus:bg-amber-50 focus:outline-none" title="THIS lot's printed MRP" />
+                      </label>
+                      <label class="text-xs text-slate-500 mr-2">Sale ₹
+                        <input type="number" [(ngModel)]="row.batchSale" class="border rounded px-1 py-0.5 text-xs w-20 text-right ml-1 focus:bg-amber-50 focus:outline-none" title="THIS lot's selling price" />
+                      </label>
+                      <input [(ngModel)]="row.godown" placeholder="Godown" class="border rounded px-2 py-0.5 text-xs w-24 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      <span class="text-xs text-slate-400 ml-2">new MRP → new lot; old stock stays (Alt+B)</span>
                     </td></tr>
                 }
                 @if (row.productId) {
@@ -571,6 +580,8 @@ export class PurchaseEntryComponent {
       batchNo: r.batchNo?.trim() || undefined,
       expiry: r.expiry || undefined,
       godown: r.godown?.trim() || undefined,
+      batchMrp: r.batchMrp != null ? Number(r.batchMrp) : undefined,
+      batchSale: r.batchSale != null ? Number(r.batchSale) : undefined,
     })) as any;
     this.entry
       .createPurchase({

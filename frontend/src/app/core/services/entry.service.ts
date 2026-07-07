@@ -186,6 +186,13 @@ export class EntryService {
 
   // ─── Item master (Miracle Add Item / Add Stock) ─────────────────────────────
   items(q = ''): Observable<ItemMasterRow[]> { return this.api.get<ItemMasterRow[]>('/entry/items', q ? { q } : undefined); }
+  itemBatches(productId: string, live = false): Observable<any[]> {
+    return this.api.get<any[]>(`/entry/items/${productId}/batches`, live ? { live: '1' } : undefined);
+  }
+  itemLocations(productId: string): Observable<Array<{ location: string; quantity: number }>> {
+    return this.api.get<Array<{ location: string; quantity: number }>>(`/entry/items/${productId}/locations`);
+  }
+  categories(): Observable<any[]> { return this.api.get<any[]>('/products/categories'); }
   addStock(productId: string, qty: number): Observable<{ ok: boolean; stock?: number }> {
     return this.api.post<{ ok: boolean; stock?: number }>(`/entry/items/${productId}/add-stock`, { qty });
   }
@@ -224,12 +231,23 @@ export interface ItemMasterRow {
   hsnCode?: string; gstRate?: number; basePrice?: number; salePrice?: number;
   purchasePrice?: number | null; mrp?: number | null; minStock?: number; stock?: number;
   barcode?: string | null; openingRate?: number | null;
+  itemType?: string; uqc?: string | null; priceIncludesTax?: boolean;
+  saleDiscountPct?: number | null; wholesalePrice?: number | null; wholesaleMinQty?: number | null;
+  minSalePrice?: number | null; maxSalePrice?: number | null; cessPct?: number | null;
+  taxExempt?: boolean; openingStockDate?: string | null; maxStock?: number | null;
+  rackLocation?: string | null; trackingMode?: string; categoryId?: string | null;
+  description?: string | null; thumbnail?: string | null; customFields?: Record<string, any> | null;
 }
 export interface ProductMasterBody {
   name?: string; basePrice?: number; salePrice?: number; gstRate?: number; hsnCode?: string;
   uom?: string; altUom?: string; uomFactor?: number; purchasePrice?: number; mrp?: number;
   lowStockThreshold?: number; initialStock?: number; sku?: string; barcode?: string;
   openingRate?: number;
+  itemType?: string; uqc?: string; priceIncludesTax?: boolean; saleDiscountPct?: number;
+  wholesalePrice?: number; wholesaleMinQty?: number; minSalePrice?: number; maxSalePrice?: number;
+  cessPct?: number; taxExempt?: boolean; openingStockDate?: string; maxStock?: number;
+  rackLocation?: string; trackingMode?: string; categoryId?: string;
+  description?: string; thumbnail?: string; customFields?: Record<string, any>;
 }
 
 export interface PriceLevel { id: string; name: string; rateCount?: number; }

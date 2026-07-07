@@ -34,6 +34,8 @@ interface Row {
   expiry?: string;
   godown?: string;
   showBatch?: boolean;
+  /** Live lots for batch-tracked items (§3F.1) — FIFO-ordered, first = suggested. */
+  batchOptions?: Array<{ batchNo: string; expiryDate?: string; mrp?: number; sellingPrice?: number; qty: number }>;
 }
 
 interface Charge {
@@ -350,7 +352,17 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                   <tr><td class="border-x border-slate-300"></td>
                     <td colspan="10" class="px-2 py-1 border-x border-slate-300 bg-slate-50">
                       <span class="text-xs text-slate-500 mr-2">Batch / Godown:</span>
-                      <input [(ngModel)]="row.batchNo" placeholder="Batch no" class="border rounded px-2 py-0.5 text-xs w-28 mr-2 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      @if (row.batchOptions?.length) {
+                        <select [ngModel]="row.batchNo" (ngModelChange)="applyBatch(row, $event)"
+                                class="border rounded px-1 py-0.5 text-xs mr-2 bg-amber-50"
+                                title="FIFO — oldest lot first; picking a batch bills at ITS price, capped at its MRP">
+                          @for (b of row.batchOptions; track b.batchNo) {
+                            <option [value]="b.batchNo">{{ b.batchNo }} · qty {{ b.qty }}{{ b.mrp ? ' · MRP ' + b.mrp : '' }}{{ b.sellingPrice ? ' · ₹' + b.sellingPrice : '' }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input [(ngModel)]="row.batchNo" placeholder="Batch no" class="border rounded px-2 py-0.5 text-xs w-28 mr-2 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
+                      }
                       <input type="date" [(ngModel)]="row.expiry" class="border rounded px-2 py-0.5 text-xs mr-2 focus:bg-amber-50 focus:outline-none" title="Expiry" />
                       <input [(ngModel)]="row.godown" placeholder="Godown" class="border rounded px-2 py-0.5 text-xs w-28 focus:bg-amber-50 focus:outline-none" autocomplete="off" />
                       <span class="text-xs text-slate-400 ml-2">(Alt+B toggles)</span>
@@ -804,10 +816,16 @@ export class SalesInvoiceEntryComponent {
     row.uom = hit.uom || 'pcs';
     row.gstRate = Number(hit.gstRate) || 0;
     row.rate = Number(hit.salePrice ?? hit.basePrice) || null;
+    // Vyapar "price includes tax": the master rate is MRP-style inclusive — bill at
+    // the derived tax-exclusive rate so the invoice math stays exclusive throughout.
+    if ((hit as any).priceIncludesTax && row.rate && row.gstRate) {
+      row.rate = money(row.rate / (1 + row.gstRate / 100));
+    }
     row.stock = Number(hit.stock) || 0;
-    // Party master: default discount % prefills D1 (still editable per line).
+    // Default D1: the party's agreed discount wins, else the item's default sale discount.
     const partyDisc = Number(this.customer()?.defaultDiscountPct) || 0;
-    if (partyDisc > 0 && row.d1 === null) row.d1 = partyDisc;
+    const itemDisc = Number((hit as any).saleDiscountPct) || 0;
+    if (row.d1 === null && (partyDisc > 0 || itemDisc > 0)) row.d1 = partyDisc > 0 ? partyDisc : itemDisc;
     this.productHits.set([]); this.searchRow.set(null);
     this.loadItemContext(r, true);
     setTimeout(() => this.focusCell(r, 'qty'));
@@ -826,8 +844,28 @@ export class SalesInvoiceEntryComponent {
         if (ctx.levelPrice) row.rate = money(ctx.levelPrice.price);
         else if (ctx.lastToCustomer) row.rate = money(ctx.lastToCustomer.price);
       }
+      // §3F.1: batch-tracked item → FIFO-suggest the OLDEST live lot; the strip opens
+      // with a batch picker and the lot's own selling price fills the rate.
+      const batches = (ctx as any).batches as Row['batchOptions'];
+      if (batches?.length) {
+        row.batchOptions = batches;
+        if (!row.batchNo) this.applyBatch(row, batches[0].batchNo);
+        row.showBatch = true;
+      }
       this.tick.update((t) => t + 1);
     });
+  }
+
+  /** Selecting a batch bills at that lot's price, capped at ITS printed MRP. */
+  applyBatch(row: Row, batchNo: string): void {
+    row.batchNo = batchNo;
+    const b = row.batchOptions?.find((x) => x.batchNo === batchNo);
+    if (!b) return;
+    row.expiry = b.expiryDate ? String(b.expiryDate).slice(0, 10) : row.expiry;
+    const price = Number(b.sellingPrice) || Number(row.rate) || 0;
+    const mrpCap = Number(b.mrp) || 0;
+    row.rate = money(mrpCap > 0 ? Math.min(price, mrpCap) : price);
+    this.tick.update((t) => t + 1);
   }
 
   // ─── Quick create ───────────────────────────────────────────────────────────
