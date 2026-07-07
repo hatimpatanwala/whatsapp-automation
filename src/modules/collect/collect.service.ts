@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import * as QRCode from 'qrcode';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
+import { firstRow } from '../erp/common/sql-result.util';
 import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
 import {
   CollectionHandle, manualCollection, parseRazorpayEvent, razorpayPaymentLink,
@@ -168,13 +169,13 @@ export class CollectService {
       }
 
       const row = existing
-        ? (await qr.query(
+        ? firstRow(await qr.query(
             `UPDATE "${schema}".payment_collections SET amount = $2, mode = $3, provider = $4,
                provider_ref = $5, virtual_upi_id = $6, pay_link = $7, status = 'PENDING'
              WHERE id = $1 RETURNING *`,
             [existing.id, amount, mode, handle.provider, handle.providerRef ?? null,
              handle.virtualUpiId ?? null, handle.payLink ?? null],
-          ))[0]
+          ))
         : (await qr.query(
             `INSERT INTO "${schema}".payment_collections
                (invoice_id, customer_id, amount, mode, provider, provider_ref, reference_id, virtual_upi_id, pay_link)
@@ -201,12 +202,12 @@ export class CollectService {
   /** Customer/operator says "paid" — a CLAIM, not proof (§10.1). */
   async claim(schema: string, id: string, note?: string) {
     return this.cm.executeInTenantContext(schema, async (qr) => {
-      const rows = await qr.query(
+      const claimed = firstRow(await qr.query(
         `UPDATE "${schema}".payment_collections SET status = 'CLAIMED', claim_note = COALESCE($2, claim_note)
          WHERE id = $1 AND status IN ('PENDING','CLAIMED') RETURNING id, reference_id`,
         [id, note?.trim() || null],
-      );
-      if (!rows[0]) throw new NotFoundException('Collection not found or already settled');
+      ));
+      if (!claimed) throw new NotFoundException('Collection not found or already settled');
       await qr.query(
         `INSERT INTO "${schema}".payment_event_log (collection_id, event_type, source, payload_json)
          VALUES ($1, 'claimed', 'customer', $2::jsonb)`,
@@ -222,21 +223,21 @@ export class CollectService {
    */
   async confirm(schema: string, id: string, by: string, source: 'admin' | 'webhook' = 'admin', raw?: any) {
     const c = await this.cm.executeInTenantContext(schema, async (qr) => {
-      const rows = await qr.query(
+      const updated = firstRow(await qr.query(
         `UPDATE "${schema}".payment_collections
          SET status = 'CONFIRMED', confirmed_by = $2, confirmed_at = NOW(), raw_event_json = COALESCE($3::jsonb, raw_event_json)
          WHERE id = $1 AND status NOT IN ('CONFIRMED','REFUNDED','PARTIALLY_REFUNDED')
          RETURNING *`,
         [id, by, raw ? JSON.stringify(raw) : null],
-      );
-      if (rows[0]) {
+      ));
+      if (updated) {
         await qr.query(
           `INSERT INTO "${schema}".payment_event_log (collection_id, event_type, source, payload_json, signature_valid)
            VALUES ($1, 'confirmed', $2, $3::jsonb, $4)`,
           [id, source, JSON.stringify({ by }), source === 'webhook'],
         );
       }
-      return rows[0] || null;
+      return updated || null;
     });
     if (!c) return { id, status: 'CONFIRMED', alreadyConfirmed: true }; // idempotent re-delivery
 
