@@ -407,6 +407,7 @@ export class TallyLayoutComponent {
         { label: 'Item Master (Add Item / Stock)', route: '/entry/items', key: 'Alt+K' },
         { label: 'Ledgers (Chart of Accounts)', route: '/accounting/ledgers' },
         { label: 'Price Levels & Credit Limits', route: '/entry/masters', key: 'F11' },
+        { label: 'Salesmen (Field App / SFA)', route: '/entry/salesmen' },
         { divider: true, label: 'd1' },
         { label: 'Products (web portal)', route: '/products' },
         { label: 'Customers', route: '/customers' },

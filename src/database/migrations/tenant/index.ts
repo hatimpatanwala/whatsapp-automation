@@ -2828,6 +2828,110 @@ const migration075Payments: TenantMigration = {
   },
 };
 
+/**
+ * 076 — SFA (salesman) module: salesmen with a token-secured WhatsApp webview,
+ * promise-to-pay follow-ups, and instrument details (cheque/UPI/cash) + collector
+ * on payments. Idempotent.
+ */
+const migration076Sfa: TenantMigration = {
+  name: '076_sfa_salesmen',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".salesmen (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(120) NOT NULL,
+      phone VARCHAR(20) NOT NULL,
+      route VARCHAR(80),
+      area VARCHAR(80),
+      access_token VARCHAR(64) NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_salesmen_token ON "${schema}".salesmen (access_token)`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_salesmen_phone ON "${schema}".salesmen (phone)`);
+
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".payment_promises (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      customer_id UUID,
+      invoice_id UUID,
+      salesman_id UUID,
+      amount NUMERIC(14,2) NOT NULL,
+      promise_date DATE NOT NULL,
+      note TEXT,
+      status VARCHAR(10) NOT NULL DEFAULT 'open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_promises_due ON "${schema}".payment_promises (status, promise_date)`);
+
+    await qr.query(`ALTER TABLE "${schema}".payments
+      ADD COLUMN IF NOT EXISTS instrument_no VARCHAR(40),
+      ADD COLUMN IF NOT EXISTS instrument_date DATE,
+      ADD COLUMN IF NOT EXISTS collected_by VARCHAR(120)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".payment_promises`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".salesmen`);
+    await qr.query(`ALTER TABLE "${schema}".payments
+      DROP COLUMN IF EXISTS instrument_no, DROP COLUMN IF EXISTS instrument_date, DROP COLUMN IF EXISTS collected_by`);
+  },
+};
+
+/** Tables gaining sync in 077 — parents before children (FK-safe backfill order). */
+const SYNC_TABLES_077 = [
+  'price_levels', 'price_list_items', 'addresses',
+  'inventory', 'erp_stock', 'item_batches',
+  'supplier_orders', 'supplier_order_items',
+  'payment_methods', 'payment_collections',
+  'salesmen', 'payment_promises',
+];
+
+/**
+ * 077 — Full-coverage sync: purchases, batches, stock, price lists, addresses,
+ * collections and the SFA tables now replicate desktop ↔ cloud like the 059/060
+ * set. Reuses the per-schema sync_stamp/sync_enqueue functions; backfills existing
+ * rows so they replicate on first pull. Idempotent.
+ */
+const migration077SyncMore: TenantMigration = {
+  name: '077_sync_more_tables',
+  async up(qr, schema) {
+    for (const t of SYNC_TABLES_077) {
+      const exists = await qr.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+        [schema, t],
+      );
+      if (!exists.length) continue;
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS origin_node UUID`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+      await qr.query(`CREATE INDEX IF NOT EXISTS idx_${t}_sync_version ON "${schema}".${t}(sync_version)`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`CREATE TRIGGER trg_${t}_sync_stamp BEFORE INSERT OR UPDATE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_stamp()`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+      await qr.query(`CREATE TRIGGER trg_${t}_sync_enqueue AFTER INSERT OR UPDATE OR DELETE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_enqueue()`);
+    }
+    await qr.query(`SET sync.apply = 'on'`);
+    try {
+      for (const t of SYNC_TABLES_077) {
+        const exists = await qr.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+          [schema, t],
+        );
+        if (!exists.length) continue;
+        await qr.query(`UPDATE "${schema}".${t} SET updated_at = updated_at WHERE sync_version = 0`);
+      }
+    } finally {
+      await qr.query(`RESET sync.apply`);
+    }
+  },
+  async down(qr, schema) {
+    for (const t of SYNC_TABLES_077) {
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+    }
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2904,4 +3008,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration073PartyMaster,
   migration074ItemMasterParity,
   migration075Payments,
+  migration076Sfa,
+  migration077SyncMore,
 ];

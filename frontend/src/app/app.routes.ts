@@ -90,6 +90,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/entry/party-master.component').then(m => m.PartyMasterComponent),
       },
       {
+        // SFA admin — register salesmen, share field-app links, follow-ups.
+        path: 'entry/salesmen',
+        loadComponent: () => import('./features/entry/salesmen.component').then(m => m.SalesmenComponent),
+      },
+      {
         // Item master — Miracle Add Item / Add Stock (dual units, HSN, rates, min stock).
         path: 'entry/items',
         loadComponent: () => import('./features/entry/item-master.component').then(m => m.ItemMasterComponent),
@@ -272,6 +277,11 @@ export const routes: Routes = [
     // & customers from inside WhatsApp (opened from the admin menu).
     path: 'm/erp',
     loadComponent: () => import('./features/builder/mobile-erp.component').then(m => m.MobileErpComponent),
+  },
+  {
+    // Token-secured salesman field app — orders on behalf, collections, promises.
+    path: 'm/sales',
+    loadComponent: () => import('./features/builder/sales-webview.component').then(m => m.SalesWebviewComponent),
   },
   { path: '**', redirectTo: '' },
 ];

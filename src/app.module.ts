@@ -42,6 +42,7 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { GstModule } from './modules/gst/gst.module';
 import { EntryModule } from './modules/entry/entry.module';
 import { CollectModule } from './modules/collect/collect.module';
+import { SfaModule } from './modules/sfa/sfa.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
@@ -91,6 +92,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     GstModule,
     EntryModule,
     CollectModule,
+    SfaModule,
   ],
   providers: [
     // Global authentication then role enforcement. Routes opt out with @Public().

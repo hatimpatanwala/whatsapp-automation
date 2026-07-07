@@ -184,6 +184,18 @@ export class EntryService {
     return this.api.delete<any>(`/entry/party/debtor/${customerId}/addresses/${addressId}`);
   }
 
+  // ─── SFA: salesmen + promise-to-pay follow-ups ──────────────────────────────
+  sfaSalesmen(): Observable<any[]> { return this.api.get<any[]>('/sfa/salesmen'); }
+  sfaAddSalesman(body: { name: string; phone: string; route?: string; area?: string }): Observable<any> {
+    return this.api.post<any>('/sfa/salesmen', body);
+  }
+  sfaUpdateSalesman(id: string, body: { isActive?: boolean; rotateToken?: boolean }): Observable<any> {
+    return this.api.patch<any>(`/sfa/salesmen/${id}`, body);
+  }
+  sfaPromises(scope: 'due' | 'open' | 'all' = 'all'): Observable<any[]> {
+    return this.api.get<any[]>('/sfa/promises', { scope });
+  }
+
   // ─── Payments & Collections (PAYMENTS_MODULE_README) ────────────────────────
   payConfig(): Observable<any> { return this.api.get<any>('/pay/config'); }
   paySetConfig(body: any): Observable<any> { return this.api.post<any>('/pay/config', body); }

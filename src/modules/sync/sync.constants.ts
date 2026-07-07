@@ -13,6 +13,14 @@ export const SYNCABLE_TABLES = [
   'suppliers',
   'erp_tax_rates',
   'erp_warehouses',
+  // full-coverage masters + stock (migration 077)
+  'price_levels',
+  'price_list_items',
+  'addresses',
+  'inventory',
+  'erp_stock',
+  'item_batches',
+  'salesmen',
   // transactional documents (migration 060)
   'orders',
   'order_items',
@@ -21,6 +29,12 @@ export const SYNCABLE_TABLES = [
   'quote_items',
   'payments',
   'deliveries',
+  // purchases + collections + SFA follow-ups (migration 077)
+  'supplier_orders',
+  'supplier_order_items',
+  'payment_methods',
+  'payment_collections',
+  'payment_promises',
 ] as const;
 
 export type SyncableTable = (typeof SYNCABLE_TABLES)[number];

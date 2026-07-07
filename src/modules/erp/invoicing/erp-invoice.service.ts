@@ -80,6 +80,11 @@ export interface RecordPaymentInput {
   paymentModeId?: string;
   ref?: string;
   description?: string;
+  /** SFA / collections: how the money arrived + instrument + who collected it. */
+  method?: string; // cash | cheque | upi | online | manual
+  instrumentNo?: string;
+  instrumentDate?: string;
+  collectedBy?: string;
 }
 
 /** Round to 2 decimals using cents to avoid float drift (port of IDURAR currency.js intent). */
@@ -386,9 +391,11 @@ export class ErpInvoiceService {
 
       const payment = (await qr.query(
         `INSERT INTO "${schema}".payments
-           (invoice_id, method, status, amount, currency, payment_mode_id, ref, description)
-         VALUES ($1,'manual','completed',$2,$3,$4,$5,$6) RETURNING *`,
-        [invoiceId, amount, inv.currency ?? 'INR', input.paymentModeId ?? null, input.ref ?? null, input.description ?? null],
+           (invoice_id, method, status, amount, currency, payment_mode_id, ref, description,
+            instrument_no, instrument_date, collected_by)
+         VALUES ($1,$7,'completed',$2,$3,$4,$5,$6,$8,$9::date,$10) RETURNING *`,
+        [invoiceId, amount, inv.currency ?? 'INR', input.paymentModeId ?? null, input.ref ?? null, input.description ?? null,
+         input.method || 'manual', input.instrumentNo ?? null, input.instrumentDate || null, input.collectedBy ?? null],
       ))[0];
 
       const newPaid = money(alreadyPaid + amount);
