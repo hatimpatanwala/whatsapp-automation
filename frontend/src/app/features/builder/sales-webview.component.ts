@@ -143,7 +143,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                       }
                     </div>
                     @if (p.wholesalePrice && p.wholesaleMinQty) {
-                      <p class="text-[10px] text-indigo-600">₹{{ fmt(p.wholesalePrice) }} for {{ p.wholesaleMinQty }}+</p>
+                      <p class="text-[10px] text-indigo-600">₹{{ fmt(p.wholesalePrice) }} for {{ fmtQty(p.wholesaleMinQty) }}+</p>
                     }
                     @if (qtyOf(p.id); as q) {
                       <div class="flex items-center gap-1 mt-2">
