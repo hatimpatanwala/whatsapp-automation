@@ -67,7 +67,17 @@ export class CartService {
         );
       }
 
-      return this.getActiveCart(schema, customerId);
+      // Read back with THIS query runner — a fresh connection (getActiveCart)
+      // cannot see the uncommitted insert and would return the pre-add cart.
+      const items = await qr.query(
+        `SELECT ci.*, p.name as product_name, p.thumbnail
+         FROM cart_items ci
+         JOIN products p ON p.id = ci.product_id
+         WHERE ci.cart_id = $1`,
+        [cart[0].id],
+      );
+      const total = items.reduce((sum: number, item: any) => sum + item.quantity * parseFloat(item.unit_price), 0);
+      return { cartId: cart[0].id, items, total };
     });
   }
 
