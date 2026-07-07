@@ -6,6 +6,8 @@ import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
 import { OrderService } from '../order/order.service';
 import { EntryContextService } from '../entry/entry-context.service';
 import { PromotionsEngine, CartItemInput } from '../promotions/promotions-engine.service';
+import { customerSegmentFlags } from '../promotions/customer-segments';
+import { CartService } from '../order/cart.service';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -26,6 +28,7 @@ export class SfaService {
     private readonly orders: OrderService,
     private readonly ctx: EntryContextService,
     private readonly promos: PromotionsEngine,
+    private readonly carts: CartService,
   ) {}
 
   // ─── Admin: manage salesmen ─────────────────────────────────────────────────
@@ -144,9 +147,48 @@ export class SfaService {
     });
   }
 
-  /** Catalog cards for the field app: image, prices (MRP/wholesale), live stock, scheme badge. */
+  /** Row → salesman-language summary. Keeps scope/audience so callers can match per product/customer. */
+  private summarizeScheme(s: any) {
+    const cfg = typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {});
+    let benefit = '';
+    if (s.action === 'discount' || s.action === 'qty_discount') {
+      benefit = cfg.discountType === 'amount' ? `₹${cfg.discountValue} off` : `${Number(cfg.discountValue) || 0}% off`;
+      if (cfg.minQty) benefit += ` on ${cfg.minQty}+ qty`;
+      if (cfg.minCartValue) benefit += ` on orders above ₹${cfg.minCartValue}`;
+    } else if (s.action === 'buy_x_get_x_free') {
+      benefit = `Buy ${cfg.buyQty || 1}, get ${cfg.getQty || 1} free`;
+    } else if (s.action === 'buy_x_get_y_free') {
+      benefit = `Buy ${cfg.buyQty || 1}, get a free gift`;
+    }
+    const on = s.scope === 'all' ? 'everything' : (s.scope_names || []).filter(Boolean).join(', ') || s.scope;
+    return {
+      id: s.id, name: s.name, description: s.description, action: s.action,
+      benefit, appliesTo: on, combinable: s.combinable,
+      validUntil: s.valid_until, minQty: cfg.minQty || null, minCartValue: cfg.minCartValue || null,
+      scope: s.scope, scopeIds: s.scope_ids || [], audience: s.audience || 'all',
+    };
+  }
+
+  private activeSchemeRows(schema: string, qr: any, audienceSql: string, params: any[] = []) {
+    return qr.query(
+      `SELECT s.*,
+              CASE WHEN s.scope = 'product' THEN (SELECT array_agg(p.name) FROM "${schema}".products p WHERE p.id = ANY(s.scope_ids))
+                   WHEN s.scope = 'category' THEN (SELECT array_agg(c.name) FROM "${schema}".categories c WHERE c.id = ANY(s.scope_ids))
+                   WHEN s.scope = 'brand' THEN (SELECT array_agg(b.name) FROM "${schema}".brands b WHERE b.id = ANY(s.scope_ids))
+              END AS scope_names
+       FROM "${schema}".schemes s
+       WHERE s.status = 'active' AND s.type = 'instant'
+         AND (s.valid_from IS NULL OR s.valid_from <= NOW())
+         AND (s.valid_until IS NULL OR s.valid_until >= NOW())
+         AND (${audienceSql})
+       ORDER BY s.weight DESC, s.created_at DESC`,
+      params,
+    );
+  }
+
+  /** Catalog cards: image, prices (MRP/wholesale), live stock, and the schemes running ON each item. */
   async products(schema: string, q: string) {
-    const [rows, badges] = await Promise.all([
+    const [rows, schemes] = await Promise.all([
       this.cm.executeInTenantContext(schema, (qr) =>
         qr.query(
           `SELECT p.id, p.name, p.thumbnail, p.uom, p.category_id, p.brand_id,
@@ -167,49 +209,64 @@ export class SfaService {
           [`%${q}%`],
         ),
       ),
-      this.promos.productBadges(schema),
+      this.schemes(schema),
     ]);
-    return rows.map((r: any) => ({
-      ...r,
-      badge: badges.products[r.id] || (r.category_id && badges.categories[r.category_id]) || (r.brand_id && badges.brands[r.brand_id]) || badges.all || null,
-    }));
+    const general = schemes.filter((s: any) => s.audience === 'all');
+    return rows.map((r: any) => {
+      const offers = general.filter((s: any) =>
+        s.scope === 'all'
+        || (s.scope === 'product' && s.scopeIds.includes(r.id))
+        || (s.scope === 'category' && r.category_id && s.scopeIds.includes(r.category_id))
+        || (s.scope === 'brand' && r.brand_id && s.scopeIds.includes(r.brand_id)),
+      );
+      return {
+        ...r,
+        badge: offers[0]?.benefit || null,
+        offers: offers.slice(0, 3).map((s: any) => ({ id: s.id, name: s.name, benefit: s.benefit })),
+      };
+    });
   }
 
   /** Active schemes, summarized in the salesman's language (what to pitch to the customer). */
-  schemes(schema: string) {
+  schemes(schema: string): Promise<any[]> {
     return this.cm.executeInTenantContext(schema, async (qr) => {
-      const rows = await qr.query(
-        `SELECT s.*,
-                CASE WHEN s.scope = 'product' THEN (SELECT array_agg(p.name) FROM "${schema}".products p WHERE p.id = ANY(s.scope_ids))
-                     WHEN s.scope = 'category' THEN (SELECT array_agg(c.name) FROM "${schema}".categories c WHERE c.id = ANY(s.scope_ids))
-                     WHEN s.scope = 'brand' THEN (SELECT array_agg(b.name) FROM "${schema}".brands b WHERE b.id = ANY(s.scope_ids))
-                END AS scope_names
-         FROM "${schema}".schemes s
-         WHERE s.status = 'active' AND s.type = 'instant'
-           AND (s.valid_from IS NULL OR s.valid_from <= NOW())
-           AND (s.valid_until IS NULL OR s.valid_until >= NOW())
-         ORDER BY s.weight DESC, s.created_at DESC`,
-      );
-      return rows.map((s: any) => {
-        const cfg = typeof s.conditions === 'string' ? JSON.parse(s.conditions) : (s.conditions || {});
-        let benefit = '';
-        if (s.action === 'discount' || s.action === 'qty_discount') {
-          benefit = cfg.discountType === 'amount' ? `₹${cfg.discountValue} off` : `${Number(cfg.discountValue) || 0}% off`;
-          if (cfg.minQty) benefit += ` on ${cfg.minQty}+ qty`;
-          if (cfg.minCartValue) benefit += ` on orders above ₹${cfg.minCartValue}`;
-        } else if (s.action === 'buy_x_get_x_free') {
-          benefit = `Buy ${cfg.buyQty || 1}, get ${cfg.getQty || 1} free`;
-        } else if (s.action === 'buy_x_get_y_free') {
-          benefit = `Buy ${cfg.buyQty || 1}, get a free gift`;
-        }
-        const on = s.scope === 'all' ? 'everything' : (s.scope_names || []).filter(Boolean).join(', ') || s.scope;
-        return {
-          id: s.id, name: s.name, description: s.description, action: s.action,
-          benefit, appliesTo: on, combinable: s.combinable,
-          validUntil: s.valid_until, minQty: cfg.minQty || null, minCartValue: cfg.minCartValue || null,
-        };
-      });
+      const rows = await this.activeSchemeRows(schema, qr, `1=1`);
+      return rows.map((s: any) => this.summarizeScheme(s));
     });
+  }
+
+  /** Offers THIS customer can get — general + targeted-to-them + their segments. */
+  customerSchemes(schema: string, customerId: string): Promise<any[]> {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const rows = await this.activeSchemeRows(
+        schema, qr,
+        `s.audience = 'all'
+         OR (s.audience = 'specific' AND EXISTS (
+               SELECT 1 FROM "${schema}".scheme_customers sc WHERE sc.scheme_id = s.id AND sc.customer_id = $1))
+         OR s.audience = 'segment'`,
+        [customerId],
+      );
+      const segFlags = await customerSegmentFlags(qr, customerId);
+      return rows
+        .filter((s: any) => s.audience !== 'segment' || (segFlags as any)[s.audience_segment])
+        .map((s: any) => ({ ...this.summarizeScheme(s), exclusive: s.audience !== 'all' }));
+    });
+  }
+
+  // ─── Customer's WhatsApp cart (salesman can view + edit it) ────────────────
+  customerCart(schema: string, customerId: string) {
+    return this.carts.getActiveCart(schema, customerId);
+  }
+  addToCustomerCart(schema: string, customerId: string, productId: string, quantity: number) {
+    if (!productId || !(Number(quantity) > 0)) throw new BadRequestException('Product and quantity are required');
+    return this.carts.addItem(schema, customerId, productId, null, Number(quantity));
+  }
+  setCustomerCartQty(schema: string, customerId: string, itemId: string, quantity: number) {
+    return this.carts.updateItemQuantity(schema, customerId, itemId, Number(quantity) || 0);
+  }
+  async clearCustomerCart(schema: string, customerId: string) {
+    await this.carts.clearCart(schema, customerId);
+    return { cleared: true };
   }
 
   /** Live cart evaluation — savings preview while the salesman builds the order. */

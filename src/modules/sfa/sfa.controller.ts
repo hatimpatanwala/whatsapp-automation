@@ -71,6 +71,36 @@ export class SfaController {
     return this.sfa.customerDetail(t, id);
   }
 
+  @Public() @Get('m/customers/:id/schemes')
+  async customerSchemes(@Query('t') t: string, @Query('token') token: string, @Param('id') id: string) {
+    await this.guard(t, token);
+    return this.sfa.customerSchemes(t, id);
+  }
+
+  @Public() @Get('m/customers/:id/cart')
+  async customerCart(@Query('t') t: string, @Query('token') token: string, @Param('id') id: string) {
+    await this.guard(t, token);
+    return this.sfa.customerCart(t, id);
+  }
+
+  @Public() @Post('m/customers/:id/cart/items')
+  async addCartItem(@Query('t') t: string, @Query('token') token: string, @Param('id') id: string, @Body() body: { productId: string; quantity: number }) {
+    await this.guard(t, token);
+    return this.sfa.addToCustomerCart(t, id, body?.productId, body?.quantity);
+  }
+
+  @Public() @Patch('m/customers/:id/cart/items/:itemId')
+  async setCartQty(@Query('t') t: string, @Query('token') token: string, @Param('id') id: string, @Param('itemId') itemId: string, @Body() body: { quantity: number }) {
+    await this.guard(t, token);
+    return this.sfa.setCustomerCartQty(t, id, itemId, body?.quantity);
+  }
+
+  @Public() @Post('m/customers/:id/cart/clear')
+  async clearCart(@Query('t') t: string, @Query('token') token: string, @Param('id') id: string) {
+    await this.guard(t, token);
+    return this.sfa.clearCustomerCart(t, id);
+  }
+
   @Public() @Get('m/products')
   async products(@Query('t') t: string, @Query('token') token: string, @Query('q') q?: string) {
     await this.guard(t, token);

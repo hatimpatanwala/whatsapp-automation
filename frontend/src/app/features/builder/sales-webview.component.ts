@@ -107,7 +107,13 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
 
           <!-- ── CATALOG ──────────────────────────────────────────── -->
           @if (view() === 'catalog') {
-            @if (cartCustomer()) {
+            @if (editTarget()) {
+              <div class="flex items-center gap-2 bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 mb-3">
+                <i class="pi pi-whatsapp text-emerald-600 text-sm"></i>
+                <p class="text-[13px] font-semibold text-emerald-800 flex-1 truncate">Editing {{ editTarget()?.name }}'s WhatsApp cart</p>
+                <button (click)="stopEditingCart()" class="text-[11px] font-semibold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-0.5">Done</button>
+              </div>
+            } @else if (cartCustomer()) {
               <div class="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 mb-3">
                 <i class="pi pi-user text-indigo-500 text-sm"></i>
                 <p class="text-[13px] font-semibold text-indigo-800 flex-1 truncate">Ordering for {{ cartCustomer()?.name }}</p>
@@ -144,6 +150,9 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                     </div>
                     @if (p.wholesalePrice && p.wholesaleMinQty) {
                       <p class="text-[10px] text-indigo-600">₹{{ fmt(p.wholesalePrice) }} for {{ fmtQty(p.wholesaleMinQty) }}+</p>
+                    }
+                    @for (o of p.offers || []; track o.id) {
+                      <p class="text-[10px] text-amber-700 font-semibold leading-tight">🎁 {{ o.benefit }}</p>
                     }
                     @if (qtyOf(p.id); as q) {
                       <div class="flex items-center gap-1 mt-2">
@@ -211,7 +220,63 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                   <button (click)="openPromise(null)" class="flex-1 text-[13px] font-semibold border border-amber-300 text-amber-700 rounded-xl py-2">Promise to pay</button>
                 </div>
               </div>
-              <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2">Open bills</h2>
+
+              <!-- Offers this customer can get -->
+              @if (custSchemes().length) {
+                <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2">Offers for this customer</h2>
+                @for (s of custSchemes(); track s.id) {
+                  <div class="bg-white rounded-xl border p-3 mb-2" [class.border-purple-300]="s.exclusive" [class.border-amber-200]="!s.exclusive">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="text-[13px] font-semibold truncate">{{ s.name }}
+                          @if (s.exclusive) { <span class="ml-1 text-[9px] font-bold bg-purple-100 text-purple-700 rounded px-1 py-0.5 align-middle">ONLY FOR THEM</span> }
+                        </p>
+                        <p class="text-[11px] text-gray-400">On {{ s.appliesTo }}{{ s.validUntil ? (' · till ' + (s.validUntil | date:'d MMM')) : '' }}</p>
+                      </div>
+                      <span class="shrink-0 text-[11px] font-bold px-2 py-1 rounded-lg"
+                        [class.bg-purple-600]="s.exclusive" [class.bg-amber-500]="!s.exclusive" [class.text-white]="true">{{ s.benefit }}</span>
+                    </div>
+                  </div>
+                }
+              }
+
+              <!-- Customer's WhatsApp cart (editable by the salesman) -->
+              <div class="flex items-center justify-between mb-2 mt-4">
+                <h2 class="text-[13px] font-bold text-gray-500 uppercase">Their WhatsApp cart</h2>
+                <button (click)="startEditingCart()" class="text-[11px] font-semibold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-1">+ Add items</button>
+              </div>
+              @if (!custCart()?.items?.length) {
+                <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4 mb-2">Cart is empty — add items or take a fresh order.</p>
+              } @else {
+                <div class="bg-white rounded-xl border border-emerald-200 p-3 mb-2">
+                  @for (it of custCart()?.items || []; track it.id) {
+                    <div class="flex items-center gap-2 mb-2">
+                      <div class="w-9 h-9 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                        @if (it.thumbnail) { <img [src]="it.thumbnail" class="w-full h-full object-cover" /> }
+                        @else { <i class="pi pi-box text-gray-300 text-sm"></i> }
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-[13px] font-medium truncate">{{ it.productName }}</p>
+                        <p class="text-[11px] text-gray-400 tabular-nums">₹{{ fmt(it.unitPrice) }} × {{ it.quantity }} = ₹{{ fmt(it.unitPrice * it.quantity) }}</p>
+                      </div>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button (click)="custCartStep(it, -1)" class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm">−</button>
+                        <span class="w-7 text-center text-sm font-bold tabular-nums">{{ it.quantity }}</span>
+                        <button (click)="custCartStep(it, 1)" class="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold text-sm">+</button>
+                      </div>
+                    </div>
+                  }
+                  <div class="flex items-center justify-between border-t border-gray-100 pt-2">
+                    <p class="text-[13px] font-bold tabular-nums">Total ₹{{ fmt(custCart()?.total) }}</p>
+                    <div class="flex gap-2">
+                      <button (click)="copyCartToOrder()" class="text-[11px] font-semibold bg-indigo-600 text-white rounded-lg px-2.5 py-1.5">Order this cart</button>
+                      <button (click)="clearCustomerCart()" class="text-[11px] font-semibold text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5">Clear</button>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2 mt-4">Open bills</h2>
               @if (!customer()?.bills?.length) { <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">Nothing outstanding. 🎉</p> }
               @for (b of customer()?.bills || []; track b.id) {
                 <div class="bg-white rounded-xl border border-gray-100 p-3 mb-2">
@@ -296,7 +361,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
       }
 
       <!-- ── STICKY CART BAR ────────────────────────────────────── -->
-      @if (authed() && cart().length && !cartOpen()) {
+      @if (authed() && cart().length && !cartOpen() && !editTarget()) {
         <button (click)="openCart()"
           class="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-2rem)] max-w-2xl bg-indigo-600 text-white rounded-2xl px-4 py-3 shadow-xl flex items-center justify-between">
           <span class="text-[13px] font-bold">{{ cartCount() }} item(s) · ₹{{ fmt(cartSubtotal()) }}</span>
@@ -323,6 +388,15 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 </div>
                 <button (click)="cartCustomer.set(null)" class="text-[11px] font-semibold text-indigo-600">Change</button>
               </div>
+              @if (cartCustSchemes().length) {
+                <div class="flex flex-wrap gap-1 mb-3 -mt-1">
+                  @for (s of cartCustSchemes(); track s.id) {
+                    <span class="text-[10px] font-semibold rounded-lg px-1.5 py-0.5"
+                      [class.bg-purple-100]="s.exclusive" [class.text-purple-700]="s.exclusive"
+                      [class.bg-amber-100]="!s.exclusive" [class.text-amber-700]="!s.exclusive">{{ s.exclusive ? '⭐ ' : '' }}{{ s.benefit }}</span>
+                  }
+                </div>
+              }
             } @else {
               <p class="text-[12px] font-semibold text-gray-500 mb-1">Who is this order for?</p>
               <input [(ngModel)]="cartCustQ" (ngModelChange)="searchCartCustomers()" placeholder="Search customer…"
@@ -479,6 +553,11 @@ export class SalesWebviewComponent implements OnInit {
   readonly home = signal<any>(null);
   readonly customers = signal<any[]>([]);
   readonly customer = signal<any>(null);
+  readonly custSchemes = signal<any[]>([]);
+  readonly custCart = signal<any>(null);
+  readonly cartCustSchemes = signal<any[]>([]);
+  /** When set, the catalog's +/− buttons edit THIS customer's WhatsApp cart instead of the order cart. */
+  readonly editTarget = signal<{ id: string; name: string } | null>(null);
   readonly pending = signal<any[]>([]);
   readonly promiseList = signal<any[]>([]);
   readonly promiseScope = signal('due');
@@ -555,6 +634,9 @@ export class SalesWebviewComponent implements OnInit {
   }
   openCustomer(id: string) {
     this.get(`customers/${id}`).subscribe((r) => this.customer.set(unwrap(r)));
+    this.custSchemes.set([]); this.custCart.set(null);
+    this.get(`customers/${id}/schemes`).subscribe((r) => this.custSchemes.set(unwrap(r)));
+    this.get(`customers/${id}/cart`).subscribe((r) => this.custCart.set(unwrap(r)));
   }
   loadPromises() {
     this.get('promises', { scope: this.promiseScope() }).subscribe((r) => this.promiseList.set(unwrap(r)));
@@ -565,9 +647,26 @@ export class SalesWebviewComponent implements OnInit {
     this.get('products', { q: this.prodQ }).subscribe((r) => this.products.set(unwrap(r)));
   }
   qtyOf(productId: string): number {
+    if (this.editTarget()) {
+      return (this.custCart()?.items || []).find((it: any) => it.productId === productId)?.quantity || 0;
+    }
     return this.cart().find((l) => l.productId === productId)?.quantity || 0;
   }
   step(p: any, delta: number) {
+    // Customer-cart edit mode: +/− writes straight into their WhatsApp cart.
+    const target = this.editTarget();
+    if (target) {
+      const existing = (this.custCart()?.items || []).find((it: any) => it.productId === p.id);
+      const done = (r: any) => this.custCart.set(unwrap(r));
+      if (existing) {
+        this.http.patch(`${this.base}/customers/${target.id}/cart/items/${existing.id}`, { quantity: existing.quantity + delta }, this.qs())
+          .subscribe({ next: done, error: () => this.showToast('Could not update cart') });
+      } else if (delta > 0) {
+        this.post(`customers/${target.id}/cart/items`, { productId: p.id, quantity: delta })
+          .subscribe({ next: done, error: () => this.showToast('Could not add to cart') });
+      }
+      return;
+    }
     this.cart.update((ls) => {
       const i = ls.findIndex((l) => l.productId === p.id);
       if (i < 0) {
@@ -580,6 +679,50 @@ export class SalesWebviewComponent implements OnInit {
       return next;
     });
     this.scheduleEval();
+  }
+
+  // ─── Customer WhatsApp cart editing ─────────────────────────────────────────
+  custCartStep(it: any, delta: number) {
+    const id = this.customer()?.id;
+    if (!id) return;
+    this.http.patch(`${this.base}/customers/${id}/cart/items/${it.id}`, { quantity: it.quantity + delta }, this.qs())
+      .subscribe({ next: (r) => this.custCart.set(unwrap(r)), error: () => this.showToast('Could not update cart') });
+  }
+  startEditingCart() {
+    const c = this.customer();
+    if (!c) return;
+    this.editTarget.set({ id: c.id, name: c.name });
+    this.view.set('catalog');
+    if (!this.products().length) this.searchProducts();
+  }
+  stopEditingCart() {
+    const target = this.editTarget();
+    this.editTarget.set(null);
+    if (target) { this.view.set('customers'); this.openCustomer(target.id); }
+  }
+  copyCartToOrder() {
+    const items = (this.custCart()?.items || []).map((it: any) => ({
+      productId: it.productId, productName: it.productName, quantity: Number(it.quantity),
+      unitPrice: Number(it.unitPrice) || 0, thumbnail: it.thumbnail,
+    }));
+    if (!items.length) return;
+    this.cart.set(items);
+    this.cartCustomer.set(this.customer());
+    this.loadCartCustSchemes(this.customer()?.id);
+    this.openCart();
+  }
+  clearCustomerCart() {
+    const id = this.customer()?.id;
+    if (!id) return;
+    this.post(`customers/${id}/cart/clear`, {}).subscribe({
+      next: () => { this.custCart.set({ items: [], total: 0 }); this.showToast('Cart cleared'); },
+      error: () => this.showToast('Could not clear cart'),
+    });
+  }
+  private loadCartCustSchemes(customerId?: string) {
+    this.cartCustSchemes.set([]);
+    if (!customerId) return;
+    this.get(`customers/${customerId}/schemes`).subscribe((r) => this.cartCustSchemes.set(unwrap(r)));
   }
   stepLine(l: any, delta: number) {
     const p = { id: l.productId, name: l.productName, price: l.unitPrice, thumbnail: l.thumbnail };
@@ -607,10 +750,13 @@ export class SalesWebviewComponent implements OnInit {
   }
   pickCartCustomer(c: any) {
     this.cartCustomer.set(c);
+    this.loadCartCustSchemes(c?.id);
     this.scheduleEval(); // customer-specific schemes may now apply
   }
   startOrder() {
     this.cartCustomer.set(this.customer());
+    this.loadCartCustSchemes(this.customer()?.id);
+    this.editTarget.set(null);
     this.go('catalog');
   }
   submitOrder() {
