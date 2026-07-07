@@ -79,8 +79,8 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
               <div class="bg-white rounded-xl border border-amber-200 p-3 mb-2">
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold truncate">{{ p.customer_name }}</p>
-                    <p class="text-[11px] text-gray-400">{{ p.invoice_number || 'On account' }} · promised {{ p.promise_date | date:'d MMM' }}</p>
+                    <p class="text-sm font-semibold truncate">{{ p.customerName }}</p>
+                    <p class="text-[11px] text-gray-400">{{ p.invoiceNumber || 'On account' }} · promised {{ p.promiseDate | date:'d MMM' }}</p>
                   </div>
                   <p class="text-sm font-bold tabular-nums text-amber-700">₹{{ fmt(p.amount) }}</p>
                 </div>
@@ -106,7 +106,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                     </div>
                     <div class="text-right shrink-0">
                       <p class="text-sm font-bold tabular-nums" [class.text-red-600]="+c.outstanding > 0">₹{{ fmt(c.outstanding) }}</p>
-                      <p class="text-[11px] text-gray-400">{{ c.open_bills }} bill(s)</p>
+                      <p class="text-[11px] text-gray-400">{{ c.openBills }} bill(s)</p>
                     </div>
                   </div>
                 </button>
@@ -128,11 +128,11 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 <div class="bg-white rounded-xl border border-gray-100 p-3 mb-2">
                   <div class="flex items-center justify-between">
                     <div>
-                      <p class="text-sm font-semibold">{{ b.invoice_number }}</p>
-                      <p class="text-[11px] text-gray-400">{{ b.issued_at | date:'d MMM yy' }} {{ b.due_date ? '· due ' + (b.due_date | date:'d MMM') : '' }}</p>
+                      <p class="text-sm font-semibold">{{ b.invoiceNumber }}</p>
+                      <p class="text-[11px] text-gray-400">{{ b.issuedAt | date:'d MMM yy' }} {{ b.dueDate ? '· due ' + (b.dueDate | date:'d MMM') : '' }}</p>
                     </div>
                     <div class="text-right">
-                      <p class="text-sm font-bold tabular-nums text-red-600">₹{{ fmt(b.balance_due) }}</p>
+                      <p class="text-sm font-bold tabular-nums text-red-600">₹{{ fmt(b.balanceDue) }}</p>
                       <p class="text-[10px] text-gray-400">of ₹{{ fmt(b.total) }}</p>
                     </div>
                   </div>
@@ -146,7 +146,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 <h2 class="text-[13px] font-bold text-gray-500 uppercase mt-4 mb-2">Open promises</h2>
                 @for (p of customer()?.promises || []; track p.id) {
                   <div class="bg-amber-50 rounded-xl border border-amber-200 p-3 mb-2 flex items-center justify-between">
-                    <p class="text-[12px] text-amber-800">₹{{ fmt(p.amount) }} on {{ p.promise_date | date:'d MMM' }}{{ p.note ? ' — ' + p.note : '' }}</p>
+                    <p class="text-[12px] text-amber-800">₹{{ fmt(p.amount) }} on {{ p.promiseDate | date:'d MMM' }}{{ p.note ? ' — ' + p.note : '' }}</p>
                   </div>
                 }
               }
@@ -159,10 +159,10 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
               <div class="bg-white rounded-xl border border-gray-100 p-3 mb-2">
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold truncate">{{ b.customer_name }}</p>
-                    <p class="text-[11px] text-gray-400">{{ b.invoice_number }} · {{ b.issued_at | date:'d MMM' }} {{ b.due_date ? '· due ' + (b.due_date | date:'d MMM') : '' }}</p>
+                    <p class="text-sm font-semibold truncate">{{ b.customerName }}</p>
+                    <p class="text-[11px] text-gray-400">{{ b.invoiceNumber }} · {{ b.issuedAt | date:'d MMM' }} {{ b.dueDate ? '· due ' + (b.dueDate | date:'d MMM') : '' }}</p>
                   </div>
-                  <p class="text-sm font-bold tabular-nums text-red-600 shrink-0">₹{{ fmt(b.balance_due) }}</p>
+                  <p class="text-sm font-bold tabular-nums text-red-600 shrink-0">₹{{ fmt(b.balanceDue) }}</p>
                 </div>
                 <div class="flex gap-2 mt-2">
                   <button (click)="openCollect(b)" class="flex-1 text-[12px] font-semibold bg-emerald-600 text-white rounded-lg py-1.5">₹ Collect</button>
@@ -188,8 +188,8 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                 [class.border-amber-300]="p.status === 'open'" [class.border-gray-100]="p.status !== 'open'">
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold truncate">{{ p.customer_name }}</p>
-                    <p class="text-[11px] text-gray-400">{{ p.invoice_number || 'On account' }} · {{ p.promise_date | date:'d MMM yy' }} · {{ p.status }}</p>
+                    <p class="text-sm font-semibold truncate">{{ p.customerName }}</p>
+                    <p class="text-[11px] text-gray-400">{{ p.invoiceNumber || 'On account' }} · {{ p.promiseDate | date:'d MMM yy' }} · {{ p.status }}</p>
                     @if (p.note) { <p class="text-[11px] text-gray-500 mt-0.5">{{ p.note }}</p> }
                   </div>
                   <p class="text-sm font-bold tabular-nums shrink-0">₹{{ fmt(p.amount) }}</p>
@@ -211,7 +211,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
         <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="collectFor.set(null)">
           <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5" (click)="$event.stopPropagation()">
             <h3 class="text-base font-bold mb-1">Collect payment</h3>
-            <p class="text-[12px] text-gray-400 mb-3">{{ bill.invoice_number }} · balance ₹{{ fmt(bill.balance_due) }}</p>
+            <p class="text-[12px] text-gray-400 mb-3">{{ bill.invoiceNumber }} · balance ₹{{ fmt(bill.balanceDue) }}</p>
             <label class="text-[11px] font-semibold text-gray-500 uppercase">Amount</label>
             <input type="number" [(ngModel)]="colAmount" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm mb-3" />
             <label class="text-[11px] font-semibold text-gray-500 uppercase">Payment type</label>
@@ -248,7 +248,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
         <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="promiseSheet.set(false)">
           <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5" (click)="$event.stopPropagation()">
             <h3 class="text-base font-bold mb-1">Promise to pay</h3>
-            <p class="text-[12px] text-gray-400 mb-3">{{ promiseBill()?.invoice_number || 'On account' }} — customer will pay on the chosen date; it shows in Follow-ups.</p>
+            <p class="text-[12px] text-gray-400 mb-3">{{ promiseBill()?.invoiceNumber || 'On account' }} — customer will pay on the chosen date; it shows in Follow-ups.</p>
             <label class="text-[11px] font-semibold text-gray-500 uppercase">Amount</label>
             <input type="number" [(ngModel)]="prAmount" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm mb-3" />
             <label class="text-[11px] font-semibold text-gray-500 uppercase">Will pay on</label>
@@ -274,7 +274,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
             @for (p of products(); track p.id) {
               <button (click)="addLine(p)" class="w-full text-left flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 mb-1">
                 <span class="text-[13px] font-medium truncate">{{ p.name }}</span>
-                <span class="text-[12px] text-gray-500 tabular-nums shrink-0">₹{{ fmt(p.price) }}</span>
+                <span class="text-[12px] text-gray-500 tabular-nums shrink-0">₹{{ fmt(p.salePrice ?? p.basePrice) }}</span>
               </button>
             }
             @if (lines().length) {
@@ -391,12 +391,12 @@ export class SalesWebviewComponent implements OnInit {
   // Collect
   openCollect(bill: any) {
     this.collectFor.set(bill);
-    this.colAmount = Number(bill.balance_due) || null;
+    this.colAmount = Number(bill.balanceDue) || null;
     this.colMethod.set('cash'); this.colInstrument = ''; this.colInstrumentDate = ''; this.colNote = '';
     this.colPromiseId = null; this.sheetError.set('');
   }
   openCollectForPromise(p: any) {
-    this.collectFor.set({ id: p.invoice_id, invoice_number: p.invoice_number || 'On account', balance_due: p.balance_due ?? p.amount });
+    this.collectFor.set({ id: p.invoiceId, invoiceNumber: p.invoiceNumber || 'On account', balanceDue: p.balanceDue ?? p.amount });
     this.colAmount = Number(p.amount) || null;
     this.colMethod.set('cash'); this.colInstrument = ''; this.colInstrumentDate = ''; this.colNote = '';
     this.colPromiseId = p.id; this.sheetError.set('');
@@ -426,15 +426,15 @@ export class SalesWebviewComponent implements OnInit {
   // Promise
   openPromise(bill: any) {
     this.promiseBill.set(bill);
-    this.colCustomerId = this.customer()?.id || bill?.customer_id || null;
-    this.prAmount = bill ? Number(bill.balance_due) || null : null;
+    this.colCustomerId = this.customer()?.id || bill?.customerId || null;
+    this.prAmount = bill ? Number(bill.balanceDue) || null : null;
     this.prDate = ''; this.prNote = ''; this.sheetError.set('');
     this.promiseSheet.set(true);
   }
   openPromiseFor(bill: any) {
     this.promiseBill.set(bill);
-    this.colCustomerId = bill.customer_id;
-    this.prAmount = Number(bill.balance_due) || null;
+    this.colCustomerId = bill.customerId;
+    this.prAmount = Number(bill.balanceDue) || null;
     this.prDate = ''; this.prNote = ''; this.sheetError.set('');
     this.promiseSheet.set(true);
   }
@@ -470,7 +470,7 @@ export class SalesWebviewComponent implements OnInit {
     this.get('products', { q: this.prodQ }).subscribe((r) => this.products.set(unwrap(r)));
   }
   addLine(p: any) {
-    this.lines.update((ls) => [...ls, { productId: p.id, productName: p.name, quantity: 1, unitPrice: Number(p.price) || 0 }]);
+    this.lines.update((ls) => [...ls, { productId: p.id, productName: p.name, quantity: 1, unitPrice: Number(p.salePrice ?? p.basePrice) || 0 }]);
   }
   removeLine(i: number) { this.lines.update((ls) => ls.filter((_, x) => x !== i)); }
   submitOrder() {

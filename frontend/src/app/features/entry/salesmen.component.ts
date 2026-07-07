@@ -51,12 +51,12 @@ import { EntryService } from '../../core/services/entry.service';
           </tr></thead>
           <tbody>
             @for (s of salesmen(); track s.id) {
-              <tr [class.opacity-50]="!s.is_active">
+              <tr [class.opacity-50]="!s.isActive">
                 <td class="border border-slate-300 px-2 py-1 font-medium">{{ s.name }}</td>
                 <td class="border border-slate-300 px-2 py-1 font-mono text-xs">{{ s.phone }}</td>
                 <td class="border border-slate-300 px-2 py-1 text-xs">{{ s.route || '—' }} {{ s.area ? '/ ' + s.area : '' }}</td>
                 <td class="border border-slate-300 px-2 py-1 text-center text-xs">
-                  <span [class.text-emerald-700]="s.is_active" [class.text-red-600]="!s.is_active">{{ s.is_active ? 'Active' : 'Off' }}</span>
+                  <span [class.text-emerald-700]="s.isActive" [class.text-red-600]="!s.isActive">{{ s.isActive ? 'Active' : 'Off' }}</span>
                 </td>
                 <td class="border border-slate-300 px-2 py-1">
                   <code class="text-[11px] text-slate-500 break-all">{{ link(s) }}</code>
@@ -65,8 +65,8 @@ import { EntryService } from '../../core/services/entry.service';
                   <button (click)="copy(s)" class="text-xs px-2 py-1 rounded border mr-1">Copy link</button>
                   <a [href]="waShare(s)" target="_blank" class="text-xs px-2 py-1 rounded bg-emerald-600 text-white mr-1 inline-block">Send on WhatsApp</a>
                   <button (click)="rotate(s)" class="text-xs px-2 py-1 rounded border mr-1" title="Old link stops working">↻ New link</button>
-                  <button (click)="toggle(s)" class="text-xs px-2 py-1 rounded border" [class.text-red-600]="s.is_active">
-                    {{ s.is_active ? 'Deactivate' : 'Activate' }}
+                  <button (click)="toggle(s)" class="text-xs px-2 py-1 rounded border" [class.text-red-600]="s.isActive">
+                    {{ s.isActive ? 'Deactivate' : 'Activate' }}
                   </button>
                 </td>
               </tr>
@@ -95,10 +95,10 @@ import { EntryService } from '../../core/services/entry.service';
           <tbody>
             @for (p of promises(); track p.id) {
               <tr [class.bg-amber-50]="p.status === 'open' && isDue(p)">
-                <td class="border border-slate-300 px-2 py-1">{{ p.customer_name }} <span class="text-xs text-slate-400">{{ p.customer_phone }}</span></td>
-                <td class="border border-slate-300 px-2 py-1 font-mono text-xs">{{ p.invoice_number || 'On a/c' }}</td>
+                <td class="border border-slate-300 px-2 py-1">{{ p.customerName }} <span class="text-xs text-slate-400">{{ p.customerPhone }}</span></td>
+                <td class="border border-slate-300 px-2 py-1 font-mono text-xs">{{ p.invoiceNumber || 'On a/c' }}</td>
                 <td class="border border-slate-300 px-2 py-1 text-right font-medium">{{ fmt(p.amount) }}</td>
-                <td class="border border-slate-300 px-2 py-1 text-center text-xs">{{ p.promise_date | date: 'dd-MM-yy' }}</td>
+                <td class="border border-slate-300 px-2 py-1 text-center text-xs">{{ p.promiseDate | date: 'dd-MM-yy' }}</td>
                 <td class="border border-slate-300 px-2 py-1 text-center text-xs capitalize"
                     [class.text-amber-700]="p.status === 'open'" [class.text-emerald-700]="p.status === 'kept'"
                     [class.text-red-600]="p.status === 'broken'">{{ p.status }}</td>
@@ -152,8 +152,8 @@ export class SalesmenComponent implements OnInit {
     });
   }
   toggle(s: any) {
-    this.entry.sfaUpdateSalesman(s.id, { isActive: !s.is_active }).subscribe({
-      next: () => { this.flash(s.is_active ? 'Deactivated' : 'Activated'); this.load(); },
+    this.entry.sfaUpdateSalesman(s.id, { isActive: !s.isActive }).subscribe({
+      next: () => { this.flash(s.isActive ? 'Deactivated' : 'Activated'); this.load(); },
       error: () => this.flashErr('Could not update'),
     });
   }
@@ -161,7 +161,7 @@ export class SalesmenComponent implements OnInit {
     navigator.clipboard?.writeText(this.link(s)).then(() => this.flash('Link copied'));
   }
 
-  isDue(p: any) { return p.promise_date && new Date(p.promise_date) <= new Date(); }
+  isDue(p: any) { return p.promiseDate && new Date(p.promiseDate) <= new Date(); }
   fmt(n: any) { return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }); }
   private flash(m: string) { this.msg.set(m); this.err.set(''); setTimeout(() => this.msg.set(''), 3000); }
   private flashErr(m: string) { this.err.set(m); this.msg.set(''); setTimeout(() => this.err.set(''), 4000); }
