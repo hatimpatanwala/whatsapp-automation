@@ -1,5 +1,6 @@
 """SFA customer-wise schemes + customer-cart editing E2E against staging."""
 import json, sys, urllib.request, http.cookiejar
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 BASE = 'https://staging-whatsappdemo.duckdns.org/api'
 SCHEMA = 'tenant_hatim_backup_c84a3b56'
