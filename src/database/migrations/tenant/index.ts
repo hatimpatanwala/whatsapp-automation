@@ -2749,6 +2749,85 @@ const migration074ItemMasterParity: TenantMigration = {
   },
 };
 
+/**
+ * 075 — Payments & Collections module (PAYMENTS_MODULE_README.md §7): collection
+ * methods (Mode A), the collection lifecycle record, the webhook audit/idempotency
+ * log, and refunds. Confirmation feeds the EXISTING payments/receipt-voucher flow —
+ * downstream is identical whichever way the money arrived. Idempotent.
+ */
+const migration075Payments: TenantMigration = {
+  name: '075_payments_collections',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".payment_methods (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      type VARCHAR(10) NOT NULL DEFAULT 'upi',
+      label VARCHAR(80),
+      vpa VARCHAR(120),
+      holder_name VARCHAR(120),
+      bank_name VARCHAR(120),
+      account_no VARCHAR(34),
+      ifsc VARCHAR(11),
+      qr_asset TEXT,
+      is_default BOOLEAN NOT NULL DEFAULT false,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".payment_collections (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      invoice_id UUID,
+      customer_id UUID,
+      amount NUMERIC(14,2) NOT NULL,
+      currency VARCHAR(8) NOT NULL DEFAULT 'INR',
+      mode CHAR(1) NOT NULL DEFAULT 'A',
+      provider VARCHAR(20) NOT NULL DEFAULT 'manual',
+      provider_ref VARCHAR(120),
+      reference_id VARCHAR(60) NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+      method_used VARCHAR(20),
+      virtual_upi_id VARCHAR(120),
+      pay_link TEXT,
+      claim_note TEXT,
+      confirmed_by VARCHAR(80),
+      confirmed_at TIMESTAMPTZ,
+      raw_event_json JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_pay_collect_ref ON "${schema}".payment_collections (reference_id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_pay_collect_status ON "${schema}".payment_collections (status)`);
+
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".payment_event_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      collection_id UUID,
+      event_type VARCHAR(60),
+      source VARCHAR(20) NOT NULL DEFAULT 'webhook',
+      provider_event_id VARCHAR(120),
+      payload_json JSONB,
+      signature_valid BOOLEAN,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_pay_event_provider
+      ON "${schema}".payment_event_log (provider_event_id) WHERE provider_event_id IS NOT NULL`);
+
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".payment_refunds (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      collection_id UUID NOT NULL,
+      amount NUMERIC(14,2) NOT NULL,
+      provider_ref VARCHAR(120),
+      status VARCHAR(20) NOT NULL DEFAULT 'initiated',
+      speed VARCHAR(10) NOT NULL DEFAULT 'normal',
+      reason TEXT,
+      created_by VARCHAR(80),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  },
+  async down(qr, schema) {
+    for (const t of ['payment_refunds', 'payment_event_log', 'payment_collections', 'payment_methods']) {
+      await qr.query(`DROP TABLE IF EXISTS "${schema}".${t}`);
+    }
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -2824,4 +2903,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration072TcsOpeningRate,
   migration073PartyMaster,
   migration074ItemMasterParity,
+  migration075Payments,
 ];

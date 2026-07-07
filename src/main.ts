@@ -35,6 +35,9 @@ try {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
+    // Payment webhooks verify an HMAC over the RAW request body — a re-stringified
+    // JSON body would never match the provider's signature.
+    rawBody: true,
   });
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');

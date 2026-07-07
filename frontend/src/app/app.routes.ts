@@ -80,6 +80,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/entry/pricing-masters.component').then(m => m.PricingMastersComponent),
       },
       {
+        // Payments & Collections — queue / feed / reconciliation / setup.
+        path: 'entry/collect',
+        loadComponent: () => import('./features/entry/collect.component').then(m => m.CollectComponent),
+      },
+      {
         // Party Master — unified GST ledger-party (PARTY_MASTER_README.md).
         path: 'entry/party',
         loadComponent: () => import('./features/entry/party-master.component').then(m => m.PartyMasterComponent),

@@ -64,6 +64,7 @@ export class KeyboardShortcutsService {
       const altRoute = {
         q: '/entry/quote', o: '/entry/order', n: '/entry/returns', j: '/entry/stock',
         k: '/entry/items', v: '/entry/registers/sales', a: '/accounting/reports/ageing',
+        c: '/entry/collect',
       }[k];
       if (altRoute) {
         e.preventDefault();

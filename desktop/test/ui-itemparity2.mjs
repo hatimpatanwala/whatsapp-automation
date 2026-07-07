@@ -1,0 +1,11 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+const ctx = browser.contexts()[0];
+const page = ctx.pages().find((p) => p.url().includes('staging-whatsappdemo')) ?? ctx.pages()[0];
+console.log('url:', page.url());
+await page.screenshot({ path: 'shots/im1-parity.png' });
+await page.evaluate(() => window.scrollBy(0, 500));
+await page.waitForTimeout(300);
+await page.screenshot({ path: 'shots/im2-parity.png' });
+console.log('DONE');
+await browser.close();

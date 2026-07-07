@@ -184,6 +184,19 @@ export class EntryService {
     return this.api.delete<any>(`/entry/party/debtor/${customerId}/addresses/${addressId}`);
   }
 
+  // ─── Payments & Collections (PAYMENTS_MODULE_README) ────────────────────────
+  payConfig(): Observable<any> { return this.api.get<any>('/pay/config'); }
+  paySetConfig(body: any): Observable<any> { return this.api.post<any>('/pay/config', body); }
+  payMethods(): Observable<any[]> { return this.api.get<any[]>('/pay/methods'); }
+  payAddMethod(body: any): Observable<any> { return this.api.post<any>('/pay/methods', body); }
+  payUpdateMethod(id: string, body: any): Observable<any> { return this.api.patch<any>(`/pay/methods/${id}`, body); }
+  payCollections(status?: string): Observable<any[]> { return this.api.get<any[]>('/pay/collections', status ? { status } : undefined); }
+  payUnmatched(): Observable<any[]> { return this.api.get<any[]>('/pay/unmatched'); }
+  payForInvoice(invoiceId: string): Observable<any> { return this.api.post<any>(`/pay/invoice/${invoiceId}`, {}); }
+  payClaim(id: string, note?: string): Observable<any> { return this.api.post<any>(`/pay/collections/${id}/claim`, { note }); }
+  payConfirm(id: string): Observable<any> { return this.api.post<any>(`/pay/collections/${id}/confirm`, {}); }
+  payRefund(id: string, amount: number, reason?: string): Observable<any> { return this.api.post<any>(`/pay/collections/${id}/refund`, { amount, reason }); }
+
   // ─── Item master (Miracle Add Item / Add Stock) ─────────────────────────────
   items(q = ''): Observable<ItemMasterRow[]> { return this.api.get<ItemMasterRow[]>('/entry/items', q ? { q } : undefined); }
   itemBatches(productId: string, live = false): Observable<any[]> {

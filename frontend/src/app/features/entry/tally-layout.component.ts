@@ -420,6 +420,7 @@ export class TallyLayoutComponent {
       entries: [
         { label: 'Sales Invoice', route: '/entry/sales', key: 'F2' },
         { label: 'Purchase Invoice', route: '/entry/purchase', key: 'F8' },
+        { label: 'Collect Payment (queue & QR)', route: '/entry/collect', key: 'Alt+C' },
         { label: 'Receipt (bill-wise)', route: '/entry/receipt', key: 'F5' },
         { label: 'Payment (bill-wise)', route: '/entry/payment', key: 'F6' },
         { label: 'Journal Voucher', route: '/accounting/vouchers/new', query: { type: 'journal' }, key: 'F7' },
@@ -497,6 +498,7 @@ export class TallyLayoutComponent {
     { key: 'Alt+J', label: 'Stock Jrnl', route: '/entry/stock' },
     { key: 'Alt+K', label: 'Items', route: '/entry/items' },
     { key: 'Alt+V', label: 'Registers', route: '/entry/registers/sales' },
+    { key: 'Alt+C', label: 'Collect', route: '/entry/collect' },
     { key: 'F9', label: 'Day Book', route: '/accounting/reports/day-book' },
     { key: 'Alt+A', label: 'Outstanding', route: '/accounting/reports/ageing' },
     { key: 'Ctrl+G', label: 'GST', route: '/gst' },

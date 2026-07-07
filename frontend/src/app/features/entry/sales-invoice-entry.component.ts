@@ -110,6 +110,10 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                     [class.bg-amber-700]="!ewayOpen()" [class.bg-amber-900]="ewayOpen()">
               🚚 e-Way Bill {{ ewayOpen() ? '▴' : '▾' }}
             </button>
+            <button (click)="collectPayment()" [disabled]="collectBusy()"
+                    class="text-sm px-3 py-1 rounded bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-50">
+              {{ collectBusy() ? '…' : '₹ Collect' }}
+            </button>
             @if (irnPayloadReady()) {
               <button (click)="downloadIrnPayload()" class="text-xs px-2 py-1 rounded border bg-white">⇣ payload JSON</button>
             }
@@ -154,6 +158,42 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               @if (ewayErr()) { <span class="text-red-600 text-xs">{{ ewayErr() }}</span> }
             </div>
           }
+        </div>
+      }
+
+      <!-- Collect popup: dynamic UPI QR + methods for the just-saved invoice -->
+      @if (collectInfo(); as ci) {
+        <div class="fixed inset-0 z-[650] bg-slate-900/45 flex items-start justify-center pt-[8vh]" (mousedown)="collectInfo.set(null)">
+          <div class="bg-white border border-emerald-500 shadow-xl rounded-lg p-4 w-[420px] max-w-[94vw] text-sm"
+               tabindex="-1" data-collect-box (mousedown)="$event.stopPropagation()" (keydown)="onCollectKey($event)">
+            <div class="font-bold text-emerald-800 mb-1">₹ Collect — {{ ci.referenceId }} · ₹{{ fmt(ci.amount) }}</div>
+            @if (ci.qrDataUrl) {
+              <div class="text-center">
+                <img [src]="ci.qrDataUrl" alt="UPI QR" class="inline-block border rounded" />
+                <p class="text-xs text-slate-500 mt-1">Scan with any UPI app — amount &amp; invoice ref are pre-filled</p>
+              </div>
+            }
+            @if (ci.payLink) {
+              <p class="mt-2 text-xs">Payment link: <a [href]="ci.payLink" target="_blank" class="text-blue-700 underline break-all">{{ ci.payLink }}</a></p>
+            }
+            @if (ci.virtualUpiId) {
+              <p class="mt-2 text-xs">Virtual UPI (auto-reconciles): <b class="font-mono">{{ ci.virtualUpiId }}</b></p>
+            }
+            @for (m of ci.methods || []; track $index) {
+              <p class="mt-1 text-xs text-slate-600">
+                @if (m.vpa) { UPI: <b class="font-mono">{{ m.vpa }}</b> ({{ m.holderName || m.label }}) }
+                @if (m.accountNo) { Bank: {{ m.bankName }} · A/c <b class="font-mono">{{ m.accountNo }}</b> · IFSC <b class="font-mono">{{ m.ifsc }}</b> }
+              </p>
+            }
+            <div class="flex gap-2 mt-3">
+              @if (ci.upiIntent) {
+                <button (click)="copyText(ci.upiIntent)" class="px-2 py-1 rounded border text-xs">Copy UPI link</button>
+              }
+              <button (click)="markClaimed(ci)" class="px-2 py-1 rounded bg-amber-600 text-white text-xs">Customer says paid → queue</button>
+              <button (click)="collectInfo.set(null)" class="ml-auto px-2 py-1 rounded border text-xs">Close (Esc)</button>
+            </div>
+            <p class="text-xs text-slate-400 mt-2">Confirm receipts from Transaction → Collect Payment (Alt+C) after checking your bank.</p>
+          </div>
         </div>
       }
 
@@ -634,6 +674,43 @@ export class SalesInvoiceEntryComponent {
 
   ewayPdf(): void {
     if (this.ewayId && this.ewayNo()) this.entry.downloadEwayPdf(this.ewayId, this.ewayNo()!);
+  }
+
+  // ─── Post-save Collect (Payments module Mode A/B/C) ─────────────────────────
+  readonly collectBusy = signal(false);
+  readonly collectInfo = signal<any | null>(null);
+
+  collectPayment(): void {
+    const id = this.savedId();
+    if (!id || this.collectBusy()) return;
+    this.collectBusy.set(true);
+    this.entry.payForInvoice(id).subscribe({
+      next: (r: any) => {
+        this.collectBusy.set(false);
+        this.collectInfo.set(r?.data ?? r);
+        setTimeout(() => (document.querySelector('[data-collect-box]') as HTMLElement | null)?.focus());
+      },
+      error: (err) => {
+        this.collectBusy.set(false);
+        this.error.set(err?.error?.error?.message || err?.error?.message || 'Collection failed — add a UPI method under Collect (Alt+C) → Setup');
+      },
+    });
+  }
+
+  onCollectKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.collectInfo.set(null); }
+  }
+
+  copyText(text: string): void {
+    void navigator.clipboard?.writeText(text);
+  }
+
+  markClaimed(ci: any): void {
+    if (!ci?.id) return;
+    this.entry.payClaim(ci.id, 'Marked from billing screen').subscribe({
+      next: () => { this.collectInfo.set(null); this.irnMsg.set(null); this.savedNumber.set(this.savedNumber()); },
+      error: () => { /* stays pending — queue still shows it */ },
+    });
   }
 
   // ─── Post-save e-Invoice (IRN) ──────────────────────────────────────────────
