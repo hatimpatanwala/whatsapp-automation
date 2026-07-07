@@ -213,8 +213,11 @@ export class SfaService {
   }
 
   /** Live cart evaluation — savings preview while the salesman builds the order. */
-  evaluate(schema: string, customerId: string | undefined, items: CartItemInput[]) {
-    return this.promos.evaluateCart(schema, items || [], customerId);
+  async evaluate(schema: string, customerId: string | undefined, items: CartItemInput[]) {
+    const r = await this.promos.evaluateCart(schema, items || [], customerId);
+    // The recommended freeItems share references with applicable[].freeItems and
+    // the response serializer nulls repeated object references — return copies.
+    return JSON.parse(JSON.stringify(r));
   }
 
   /** Every open bill across customers, oldest due first — the collection run. */
