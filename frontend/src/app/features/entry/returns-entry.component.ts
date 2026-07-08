@@ -1,4 +1,5 @@
-import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { Observable } from 'rxjs';
@@ -137,9 +138,50 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     </div>
   `,
 })
-export class ReturnsEntryComponent {
+export class ReturnsEntryComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
+
+  private readonly drafts = inject(EntryDraftService);
+
+  // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
+  ngOnInit(): void {
+    const d = this.drafts.load<any>('returns');
+    if (!d) return;
+    if (d.mode) this.mode.set(d.mode);
+    this.partyQuery = d.partyQuery ?? ''; this.party.set(d.party ?? null);
+    if (Array.isArray(d.rows) && d.rows.length) this.rows = d.rows;
+    this.gstPct = d.gstPct ?? null; this.reason = d.reason ?? '';
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✎ Draft restored — Alt+X to start fresh');
+  }
+
+  ngOnDestroy(): void {
+    if (!this.entryDirty()) { this.drafts.clear('returns'); return; }
+    this.drafts.save('returns', {
+      mode: this.mode(), partyQuery: this.partyQuery, party: this.party(), rows: this.rows,
+      gstPct: this.gstPct, reason: this.reason,
+    });
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private entryDirty(): boolean {
+    return !!(this.partyQuery.trim() || this.party() || this.reason || this.rows.some((r) => r.name || r.qty || r.rate));
+  }
+
+  /** Alt+X — wipe the entry and its draft (start fresh). */
+  @HostListener('document:wa-clear-entry')
+  clearEntry(): void {
+    this.drafts.clear('returns');
+    this.partyQuery = ''; this.party.set(null); this.partyHits.set([]);
+    this.rows = [this.blankRow(), this.blankRow()];
+    this.gstPct = null; this.reason = '';
+    this.error.set(null);
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✕ Entry cleared');
+    setTimeout(() => (this.host.nativeElement.querySelector('[data-cell="party"], input') as HTMLInputElement | null)?.focus());
+  }
+
 
   readonly today = new Date();
   readonly tick = signal(0);
@@ -305,7 +347,8 @@ export class ReturnsEntryComponent {
       next: (note: any) => {
         this.saving.set(false);
         this.savedNumber.set(note?.noteNumber || 'note');
-        this.rows = [this.blankRow(), this.blankRow()];
+        this.drafts.clear('returns');
+          this.rows = [this.blankRow(), this.blankRow()];
         this.reason = '';
         this.partyQuery = '';
         this.party.set(null);

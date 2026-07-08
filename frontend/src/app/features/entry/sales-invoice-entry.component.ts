@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -11,6 +11,7 @@ import {
   SavedAddress,
 } from '../../core/services/entry.service';
 import { EntryLookupComponent } from './entry-lookup.component';
+import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { QuickCreateComponent, QuickCreated, QuickKind } from './quick-create.component';
 
 /** One grid row — full Miracle line: qty + FREE qty, cascading Disc-1/Disc-2, GST. */
@@ -533,11 +534,75 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     </div>
   `,
 })
-export class SalesInvoiceEntryComponent {
+export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly drafts = inject(EntryDraftService);
+
+  // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
+  ngOnInit(): void {
+    if (this.route.snapshot.queryParamMap.get('fromQuote')) return; // explicit conversion wins
+    const d = this.drafts.load<any>('sales');
+    if (!d) return;
+    this.memoType = d.memoType ?? 'credit'; this.manualNo = d.manualNo ?? ''; this.series = d.series ?? '';
+    this.voucherDate = d.voucherDate ?? this.voucherDate; this.dueDays = d.dueDays ?? null;
+    this.broker = d.broker ?? ''; this.commissionPct = d.commissionPct ?? null;
+    this.transportName = d.transportName ?? ''; this.lrNo = d.lrNo ?? ''; this.vehicleNo = d.vehicleNo ?? '';
+    this.isInterstate = !!d.isInterstate;
+    this.customerQuery = d.customerQuery ?? ''; this.customer.set(d.customer ?? null);
+    if (Array.isArray(d.rows) && d.rows.length) this.rows = d.rows;
+    this.billTo = d.billTo ?? {}; this.shipTo = d.shipTo ?? {};
+    this.billDiscPct = d.billDiscPct ?? null; this.billDiscAmt = d.billDiscAmt ?? null;
+    if (Array.isArray(d.chargeRows) && d.chargeRows.length) this.chargeRows = d.chargeRows;
+    this.receivedNow = d.receivedNow ?? null; this.tcsPct = d.tcsPct ?? null; this.note = d.note ?? '';
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✎ Draft restored — Alt+X to start fresh');
+  }
+
+  ngOnDestroy(): void {
+    if (!this.entryDirty()) { this.drafts.clear('sales'); return; }
+    this.drafts.save('sales', {
+      memoType: this.memoType, manualNo: this.manualNo, series: this.series,
+      voucherDate: this.voucherDate, dueDays: this.dueDays, broker: this.broker,
+      commissionPct: this.commissionPct, transportName: this.transportName,
+      lrNo: this.lrNo, vehicleNo: this.vehicleNo, isInterstate: this.isInterstate,
+      customerQuery: this.customerQuery, customer: this.customer(),
+      rows: this.rows, billTo: this.billTo, shipTo: this.shipTo,
+      billDiscPct: this.billDiscPct, billDiscAmt: this.billDiscAmt,
+      chargeRows: this.chargeRows, receivedNow: this.receivedNow,
+      tcsPct: this.tcsPct, note: this.note,
+    });
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private entryDirty(): boolean {
+    return !!(this.customerQuery.trim() || this.customer() || this.note
+      || this.rows.some((r) => r.name || r.qty || r.rate));
+  }
+
+  /** Alt+X — wipe the entry and its draft (start fresh). */
+  @HostListener('document:wa-clear-entry')
+  clearEntry(): void {
+    this.drafts.clear('sales');
+    this.rows = [this.blankRow(), this.blankRow()];
+    this.note = ''; this.manualNo = ''; this.customerQuery = ''; this.customer.set(null);
+    this.customerHits.set([]);
+    this.billDiscPct = null; this.billDiscAmt = null; this.receivedNow = null; this.dueDays = null; this.tcsPct = null;
+    this.billTo = {}; this.shipTo = {}; this.savedAddresses.set([]);
+    this.broker = ''; this.commissionPct = null; this.transportName = ''; this.lrNo = ''; this.vehicleNo = '';
+    this.isInterstate = false; this.memoType = 'credit';
+    this.chargeRows = [
+      { label: 'Freight', amount: null, gstRate: null },
+      { label: 'Packing', amount: null, gstRate: null },
+      { label: 'Other', amount: null, gstRate: null },
+    ];
+    this.error.set(null);
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✕ Entry cleared');
+    setTimeout(() => this.focusParty());
+  }
 
   /** Manual voucher number (Miracle manual series) — blank = automatic sequence. */
   manualNo = '';
@@ -1260,6 +1325,7 @@ export class SalesInvoiceEntryComponent {
 
       this.savedNumber.set(inv?.invoiceNumber || 'invoice');
       this.savedId.set(inv?.id || null);
+      this.drafts.clear('sales');
       this.irnMsg.set(null);
       this.ewayOpen.set(false); this.ewayNo.set(null); this.ewayErr.set(null); this.ewayId = null;
       // e-Way "To" prefills from the just-billed dispatch destination (before the form resets).

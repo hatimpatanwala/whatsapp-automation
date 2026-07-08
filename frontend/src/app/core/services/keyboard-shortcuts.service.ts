@@ -72,6 +72,13 @@ export class KeyboardShortcutsService {
         return;
       }
 
+      // Alt+X — clear the current entry (discard the draft); handled per screen.
+      if (k === 'x') {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent('wa-clear-entry'));
+        return;
+      }
+
       // Alt+M/T/G/R/U/S/E — open the Miracle module menus (handled by the ERP layout).
       const menuIdx = { m: 0, t: 1, g: 2, r: 3, u: 4, s: 5, e: 6 }[k];
       if (menuIdx !== undefined) {

@@ -1,4 +1,5 @@
-import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { EntryService, CustomerHit, CustomerContext, ProductHit } from '../../core/services/entry.service';
@@ -191,9 +192,49 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     </div>
   `,
 })
-export class QuoteEntryComponent {
+export class QuoteEntryComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
+
+  private readonly drafts = inject(EntryDraftService);
+
+  // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
+  ngOnInit(): void {
+    const d = this.drafts.load<any>('quote');
+    if (!d) return;
+    this.customerQuery = d.customerQuery ?? ''; this.customer.set(d.customer ?? null);
+    if (Array.isArray(d.rows) && d.rows.length) this.rows = d.rows;
+    this.validUntil = d.validUntil ?? this.validUntil; this.notes = d.notes ?? '';
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✎ Draft restored — Alt+X to start fresh');
+  }
+
+  ngOnDestroy(): void {
+    if (!this.entryDirty()) { this.drafts.clear('quote'); return; }
+    this.drafts.save('quote', {
+      customerQuery: this.customerQuery, customer: this.customer(), rows: this.rows,
+      validUntil: this.validUntil, notes: this.notes,
+    });
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private entryDirty(): boolean {
+    return !!(this.customerQuery.trim() || this.customer() || this.notes || this.rows.some((r) => r.name || r.qty || r.rate));
+  }
+
+  /** Alt+X — wipe the entry and its draft (start fresh). */
+  @HostListener('document:wa-clear-entry')
+  clearEntry(): void {
+    this.drafts.clear('quote');
+    this.customerQuery = ''; this.customer.set(null); this.customerHits.set([]);
+    this.rows = [this.blankRow(), this.blankRow()];
+    this.notes = '';
+    this.error.set(null);
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✕ Entry cleared');
+    setTimeout(() => (this.host.nativeElement.querySelector('[data-cell="party"], input') as HTMLInputElement | null)?.focus());
+  }
+
 
   readonly today = new Date();
   readonly tick = signal(0);
@@ -446,6 +487,7 @@ export class QuoteEntryComponent {
         next: (q) => {
           this.saving.set(false);
           this.savedNumber.set(q?.quoteNumber || 'quote');
+          this.drafts.clear('quote');
           this.rows = [this.blankRow(), this.blankRow()];
           this.notes = '';
           this.customerQuery = '';

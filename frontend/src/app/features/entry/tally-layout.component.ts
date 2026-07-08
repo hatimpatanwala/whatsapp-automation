@@ -94,8 +94,12 @@ interface MenuGroup {
         <span><b>Alt+P</b> Party</span>
         <span><b>Alt+I</b> Item</span>
         <span><b>Alt+L</b> Last rates</span>
+        <span><b>Alt+X</b> Clear</span>
         <span><b>F2</b> Sales · <b>F8</b> Purch · <b>F5</b> Rcpt · <b>F6</b> Pymt · <b>F9</b> DayBk</span>
         <span class="mcl-help-link" (click)="openHelp()"><b>Alt+H</b> Help</span>
+        @if (draftNote()) {
+          <span class="mcl-draft-note">{{ draftNote() }}</span>
+        }
         <span class="mcl-status-right" (click)="exitToPortal()">Web Portal ⤴</span>
       </footer>
 
@@ -207,6 +211,10 @@ interface MenuGroup {
       .mcl-status b { color: #ffd76b; font-weight: 600; margin-right: 3px; }
       .mcl-status-right { margin-left: auto; cursor: pointer; }
       .mcl-status-right:hover { text-decoration: underline; color: #fff; }
+      .mcl-draft-note {
+        background: #fef3c7; color: #92400e; border: 1px solid #f4d35e;
+        border-radius: 4px; padding: 1px 8px; font-weight: 600;
+      }
       .mcl-help-link { cursor: pointer; }
       .mcl-help-link:hover { text-decoration: underline; color: #fff; }
 
@@ -295,6 +303,7 @@ export class TallyLayoutComponent {
         ['Enter / Tab', 'Next field'], ['Shift+Enter', 'Previous field'],
         ['Ctrl+Enter', 'Save voucher (Miracle)'], ['Ctrl+A', 'Save voucher'],
         ['F9', 'Calculator in any field — Enter applies the result'],
+        ['Alt+X', 'Clear the entry / discard draft (drafts auto-restore when you return)'],
         ['Ins', 'Insert row'], ['Ctrl+Del', 'Delete row'], ['↑ ↓', 'Move rows / pick from list'],
         ['Alt+P', 'Party details (outstanding, credit, history)'], ['Alt+I', 'Item details (stock, rates, last rate)'],
         ['Alt+L', 'Last rates to THIS party — Enter applies to the line'],
@@ -339,6 +348,19 @@ export class TallyLayoutComponent {
   @HostListener('document:wa-help')
   onHelpEvent(): void {
     if (!this.helpOpen()) this.openHelp();
+  }
+
+  // ─── Draft-retention feedback (entry screens announce restore/save/clear) ───
+  readonly draftNote = signal<string | null>(null);
+  private draftNoteTimer: ReturnType<typeof setTimeout> | null = null;
+
+  @HostListener('document:wa-draft-note', ['$event'])
+  onDraftNote(e: Event): void {
+    const msg = (e as CustomEvent<string>).detail;
+    if (!msg) return;
+    this.draftNote.set(msg);
+    if (this.draftNoteTimer) clearTimeout(this.draftNoteTimer);
+    this.draftNoteTimer = setTimeout(() => this.draftNote.set(null), 6000);
   }
 
   // ─── F9 inline calculator (Miracle) ─────────────────────────────────────────

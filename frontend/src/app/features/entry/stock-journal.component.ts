@@ -1,4 +1,5 @@
-import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
@@ -129,9 +130,49 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     </div>
   `,
 })
-export class StockJournalComponent {
+export class StockJournalComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
+
+  private readonly drafts = inject(EntryDraftService);
+
+  // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
+  ngOnInit(): void {
+    const d = this.drafts.load<any>('stock');
+    if (!d) return;
+    if (d.mode) this.mode.set(d.mode);
+    this.warehouseId = d.warehouseId ?? ''; this.toWarehouseId = d.toWarehouseId ?? '';
+    if (Array.isArray(d.rows) && d.rows.length) this.rows = d.rows;
+    this.note = d.note ?? '';
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✎ Draft restored — Alt+X to start fresh');
+  }
+
+  ngOnDestroy(): void {
+    if (!this.entryDirty()) { this.drafts.clear('stock'); return; }
+    this.drafts.save('stock', {
+      mode: this.mode(), warehouseId: this.warehouseId, toWarehouseId: this.toWarehouseId,
+      rows: this.rows, note: this.note,
+    });
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private entryDirty(): boolean {
+    return !!(this.note || this.rows.some((r) => r.name || r.delta));
+  }
+
+  /** Alt+X — wipe the entry and its draft (start fresh). */
+  @HostListener('document:wa-clear-entry')
+  clearEntry(): void {
+    this.drafts.clear('stock');
+    this.rows = [this.blankRow(), this.blankRow()];
+    this.note = '';
+    this.error.set(null);
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✕ Entry cleared');
+    setTimeout(() => (this.host.nativeElement.querySelector('[data-cell="party"], input') as HTMLInputElement | null)?.focus());
+  }
+
 
   readonly today = new Date();
   readonly tick = signal(0);
@@ -286,7 +327,8 @@ export class StockJournalComponent {
         done++;
       }
       this.savedCount.set(done);
-      this.rows = [this.blankRow(), this.blankRow()];
+      this.drafts.clear('stock');
+          this.rows = [this.blankRow(), this.blankRow()];
       this.note = '';
       this.tick.update((t) => t + 1);
       setTimeout(() => this.focusCell(0, 'name'));

@@ -1,4 +1,5 @@
-import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import {
@@ -301,9 +302,56 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     </div>
   `,
 })
-export class PurchaseEntryComponent {
+export class PurchaseEntryComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
+
+  private readonly drafts = inject(EntryDraftService);
+
+  // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
+  ngOnInit(): void {
+    const d = this.drafts.load<any>('purchase');
+    if (!d) return;
+    this.supplierQuery = d.supplierQuery ?? ''; this.supplier.set(d.supplier ?? null);
+    if (Array.isArray(d.rows) && d.rows.length) this.rows = d.rows;
+    this.supplierInvoiceNo = d.supplierInvoiceNo ?? ''; this.supplierInvoiceDate = d.supplierInvoiceDate ?? this.supplierInvoiceDate;
+    this.isInterstate = !!d.isInterstate; this.note = d.note ?? '';
+    if (Array.isArray(d.chargeRows) && d.chargeRows.length) this.chargeRows = d.chargeRows;
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✎ Draft restored — Alt+X to start fresh');
+  }
+
+  ngOnDestroy(): void {
+    if (!this.entryDirty()) { this.drafts.clear('purchase'); return; }
+    this.drafts.save('purchase', {
+      supplierQuery: this.supplierQuery, supplier: this.supplier(), rows: this.rows,
+      supplierInvoiceNo: this.supplierInvoiceNo, supplierInvoiceDate: this.supplierInvoiceDate,
+      isInterstate: this.isInterstate, note: this.note, chargeRows: this.chargeRows,
+    });
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private entryDirty(): boolean {
+    return !!(this.supplierQuery.trim() || this.supplier() || this.note || this.rows.some((r) => r.name || r.qty || r.rate));
+  }
+
+  /** Alt+X — wipe the entry and its draft (start fresh). */
+  @HostListener('document:wa-clear-entry')
+  clearEntry(): void {
+    this.drafts.clear('purchase');
+    this.supplierQuery = ''; this.supplier.set(null); this.supplierHits.set([]);
+    this.rows = [this.blankRow(), this.blankRow()];
+    this.supplierInvoiceNo = ''; this.isInterstate = false; this.note = '';
+    this.chargeRows = [
+      { label: 'Freight', amount: null, gstRate: null },
+      { label: 'Other', amount: null, gstRate: null },
+    ];
+    this.error.set(null);
+    this.tick.update((t) => t + 1);
+    this.drafts.note('✕ Entry cleared');
+    setTimeout(() => (this.host.nativeElement.querySelector('[data-cell="party"], input') as HTMLInputElement | null)?.focus());
+  }
+
 
   readonly today = new Date();
   readonly tick = signal(0);
@@ -599,6 +647,7 @@ export class PurchaseEntryComponent {
         next: (so) => {
           this.saving.set(false);
           this.savedNumber.set(so?.orderNumber || 'purchase');
+          this.drafts.clear('purchase');
           this.rows = [this.blankRow(), this.blankRow()];
           this.note = '';
           this.supplierInvoiceNo = '';
