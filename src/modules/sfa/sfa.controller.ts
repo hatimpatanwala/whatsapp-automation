@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
+import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
+import { ErpFeatureGuard } from '../../common/guards/erp-feature.guard';
 import { SfaService } from './sfa.service';
 
 /**
@@ -19,8 +21,10 @@ export class SfaController {
     return schema;
   }
 
-  // ─── Admin ──────────────────────────────────────────────────────────────────
+  // ─── Admin (session-authed; gated by the `sfa` plan feature) ────────────────
   @Get('salesmen')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('sfa')
   async list(@Req() req: Request) {
     const schema = this.schema(req);
     const rows = await this.sfa.listSalesmen(schema);
@@ -31,6 +35,8 @@ export class SfaController {
   }
 
   @Post('salesmen')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('sfa')
   async add(@Req() req: Request, @Body() body: any) {
     const schema = this.schema(req);
     const s = await this.sfa.addSalesman(schema, body);
@@ -38,11 +44,15 @@ export class SfaController {
   }
 
   @Patch('salesmen/:id')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('sfa')
   update(@Req() req: Request, @Param('id') id: string, @Body() body: any) {
     return this.sfa.updateSalesman(this.schema(req), id, body);
   }
 
   @Get('promises')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('sfa')
   adminPromises(@Req() req: Request, @Query('scope') scope?: string) {
     return this.sfa.promises(this.schema(req), (scope as any) || 'all');
   }

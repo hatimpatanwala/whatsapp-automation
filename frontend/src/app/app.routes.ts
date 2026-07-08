@@ -125,6 +125,18 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
       },
       {
+        // Salesman field-app admin — usable even when the ERP suite is off (SFA is
+        // its own plan feature). Reuses the ERP salesmen screen inside the portal.
+        path: 'salesmen',
+        loadComponent: () => import('./features/entry/salesmen.component').then(m => m.SalesmenComponent),
+      },
+      {
+        // Offline desktop app info + download (portal only advertises it when the
+        // tenant's plan includes erpOffline).
+        path: 'desktop-app',
+        loadComponent: () => import('./features/desktop-app/desktop-app.component').then(m => m.DesktopAppComponent),
+      },
+      {
         path: 'products',
         loadChildren: () => import('./features/products/products.routes').then(m => m.PRODUCTS_ROUTES),
       },

@@ -33,8 +33,10 @@ const FEATURE_LABELS: Record<string, { label: string; desc: string; icon: string
   aiFeatures: { label: 'AI Features', desc: 'Chatbot and smart replies', icon: 'pi-sparkles' },
   advancedAnalytics: { label: 'Advanced Analytics', desc: 'In-depth reports', icon: 'pi-chart-bar' },
   multiCatalog: { label: 'Multi-Catalog', desc: 'Multiple product catalogs', icon: 'pi-th-large' },
-  // ── ERP / Business Suite (single switch for the whole suite) ───────────
-  erp: { label: 'ERP — Business Suite', desc: 'Full ERP: invoicing, CRM, procurement, inventory, POS, GST, HR', icon: 'pi-building' },
+  // ── ERP / Business Suite ───────────────────────────────────────────────
+  erp: { label: 'ERP — Business Suite (online)', desc: 'Full ERP: invoicing, CRM, procurement, inventory, POS, GST, HR. Online version always available.', icon: 'pi-building' },
+  erpOffline: { label: 'ERP — Offline Desktop App', desc: 'Installable Windows desktop app (offline + sync). Downloaded app refuses login without this.', icon: 'pi-desktop' },
+  sfa: { label: 'Salesman Field App (SFA)', desc: 'Standalone salesman module — works even with the ERP suite off.', icon: 'pi-briefcase' },
 };
 
 @Component({

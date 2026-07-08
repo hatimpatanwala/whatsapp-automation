@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
+import { Tenant } from '../../database/entities/public/tenant.entity';
 import { firstRow } from '../erp/common/sql-result.util';
 import { ErpInvoiceService } from '../erp/invoicing/erp-invoice.service';
 import { OrderService } from '../order/order.service';
@@ -8,6 +11,7 @@ import { EntryContextService } from '../entry/entry-context.service';
 import { PromotionsEngine, CartItemInput } from '../promotions/promotions-engine.service';
 import { customerSegmentFlags } from '../promotions/customer-segments';
 import { CartService } from '../order/cart.service';
+import { PlanFeatureService } from '../erp/common/plan-feature.service';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -29,6 +33,8 @@ export class SfaService {
     private readonly ctx: EntryContextService,
     private readonly promos: PromotionsEngine,
     private readonly carts: CartService,
+    private readonly planFeatures: PlanFeatureService,
+    @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
   ) {}
 
   // ─── Admin: manage salesmen ─────────────────────────────────────────────────
@@ -72,6 +78,11 @@ export class SfaService {
   // ─── Webview auth: schema + token → salesman ────────────────────────────────
   async auth(schema: string, token: string) {
     if (!/^tenant_[a-z0-9_]+$/.test(schema) || !token) throw new UnauthorizedException('Invalid link');
+    // The salesman field app is a plan feature — a link stops working the moment
+    // the business's `sfa` entitlement is turned off (plan downgrade / override).
+    if (!(await this.tenantHasSfa(schema))) {
+      throw new UnauthorizedException('The salesman module is not enabled for this business.');
+    }
     const s = await this.cm.executeInTenantContext(schema, async (qr) =>
       (await qr.query(
         `SELECT id, name, phone, route, area FROM "${schema}".salesmen WHERE access_token = $1 AND is_active = true`,
@@ -80,6 +91,13 @@ export class SfaService {
     );
     if (!s) throw new UnauthorizedException('Link expired or salesman deactivated');
     return s;
+  }
+
+  /** Resolve the tenant behind a schema and check the `sfa` plan feature. */
+  private async tenantHasSfa(schema: string): Promise<boolean> {
+    const tenant = await this.tenants.findOne({ where: { schemaName: schema }, select: ['id'] });
+    if (!tenant) return false;
+    return this.planFeatures.hasFeatures(tenant.id, ['sfa']);
   }
 
   // ─── Field operations ───────────────────────────────────────────────────────

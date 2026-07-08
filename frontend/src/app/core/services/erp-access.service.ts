@@ -19,6 +19,14 @@ export class ErpAccessService {
   readonly readOnly = signal(false);
   readonly provisioned = signal(false);
   /**
+   * The tenant's full live plan-feature map from /erp/status (erp, erpOffline,
+   * sfa, …). This endpoint is NOT erp-gated, so it is the single live source of
+   * truth for EVERY entitlement — including modules like the salesman app that
+   * work with ERP switched off. `has()` reads from it.
+   */
+  readonly features = signal<Record<string, boolean>>({});
+  has(key: string): boolean { return this.features()[key] === true; }
+  /**
    * False until the first /erp/status response lands. The nav uses this to avoid
    * rendering any ERP-conditional item from default (false) state on first paint
    * — otherwise a tenant could briefly see the wrong ERP nav before status loads
@@ -61,6 +69,7 @@ export class ErpAccessService {
     this.enabled.set(!!s?.enabled);
     this.readOnly.set(!!s?.readOnly);
     this.provisioned.set(!!s?.provisioned);
+    this.features.set(s?.features ?? {});
     this.ready.set(true);
   }
 }

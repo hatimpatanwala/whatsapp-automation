@@ -24,6 +24,9 @@ interface NavItem {
   erpTeaser?: boolean;
   /** Single read-only-archive entry shown only when the tenant is downgraded. */
   erpReadOnlyEntry?: boolean;
+  /** Gated by a LIVE plan feature from /erp/status, independent of the ERP master
+   *  switch (e.g. `sfa` salesman app works with ERP off; `erpOffline` desktop app). */
+  featureLive?: string;
 }
 
 interface NavSection {
@@ -326,6 +329,8 @@ export class MainLayoutComponent implements OnInit {
       items: [
         { label: 'Point of Sale', icon: 'pi-shopping-cart', route: '/erp/pos', featureKey: 'erp' },
         { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders' },
+        // Salesman field app (SFA) — a standalone module: works even with ERP off.
+        { label: 'Salesmen (Field App)', icon: 'pi-briefcase', route: '/salesmen', featureLive: 'sfa' },
         // Base Invoices (GST/order docs) — superseded by ERP Invoices (same `invoices` table).
         { label: 'Invoices', icon: 'pi-receipt', route: '/invoices', hideWhenErp: true },
         { label: 'Invoices', icon: 'pi-receipt', route: '/erp/invoices', featureKey: 'erp' },
@@ -401,6 +406,9 @@ export class MainLayoutComponent implements OnInit {
         { label: 'API Keys', icon: 'pi-key', route: '/erp/api-keys', featureKey: 'erp' },
         { label: 'Export Data', icon: 'pi-download', route: '/erp/export', featureKey: 'erp' },
         { label: 'Business Settings', icon: 'pi-sliders-h', route: '/erp/settings', featureKey: 'erp' },
+        // Offline desktop app — shown ONLY to tenants licensed for it (erpOffline).
+        // Online-only plans never see this entry.
+        { label: 'Desktop App (Offline)', icon: 'pi-desktop', route: '/desktop-app', featureLive: 'erpOffline' },
         { label: 'App Settings', icon: 'pi-cog', route: '/settings' },
       ],
     },
@@ -430,6 +438,9 @@ export class MainLayoutComponent implements OnInit {
           if (it.hideWhenErp && erpFull) return false;
           // Individual ERP items show only with full ERP (hidden — not locked — otherwise).
           if (it.featureKey === 'erp') return erpFull;
+          // Live-feature items (salesman app, offline desktop) — shown only when the
+          // tenant is actually entitled, independent of the ERP master switch.
+          if (it.featureLive) return ready && this.erpAccess.has(it.featureLive);
           return true; // non-ERP items: featureKey gating handled in template
         }),
       }))

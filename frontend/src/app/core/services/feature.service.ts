@@ -24,6 +24,9 @@ export const FEATURE_KEYS = {
   erpCrm: 'erpCrm',
   erpProcurement: 'erpProcurement',
   erpHr: 'erpHr',
+  // Offline desktop app (installable Windows build) + standalone salesman module.
+  erpOffline: 'erpOffline',
+  sfa: 'sfa',
 } as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[keyof typeof FEATURE_KEYS];

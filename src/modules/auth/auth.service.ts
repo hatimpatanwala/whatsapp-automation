@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -207,6 +207,7 @@ export class AuthService {
     if (!base || !email || !password) return;
 
     let cloudUser: any = null;
+    let cookie = '';
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 5000);
@@ -218,6 +219,13 @@ export class AuthService {
       });
       clearTimeout(timer);
       if (!res.ok) return; // cloud says no — let the local check decide
+      // Capture the session cookie so we can ask the cloud what this account is
+      // licensed for (the offline-app entitlement check below).
+      const setCookies = (res.headers as any).getSetCookie?.() as string[] | undefined;
+      cookie = (setCookies?.length
+        ? setCookies.map((c) => c.split(';')[0])
+        : [(res.headers.get('set-cookie') || '').split(';')[0]]
+      ).filter(Boolean).join('; ');
       try {
         const body = (await res.json()) as any;
         cloudUser = body?.data?.user ?? body?.user ?? null;
@@ -227,6 +235,14 @@ export class AuthService {
     } catch {
       return; // offline / cloud unreachable — cached local credentials decide
     }
+
+    // Offline-app licensing gate: the downloaded desktop (offline) app is only for
+    // tenants whose plan includes `erpOffline`. Online login just succeeded, so the
+    // cloud is reachable — ask it what this account is licensed for and REFUSE the
+    // offline login when the entitlement is missing (the web/online version stays
+    // available in a browser). A definitive "not licensed" throws; an ambiguous
+    // network/parse failure is lenient so cached-credential offline use still works.
+    await this.assertOfflineEntitled(base, cookie);
 
     // Cloud accepted → refresh the local credential cache.
     try {
@@ -270,6 +286,38 @@ export class AuthService {
     } catch (err) {
       // The mirror is a convenience — never block login on it.
       console.error('[desktop-auth] cloud mirror failed:', (err as Error).message);
+    }
+  }
+
+  /**
+   * Offline-desktop-app entitlement gate. Reads the cloud account's licensed
+   * features (via /auth/me using the just-issued session cookie) and throws when
+   * `erpOffline` is absent. Only a definitive negative blocks login; any transport
+   * or parsing failure is swallowed so a genuinely-offline relaunch on cached
+   * credentials is never locked out by a transient hiccup.
+   */
+  private async assertOfflineEntitled(base: string, cookie: string): Promise<void> {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(`${base}/auth/me`, {
+        headers: cookie ? { cookie } : {},
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) return; // cannot determine — stay lenient
+      const body = (await res.json()) as any;
+      const sub = body?.data?.subscription ?? body?.subscription ?? null;
+      const features: string[] = sub?.enabledFeatures ?? [];
+      // Only enforce when we got a real subscription payload back.
+      if (sub && Array.isArray(features) && !features.includes('erpOffline')) {
+        throw new ForbiddenException(
+          'This account is not licensed for the offline desktop app. Your plan includes the online version — please use it in your web browser, or upgrade to add the offline desktop app.',
+        );
+      }
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+      // network / parse failure — leave the cached-credential path to decide.
     }
   }
 

@@ -225,7 +225,9 @@ export class PlanFormComponent implements OnInit {
     { key: 'advancedAnalytics', label: 'Advanced Analytics', desc: 'In-depth reports and dashboards' },
     { key: 'multiCatalog', label: 'Multi-Catalog', desc: 'Multiple WhatsApp product catalogs' },
     // ── ERP / Business Suite (single switch for the whole suite) ───────────
-    { key: 'erp', label: 'ERP — Business Suite', desc: 'Full ERP: invoicing, accounting, CRM, procurement, inventory, POS, GST, HR' },
+    { key: 'erp', label: 'ERP — Business Suite (online)', desc: 'Full ERP: invoicing, accounting, CRM, procurement, inventory, POS, GST, HR. The online (browser) version is always available.' },
+    { key: 'erpOffline', label: 'ERP — Offline Desktop App', desc: 'The installable Windows desktop app (embedded database, works offline, two-way sync). The downloaded app refuses login without this.' },
+    { key: 'sfa', label: 'Salesman Field App (SFA)', desc: 'Standalone salesman module — take orders, collect payments, promise-to-pay. Works even when the ERP suite is off.' },
   ];
 
   planForm = this.fb.group({
@@ -251,8 +253,10 @@ export class PlanFormComponent implements OnInit {
     aiFeatures: [false],
     advancedAnalytics: [false],
     multiCatalog: [false],
-    // ERP / Business Suite (single switch)
+    // ERP / Business Suite (online master switch) + offline add-on + salesman app
     erp: [false],
+    erpOffline: [false],
+    sfa: [false],
     // Display
     isActive: [true],
     sortOrder: [1],
@@ -293,8 +297,10 @@ export class PlanFormComponent implements OnInit {
           aiFeatures: plan.features?.aiFeatures ?? false,
           advancedAnalytics: plan.features?.advancedAnalytics ?? false,
           multiCatalog: plan.features?.multiCatalog ?? false,
-          // ERP / Business Suite (single switch)
+          // ERP / Business Suite (online master switch) + offline + salesman app
           erp: plan.features?.erp ?? false,
+          erpOffline: plan.features?.erpOffline ?? false,
+          sfa: plan.features?.sfa ?? false,
           // Display
           isActive: plan.isActive,
           sortOrder: plan.sortOrder,
@@ -354,6 +360,8 @@ export class PlanFormComponent implements OnInit {
         advancedAnalytics: v.advancedAnalytics ?? false,
         multiCatalog: v.multiCatalog ?? false,
         erp: v.erp ?? false,
+        erpOffline: v.erpOffline ?? false,
+        sfa: v.sfa ?? false,
         // Mirror the single ERP switch onto the legacy sub-flags so any code still
         // reading them stays consistent (the suite is all-or-nothing now).
         erpInvoicing: v.erp ?? false,
