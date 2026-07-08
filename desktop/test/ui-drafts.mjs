@@ -17,9 +17,13 @@ async function go(url) {
 }
 const statusChip = () => page.evaluate(() => document.querySelector('.mcl-draft-note')?.textContent || '');
 
-// fresh slate
+// fresh slate: hard-reload past any cached bundle, then drop old drafts
 await go(`${BASE}/home`);
-await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('wa-entry-draft:')).forEach((k) => localStorage.removeItem(k)));
+const cdp = await ctx.newCDPSession(page);
+await cdp.send('Page.reload', { ignoreCache: true }).catch(() => {});
+await page.waitForTimeout(6000);
+if (page.url().includes('chrome-error') || !page.url().includes('staging')) await go(`${BASE}/home`);
+await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('wa-entry-draft:')).forEach((k) => localStorage.removeItem(k))).catch(() => {});
 
 // ─── 1. Sales draft survives a round-trip to Item Master ────────────────────
 await step('sales: type party + item, jump to items, come back → restored', async () => {
