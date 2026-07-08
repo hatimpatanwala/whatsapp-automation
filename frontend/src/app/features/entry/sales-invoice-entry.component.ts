@@ -562,8 +562,14 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.draftTimer);
     if (!this.entryDirty()) { this.drafts.clear('sales'); return; }
-    this.drafts.save('sales', {
+    this.drafts.save('sales', this.captureDraft());
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private captureDraft() {
+    return {
       memoType: this.memoType, manualNo: this.manualNo, series: this.series,
       voucherDate: this.voucherDate, dueDays: this.dueDays, broker: this.broker,
       commissionPct: this.commissionPct, transportName: this.transportName,
@@ -573,8 +579,18 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
       billDiscPct: this.billDiscPct, billDiscAmt: this.billDiscAmt,
       chargeRows: this.chargeRows, receivedNow: this.receivedNow,
       tcsPct: this.tcsPct, note: this.note,
-    });
-    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+    };
+  }
+
+  /** Debounced autosave — the draft also survives a hard reload or app close
+   *  (ngOnDestroy never runs on document unload). */
+  private draftTimer: ReturnType<typeof setTimeout> | undefined;
+  @HostListener('input')
+  onDraftAutosave(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (this.entryDirty()) this.drafts.save('sales', this.captureDraft());
+    }, 700);
   }
 
   private entryDirty(): boolean {

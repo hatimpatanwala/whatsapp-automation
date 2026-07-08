@@ -210,12 +210,27 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.draftTimer);
     if (!this.entryDirty()) { this.drafts.clear('quote'); return; }
-    this.drafts.save('quote', {
+    this.drafts.save('quote', this.captureDraft());
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private captureDraft() {
+    return {
       customerQuery: this.customerQuery, customer: this.customer(), rows: this.rows,
       validUntil: this.validUntil, notes: this.notes,
-    });
-    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+    };
+  }
+
+  /** Debounced autosave — survives hard reloads/app close too. */
+  private draftTimer: ReturnType<typeof setTimeout> | undefined;
+  @HostListener('input')
+  onDraftAutosave(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (this.entryDirty()) this.drafts.save('quote', this.captureDraft());
+    }, 700);
   }
 
   private entryDirty(): boolean {

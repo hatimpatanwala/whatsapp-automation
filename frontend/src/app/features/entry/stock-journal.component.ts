@@ -149,12 +149,27 @@ export class StockJournalComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.draftTimer);
     if (!this.entryDirty()) { this.drafts.clear('stock'); return; }
-    this.drafts.save('stock', {
+    this.drafts.save('stock', this.captureDraft());
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private captureDraft() {
+    return {
       mode: this.mode(), warehouseId: this.warehouseId, toWarehouseId: this.toWarehouseId,
       rows: this.rows, note: this.note,
-    });
-    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+    };
+  }
+
+  /** Debounced autosave — survives hard reloads/app close too. */
+  private draftTimer: ReturnType<typeof setTimeout> | undefined;
+  @HostListener('input')
+  onDraftAutosave(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (this.entryDirty()) this.drafts.save('stock', this.captureDraft());
+    }, 700);
   }
 
   private entryDirty(): boolean {

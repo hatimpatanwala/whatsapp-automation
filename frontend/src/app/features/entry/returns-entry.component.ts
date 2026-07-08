@@ -157,12 +157,27 @@ export class ReturnsEntryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.draftTimer);
     if (!this.entryDirty()) { this.drafts.clear('returns'); return; }
-    this.drafts.save('returns', {
+    this.drafts.save('returns', this.captureDraft());
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private captureDraft() {
+    return {
       mode: this.mode(), partyQuery: this.partyQuery, party: this.party(), rows: this.rows,
       gstPct: this.gstPct, reason: this.reason,
-    });
-    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+    };
+  }
+
+  /** Debounced autosave — survives hard reloads/app close too. */
+  private draftTimer: ReturnType<typeof setTimeout> | undefined;
+  @HostListener('input')
+  onDraftAutosave(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (this.entryDirty()) this.drafts.save('returns', this.captureDraft());
+    }, 700);
   }
 
   private entryDirty(): boolean {

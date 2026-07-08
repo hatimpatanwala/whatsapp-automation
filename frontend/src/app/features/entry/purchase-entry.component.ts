@@ -322,13 +322,28 @@ export class PurchaseEntryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.draftTimer);
     if (!this.entryDirty()) { this.drafts.clear('purchase'); return; }
-    this.drafts.save('purchase', {
+    this.drafts.save('purchase', this.captureDraft());
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private captureDraft() {
+    return {
       supplierQuery: this.supplierQuery, supplier: this.supplier(), rows: this.rows,
       supplierInvoiceNo: this.supplierInvoiceNo, supplierInvoiceDate: this.supplierInvoiceDate,
       isInterstate: this.isInterstate, note: this.note, chargeRows: this.chargeRows,
-    });
-    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+    };
+  }
+
+  /** Debounced autosave — survives hard reloads/app close too. */
+  private draftTimer: ReturnType<typeof setTimeout> | undefined;
+  @HostListener('input')
+  onDraftAutosave(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (this.entryDirty()) this.drafts.save('purchase', this.captureDraft());
+    }, 700);
   }
 
   private entryDirty(): boolean {

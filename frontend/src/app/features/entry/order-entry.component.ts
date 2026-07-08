@@ -225,12 +225,27 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.draftTimer);
     if (!this.entryDirty()) { this.drafts.clear('order'); return; }
-    this.drafts.save('order', {
+    this.drafts.save('order', this.captureDraft());
+    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+  }
+
+  private captureDraft() {
+    return {
       customerQuery: this.customerQuery, customer: this.customer(), rows: this.rows,
       deliveryFee: this.deliveryFee, notes: this.notes,
-    });
-    this.drafts.note('✎ Draft kept — it will be waiting when you return');
+    };
+  }
+
+  /** Debounced autosave — survives hard reloads/app close too. */
+  private draftTimer: ReturnType<typeof setTimeout> | undefined;
+  @HostListener('input')
+  onDraftAutosave(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => {
+      if (this.entryDirty()) this.drafts.save('order', this.captureDraft());
+    }, 700);
   }
 
   private entryDirty(): boolean {
