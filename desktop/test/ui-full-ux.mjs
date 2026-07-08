@@ -134,11 +134,14 @@ await step('kbd: F1 help overlay + Esc closes', async () => {
   await go(`${BASE}/entry/sales`);
   await page.keyboard.press('F1');
   await page.waitForTimeout(900);
-  const t = await text();
-  if (!t.includes('Vouchers') || !t.includes('Inside an entry')) throw new Error('help overlay missing');
+  // CSS uppercases the column headers — match case-insensitively on the box itself.
+  const box = await page.evaluate(() => document.querySelector('.mcl-help')?.innerText.toLowerCase() || '');
+  if (!box.includes('vouchers') || !box.includes('inside an entry')) throw new Error('help overlay missing');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
-  return '3-column keymap card';
+  const still = await page.evaluate(() => !!document.querySelector('.mcl-help'));
+  if (still) throw new Error('Esc did not close overlay');
+  return '3-column keymap card, Esc closes';
 });
 
 // ─── 5. Registers: rows, filters, detail popup ───────────────────────────────
@@ -148,7 +151,11 @@ await step('registers: sales register rows + detail popup', async () => {
   if (!page.url().includes('/entry/registers')) throw new Error('URL ' + page.url());
   const t = await text();
   if (!t.includes(savedNo)) throw new Error(savedNo + ' not in register');
-  await page.click(`tr:has-text("${savedNo}")`);
+  // JS click — Playwright's actionability scroll can stall when the window is backgrounded.
+  await page.evaluate((no) => {
+    const row = [...document.querySelectorAll('tr')].find((r) => r.innerText.includes(no));
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  }, savedNo);
   await page.waitForTimeout(1200);
   const t2 = await text();
   if (!t2.includes('TOTAL')) throw new Error('detail popup missing');
