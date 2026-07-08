@@ -96,10 +96,15 @@ export class KeyboardShortcutsService {
     const command = this.keyToCommand(e);
     if (!command) return;
 
-    // Don't hijack typing, except Escape.
+    // Don't hijack typing — except Escape and the function keys. F-keys never
+    // insert characters, and with auto-focus placing the cursor in a field on
+    // every screen they would otherwise be unreachable (Miracle expects F2/F8
+    // etc. to fire from inside any field).
     const el = e.target as HTMLElement | null;
     const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-    if (typing && e.key !== 'Escape') return;
+    // F9 stays field-scoped: inside a field it is the inline calculator, not Day Book.
+    const fnKey = /^F\d{1,2}$/.test(e.key) && e.key !== 'F9';
+    if (typing && e.key !== 'Escape' && !fnKey) return;
 
     e.preventDefault();
     this.run(command);
