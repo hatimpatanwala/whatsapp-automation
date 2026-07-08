@@ -87,6 +87,22 @@ export class QuoteService {
     taxAmount?: number;
     items: { productId?: string; description: string; quantity: number; unitPrice: number; discount?: number }[];
   }) {
+    if (!data?.customerId) throw new BadRequestException('Customer is required');
+    if (!data?.items?.length) throw new BadRequestException('A quote needs at least one line item');
+    // Accept productName as the description (callers like the order grid send that);
+    // reject cleanly instead of surfacing a not-null 500 from quote_items.
+    data = {
+      ...data,
+      items: data.items.map((it) => ({
+        ...it,
+        description: String(it.description ?? (it as any).productName ?? '').trim(),
+      })),
+    };
+    for (const it of data.items) {
+      if (!it.description) throw new BadRequestException('Each quote line needs an item description');
+      if (!(Number(it.quantity) > 0)) throw new BadRequestException('Each quote line needs a quantity greater than zero');
+    }
+
     const lineNet = (it: { quantity: number; unitPrice: number; discount?: number }) => {
       const gross = it.quantity * it.unitPrice;
       const pct = Math.min(100, Math.max(0, Number(it.discount) || 0)); // discount is a PERCENTAGE
