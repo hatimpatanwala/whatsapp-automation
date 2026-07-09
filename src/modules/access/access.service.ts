@@ -89,14 +89,13 @@ export class AccessService {
     if (!body?.password || body.password.length < 6) throw new BadRequestException('Password must be at least 6 characters');
     const hash = await bcrypt.hash(body.password, 12);
     return this.cm.executeInTenantContext(schema, async (qr) => {
-      const roleName = body.roleId
-        ? (await qr.query(`SELECT name FROM "${schema}".roles WHERE id = $1`, [body.roleId]))[0]?.name
-        : null;
+      // The legacy `role` string is 'seller' for every RBAC employee — enough to
+      // clear the coarse @Roles gate; the fine-grained control is the RBAC role
+      // (role_id) enforced by PermissionGuard. Only the tenant owner is 'owner'.
       const rows = await qr.query(
         `INSERT INTO "${schema}".users (name, email, phone, password_hash, role, role_id, is_active)
-         VALUES ($1,$2,$3,$4,$5,$6,true) RETURNING id, name, email, phone, role, role_id, is_active`,
-        [body.name.trim(), body.email?.trim() || null, body.phone?.trim() || null, hash,
-         (roleName || 'staff').toLowerCase(), body.roleId || null],
+         VALUES ($1,$2,$3,$4,'seller',$5,true) RETURNING id, name, email, phone, role, role_id, is_active`,
+        [body.name.trim(), body.email?.trim() || null, body.phone?.trim() || null, hash, body.roleId || null],
       ).catch((e: any) => {
         if (String(e?.message || '').includes('duplicate') || String(e?.message || '').includes('unique')) {
           throw new BadRequestException('A user with that email or phone already exists');
@@ -116,26 +115,21 @@ export class AccessService {
         const owners = (await qr.query(`SELECT COUNT(*)::int AS n FROM "${schema}".users WHERE role = 'owner' AND is_active`, []))[0];
         if (Number(owners?.n) <= 1) throw new BadRequestException('Cannot deactivate the last active owner');
       }
-      let roleName = user.role;
-      if (body.roleId !== undefined) {
-        roleName = body.roleId
-          ? ((await qr.query(`SELECT name FROM "${schema}".roles WHERE id = $1`, [body.roleId]))[0]?.name || 'staff').toLowerCase()
-          : 'staff';
-      }
+      // Keep the legacy `role` string as-is (owner stays owner; employees stay
+      // 'seller'); the RBAC role is role_id. Fine control lives in PermissionGuard.
       const perms = body.permissions === undefined ? user.permissions
         : (body.permissions === null ? null : JSON.stringify(this.sanitizePerms(body.permissions)));
       const passHash = body.password ? await bcrypt.hash(body.password, 12) : null;
       const row = firstRow(await qr.query(
         `UPDATE "${schema}".users SET
            name = COALESCE($2, name),
-           role = $3,
-           role_id = $4,
-           is_active = COALESCE($5, is_active),
-           permissions = $6,
-           password_hash = COALESCE($7, password_hash),
+           role_id = $3,
+           is_active = COALESCE($4, is_active),
+           permissions = $5,
+           password_hash = COALESCE($6, password_hash),
            updated_at = NOW()
          WHERE id = $1 RETURNING id, name, email, phone, role, role_id, is_active`,
-        [id, body.name?.trim() ?? null, roleName,
+        [id, body.name?.trim() ?? null,
          body.roleId !== undefined ? body.roleId : user.role_id,
          body.isActive ?? null,
          typeof perms === 'string' || perms === null ? perms : (perms ? JSON.stringify(perms) : null),
