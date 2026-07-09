@@ -17,6 +17,7 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OrderService } from '../../core/services/order.service';
 import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
+import { PdfExportService } from '../../core/services/pdf-export.service';
 import { Order, OrderStats } from '../../core/models';
 
 interface OrderRow {
@@ -65,6 +66,7 @@ interface OrderRow {
           <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined p-button-sm" [loading]="openingBuilder()" (click)="openBuilder()"></button>
           <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" routerLink="/orders/new"></button>
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
+          <button pButton label="PDF" icon="pi pi-file-pdf" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportPdf()"></button>
         </div>
       </div>
 
@@ -178,6 +180,7 @@ export class OrderListComponent implements OnInit {
   private readonly datePipe = inject(DatePipe);
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
+  private readonly pdf = inject(PdfExportService);
 
   openingBuilder = signal(false);
 
@@ -188,6 +191,25 @@ export class OrderListComponent implements OnInit {
     this.api.post<{ token: string }>('/builder/sessions', { type: 'order' }).subscribe({
       next: (r) => { this.openingBuilder.set(false); this.router.navigate(['/m/builder'], { queryParams: { token: r.token } }); },
       error: () => { this.openingBuilder.set(false); this.messageService.add({ severity: 'error', summary: 'Could not open builder' }); },
+    });
+  }
+
+  async exportPdf() {
+    if (!this.orders().length) return;
+    const M = (v: any) => this.pdf.money(v);
+    await this.pdf.exportTable({
+      title: 'Orders', subtitle: `${this.orders().length} order(s)`, orientation: 'landscape',
+      columns: [
+        { header: 'Order #', key: 'orderNumber' },
+        { header: 'Customer', key: 'customer' },
+        { header: 'Via', key: 'placedBy', fmt: (_v, r) => r.source === 'salesman' ? ('Salesman: ' + (r.placedBy || '')) : (r.source || 'portal') },
+        { header: 'Items', key: 'items', align: 'right' },
+        { header: 'Total', key: 'total', align: 'right', fmt: M },
+        { header: 'Status', key: 'status' },
+        { header: 'Payment', key: 'paymentStatus' },
+        { header: 'Date', key: 'date' },
+      ],
+      rows: this.orders(),
     });
   }
 

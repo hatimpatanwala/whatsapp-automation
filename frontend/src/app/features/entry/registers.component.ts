@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EntryService } from '../../core/services/entry.service';
+import { PdfExportService } from '../../core/services/pdf-export.service';
 
 type Kind = 'sales' | 'purchase' | 'quote' | 'order';
 
@@ -49,7 +50,9 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
                     [class.bg-slate-800]="kind() === k.kind" [class.text-white]="kind() === k.kind">{{ k.label }}</button>
           }
         </div>
-        <span class="ml-auto text-xs text-slate-500">↑↓ move · Enter {{ kind() === 'quote' ? 'convert to invoice' : 'open' }} · PgUp/PgDn month · Esc back</span>
+        <button (click)="downloadPdf()" [disabled]="!visible().length"
+          class="ml-auto text-xs px-3 py-1.5 rounded bg-slate-800 text-white disabled:opacity-40">⬇ Download PDF</button>
+        <span class="text-xs text-slate-500">↑↓ move · Enter {{ kind() === 'quote' ? 'convert to invoice' : 'open' }} · PgUp/PgDn month · Esc back</span>
       </div>
 
       <!-- Filter bar: period presets, dates, text, status, amount range, due-only -->
@@ -211,6 +214,33 @@ export class RegistersComponent {
   private readonly entry = inject(EntryService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly pdf = inject(PdfExportService);
+
+  /** Export the filtered register as a PDF. */
+  async downloadPdf(): Promise<void> {
+    const rows = this.visible();
+    if (!rows.length) return;
+    const M = (v: any) => this.pdf.money(v);
+    const cols: any[] = [
+      { header: 'Date', key: 'date', fmt: (v: any) => v ? new Date(v).toLocaleDateString('en-IN') : '' },
+      { header: 'No.', key: 'number' },
+      { header: 'Party', key: 'party' },
+      { header: 'Status', key: 'status' },
+      { header: 'Amount', key: 'total', align: 'right', fmt: M },
+    ];
+    if (this.hasBalance()) cols.push({ header: this.balanceHead(), key: 'balance', align: 'right', fmt: (v: any) => v == null ? '—' : M(v) });
+    await this.pdf.exportTable({
+      title: this.title(),
+      subtitle: `${rows.length} document(s)`,
+      columns: cols,
+      rows,
+      summary: [
+        { label: 'Total', value: M(this.sumTotal()) },
+        ...(this.hasBalance() ? [{ label: this.balanceHead(), value: M(this.sumBalance()) }] : []),
+      ],
+      orientation: 'landscape',
+    });
+  }
 
   readonly kinds: Array<{ kind: Kind; label: string }> = [
     { kind: 'sales', label: 'Sales' },

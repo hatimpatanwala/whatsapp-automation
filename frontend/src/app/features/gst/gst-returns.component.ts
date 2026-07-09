@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { GstService } from '../../core/services/gst.service';
+import { PdfExportService } from '../../core/services/pdf-export.service';
 
 type Report = 'gstr1' | 'gstr3b' | 'hsn' | 'gstr2b';
 
@@ -21,6 +22,9 @@ type Report = 'gstr1' | 'gstr3b' | 'hsn' | 'gstr2b';
                     [class.bg-slate-100]="report() !== t.key">{{ t.label }}</button>
           }
         </div>
+        <button (click)="downloadPdf()" [disabled]="!data()" class="px-3 py-1.5 rounded-md bg-slate-800 text-white text-sm disabled:opacity-40">
+          ⬇ Download PDF
+        </button>
         <button (click)="downloadJson()" class="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-sm">
           Download GSTR-1 JSON
         </button>
@@ -164,6 +168,7 @@ type Report = 'gstr1' | 'gstr3b' | 'hsn' | 'gstr2b';
 })
 export class GstReturnsComponent {
   private readonly gst = inject(GstService);
+  private readonly pdf = inject(PdfExportService);
   readonly report = signal<Report>('gstr1');
   readonly data = signal<any>(null);
   readonly loading = signal(true);
@@ -180,6 +185,49 @@ export class GstReturnsComponent {
 
   select(r: Report): void { this.report.set(r); this.load(); }
   fmt(n: unknown): string { return Number(n || 0).toFixed(2); }
+
+  /** Export the current GST report as a PDF. */
+  async downloadPdf(): Promise<void> {
+    const d = this.data(); if (!d) return;
+    const M = (v: any) => this.pdf.money(v);
+    const period = `Period ${this.month}`;
+    const rep = this.report();
+    if (rep === 'gstr1') {
+      const rows = [
+        ...(d.b2b || []).map((r: any) => ({ sec: 'B2B', a: r.invoiceNumber, b: r.buyerGstin, rate: r.rate, tv: r.taxableValue, igst: r.igst, cgst: r.cgst, sgst: r.sgst })),
+        ...(d.b2cs || []).map((r: any) => ({ sec: 'B2CS', a: r.placeOfSupply || '', b: '', rate: r.rate, tv: r.taxableValue, igst: r.igst, cgst: r.cgst, sgst: r.sgst })),
+      ];
+      await this.pdf.exportTable({
+        title: 'GSTR-1', subtitle: period, orientation: 'landscape',
+        columns: [{ header: 'Section', key: 'sec' }, { header: 'Invoice / PoS', key: 'a' }, { header: 'Buyer GSTIN', key: 'b' }, { header: 'Rate%', key: 'rate', align: 'right' }, { header: 'Taxable', key: 'tv', align: 'right', fmt: M }, { header: 'IGST', key: 'igst', align: 'right', fmt: M }, { header: 'CGST', key: 'cgst', align: 'right', fmt: M }, { header: 'SGST', key: 'sgst', align: 'right', fmt: M }],
+        rows,
+      });
+    } else if (rep === 'gstr3b') {
+      const o = d.outwardTaxableSupplies || {};
+      await this.pdf.exportTable({
+        title: 'GSTR-3B', subtitle: period,
+        columns: [{ header: 'Particulars', key: 'k' }, { header: 'Amount', key: 'v', align: 'right', fmt: M }],
+        rows: [
+          { k: 'Outward taxable value', v: o.taxableValue }, { k: 'IGST', v: o.igst }, { k: 'CGST', v: o.cgst }, { k: 'SGST', v: o.sgst },
+          { k: `Total invoice value (${d.invoiceCount} invoices)`, v: d.totalInvoiceValue },
+        ],
+      });
+    } else if (rep === 'hsn') {
+      await this.pdf.exportTable({
+        title: 'HSN Summary', subtitle: period, orientation: 'landscape',
+        columns: [{ header: 'HSN', key: 'hsn' }, { header: 'Rate%', key: 'rate', align: 'right' }, { header: 'Qty', key: 'quantity', align: 'right' }, { header: 'Taxable', key: 'taxableValue', align: 'right', fmt: M }, { header: 'IGST', key: 'igst', align: 'right', fmt: M }, { header: 'CGST', key: 'cgst', align: 'right', fmt: M }, { header: 'SGST', key: 'sgst', align: 'right', fmt: M }],
+        rows: d.items || d.rows || d || [],
+      });
+    } else {
+      await this.pdf.exportTable({
+        title: 'GSTR-2B Reconciliation', subtitle: period,
+        columns: [{ header: 'Metric', key: 'k' }, { header: 'Value', key: 'v', align: 'right', fmt: M }],
+        rows: [
+          { k: 'ITC as per 2B', v: d.summary?.itcAsPer2b }, { k: 'ITC in books', v: d.summary?.itcInBooks },
+        ],
+      });
+    }
+  }
 
   load(): void {
     this.loading.set(true);

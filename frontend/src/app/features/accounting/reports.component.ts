@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AccountingService, Ledger } from '../../core/services/accounting.service';
 import { EntryService } from '../../core/services/entry.service';
+import { PdfExportService } from '../../core/services/pdf-export.service';
 
 const TITLES: Record<string, string> = {
   'trial-balance': 'Trial Balance',
@@ -20,7 +21,11 @@ const TITLES: Record<string, string> = {
   imports: [FormsModule],
   template: `
     <div class="p-4 md:p-6">
-      <h1 class="text-xl font-semibold mb-4">{{ title() }}</h1>
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <h1 class="text-xl font-semibold">{{ title() }}</h1>
+        <button (click)="downloadPdf()" [disabled]="!data()"
+          class="text-sm px-3 py-1.5 rounded bg-slate-800 text-white disabled:opacity-40">⬇ Download PDF</button>
+      </div>
 
       @if (loading()) {
         <p class="text-slate-500">Loading…</p>
@@ -233,6 +238,7 @@ export class ReportsComponent {
   private readonly acc = inject(AccountingService);
   private readonly entry = inject(EntryService);
   private readonly route = inject(ActivatedRoute);
+  private readonly pdf = inject(PdfExportService);
 
   readonly report = signal('trial-balance');
   readonly data = signal<any>(null);
@@ -252,6 +258,82 @@ export class ReportsComponent {
     const rate = (Number(this.intRate()) || 0) / 100 / 365;
     return (Number(r.d030) || 0) * 15 * rate + (Number(r.d3160) || 0) * 45 * rate
       + (Number(r.d6190) || 0) * 75 * rate + (Number(r.d90Plus) || 0) * 105 * rate;
+  }
+
+  /** Export the current report as a PDF (columns/rows per report type). */
+  async downloadPdf(): Promise<void> {
+    const d = this.data();
+    if (!d) return;
+    const M = (v: any) => this.pdf.money(v);
+    const title = this.title();
+    const today = new Date().toLocaleDateString('en-IN');
+    const rep = this.report();
+
+    if (rep === 'trial-balance') {
+      await this.pdf.exportTable({
+        title, subtitle: `As on ${today}`,
+        columns: [{ header: 'Ledger', key: 'name' }, { header: 'Debit', key: 'debit', align: 'right', fmt: M }, { header: 'Credit', key: 'credit', align: 'right', fmt: M }],
+        rows: d.rows || [],
+        summary: [{ label: 'Total Debit', value: M(d.totalDebit) }, { label: 'Total Credit', value: M(d.totalCredit) }, { label: d.balanced ? 'Balanced ✓' : 'Not balanced ✗', value: '' }],
+      });
+    } else if (rep === 'pnl') {
+      const rows = [
+        ...(d.income || []).map((r: any) => ({ side: 'Income', name: r.name, amount: r.amount })),
+        { side: '', name: 'Total Income', amount: d.totalIncome },
+        ...(d.expense || []).map((r: any) => ({ side: 'Expense', name: r.name, amount: r.amount })),
+        { side: '', name: 'Total Expense', amount: d.totalExpense },
+      ];
+      await this.pdf.exportTable({
+        title, subtitle: `Period ending ${today}`,
+        columns: [{ header: 'Group', key: 'side' }, { header: 'Account', key: 'name' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
+        rows,
+        summary: [{ label: `Net ${d.netProfit >= 0 ? 'Profit' : 'Loss'}`, value: M(Math.abs(d.netProfit)) }],
+      });
+    } else if (rep === 'balance-sheet') {
+      const rows = [
+        ...(d.liabilities || []).map((r: any) => ({ side: 'Liabilities', name: r.name, amount: r.amount })),
+        { side: 'Liabilities', name: 'Net Profit', amount: d.netProfit },
+        { side: '', name: 'Total Liabilities', amount: d.totalLiabilities },
+        ...(d.assets || []).map((r: any) => ({ side: 'Assets', name: r.name, amount: r.amount })),
+        { side: '', name: 'Total Assets', amount: d.totalAssets },
+      ];
+      await this.pdf.exportTable({
+        title, subtitle: `As on ${today}`,
+        columns: [{ header: 'Section', key: 'side' }, { header: 'Account', key: 'name' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
+        rows,
+      });
+    } else if (rep === 'day-book') {
+      await this.pdf.exportTable({
+        title, subtitle: `Date ${d.date || today}`,
+        columns: [{ header: 'Type', key: 'voucherType' }, { header: 'Number', key: 'number' }, { header: 'Party', key: 'partyName' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
+        rows: (d.vouchers || []).map((v: any) => ({ ...v, partyName: v.partyName || '—' })),
+      });
+    } else if (rep === 'stock-summary') {
+      const rows = (d as any[]) || [];
+      await this.pdf.exportTable({
+        title, subtitle: `As on ${today}`,
+        columns: [{ header: 'Item', key: 'name' }, { header: 'UoM', key: 'uom' }, { header: 'Stock', key: 'stock', align: 'right' }, { header: 'Rate', key: 'rate', align: 'right', fmt: M }, { header: 'Value', key: 'stockValue', align: 'right', fmt: M }],
+        rows: rows.map((r: any) => ({ ...r, rate: r.salePrice ?? r.basePrice })),
+        summary: [{ label: 'Total stock value', value: M(this.stockTotal()) }],
+      });
+    } else if (rep === 'ledger') {
+      const st = this.statement();
+      if (!st) return;
+      const name = this.ledgers().find((l) => l.id === this.ledgerId())?.name || 'Ledger';
+      await this.pdf.exportTable({
+        title: `Ledger — ${name}`, subtitle: `Opening ${M(st.opening)} · Closing ${M(st.closing)}`,
+        columns: [{ header: 'Date', key: 'date' }, { header: 'Voucher', key: 'number' }, { header: 'Type', key: 'voucherType' }, { header: 'Debit', key: 'debit', align: 'right', fmt: M }, { header: 'Credit', key: 'credit', align: 'right', fmt: M }, { header: 'Balance', key: 'balance', align: 'right', fmt: M }],
+        rows: st.lines || [],
+        summary: [{ label: 'Closing balance', value: M(st.closing) }],
+      });
+    } else if (rep === 'ageing') {
+      await this.pdf.exportTable({
+        title: 'Bills Outstanding — Receivables', subtitle: `As on ${today}`, orientation: 'landscape',
+        columns: [{ header: 'Party', key: 'party' }, { header: '0–30d', key: 'd030', align: 'right', fmt: M }, { header: '31–60d', key: 'd3160', align: 'right', fmt: M }, { header: '61–90d', key: 'd6190', align: 'right', fmt: M }, { header: '90d+', key: 'd90Plus', align: 'right', fmt: M }, { header: 'Total', key: 'total', align: 'right', fmt: M }, { header: 'Bills', key: 'bills', align: 'right' }, { header: 'Interest', key: '_int', align: 'right', fmt: M }],
+        rows: (d.receivables || []).map((r: any) => ({ ...r, _int: this.interestOf(r) })),
+        summary: [{ label: 'Total receivable', value: M(d.totals?.receivable) }, { label: 'Total payable', value: M(d.totals?.payable) }],
+      });
+    }
   }
 
   stockTotal(): number {

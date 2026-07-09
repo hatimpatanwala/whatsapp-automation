@@ -381,6 +381,9 @@ export class MainLayoutComponent implements OnInit {
       title: 'Accounting',
       items: [
         { label: 'Ledgers', icon: 'pi-book', route: '/ledgers', featureKey: 'erp', perm: 'accounting' },
+        { label: 'Profit & Loss', icon: 'pi-chart-line', route: '/accounting/reports/pnl', featureKey: 'erp', perm: 'accounting' },
+        { label: 'Trial Balance', icon: 'pi-list', route: '/accounting/reports/trial-balance', featureKey: 'erp', perm: 'accounting' },
+        { label: 'Balance Sheet', icon: 'pi-book', route: '/accounting/reports/balance-sheet', featureKey: 'erp', perm: 'accounting' },
         { label: 'Payments', icon: 'pi-credit-card', route: '/payments', perm: 'payments' },
         { label: 'Cash & Bank', icon: 'pi-wallet', route: '/erp/bank-accounts', featureKey: 'erp' },
         { label: 'Payment Modes', icon: 'pi-money-bill', route: '/erp/payment-modes', featureKey: 'erp' },
