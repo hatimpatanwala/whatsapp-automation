@@ -6,6 +6,7 @@ import { PhoneNumber } from '../../database/entities/public/phone-number.entity'
 import { WhatsAppWebhookController } from './whatsapp-webhook.controller';
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { AdminCommandService } from './admin-command.service';
+import { SalesmanCommandService } from './salesman-command.service';
 import { WhatsAppMessageService } from './whatsapp-message.service';
 import { WebhookProcessorService } from './webhook-processor.service';
 import { WhatsAppOutboundProcessor } from './whatsapp-outbound.processor';
@@ -59,6 +60,7 @@ import { DocDeliveryController } from './doc-delivery.controller';
     SmartNotificationProcessor,
     InvoiceService,
     AdminCommandService,
+    SalesmanCommandService,
     ErpReminderService,
     ErpReminderCron,
   ],

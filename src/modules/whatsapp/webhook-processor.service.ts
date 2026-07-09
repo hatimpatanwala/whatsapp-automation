@@ -22,6 +22,7 @@ import { ComplianceMonitorService } from '../waba/compliance/compliance-monitor.
 import { OrderMessageHandler } from './message-handlers/order-message.handler';
 import { CommerceSettingsHelper } from './helpers/commerce-settings.helper';
 import { AdminCommandService } from './admin-command.service';
+import { SalesmanCommandService } from './salesman-command.service';
 import { SmartNotificationService } from './smart-notification.service';
 import { CustomFieldService } from '../custom-field/custom-field.service';
 import { BuilderService } from '../builder/builder.service';
@@ -53,6 +54,7 @@ export class WebhookProcessorService {
     private readonly commerceSettings: CommerceSettingsHelper,
     private readonly configService: ConfigService,
     @Optional() private readonly adminCommandService: AdminCommandService,
+    @Optional() private readonly salesmanCommandService: SalesmanCommandService,
     @Optional() private readonly smartNotification: SmartNotificationService,
     @Optional() private readonly customFieldService: CustomFieldService,
     @Optional() private readonly builderService: BuilderService,
@@ -190,6 +192,16 @@ export class WebhookProcessorService {
       this.logger.warn(`[FLOW] ${from} matches the admin number for ${schema} but it is NOT verified — treated as customer. Verify it in Settings → Admin WhatsApp.`);
     }
 
+    // Is this a registered salesman? Their number is a dedicated field-app channel
+    // (like the admin's): any message opens their Sales App webview. Resolved once,
+    // and treated like the admin for skipping customer metering/workflows.
+    const salesman = (!isAdmin && this.salesmanCommandService)
+      ? await this.salesmanCommandService.findByPhone(schema, from)
+      : null;
+    const isSalesman = !!salesman;
+    if (isSalesman) this.logger.log(`[FLOW] Message from SALESMAN ${salesman!.name} (${from}) for ${schema} — sending field-app link`);
+    const isStaffChannel = isAdmin || isSalesman;
+
     // Idempotency check
     const dedupKey = `webhook:dedup:${schema}:${messageId}`;
     const exists = await this.redis.set(dedupKey, '1', 'EX', 86400, 'NX');
@@ -214,7 +226,7 @@ export class WebhookProcessorService {
 
     // ─── METERING: Track conversation session + enforce quotas ────────
     // (Admin control messages don't count against customer conversation quota.)
-    if (!isAdmin && this.meteringService && tenant.id) {
+    if (!isStaffChannel && this.meteringService && tenant.id) {
       try {
         const meteringResult = await this.meteringService.meterConversation({
           tenantId: tenant.id,
@@ -250,7 +262,7 @@ export class WebhookProcessorService {
       // as a customer (and left a waiting flow) and was later promoted to admin
       // must route to admin handling — not get pinned to its old customer flow.
       // Audience-scoped admin trigger matching + built-in admin commands follow.
-      const activeExecution = isAdmin ? null : await this.workflowEngine.findActiveExecution(schema, from);
+      const activeExecution = isStaffChannel ? null : await this.workflowEngine.findActiveExecution(schema, from);
       this.logger.log(`[FLOW] findActiveExecution for ${from}: ${activeExecution ? `id=${activeExecution.id} status=${activeExecution.status}` : (isAdmin ? 'skipped (admin sender)' : 'null')}`);
       if (activeExecution) {
         if (activeExecution.status === 'waiting') {
@@ -272,7 +284,8 @@ export class WebhookProcessorService {
       }
 
       // ─── WORKFLOW ENGINE: Check for trigger match ──────────────────────
-      if (!handledByWorkflow) {
+      // Salesmen never run customer/admin workflows — their channel is the field app.
+      if (!handledByWorkflow && !isSalesman) {
         const text = message.text?.body || '';
         const interactiveText = message.interactive?.button_reply?.title
           || message.interactive?.list_reply?.title || '';
@@ -331,7 +344,7 @@ export class WebhookProcessorService {
 
       // ─── NO WORKFLOW, NO TRIGGER: Check for recently expired execution ─
       // (Admins skip this too — it would restart the old customer workflow.)
-      if (!handledByWorkflow && !isAdmin) {
+      if (!handledByWorkflow && !isStaffChannel) {
         this.logger.log(`[FLOW] No workflow matched, checking recently expired executions for ${from}`);
         const recentExecution = await this.workflowEngine.findRecentExpiredExecution(schema, from);
         if (recentExecution) {
@@ -377,6 +390,13 @@ export class WebhookProcessorService {
       if (this.adminCommandService) {
         await this.adminCommandService.handle(tenant, message);
       }
+      return;
+    }
+
+    // Salesman sender → reply with their Sales App webview link (the field-app
+    // channel). They text "hi" (or anything) and tap the button to control sales.
+    if (isSalesman && this.salesmanCommandService) {
+      await this.salesmanCommandService.sendApp(tenant, salesman!, from);
       return;
     }
 
