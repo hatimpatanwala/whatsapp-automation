@@ -335,6 +335,9 @@ export class SfaService {
       items: [...body.items, ...freeLines],
       discount: evalRes.discountTotal || 0,
       notes: noteBits.join(' — '),
+      source: 'salesman',
+      placedByName: salesman.name,
+      salesmanId: salesman.id,
     } as any);
     return {
       id: order?.id,

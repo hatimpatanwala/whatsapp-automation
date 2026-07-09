@@ -137,6 +137,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/desktop-app/desktop-app.component').then(m => m.DesktopAppComponent),
       },
       {
+        // Team & Roles — employees + RBAC permission matrix.
+        path: 'team',
+        loadComponent: () => import('./features/team/team.component').then(m => m.TeamComponent),
+      },
+      {
         path: 'products',
         loadChildren: () => import('./features/products/products.routes').then(m => m.PRODUCTS_ROUTES),
       },

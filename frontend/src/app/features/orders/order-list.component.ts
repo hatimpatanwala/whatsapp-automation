@@ -29,6 +29,8 @@ interface OrderRow {
   status: string;
   paymentStatus: string;
   date: string;
+  source?: string;
+  placedBy?: string;
 }
 
 @Component({
@@ -128,7 +130,15 @@ interface OrderRow {
               </td>
               <td>
                 <div>
-                  <p class="font-medium text-gray-900">{{ order.customer }}</p>
+                  <p class="font-medium text-gray-900">
+                    {{ order.customer }}
+                    @if (order.source === 'salesman') {
+                      <span class="ml-1.5 align-middle text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5"
+                            [title]="order.placedBy ? 'Placed by salesman ' + order.placedBy : 'Placed by a salesman'">
+                        <i class="pi pi-briefcase" style="font-size:0.6rem"></i> {{ order.placedBy || 'Salesman' }}
+                      </span>
+                    }
+                  </p>
                   <p class="text-xs text-gray-400">{{ order.phone }}</p>
                 </div>
               </td>
@@ -339,6 +349,8 @@ export class OrderListComponent implements OnInit {
       status: order.status,
       paymentStatus: order.paymentStatus,
       date: this.datePipe.transform(order.createdAt, 'MMM d, y') || order.createdAt,
+      source: (order as any).source,
+      placedBy: (order as any).placedByName ?? (order as any).placed_by_name,
     };
   }
 

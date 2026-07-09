@@ -6,6 +6,8 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { ErpFeatureGuard } from '../../common/guards/erp-feature.guard';
 import { RequiresFeature } from '../../common/decorators/requires-feature.decorator';
+import { RequiresPermission } from '../../common/decorators/requires-permission.decorator';
+import { PermissionGuard } from '../../common/guards/permission.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('customers')
@@ -30,6 +32,7 @@ export class CustomerController {
   /** Quick-create (Miracle-style on-the-fly master from the entry screens). */
   @Post()
   @Roles('owner', 'seller')
+  @UseGuards(PermissionGuard) @RequiresPermission('customers', 'write')
   async create(@Req() req: Request, @Body() body: { name: string; phone: string }) {
     return this.customerService.quickCreate(req.tenantContext.schemaName, body);
   }

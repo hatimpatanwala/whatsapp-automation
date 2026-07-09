@@ -9,6 +9,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequiresPermission } from '../../common/decorators/requires-permission.decorator';
+import { PermissionGuard } from '../../common/guards/permission.guard';
 
 @Controller('products')
 @UseGuards(TenantGuard)
@@ -88,6 +90,7 @@ export class ProductController {
 
   @Post()
   @Roles('owner', 'seller')
+  @UseGuards(PermissionGuard) @RequiresPermission('products', 'write')
   async create(@Req() req: Request, @Body() dto: CreateProductDto) {
     return this.productService.create(req.tenantContext.schemaName, dto);
   }

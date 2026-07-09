@@ -62,6 +62,7 @@ import { EntryService } from '../../core/services/entry.service';
                   <code class="text-[11px] text-slate-500 break-all">{{ link(s) }}</code>
                 </td>
                 <td class="border border-slate-300 px-2 py-1 text-center whitespace-nowrap">
+                  <button (click)="openApp(s)" class="text-xs px-2 py-1 rounded bg-indigo-600 text-white mr-1" title="Open this salesman's field app yourself">▶ Open field app</button>
                   <button (click)="copy(s)" class="text-xs px-2 py-1 rounded border mr-1">Copy link</button>
                   <a [href]="waShare(s)" target="_blank" class="text-xs px-2 py-1 rounded bg-emerald-600 text-white mr-1 inline-block">Send on WhatsApp</a>
                   <button (click)="rotate(s)" class="text-xs px-2 py-1 rounded border mr-1" title="Old link stops working">↻ New link</button>
@@ -159,6 +160,10 @@ export class SalesmenComponent implements OnInit {
   }
   copy(s: any) {
     navigator.clipboard?.writeText(this.link(s)).then(() => this.flash('Link copied'));
+  }
+  /** Admin opens the salesman's own field app (same token link) to preview or operate it. */
+  openApp(s: any) {
+    window.open(this.link(s), '_blank');
   }
 
   isDue(p: any) { return p.promiseDate && new Date(p.promiseDate) <= new Date(); }

@@ -4,6 +4,8 @@ import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { ErpFeatureGuard } from '../../../common/guards/erp-feature.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RequiresFeature } from '../../../common/decorators/requires-feature.decorator';
+import { RequiresPermission } from '../../../common/decorators/requires-permission.decorator';
+import { PermissionGuard } from '../../../common/guards/permission.guard';
 import { ErpInvoiceService, CreateInvoiceInput, RecordPaymentInput } from './erp-invoice.service';
 import { ErpDocumentService } from './erp-document.service';
 
@@ -65,12 +67,14 @@ export class ErpInvoiceController {
 
   @Post()
   @Roles('owner', 'seller')
+  @UseGuards(PermissionGuard) @RequiresPermission('invoices', 'write')
   async create(@Req() req: Request, @Body() body: CreateInvoiceInput) {
     return this.service.create(req.tenantContext.schemaName, body);
   }
 
   @Post(':id/payments')
   @Roles('owner', 'seller')
+  @UseGuards(PermissionGuard) @RequiresPermission('payments', 'write')
   async recordPayment(@Req() req: Request, @Param('id') id: string, @Body() body: RecordPaymentInput) {
     return this.service.recordPayment(req.tenantContext.schemaName, id, body);
   }

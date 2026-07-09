@@ -47,6 +47,7 @@ export class OrderService {
                 o.delivery_fee, o.total as total_amount, o.currency, o.notes,
                 o.placed_at, o.confirmed_at, o.delivered_at,
                 o.created_at, o.updated_at,
+                COALESCE(o.source, 'portal') as source, o.placed_by_name, o.salesman_id,
                 (SELECT COUNT(*)::int FROM order_items oi WHERE oi.order_id = o.id) as item_count,
                 COALESCE(p.status, 'pending') as payment_status,
                 json_build_object(
@@ -212,6 +213,10 @@ export class OrderService {
       deliveryFee?: number;
       taxAmount?: number;
       addressId?: string;
+      /** Attribution: who/what placed this order (portal | salesman | whatsapp). */
+      source?: string;
+      placedByName?: string;
+      salesmanId?: string;
     },
   ): Promise<any> {
     return this.connectionManager.executeInTransaction(schema, async (qr) => {
@@ -228,9 +233,10 @@ export class OrderService {
       const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}${randomBytes(3).toString('hex').toUpperCase()}`;
 
       const order = await qr.query(
-        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes, address_id)
-         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null, data.addressId || null],
+        `INSERT INTO orders (order_number, customer_id, status, subtotal, tax_amount, discount, delivery_fee, total, notes, address_id, placed_at, source, placed_by_name, salesman_id)
+         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12) RETURNING *`,
+        [orderNumber, data.customerId, subtotal, taxAmount, discount, deliveryFee, total, data.notes || null, data.addressId || null,
+         data.source || 'portal', data.placedByName || null, data.salesmanId || null],
       );
 
       for (const it of data.items) {

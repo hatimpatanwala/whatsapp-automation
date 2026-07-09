@@ -11,6 +11,7 @@ import { AuthService } from '../core/services/auth.service';
 import { ApiService } from '../core/services/api.service';
 import { FeatureService } from '../core/services/feature.service';
 import { ErpAccessService } from '../core/services/erp-access.service';
+import { PermissionService } from '../core/services/permission.service';
 
 interface NavItem {
   label: string;
@@ -27,6 +28,8 @@ interface NavItem {
   /** Gated by a LIVE plan feature from /erp/status, independent of the ERP master
    *  switch (e.g. `sfa` salesman app works with ERP off; `erpOffline` desktop app). */
   featureLive?: string;
+  /** RBAC feature key — item is hidden when the user's role has no `read` on it. */
+  perm?: string;
 }
 
 interface NavSection {
@@ -296,6 +299,7 @@ export class MainLayoutComponent implements OnInit {
   private readonly apiService = inject(ApiService);
   readonly featureService = inject(FeatureService);
   readonly erpAccess = inject(ErpAccessService);
+  readonly permissions = inject(PermissionService);
 
   sidebarOpen = signal(true);
   isMobile = signal(false);
@@ -328,34 +332,34 @@ export class MainLayoutComponent implements OnInit {
       title: 'Sales',
       items: [
         { label: 'Point of Sale', icon: 'pi-shopping-cart', route: '/erp/pos', featureKey: 'erp' },
-        { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders' },
+        { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders', perm: 'orders' },
         // Salesman field app (SFA) — a standalone module: works even with ERP off.
         { label: 'Salesmen (Field App)', icon: 'pi-briefcase', route: '/salesmen', featureLive: 'sfa' },
         // Base Invoices (GST/order docs) — superseded by ERP Invoices (same `invoices` table).
-        { label: 'Invoices', icon: 'pi-receipt', route: '/invoices', hideWhenErp: true },
-        { label: 'Invoices', icon: 'pi-receipt', route: '/erp/invoices', featureKey: 'erp' },
-        { label: 'Recurring Invoices', icon: 'pi-replay', route: '/erp/recurring', featureKey: 'erp' },
-        { label: 'Quotes', icon: 'pi-file-edit', route: '/quotes', featureKey: 'quotes' },
+        { label: 'Invoices', icon: 'pi-receipt', route: '/invoices', hideWhenErp: true, perm: 'invoices' },
+        { label: 'Invoices', icon: 'pi-receipt', route: '/erp/invoices', featureKey: 'erp', perm: 'invoices' },
+        { label: 'Recurring Invoices', icon: 'pi-replay', route: '/erp/recurring', featureKey: 'erp', perm: 'invoices' },
+        { label: 'Quotes', icon: 'pi-file-edit', route: '/quotes', featureKey: 'quotes', perm: 'quotes' },
         { label: 'Offers', icon: 'pi-tags', route: '/erp/offers', featureKey: 'erp' },
-        { label: 'Credit Notes', icon: 'pi-reply', route: '/erp/credit-notes', featureKey: 'erp' },
+        { label: 'Credit Notes', icon: 'pi-reply', route: '/erp/credit-notes', featureKey: 'erp', perm: 'invoices' },
         { label: 'E-Way Bills', icon: 'pi-truck', route: '/erp/eway-bills', featureKey: 'erp' },
       ],
     },
     {
       title: 'Purchases',
       items: [
-        { label: 'Purchase Orders', icon: 'pi-shopping-bag', route: '/erp/purchase-orders', featureKey: 'erp' },
-        { label: 'Suppliers', icon: 'pi-building', route: '/erp/suppliers', featureKey: 'erp' },
-        { label: 'Expenses', icon: 'pi-wallet', route: '/erp/expenses', featureKey: 'erp' },
-        { label: 'Debit Notes', icon: 'pi-undo', route: '/erp/debit-notes', featureKey: 'erp' },
+        { label: 'Purchase Orders', icon: 'pi-shopping-bag', route: '/erp/purchase-orders', featureKey: 'erp', perm: 'purchases' },
+        { label: 'Suppliers', icon: 'pi-building', route: '/erp/suppliers', featureKey: 'erp', perm: 'suppliers' },
+        { label: 'Expenses', icon: 'pi-wallet', route: '/erp/expenses', featureKey: 'erp', perm: 'purchases' },
+        { label: 'Debit Notes', icon: 'pi-undo', route: '/erp/debit-notes', featureKey: 'erp', perm: 'purchases' },
       ],
     },
     {
       title: 'Customers & CRM',
       items: [
         // Base Customers — superseded by ERP Clients (same `customers` table).
-        { label: 'Customers', icon: 'pi-users', route: '/customers', featureKey: 'customers', hideWhenErp: true },
-        { label: 'Customers', icon: 'pi-users', route: '/erp/clients', featureKey: 'erp' },
+        { label: 'Customers', icon: 'pi-users', route: '/customers', featureKey: 'customers', hideWhenErp: true, perm: 'customers' },
+        { label: 'Customers', icon: 'pi-users', route: '/erp/clients', featureKey: 'erp', perm: 'customers' },
         { label: 'Companies', icon: 'pi-building', route: '/erp/companies', featureKey: 'erp' },
         { label: 'People', icon: 'pi-user', route: '/erp/people', featureKey: 'erp' },
         { label: 'Leads', icon: 'pi-filter', route: '/erp/leads', featureKey: 'erp' },
@@ -364,20 +368,20 @@ export class MainLayoutComponent implements OnInit {
     {
       title: 'Catalog & Inventory',
       items: [
-        { label: 'Products', icon: 'pi-box', route: '/products' },
+        { label: 'Products', icon: 'pi-box', route: '/products', perm: 'products' },
         { label: 'Categories & Brands', icon: 'pi-tags', route: '/catalog-taxonomy' },
         { label: 'Tax Rates', icon: 'pi-percentage', route: '/tax-rates' },
-        { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory' },
-        { label: 'Warehouse Stock', icon: 'pi-building-columns', route: '/erp/stock', featureKey: 'erp' },
+        { label: 'Inventory', icon: 'pi-warehouse', route: '/inventory', perm: 'inventory' },
+        { label: 'Warehouse Stock', icon: 'pi-building-columns', route: '/erp/stock', featureKey: 'erp', perm: 'inventory' },
         { label: 'Batch & Serial', icon: 'pi-qrcode', route: '/erp/batches', featureKey: 'erp' },
-        { label: 'Schemes & Offers', icon: 'pi-percentage', route: '/schemes' },
+        { label: 'Schemes & Offers', icon: 'pi-percentage', route: '/schemes', perm: 'schemes' },
       ],
     },
     {
       title: 'Accounting',
       items: [
-        { label: 'Ledgers', icon: 'pi-book', route: '/ledgers', featureKey: 'erp' },
-        { label: 'Payments', icon: 'pi-credit-card', route: '/payments' },
+        { label: 'Ledgers', icon: 'pi-book', route: '/ledgers', featureKey: 'erp', perm: 'accounting' },
+        { label: 'Payments', icon: 'pi-credit-card', route: '/payments', perm: 'payments' },
         { label: 'Cash & Bank', icon: 'pi-wallet', route: '/erp/bank-accounts', featureKey: 'erp' },
         { label: 'Payment Modes', icon: 'pi-money-bill', route: '/erp/payment-modes', featureKey: 'erp' },
         { label: 'Currencies', icon: 'pi-dollar', route: '/erp/currencies', featureKey: 'erp' },
@@ -406,6 +410,8 @@ export class MainLayoutComponent implements OnInit {
         { label: 'API Keys', icon: 'pi-key', route: '/erp/api-keys', featureKey: 'erp' },
         { label: 'Export Data', icon: 'pi-download', route: '/erp/export', featureKey: 'erp' },
         { label: 'Business Settings', icon: 'pi-sliders-h', route: '/erp/settings', featureKey: 'erp' },
+        // Team & Roles (RBAC) — employees + per-feature permissions.
+        { label: 'Team & Roles', icon: 'pi-users', route: '/team', perm: 'employees' },
         // Offline desktop app — shown ONLY to tenants licensed for it (erpOffline).
         // Online-only plans never see this entry.
         { label: 'Desktop App (Offline)', icon: 'pi-desktop', route: '/desktop-app', featureLive: 'erpOffline' },
@@ -441,6 +447,9 @@ export class MainLayoutComponent implements OnInit {
           // Live-feature items (salesman app, offline desktop) — shown only when the
           // tenant is actually entitled, independent of the ERP master switch.
           if (it.featureLive) return ready && this.erpAccess.has(it.featureLive);
+          // RBAC: hide anything the user's role can't even read. Until permissions
+          // resolve, don't hide (avoids a flash); owner passes everything.
+          if (it.perm && this.permissions.ready() && !this.permissions.can(it.perm, 'read')) return false;
           return true; // non-ERP items: featureKey gating handled in template
         }),
       }))
@@ -529,6 +538,7 @@ export class MainLayoutComponent implements OnInit {
     this.checkMobile();
     window.addEventListener('resize', () => this.checkMobile());
     this.erpAccess.load();
+    this.permissions.load();
     this.currentUrl.set(this.router.url);
     this.router.events.subscribe((e) => { if (e instanceof NavigationEnd) this.currentUrl.set(e.urlAfterRedirects); });
     this.loadFeed();
@@ -542,9 +552,9 @@ export class MainLayoutComponent implements OnInit {
           '/deliveries': counts.pendingDeliveries || 0,
         });
         this.notifications.set([
-          { label: 'Pending orders', icon: 'pi-shopping-cart', route: '/orders', count: counts.pendingOrders || 0 },
+          { label: 'Pending orders', icon: 'pi-shopping-cart', route: '/orders', count: counts.pendingOrders || 0, perm: 'orders' },
           { label: 'Open conversations', icon: 'pi-comments', route: '/conversations', count: counts.openConversations || 0 },
-          { label: 'Payments to verify', icon: 'pi-credit-card', route: '/payments', count: counts.pendingPayments || 0 },
+          { label: 'Payments to verify', icon: 'pi-credit-card', route: '/payments', count: counts.pendingPayments || 0, perm: 'payments' },
           { label: 'Pending deliveries', icon: 'pi-truck', route: '/deliveries', count: counts.pendingDeliveries || 0 },
         ].filter(n => n.count > 0));
       },

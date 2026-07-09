@@ -5,6 +5,8 @@ import { CouponService } from '../promotions/coupon.service';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequiresPermission } from '../../common/decorators/requires-permission.decorator';
+import { PermissionGuard } from '../../common/guards/permission.guard';
 
 @Controller('orders')
 @UseGuards(TenantGuard)
@@ -16,6 +18,7 @@ export class OrderController {
 
   @Get()
   @Roles('owner', 'seller', 'staff')
+  @UseGuards(PermissionGuard) @RequiresPermission('orders', 'read')
   async findAll(@Req() req: Request, @Query() query: OrderQueryDto) {
     return this.orderService.findAll(req.tenantContext.schemaName, query, query.status, query.search, query.paymentStatus);
   }
@@ -23,6 +26,7 @@ export class OrderController {
   /** Create an order from the in-portal "New order" page. */
   @Post()
   @Roles('owner', 'seller')
+  @UseGuards(PermissionGuard) @RequiresPermission('orders', 'write')
   async create(
     @Req() req: Request,
     @Body() body: {

@@ -2932,6 +2932,82 @@ const migration077SyncMore: TenantMigration = {
   },
 };
 
+/**
+ * 078 — Order attribution. Who placed an order (WhatsApp customer, portal admin,
+ * a salesman) so the portal/registers can show and filter by it. Idempotent.
+ */
+const migration078OrderSource: TenantMigration = {
+  name: '078_order_source',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".orders
+      ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'portal',
+      ADD COLUMN IF NOT EXISTS placed_by_name VARCHAR(120),
+      ADD COLUMN IF NOT EXISTS salesman_id UUID`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_orders_source ON "${schema}".orders (source)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_orders_salesman ON "${schema}".orders (salesman_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".orders
+      DROP COLUMN IF EXISTS source, DROP COLUMN IF EXISTS placed_by_name, DROP COLUMN IF EXISTS salesman_id`);
+  },
+};
+
+/**
+ * 079 — Role-based access control (RBAC). A `roles` table (per-feature
+ * read/write permission map) + `users.role_id` and an optional per-user
+ * permission override. Seeds a system Owner role (full access, undeletable) and
+ * a few starter roles; existing owner/admin users are linked to Owner. Idempotent.
+ */
+const migration079Rbac: TenantMigration = {
+  name: '079_rbac',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".roles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(60) NOT NULL,
+      description TEXT,
+      permissions JSONB NOT NULL DEFAULT '{}',
+      is_system BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_roles_name ON "${schema}".roles (lower(name))`);
+    await qr.query(`ALTER TABLE "${schema}".users
+      ADD COLUMN IF NOT EXISTS role_id UUID,
+      ADD COLUMN IF NOT EXISTS permissions JSONB`);
+
+    // Seed starter roles once. Features map: none | read | write (write implies read).
+    const ALL = ['dashboard','orders','invoices','quotes','purchases','customers','suppliers','products','inventory','payments','accounting','gst','salesmen','schemes','reports','settings','employees'];
+    const lvl = (level: string) => JSON.stringify(Object.fromEntries(ALL.map((f) => [f, level])));
+    const owner = lvl('write');
+    const viewer = lvl('read');
+    const salesman = JSON.stringify({ dashboard: 'read', orders: 'write', quotes: 'write', customers: 'write', products: 'read', invoices: 'read', payments: 'write', salesmen: 'read', schemes: 'read', reports: 'read', purchases: 'none', suppliers: 'none', accounting: 'none', gst: 'none', inventory: 'read', settings: 'none', employees: 'none' });
+    const accountant = JSON.stringify({ dashboard: 'read', orders: 'read', quotes: 'read', customers: 'read', products: 'read', invoices: 'write', payments: 'write', accounting: 'write', gst: 'write', reports: 'read', purchases: 'read', suppliers: 'read', inventory: 'read', salesmen: 'none', schemes: 'read', settings: 'none', employees: 'none' });
+    await qr.query(
+      `INSERT INTO "${schema}".roles (name, description, permissions, is_system)
+       SELECT * FROM (VALUES
+         ('Owner', 'Full access to everything', $1::jsonb, true),
+         ('Manager', 'Manage sales, purchases and customers', $1::jsonb, false),
+         ('Accountant', 'Invoicing, payments, accounting and GST', $2::jsonb, false),
+         ('Salesman', 'Orders, quotes and customers', $3::jsonb, false),
+         ('Viewer', 'Read-only across the app', $4::jsonb, false)
+       ) AS r(name, description, permissions, is_system)
+       WHERE NOT EXISTS (SELECT 1 FROM "${schema}".roles)`,
+      [owner, accountant, salesman, viewer],
+    );
+
+    // Link existing owner/admin users to the Owner role so nothing locks out.
+    await qr.query(
+      `UPDATE "${schema}".users u SET role_id = r.id
+       FROM "${schema}".roles r
+       WHERE r.is_system = true AND u.role_id IS NULL AND u.role IN ('owner','admin')`,
+    );
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".users DROP COLUMN IF EXISTS role_id, DROP COLUMN IF EXISTS permissions`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".roles`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3010,4 +3086,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration075Payments,
   migration076Sfa,
   migration077SyncMore,
+  migration078OrderSource,
+  migration079Rbac,
 ];

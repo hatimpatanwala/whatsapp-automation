@@ -16,6 +16,7 @@ import { SuperAdmin } from '../../database/entities/public/super-admin.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
 import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
+import { AccessService } from '../access/access.service';
 
 @Controller('auth')
 export class AuthController {
@@ -24,6 +25,7 @@ export class AuthController {
     private readonly oauthService: OAuthService,
     private readonly emailVerification: EmailVerificationService,
     private readonly tenantProvisioning: TenantProvisioningService,
+    private readonly access: AccessService,
     @InjectRepository(Tenant)
     private readonly tenantRepository: Repository<Tenant>,
     @InjectRepository(SuperAdmin)
@@ -353,9 +355,20 @@ export class AuthController {
         }
       }
 
+      // Effective RBAC permissions for this user (drives UI visibility both here
+      // and in the ERP). Best-effort — never block session rehydration on it.
+      let permissions: Record<string, string> = {};
+      let isOwner = false;
+      try {
+        const p = await this.access.getPermissions(session.tenantSchema, session.userId);
+        permissions = p.permissions; isOwner = p.owner;
+      } catch { /* roles table may not exist on a very old schema */ }
+
       return {
         type: 'tenant_user',
         user,
+        permissions,
+        isOwner,
         tenant: tenant ? {
           id: tenant.id,
           slug: tenant.slug,
