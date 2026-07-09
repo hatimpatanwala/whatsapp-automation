@@ -50,8 +50,10 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
                     [class.bg-slate-800]="kind() === k.kind" [class.text-white]="kind() === k.kind">{{ k.label }}</button>
           }
         </div>
+        <button (click)="refresh()" class="ml-auto text-xs px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-50"
+          [class.opacity-50]="loading()" title="Reload the latest documents (F5)">↻ Refresh</button>
         <button (click)="downloadPdf()" [disabled]="!visible().length"
-          class="ml-auto text-xs px-3 py-1.5 rounded bg-slate-800 text-white disabled:opacity-40">⬇ Download PDF</button>
+          class="text-xs px-3 py-1.5 rounded bg-slate-800 text-white disabled:opacity-40">⬇ Download PDF</button>
         <span class="text-xs text-slate-500">↑↓ move · Enter {{ kind() === 'quote' ? 'convert to invoice' : 'open' }} · PgUp/PgDn month · Esc back</span>
       </div>
 
@@ -328,6 +330,10 @@ export class RegistersComponent {
   switchKind(k: Kind): void {
     void this.router.navigate(['/entry/registers', k]);
   }
+
+  /** Manual + tab-focus refresh — pulls new invoices/orders that landed while viewing. */
+  @HostListener('window:focus')
+  refresh(): void { this.load(); }
 
   private load(): void {
     this.loading.set(true);

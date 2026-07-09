@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, HostListener, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { EntryService, ItemMasterRow } from '../../core/services/entry.service';
@@ -28,6 +28,7 @@ const ymdLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
         <h1 class="text-lg font-semibold">Business Overview</h1>
         <span class="text-sm text-slate-500">{{ today | date: 'EEEE, dd MMMM yyyy' }}</span>
         @if (loading()) { <span class="text-xs text-slate-400">refreshing…</span> }
+        <button (click)="refresh()" class="ml-auto text-xs px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-50" title="Reload the latest figures">↻ Refresh</button>
       </div>
 
       <!-- KPI cards -->
@@ -178,6 +179,10 @@ export class ErpHomeComponent {
   constructor() {
     this.load();
   }
+
+  /** Manual + tab-focus refresh of the dashboard figures. */
+  @HostListener('window:focus')
+  refresh(): void { this.load(); }
 
   private load(): void {
     const now = new Date();

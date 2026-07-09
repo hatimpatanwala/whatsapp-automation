@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, signal, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { TableModule } from 'primeng/table';
@@ -63,6 +63,7 @@ interface OrderRow {
           <p class="text-gray-500 text-sm">Track and manage customer orders</p>
         </div>
         <div class="flex gap-2">
+          <button pButton label="Refresh" icon="pi pi-refresh" class="p-button-outlined p-button-sm" [loading]="refreshing()" (click)="refresh()" title="Reload the latest orders"></button>
           <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined p-button-sm" [loading]="openingBuilder()" (click)="openBuilder()"></button>
           <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" routerLink="/orders/new"></button>
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
@@ -174,7 +175,7 @@ interface OrderRow {
     </div>
   `,
 })
-export class OrderListComponent implements OnInit {
+export class OrderListComponent implements OnInit, OnDestroy {
   private readonly messageService = inject(MessageService);
   private readonly orderService = inject(OrderService);
   private readonly datePipe = inject(DatePipe);
@@ -283,6 +284,22 @@ export class OrderListComponent implements OnInit {
 
     this.loadOrders();
     this.loadStats();
+
+    // Live-ish updates: refresh when the tab regains focus (e.g. after taking a
+    // salesman order in another window) and on a gentle 45s poll while viewing.
+    this.pollId = setInterval(() => this.loadOrders(true), 45000);
+  }
+
+  ngOnDestroy() { if (this.pollId) clearInterval(this.pollId); }
+
+  private pollId: any = null;
+  readonly refreshing = signal(false);
+
+  /** Manual refresh button + tab-focus auto-refresh — pulls new orders/invoices. */
+  @HostListener('window:focus')
+  refresh() {
+    this.loadOrders(true);
+    this.loadStats();
   }
 
   onSearchInput() {
@@ -310,8 +327,8 @@ export class OrderListComponent implements OnInit {
     this.loadOrders();
   }
 
-  private loadOrders() {
-    this.loading.set(true);
+  private loadOrders(silent = false) {
+    if (silent) this.refreshing.set(true); else this.loading.set(true);
 
     const params: any = {
       page: this.currentPage,
@@ -326,15 +343,15 @@ export class OrderListComponent implements OnInit {
         const rows = res.data.map((order: Order) => this.mapOrderToRow(order));
         this.orders.set(rows);
         this.totalRecords.set(res.total);
-        this.loading.set(false);
+        this.loading.set(false); this.refreshing.set(false);
       },
       error: (err) => {
-        this.messageService.add({
+        if (!silent) this.messageService.add({
           severity: 'error',
           summary: 'Error',
           detail: 'Failed to load orders. Please try again.',
         });
-        this.loading.set(false);
+        this.loading.set(false); this.refreshing.set(false);
       },
     });
   }

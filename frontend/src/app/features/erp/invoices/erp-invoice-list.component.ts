@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, HostListener, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -39,6 +39,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
           <p class="text-sm text-gray-500 mt-1">Create invoices, record payments and track receivables</p>
         </div>
         <div class="flex gap-2">
+          <p-button label="Refresh" icon="pi pi-refresh" [outlined]="true" [loading]="loading()" (onClick)="load()" pTooltip="Reload the latest invoices" />
           @if (!access.readOnly()) {
             <p-button label="New Invoice" icon="pi pi-plus" (onClick)="openCreate()" />
           }
@@ -370,6 +371,10 @@ export class ErpInvoiceListComponent implements OnInit {
 
   currencies = signal<any[]>([]);
   branches = signal<any[]>([]);
+
+  /** Reload the latest invoices when the tab regains focus (e.g. after a payment/order elsewhere). */
+  @HostListener('window:focus')
+  onFocusRefresh() { this.load(); }
 
   ngOnInit() {
     this.load();
