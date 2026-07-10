@@ -126,9 +126,15 @@ services:
       # Session
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       SESSION_TTL: ${SESSION_TTL:-86400}
+      # 'none' lets the native (Capacitor) app send the session cookie cross-site
+      # (requires Secure, which staging has over HTTPS). 'lax' for web-only.
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
 
-      # CORS — staging frontend origin
+      # CORS — staging frontend origin + native app origins (https://localhost, capacitor://localhost)
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+
+      # Push notifications (Firebase Cloud Messaging server key). Empty = log-only.
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
 
       # OAuth / social login (point callbacks at the STAGING URLs)
       OAUTH_CALLBACK_BASE_URL: ${OAUTH_CALLBACK_BASE_URL:-}
