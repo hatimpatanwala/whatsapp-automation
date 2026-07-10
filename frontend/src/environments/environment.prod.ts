@@ -3,5 +3,7 @@ export const environment = {
   // Relative: the SPA is always served same-origin with the API (EC2 nginx, and the
   // desktop's local backend). The old absolute Render URL was a legacy trap — it sent
   // desktop logins to a dead deployment.
+  // WhatsApp Commerce features on (campaigns, conversations, catalog, workflows).
+  whatsapp: true,
   apiUrl: '/api',
 };

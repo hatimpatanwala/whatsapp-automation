@@ -18,6 +18,7 @@ import { OrderService } from '../../core/services/order.service';
 import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
 import { PdfExportService } from '../../core/services/pdf-export.service';
+import { environment } from '../../../environments/environment';
 import { Order, OrderStats } from '../../core/models';
 
 interface OrderRow {
@@ -64,7 +65,9 @@ interface OrderRow {
         </div>
         <div class="flex gap-2">
           <button pButton label="Refresh" icon="pi pi-refresh" class="p-button-outlined p-button-sm" [loading]="refreshing()" (click)="refresh()" title="Reload the latest orders"></button>
-          <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined p-button-sm" [loading]="openingBuilder()" (click)="openBuilder()"></button>
+          @if (waEnabled) {
+            <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined p-button-sm" [loading]="openingBuilder()" (click)="openBuilder()"></button>
+          }
           <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" routerLink="/orders/new"></button>
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
           <button pButton label="PDF" icon="pi pi-file-pdf" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportPdf()"></button>
@@ -182,6 +185,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
   private readonly pdf = inject(PdfExportService);
+  readonly waEnabled = environment.whatsapp !== false;
 
   openingBuilder = signal(false);
 

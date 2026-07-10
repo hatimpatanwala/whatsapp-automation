@@ -12,6 +12,7 @@ import { ApiService } from '../core/services/api.service';
 import { FeatureService } from '../core/services/feature.service';
 import { ErpAccessService } from '../core/services/erp-access.service';
 import { PermissionService } from '../core/services/permission.service';
+import { environment } from '../../environments/environment';
 
 interface NavItem {
   label: string;
@@ -30,6 +31,8 @@ interface NavItem {
   featureLive?: string;
   /** RBAC feature key — item is hidden when the user's role has no `read` on it. */
   perm?: string;
+  /** WhatsApp-only item — hidden in the "ERP" (no-WhatsApp) mobile build variant. */
+  wa?: boolean;
 }
 
 interface NavSection {
@@ -393,10 +396,10 @@ export class MainLayoutComponent implements OnInit {
     {
       title: 'Marketing & WhatsApp',
       items: [
-        { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns' },
-        { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations' },
-        { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog' },
-        { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder' },
+        { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns', wa: true },
+        { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations', wa: true },
+        { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog', wa: true },
+        { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder', wa: true },
       ],
     },
     {
@@ -439,6 +442,8 @@ export class MainLayoutComponent implements OnInit {
       .map((s) => ({
         title: s.title,
         items: s.items.filter((it) => {
+          // "Without WhatsApp" app variant (ERP build): hide WhatsApp-only items.
+          if (it.wa && !environment.whatsapp) return false;
           // Single "ERP Data (read-only)" entry, only when downgraded.
           if (it.erpReadOnlyEntry) return erpReadOnly;
           // Upsell teaser only when status is known AND the tenant has no ERP at all.
@@ -556,7 +561,7 @@ export class MainLayoutComponent implements OnInit {
         });
         this.notifications.set([
           { label: 'Pending orders', icon: 'pi-shopping-cart', route: '/orders', count: counts.pendingOrders || 0, perm: 'orders' },
-          { label: 'Open conversations', icon: 'pi-comments', route: '/conversations', count: counts.openConversations || 0 },
+          { label: 'Open conversations', icon: 'pi-comments', route: '/conversations', count: counts.openConversations || 0, wa: true },
           { label: 'Payments to verify', icon: 'pi-credit-card', route: '/payments', count: counts.pendingPayments || 0, perm: 'payments' },
           { label: 'Pending deliveries', icon: 'pi-truck', route: '/deliveries', count: counts.pendingDeliveries || 0 },
         ].filter(n => n.count > 0));
