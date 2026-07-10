@@ -26,6 +26,9 @@ export class AccountingPostingService {
 
   @OnEvent('invoice.created')
   async onInvoiceCreated(event: InvoiceCreatedEvent): Promise<void> {
+    // A delivery challan is a goods-movement document, not a sale — it must never
+    // hit the books (bill of supply and tax invoice do post as sales).
+    if (event.docType === 'delivery_challan') return;
     try {
       await this.accounting.postSalesInvoice(event.tenantSchema, event.invoiceId);
     } catch (err) {

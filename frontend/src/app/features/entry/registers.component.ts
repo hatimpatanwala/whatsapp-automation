@@ -180,7 +180,13 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
                   <button class="rg-btn rg-btn-dark" (click)="printDetail()">🖨 Print (Enter)</button>
                 }
                 @if (kind() === 'quote') {
-                  <button class="rg-btn rg-btn-dark" (click)="convertDetail()">→ Convert to Invoice (Enter)</button>
+                  <button class="rg-btn rg-btn-dark" (click)="convertDetail()">→ Invoice (Enter)</button>
+                  <button class="rg-btn" (click)="quoteToOrder()">→ Order</button>
+                }
+                @if (kind() === 'order') {
+                  <button class="rg-btn rg-btn-dark" (click)="orderToInvoice()">→ Invoice (Enter)</button>
+                  <button class="rg-btn" [disabled]="converting()" (click)="orderToDoc('delivery_challan')">→ Delivery Challan</button>
+                  <button class="rg-btn" [disabled]="converting()" (click)="orderToDoc('bill_of_supply')">→ Bill of Supply</button>
                 }
                 <button class="rg-btn" (click)="closeDetail()">Close (Esc)</button>
               </div>
@@ -544,6 +550,7 @@ export class RegistersComponent {
       e.preventDefault(); e.stopPropagation();
       if (this.kind() === 'sales') this.printDetail();
       else if (this.kind() === 'quote') this.convertDetail();
+      else if (this.kind() === 'order') this.orderToInvoice();
     }
   }
 
@@ -556,6 +563,36 @@ export class RegistersComponent {
   convertDetail(): void {
     const d = this.detail();
     if (d) void this.router.navigate(['/entry/sales'], { queryParams: { fromQuote: d.id } });
+  }
+
+  /** Order → Invoice: open the sales form pre-filled (full ERP invoice on save). */
+  orderToInvoice(): void {
+    const d = this.detail();
+    if (d) void this.router.navigate(['/entry/sales'], { queryParams: { fromOrder: d.id } });
+  }
+
+  /** Quote → Order: open the order form pre-filled from the quote. */
+  quoteToOrder(): void {
+    const d = this.detail();
+    if (d) void this.router.navigate(['/entry/order'], { queryParams: { fromQuote: d.id } });
+  }
+
+  readonly converting = signal(false);
+
+  /** Order → Delivery Challan / Bill of Supply (one-click doc) → open its print view. */
+  orderToDoc(docType: 'delivery_challan' | 'bill_of_supply' | 'tax_invoice'): void {
+    const d = this.detail();
+    if (!d || this.converting()) return;
+    this.converting.set(true);
+    this.entry.convertOrderToDoc(d.id, docType).subscribe({
+      next: (res: any) => {
+        this.converting.set(false);
+        const inv = res?.data ?? res;
+        const id = inv?.id || inv?.invoiceId;
+        if (id) { this.closeDetail(); void this.router.navigate(['/print/invoice', id]); }
+      },
+      error: () => this.converting.set(false),
+    });
   }
 
   closeDetail(): void {

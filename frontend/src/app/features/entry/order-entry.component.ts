@@ -1,4 +1,5 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -210,11 +211,16 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export class OrderEntryComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly route = inject(ActivatedRoute);
 
   private readonly drafts = inject(EntryDraftService);
 
   // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
   ngOnInit(): void {
+    // Quote → Order conversion: /entry/order?fromQuote=<id>
+    const quoteId = this.route.snapshot.queryParamMap.get('fromQuote');
+    if (quoteId) { this.loadFromQuote(quoteId); return; }
+
     const d = this.drafts.load<any>('order');
     if (!d) return;
     this.customerQuery = d.customerQuery ?? ''; this.customer.set(d.customer ?? null);
@@ -290,6 +296,26 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
 
   private blankRow(): Row {
     return { name: '', qty: null, free: null, rate: null, d1: null, d2: null, gstRate: null };
+  }
+
+  /** Quote → Order: carry the quote's party + lines into the order form. */
+  private loadFromQuote(id: string): void {
+    this.entry.quoteById(id).subscribe((res: any) => {
+      const q = res?.data ?? res;
+      if (!q) return;
+      if (q.customerId) this.pickCustomer({ id: q.customerId, name: q.customerName || '', phone: q.customerPhone || '' });
+      this.rows = (q.items || []).map((it: any) => ({
+        productId: it.productId || undefined,
+        name: it.productName || it.description || '',
+        qty: Number(it.quantity) || null, free: null,
+        rate: Number(it.unitPrice) || null,
+        d1: Number(it.discount) || null, d2: null, gstRate: null,
+      }));
+      this.rows.push(this.blankRow());
+      this.notes = `Ref: ${q.quoteNumber || 'quotation'}`;
+      this.tick.update((t) => t + 1);
+      this.drafts.note('✎ Loaded from quotation — review & save as order');
+    });
   }
 
   onCustomerQuery(q: string): void {

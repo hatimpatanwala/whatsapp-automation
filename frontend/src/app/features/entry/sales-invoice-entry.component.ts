@@ -543,7 +543,7 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
 
   // ─── Draft retention: navigating away mid-entry keeps everything typed ──────
   ngOnInit(): void {
-    if (this.route.snapshot.queryParamMap.get('fromQuote')) return; // explicit conversion wins
+    if (this.route.snapshot.queryParamMap.get('fromQuote') || this.route.snapshot.queryParamMap.get('fromOrder')) return; // explicit conversion wins
     const d = this.drafts.load<any>('sales');
     if (!d) return;
     this.memoType = d.memoType ?? 'credit'; this.manualNo = d.manualNo ?? ''; this.series = d.series ?? '';
@@ -638,6 +638,9 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
     // Quote → Invoice conversion (Miracle "carry forward"): /entry/sales?fromQuote=<id>
     const quoteId = this.route.snapshot.queryParamMap.get('fromQuote');
     if (quoteId) this.loadFromQuote(quoteId);
+    // Order → Invoice conversion: /entry/sales?fromOrder=<id>
+    const orderId = this.route.snapshot.queryParamMap.get('fromOrder');
+    if (orderId) this.loadFromOrder(orderId);
   }
 
   /** CGST/SGST vs IGST from Place of Supply vs the seller's state — user can override. */
@@ -697,6 +700,39 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
           row.uom = ctx.uom || 'pcs';
           row.stock = Number(ctx.stock) || 0;
           row.lastToCustomer = ctx.lastToCustomer || null;
+          this.tick.update((t) => t + 1);
+        });
+      });
+      this.tick.update((t) => t + 1);
+    });
+  }
+
+  /** Order → Invoice: carry the order's party + lines into the sales form. */
+  private loadFromOrder(id: string): void {
+    this.entry.orderById(id).subscribe((res: any) => {
+      const o = res?.data ?? res;
+      if (!o) return;
+      const cust = o.customer || {};
+      const cid = o.customerId || cust.id;
+      if (cid) this.pickCustomer({ id: cid, name: cust.whatsappName || o.customerName || '', phone: cust.whatsappPhone || '' });
+      const items = o.items || o.orderItems || [];
+      this.rows = items.map((it: any) => ({
+        productId: it.productId || it.product_id || undefined,
+        name: it.productName || it.product_name || it.description || '',
+        hsn: '', uom: 'pcs',
+        qty: Number(it.quantity) || null, free: null,
+        rate: Number(it.unitPrice ?? it.unit_price) || null,
+        d1: null, d2: null, gstRate: null,
+      }));
+      this.rows.push(this.blankRow());
+      this.note = `Ref: ${o.orderNumber || 'order'}`;
+      this.rows.forEach((row) => {
+        if (!row.productId) return;
+        this.entry.itemContext(row.productId, cid || undefined).subscribe((ctx: any) => {
+          row.gstRate = row.gstRate ?? (Number(ctx.gstRate) || 0);
+          row.hsn = ctx.hsnCode || '';
+          row.uom = ctx.uom || 'pcs';
+          row.stock = Number(ctx.stock) || 0;
           this.tick.update((t) => t + 1);
         });
       });

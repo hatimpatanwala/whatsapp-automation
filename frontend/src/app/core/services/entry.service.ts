@@ -93,6 +93,10 @@ export class EntryService {
   }
   supplierOrderById(id: string): Observable<any> { return this.api.get<any>(`/erp/supplier-orders/${id}`); }
   orderById(id: string): Observable<any> { return this.api.get<any>(`/orders/${id}`); }
+  /** Convert an order into a document (tax_invoice | bill_of_supply | delivery_challan). */
+  convertOrderToDoc(orderId: string, docType: 'tax_invoice' | 'bill_of_supply' | 'delivery_challan'): Observable<any> {
+    return this.api.post<any>(`/orders/${orderId}/invoice`, { docType });
+  }
   createEway(body: {
     invoiceId: string; transportMode?: string; vehicleNumber?: string; transporter?: string;
     fromPlace?: string; toPlace?: string; distanceKm?: number;
