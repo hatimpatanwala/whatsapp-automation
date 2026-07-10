@@ -390,11 +390,12 @@ export class RegistersComponent {
         this.entry.orders(100).subscribe({
           next: (res) => done(arr(res).map((r: any) => ({
             id: r.id,
-            date: r.createdAt,
+            date: r.placedAt || r.createdAt,
             number: r.orderNumber || '',
-            party: r.customerName || r.customer?.name || '—',
+            party: r.customer?.whatsappName || r.customer?.name || r.customerName
+              || [r.customer?.firstName, r.customer?.lastName].filter(Boolean).join(' ') || '—',
             status: r.status || '',
-            total: Number(r.total) || 0,
+            total: Number(r.totalAmount ?? r.total) || 0,
             balance: null,
           }))),
           error: () => done([]),
@@ -528,7 +529,7 @@ export class RegistersComponent {
                 rate: money(it.unitPrice),
                 amount: money(it.totalPrice) || money(it.lineTotal) || money(it.quantity) * money(it.unitPrice),
               })),
-              money(o?.total), null,
+              money(o?.totalAmount ?? o?.total), null,
             );
           },
           error: fail,
