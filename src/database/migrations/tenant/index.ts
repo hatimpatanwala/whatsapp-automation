@@ -3008,6 +3008,36 @@ const migration079Rbac: TenantMigration = {
   },
 };
 
+/**
+ * 080 — Push notifications: registered app devices (FCM/APNs tokens) per user,
+ * plus a per-type notification preferences setting (all on by default). Idempotent.
+ */
+const migration080PushDevices: TenantMigration = {
+  name: '080_push_devices',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".device_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      token TEXT NOT NULL,
+      platform VARCHAR(12),
+      app_variant VARCHAR(12),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_device_token ON "${schema}".device_tokens (token)`);
+    // Default notification preferences (per event type) — all enabled.
+    await qr.query(
+      `INSERT INTO "${schema}".settings (key, value, updated_at)
+       VALUES ('notification_prefs', $1::jsonb, NOW())
+       ON CONFLICT (key) DO NOTHING`,
+      [JSON.stringify({ order: true, payment: true, invoice: true, quote: true, customer: true, low_stock: true, purchase: true })],
+    );
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".device_tokens`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3088,4 +3118,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration077SyncMore,
   migration078OrderSource,
   migration079Rbac,
+  migration080PushDevices,
 ];

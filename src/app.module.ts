@@ -27,6 +27,7 @@ import { I18nModule } from './modules/i18n/i18n.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { AdminFeedModule } from './modules/admin-feed/admin-feed.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { WabaModule } from './modules/waba/waba.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
@@ -78,6 +79,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     WorkflowModule,
     OnboardingModule,
     AdminFeedModule,
+    NotificationsModule,
     WabaModule,
     BillingModule,
     CommerceModule,

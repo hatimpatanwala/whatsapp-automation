@@ -65,3 +65,34 @@ API must allow that origin with credentials (CORS `Access-Control-Allow-Origin`
 for the Capacitor origin + `SameSite=None; Secure` cookies). The **Salesman field
 app (`/m/sales`) and all `/m/*` webviews use token-in-URL auth**, so they work in
 the app with no cookie/CORS changes — the SFA experience is ready out of the box.
+
+## Push notifications
+
+The app receives native push notifications for business events — **new order,
+payment received, invoice/challan created, new quote/customer, low stock,
+purchase** — even when it's closed. Tapping one deep-links to the record.
+
+The backend already fires these on every event (via the notification feed). To
+deliver them to devices you need **Firebase Cloud Messaging (FCM)**:
+
+1. Create a Firebase project → add an Android app with appId `com.wacommerce.app`
+   (and `com.wacommerce.erp` for the ERP variant); download **`google-services.json`**
+   into `android/app/`. For iOS add an iOS app + `GoogleService-Info.plist` and
+   upload your APNs key in Firebase.
+2. Backend: set **`FCM_SERVER_KEY`** (Firebase → Project settings → Cloud Messaging →
+   Server key) in the API env. Until it's set, the backend logs what *would* be
+   pushed (`[push] (no FCM_SERVER_KEY) would notify N device(s): …`) so the whole
+   pipeline works and is testable.
+3. In the app, the user grants notification permission on first launch; the device
+   token registers automatically (`POST /notifications/devices`).
+
+Which events push is configurable per tenant under **Notifications** in the app
+(`/notifications`) — toggle order / payment / invoice / quote / customer /
+low-stock / purchase. The same feed also drives the in-app bell on the web.
+
+## Channels: app vs WhatsApp
+- **Staff (admin, salesmen, employees)** use the app for everything — ERP,
+  orders, invoices, the salesman field app, team/roles, reports.
+- **Customers** shop over **WhatsApp** (catalog + `/m/shop` webview). Those
+  WhatsApp-commerce features are hidden in the ERP app variant (WHATSAPP off) and
+  gated per plan by the entitlements system (`whatsapp`/`erp`/`sfa` flags).

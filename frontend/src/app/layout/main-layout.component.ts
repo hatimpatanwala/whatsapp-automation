@@ -12,6 +12,7 @@ import { ApiService } from '../core/services/api.service';
 import { FeatureService } from '../core/services/feature.service';
 import { ErpAccessService } from '../core/services/erp-access.service';
 import { PermissionService } from '../core/services/permission.service';
+import { PushRegistrationService } from '../core/services/push-registration.service';
 import { environment } from '../../environments/environment';
 
 interface NavItem {
@@ -303,6 +304,7 @@ export class MainLayoutComponent implements OnInit {
   readonly featureService = inject(FeatureService);
   readonly erpAccess = inject(ErpAccessService);
   readonly permissions = inject(PermissionService);
+  private readonly push = inject(PushRegistrationService);
 
   sidebarOpen = signal(true);
   isMobile = signal(false);
@@ -418,6 +420,7 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Business Settings', icon: 'pi-sliders-h', route: '/erp/settings', featureKey: 'erp' },
         // Team & Roles (RBAC) — employees + per-feature permissions.
         { label: 'Team & Roles', icon: 'pi-users', route: '/team', perm: 'employees' },
+        { label: 'Notifications', icon: 'pi-bell', route: '/notifications' },
         // Offline desktop app — shown ONLY to tenants licensed for it (erpOffline).
         // Online-only plans never see this entry.
         { label: 'Desktop App (Offline)', icon: 'pi-desktop', route: '/desktop-app', featureLive: 'erpOffline' },
@@ -547,6 +550,8 @@ export class MainLayoutComponent implements OnInit {
     window.addEventListener('resize', () => this.checkMobile());
     this.erpAccess.load();
     this.permissions.load();
+    // Register for push on the native app (no-op on the web).
+    void this.push.init();
     this.currentUrl.set(this.router.url);
     this.router.events.subscribe((e) => { if (e instanceof NavigationEnd) this.currentUrl.set(e.urlAfterRedirects); });
     this.loadFeed();

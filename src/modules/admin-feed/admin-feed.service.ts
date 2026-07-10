@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
+import { PushService } from '../notifications/push.service';
 
 /** In-app admin notification feed (portal bell) — one row per notable event. */
 @Injectable()
 export class AdminFeedService {
-  constructor(private readonly cm: TenantConnectionManager) {}
+  constructor(
+    private readonly cm: TenantConnectionManager,
+    private readonly push: PushService,
+  ) {}
 
   /** Best-effort create — never throws (must not break the event that triggered it). */
   async create(
@@ -19,6 +23,8 @@ export class AdminFeedService {
         ),
       )
       .catch(() => undefined);
+    // Every feed item also pushes to the tenant's registered app devices (pref-gated).
+    void this.push.pushToTenant(schema, n as any);
   }
 
   async list(schema: string, limit = 30): Promise<{ items: any[]; unread: number }> {

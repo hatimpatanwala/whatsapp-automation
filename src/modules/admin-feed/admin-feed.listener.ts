@@ -11,6 +11,8 @@ import {
   CustomerCreatedEvent,
   PaymentVerifiedEvent,
   InvoiceCreatedEvent,
+  StockLowEvent,
+  PurchaseRecordedEvent,
 } from '../events/domain-events';
 
 /**
@@ -95,6 +97,24 @@ export class AdminFeedListener {
 
   @OnEvent('invoice.created')
   async onInvoice(e: InvoiceCreatedEvent): Promise<void> {
-    await this.feed.create(e.tenantSchema, { type: 'invoice', title: 'Invoice created', body: '', route: '/invoices', entityId: (e as any).invoiceId });
+    const label = e.docType === 'delivery_challan' ? 'Delivery challan created'
+      : e.docType === 'bill_of_supply' ? 'Bill of supply created' : 'Invoice created';
+    await this.feed.create(e.tenantSchema, { type: 'invoice', title: `${label} ${e.invoiceNumber || ''}`.trim(), body: e.total ? `₹${e.total}` : '', route: `/print/invoice/${e.invoiceId}`, entityId: e.invoiceId });
+  }
+
+  @OnEvent('inventory.stock_low')
+  async onLowStock(e: StockLowEvent): Promise<void> {
+    await this.feed.create(e.tenantSchema, {
+      type: 'low_stock', title: `Low stock: ${e.productName}`,
+      body: `Only ${e.currentStock} left (reorder at ${e.threshold})`, route: '/inventory', entityId: e.productId,
+    });
+  }
+
+  @OnEvent('purchase.recorded')
+  async onPurchase(e: PurchaseRecordedEvent): Promise<void> {
+    await this.feed.create(e.tenantSchema, {
+      type: 'purchase', title: `Purchase recorded ${e.orderNumber || ''}`.trim(),
+      body: e.total ? `₹${e.total}` : '', route: '/erp/purchase-orders', entityId: e.supplierOrderId,
+    });
   }
 }

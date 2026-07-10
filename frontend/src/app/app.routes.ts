@@ -142,6 +142,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/team/team.component').then(m => m.TeamComponent),
       },
       {
+        // Notification preferences (which events push to the app + bell).
+        path: 'notifications',
+        loadComponent: () => import('./features/notifications/notification-settings.component').then(m => m.NotificationSettingsComponent),
+      },
+      {
         path: 'products',
         loadChildren: () => import('./features/products/products.routes').then(m => m.PRODUCTS_ROUTES),
       },
