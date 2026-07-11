@@ -138,8 +138,8 @@ export class MiracleImportComponent implements OnDestroy {
   private readonly LABELS: Record<string, string> = {
     customer: 'Customers', supplier: 'Suppliers', product: 'Products', ledger: 'Ledgers',
     invoices: 'Invoices', purchases: 'Purchases', receipts: 'Receipts', payments: 'Payments',
-    sales_returns: 'Sales returns', customer_updated: 'Customers updated', supplier_updated: 'Suppliers updated',
-    product_updated: 'Products updated', txn_errors: 'Skipped (errors)',
+    salesReturns: 'Sales returns', customerUpdated: 'Customers updated', supplierUpdated: 'Suppliers updated',
+    productUpdated: 'Products updated', txnErrors: 'Skipped (errors)',
   };
 
   countRows = computed(() => {

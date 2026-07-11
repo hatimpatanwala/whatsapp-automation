@@ -435,7 +435,7 @@ export class MiracleImportService {
       await qr.query(
         `INSERT INTO "${schema}".supplier_order_items (supplier_order_id, product_id, description, quantity, unit_price, line_total, gst_rate, hsn, sort_order)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [id, map.get(`product:${l.itemCode}`) || null, (names.get(l.itemCode) || l.itemCode).slice(0, 500), l.qty, l.rate, l.amount, l.gstRate || null, l.hsn || null, sort++],
+        [id, map.get(`product:${l.itemCode}`) || null, (names.get(l.itemCode) || l.itemCode).slice(0, 500), l.qty, l.rate, l.amount, l.gstRate || 0, l.hsn || null, sort++],
       );
     }
     if (post) await this.postPurchaseVoucher(qr, schema, v, id, number, names.get(v.partyCode) || v.partyCode, led);
@@ -462,19 +462,23 @@ export class MiracleImportService {
   }
   private async writeVoucher(
     qr: any, schema: string, type: string, number: string, date: string | null, party: string | null,
-    amount: number, reference: string, sourceType: string, sourceId: string, entries: { ledgerId: string; debit: number; credit: number }[],
-  ) {
-    // The (source_type, source_id) unique index is PARTIAL, so guard with an
-    // existence check rather than ON CONFLICT (which can't target a partial index).
-    const dup = await qr.query(`SELECT 1 FROM "${schema}".vouchers WHERE source_type=$1 AND source_id=$2 LIMIT 1`, [sourceType, sourceId]);
-    if (dup[0]) return;
+    amount: number, reference: string, sourceType: string, sourceId: string | null, entries: { ledgerId: string; debit: number; credit: number }[],
+  ): Promise<string | null> {
+    // source_id is a UUID column: only invoice/purchase-sourced vouchers carry
+    // one. Those get an existence-check guard (the unique index is PARTIAL, so
+    // ON CONFLICT can't target it); receipt/payment vouchers pass null and are
+    // deduped by the caller via miracle_import_map.
+    if (sourceId) {
+      const dup = await qr.query(`SELECT 1 FROM "${schema}".vouchers WHERE source_type=$1 AND source_id=$2 LIMIT 1`, [sourceType, sourceId]);
+      if (dup[0]) return null;
+    }
     const v = await qr.query(
       `INSERT INTO "${schema}".vouchers (voucher_type, number, date, party_ledger_id, amount, reference, source_type, source_id, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active') RETURNING id`,
       [type, number.slice(0, 40), date || new Date().toISOString().slice(0, 10), party, amount, reference.slice(0, 80), sourceType, sourceId],
     );
     const vid = v[0]?.id;
-    if (!vid) return;
+    if (!vid) return null;
     for (const e of entries) {
       if (!e.ledgerId || (e.debit === 0 && e.credit === 0)) continue;
       await qr.query(
@@ -482,6 +486,7 @@ export class MiracleImportService {
         [vid, e.ledgerId, e.debit, e.credit],
       );
     }
+    return vid;
   }
   private async postSaleVoucher(qr: any, schema: string, v: MiracleVoucher, invoiceId: string, number: string, customerName: string, led: Record<string, string>) {
     const debitLedger = v.isCash ? led['cash'] : await this.ledgerByName(qr, schema, customerName, 'Sundry Debtors', led);
@@ -506,21 +511,24 @@ export class MiracleImportService {
     await this.writeVoucher(qr, schema, 'purchase', number, v.date, null, v.total, number, 'purchase', purchaseId, entries);
   }
   private async importReceiptPayment(qr: any, schema: string, v: MiracleVoucher, map: Map<string, string>, names: Map<string, string>, led: Record<string, string>) {
+    if (map.get(`${v.kind}:${v.miracleId}`)) return; // already imported (dedup — source_id is null)
     const partyName = names.get(v.partyCode) || v.partyCode;
     const bankLedger = v.isCash ? led['cash'] : led['bank'];
+    let vid: string | null = null;
     if (v.kind === 'receipt') {
       const party = await this.ledgerByName(qr, schema, partyName, 'Sundry Debtors', led);
-      await this.writeVoucher(qr, schema, 'receipt', `RCP/${v.billNo || v.miracleId}`, v.date, party, v.total, v.billNo || '', 'receipt', v.miracleId, [
+      vid = await this.writeVoucher(qr, schema, 'receipt', `RCP/${v.billNo || v.miracleId}`, v.date, party, v.total, v.billNo || '', 'miracle_receipt', null, [
         { ledgerId: bankLedger, debit: v.total, credit: 0 },
         { ledgerId: party, debit: 0, credit: v.total },
       ]);
     } else {
       const party = await this.ledgerByName(qr, schema, partyName, 'Sundry Creditors', led);
-      await this.writeVoucher(qr, schema, 'payment', `PAY/${v.billNo || v.miracleId}`, v.date, party, v.total, v.billNo || '', 'payment', v.miracleId, [
+      vid = await this.writeVoucher(qr, schema, 'payment', `PAY/${v.billNo || v.miracleId}`, v.date, party, v.total, v.billNo || '', 'miracle_payment', null, [
         { ledgerId: party, debit: v.total, credit: 0 },
         { ledgerId: bankLedger, debit: 0, credit: v.total },
       ]);
     }
+    if (vid) await this.putMap(qr, schema, v.kind, v.miracleId, vid, map);
   }
 }
 
