@@ -325,6 +325,22 @@ export class MiracleImportService {
         c('ledger');
       }
     }
+
+    // GST tax rates from Miracle → erp_tax_rates (drives the billing GST picker
+    // and the /tax-rates page). Idempotent by name.
+    const haveTax = new Set<string>(
+      (await qr.query(`SELECT lower(name) n FROM "${schema}".erp_tax_rates`)).map((r: any) => r.n),
+    );
+    for (const t of parser.taxRates()) {
+      const name = t.name.replace(/\s+/g, ' ').trim();
+      if (!name || haveTax.has(name.toLowerCase())) continue;
+      await qr.query(
+        `INSERT INTO "${schema}".erp_tax_rates (name, rate, is_default, enabled, removed) VALUES ($1,$2,$3,true,false)`,
+        [name, t.rate, t.rate === 18],
+      );
+      haveTax.add(name.toLowerCase());
+      c('tax_rate');
+    }
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
@@ -368,6 +384,32 @@ export class MiracleImportService {
       }
       state.message = `Transactions: ${y} done (${state.counts['invoices'] || 0} invoices, ${state.counts['purchases'] || 0} purchases)`;
     }
+
+    // Reconcile on-hand stock from the full imported history:
+    //   stock = Σ purchases − Σ sales + Σ sales-returns   (clamped at 0)
+    // Miracle doesn't store current stock in the item master (it derives it from
+    // vouchers), which is why most products showed 0 before this step.
+    this.set(state, 'transactions', 'Reconciling stock levels');
+    await qr.query(`
+      UPDATE "${schema}".inventory inv
+      SET stock_quantity = GREATEST(0, ROUND(sub.qty))::int, updated_at = NOW()
+      FROM (
+        SELECT pid AS product_id, SUM(delta) AS qty FROM (
+          SELECT product_id AS pid, quantity AS delta
+            FROM "${schema}".supplier_order_items WHERE product_id IS NOT NULL
+          UNION ALL
+          SELECT (it->>'productId')::uuid, -1 * (it->>'quantity')::numeric
+            FROM "${schema}".invoices i, jsonb_array_elements(i.items) it
+            WHERE i.doc_type = 'tax_invoice' AND (it->>'productId') ~ '^[0-9a-fA-F-]{36}$'
+          UNION ALL
+          SELECT (it->>'productId')::uuid, (it->>'quantity')::numeric
+            FROM "${schema}".invoices i, jsonb_array_elements(i.items) it
+            WHERE i.doc_type = 'credit_note' AND (it->>'productId') ~ '^[0-9a-fA-F-]{36}$'
+        ) m GROUP BY pid
+      ) sub
+      WHERE inv.product_id = sub.product_id
+    `);
+    state.counts['stock_reconciled'] = 1;
   }
 
   private invoiceNumber(v: MiracleVoucher, year: string): string {

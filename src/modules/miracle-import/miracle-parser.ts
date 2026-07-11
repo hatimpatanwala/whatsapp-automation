@@ -275,21 +275,27 @@ export class MiracleParser {
     // Rates + stock keyed by item code (RKACCM29).
     const rates = new Map<string, DbfRecord>();
     for (const r of readDbfSafe(this.p(y, 'RKACCM29.DBF')).records) rates.set(s(r.M29F01), r);
-    // Per-item GST rate: the item master carries no reliable rate, so derive it
-    // from how the item was actually taxed in the latest year's transactions.
+    // Per-item GST rate + last selling rate: the item master often has no rate
+    // (it's set at billing time), so derive both from how the item actually sold
+    // in the latest years' transactions.
     const itemGst = this.deriveItemGst(y);
+    const lastRate = this.deriveItemRate();
     const out: MiracleItem[] = [];
     for (const r of readDbfSafe(this.p(y, 'RKACCM21.DBF')).records) {
       const code = s(r.FIELD01);
       const rt = rates.get(code) || {};
+      // Real Miracle unit lives in M21F28 as "CODE-NAME" (e.g. "NOS-NUMBERS").
+      const unit = s(r.M21F28).split('-')[0].trim() || s(r.M21F27) || 'NOS';
+      const masterSale = num(rt.M29F02);
       out.push({
         code,
         name: s(r.FIELD02) || code,
         hsn: s(r.FIELD40),
         category: cats.get(s(r.FIELD12)) || brands.get(s(r.FIELD11)) || '',
         brand: brands.get(s(r.FIELD11)) || '',
-        unit: 'Nos',
-        saleRate: num(rt.M29F02),
+        unit,
+        // fall back to the last real selling rate, then the purchase rate.
+        saleRate: masterSale || lastRate.get(code) || num(rt.M29F03),
         purchaseRate: num(rt.M29F03),
         openingStock: num(rt.M29F10),
         openingRate: num(rt.M29F03),
@@ -321,6 +327,22 @@ export class MiracleParser {
     }
     const out = new Map<string, number>();
     for (const [code, m] of tally) out.set(code, [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+    return out;
+  }
+
+  /** itemCode → most recent non-zero selling rate, scanned newest year backwards. */
+  private deriveItemRate(): Map<string, number> {
+    const out = new Map<string, number>();
+    const years = [...this.years()].reverse(); // newest first
+    for (const y of years) {
+      for (const r of readDbfSafe(this.p(y, 'RKACCT02.DBF')).records) {
+        const code = s(r.FIELD03);
+        if (out.has(code)) continue;
+        const rate = num(r.FIELD07);
+        if (rate > 0) out.set(code, rate);
+      }
+      if (out.size > 5000) break; // plenty
+    }
     return out;
   }
 
