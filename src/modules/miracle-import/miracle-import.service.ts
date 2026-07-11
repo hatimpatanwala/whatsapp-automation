@@ -376,8 +376,8 @@ export class MiracleImportService {
     qr: any, schema: string, v: MiracleVoucher, year: string, map: Map<string, string>,
     names: Map<string, string>, led: Record<string, string>, company: { stateCode: string }, post: boolean,
   ) {
-    const number = this.invoiceNumber(v, year);
     if (map.get(`invoice:${v.miracleId}`)) return; // already imported
+    const number = this.invoiceNumber(v, year);
     const customerId = v.isCash ? null : map.get(`customer:${v.partyCode}`) || null;
     const customerName = names.get(v.partyCode) || (v.isCash ? 'Cash Sale' : v.partyCode);
     const interstate = v.igst > 0;
@@ -390,24 +390,33 @@ export class MiracleImportService {
       gstRate: l.gstRate || undefined,
       hsn: l.hsn || undefined,
     }));
-    const row = await qr.query(
-      `INSERT INTO "${schema}".invoices
-         (invoice_number, doc_type, year, customer_id, customer_name, is_interstate, subtotal, discount,
-          taxable_value, cgst, sgst, igst, total_tax, round_off, total, items, status, issued_at, is_cash,
-          amount_paid, balance_due, payment_status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,'issued',$16,$17,0,$14,'unpaid',$18)
-       ON CONFLICT (invoice_number) DO NOTHING RETURNING id`,
-      [
-        number, v.kind === 'sales_return' ? 'credit_note' : 'tax_invoice', fyOf(year), customerId, customerName.slice(0, 250),
-        interstate, v.taxable, v.taxable, v.cgst, v.sgst, v.igst, v.tax, v.roundOff, v.total,
-        JSON.stringify(items), v.date || null, v.isCash,
-        v.kind === 'sales_return' ? 'Sales Return (Miracle)' : null,
-      ],
-    );
+    const insert = (num: string) =>
+      qr.query(
+        `INSERT INTO "${schema}".invoices
+           (invoice_number, doc_type, year, customer_id, customer_name, is_interstate, subtotal, discount,
+            taxable_value, cgst, sgst, igst, total_tax, round_off, total, items, status, issued_at, is_cash,
+            amount_paid, balance_due, payment_status, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,'issued',$16,$17,0,$14,'unpaid',$18)
+         ON CONFLICT (invoice_number) DO NOTHING RETURNING id`,
+        [
+          num, v.kind === 'sales_return' ? 'credit_note' : 'tax_invoice', fyOf(year), customerId, customerName.slice(0, 250),
+          interstate, v.taxable, v.taxable, v.cgst, v.sgst, v.igst, v.tax, v.roundOff, v.total,
+          JSON.stringify(items), v.date || null, v.isCash,
+          v.kind === 'sales_return' ? 'Sales Return (Miracle)' : null,
+        ],
+      );
+    // Miracle re-uses bill numbers across cash/counter sales, so on a clash keep
+    // the clean number for the first and suffix the rest with the unique vid tail.
+    let usedNumber = number;
+    let row = await insert(usedNumber);
+    if (!row[0]) {
+      usedNumber = `${number}-${v.miracleId.slice(-6)}`.slice(0, 40);
+      row = await insert(usedNumber);
+    }
     const id = row[0]?.id;
     if (!id) return;
     await this.putMap(qr, schema, 'invoice', v.miracleId, id, map);
-    if (post && v.kind === 'sale') await this.postSaleVoucher(qr, schema, v, id, number, customerName, led);
+    if (post && v.kind === 'sale') await this.postSaleVoucher(qr, schema, v, id, usedNumber, customerName, led);
   }
 
   private async importPurchase(
