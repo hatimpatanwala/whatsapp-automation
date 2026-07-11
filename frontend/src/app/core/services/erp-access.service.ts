@@ -1,6 +1,7 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
+import { PermissionService } from './permission.service';
 
 /**
  * Live ERP access state for the current tenant (from /erp/status):
@@ -15,9 +16,23 @@ import { ApiService } from './api.service';
 @Injectable({ providedIn: 'root' })
 export class ErpAccessService {
   private readonly api = inject(ApiService);
+  private readonly perms = inject(PermissionService);
   readonly enabled = signal(false);
-  readonly readOnly = signal(false);
+  /** Plan-level read-only (tenant downgraded from ERP). */
+  readonly planReadOnly = signal(false);
+  /**
+   * Effective read-only for the current user: the tenant's plan is read-only OR
+   * the signed-in user's ROLE has no write permission anywhere (e.g. Viewer).
+   * This is the single flag ERP components use to hide/disable write actions, so
+   * a role-based read-only user cannot create/edit/delete in the UI.
+   */
+  readonly readOnly = computed(() => this.planReadOnly() || this.perms.isReadOnly());
   readonly provisioned = signal(false);
+
+  /** Can the current user WRITE this feature? (plan not read-only AND role allows). */
+  canWrite(feature: string): boolean {
+    return !this.planReadOnly() && this.perms.canWrite(feature);
+  }
   /**
    * The tenant's full live plan-feature map from /erp/status (erp, erpOffline,
    * sfa, …). This endpoint is NOT erp-gated, so it is the single live source of
@@ -48,7 +63,7 @@ export class ErpAccessService {
   refresh(): void {
     this.api.get<any>('/erp/status').subscribe({
       next: (s) => this.apply(s),
-      error: () => { this.enabled.set(false); this.readOnly.set(false); this.ready.set(true); },
+      error: () => { this.enabled.set(false); this.planReadOnly.set(false); this.ready.set(true); },
     });
   }
 
@@ -67,7 +82,7 @@ export class ErpAccessService {
 
   private apply(s: any): void {
     this.enabled.set(!!s?.enabled);
-    this.readOnly.set(!!s?.readOnly);
+    this.planReadOnly.set(!!s?.readOnly);
     this.provisioned.set(!!s?.provisioned);
     this.features.set(s?.features ?? {});
     this.ready.set(true);

@@ -17,6 +17,15 @@ export class PermissionService {
   readonly ready = signal(false);
   private loaded = false;
 
+  /**
+   * A globally read-only user: permissions loaded, not the owner, and with no
+   * `write` on ANY feature (e.g. the "Viewer" role). Drives blanket write-lock
+   * of the ERP/portal so read-only users never see create/edit/delete controls.
+   */
+  readonly isReadOnly = computed(
+    () => this.ready() && !this.owner() && !Object.values(this.permissions()).some((v) => v === 'write'),
+  );
+
   load(): void {
     if (this.loaded) return;
     this.loaded = true;

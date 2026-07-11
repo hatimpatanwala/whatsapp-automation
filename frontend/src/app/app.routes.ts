@@ -4,6 +4,7 @@ import { adminGuard } from './core/guards/admin.guard';
 import { onboardingGuard } from './core/guards/onboarding.guard';
 import { featureGuard } from './core/guards/feature.guard';
 import { erpAccessGuard } from './core/guards/erp-access.guard';
+import { writeGuard } from './core/guards/write.guard';
 
 export const routes: Routes = [
   {
@@ -45,34 +46,42 @@ export const routes: Routes = [
       },
       {
         path: 'entry/sales',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/sales-invoice-entry.component').then(m => m.SalesInvoiceEntryComponent),
       },
       {
         path: 'entry/purchase',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/purchase-entry.component').then(m => m.PurchaseEntryComponent),
       },
       {
         path: 'entry/receipt',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/receipt-entry.component').then(m => m.ReceiptEntryComponent),
       },
       {
         path: 'entry/payment',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/payment-entry.component').then(m => m.PaymentEntryComponent),
       },
       {
         path: 'entry/quote',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/quote-entry.component').then(m => m.QuoteEntryComponent),
       },
       {
         path: 'entry/order',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/order-entry.component').then(m => m.OrderEntryComponent),
       },
       {
         path: 'entry/returns',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/returns-entry.component').then(m => m.ReturnsEntryComponent),
       },
       {
         path: 'entry/stock',
+        canActivate: [writeGuard],
         loadComponent: () => import('./features/entry/stock-journal.component').then(m => m.StockJournalComponent),
       },
       {

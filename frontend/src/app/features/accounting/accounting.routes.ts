@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { writeGuard } from '../../core/guards/write.guard';
 
 export const ACCOUNTING_ROUTES: Routes = [
   { path: '', redirectTo: 'vouchers', pathMatch: 'full' },
@@ -8,6 +9,7 @@ export const ACCOUNTING_ROUTES: Routes = [
   },
   {
     path: 'vouchers/new',
+    canActivate: [writeGuard],
     loadComponent: () => import('./voucher-entry.component').then((m) => m.VoucherEntryComponent),
   },
   {

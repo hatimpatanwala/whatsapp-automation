@@ -14,6 +14,7 @@ import { IconFieldModule } from 'primeng/iconfield';
 import { InputIconModule } from 'primeng/inputicon';
 import { MessageService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 interface RelatedDoc { id: string; invoiceNumber: string; docType: string; }
 interface InvoiceRow {
@@ -45,8 +46,10 @@ interface Line { productId: string | null; description: string; quantity: number
         </div>
         @if (view() === 'list') {
           <div class="flex items-center gap-2">
-            <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined" [loading]="mintingLink()" (click)="createOnWhatsApp()"></button>
-            <button pButton label="New Invoice" icon="pi pi-plus" severity="success" (click)="startCreate()"></button>
+            @if (perms.canWrite('invoices')) {
+              <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined" [loading]="mintingLink()" (click)="createOnWhatsApp()"></button>
+              <button pButton label="New Invoice" icon="pi pi-plus" severity="success" (click)="startCreate()"></button>
+            }
           </div>
         } @else {
           <button pButton label="Back to invoices" icon="pi pi-arrow-left" class="p-button-outlined p-button-sm" (click)="view.set('list')"></button>
@@ -145,7 +148,9 @@ interface Line { productId: string | null; description: string; quantity: number
                   <i class="pi pi-file text-gray-200" style="font-size:2.5rem"></i>
                   <p class="text-base font-semibold text-gray-700 mt-3">No invoices yet</p>
                   <p class="text-sm text-gray-400 mt-1">Create your first invoice and send it straight to the customer.</p>
-                  <button pButton label="New Invoice" icon="pi pi-plus" class="mt-4" severity="success" (click)="startCreate()"></button>
+                  @if (perms.canWrite('invoices')) {
+                    <button pButton label="New Invoice" icon="pi pi-plus" class="mt-4" severity="success" (click)="startCreate()"></button>
+                  }
                 </div>
               </td></tr>
             </ng-template>
@@ -369,6 +374,7 @@ interface Line { productId: string | null; description: string; quantity: number
 export class InvoicesComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly toast = inject(MessageService);
+  readonly perms = inject(PermissionService);
 
   view = signal<'list' | 'create' | 'settings'>('list');
   mode = signal<'new' | 'existing'>('new');

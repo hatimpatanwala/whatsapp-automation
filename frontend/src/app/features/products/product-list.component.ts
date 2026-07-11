@@ -15,6 +15,7 @@ import { InputIconModule } from 'primeng/inputicon';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { TooltipModule } from 'primeng/tooltip';
 import { ProductService, ProductListParams } from '../../core/services/product.service';
+import { PermissionService } from '../../core/services/permission.service';
 import { Product, Category } from '../../core/models';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -132,8 +133,10 @@ interface BulkUploadStatus {
         <div class="flex flex-wrap items-center gap-2">
           <button pButton label="Export Products" icon="pi pi-file-export" class="p-button-outlined p-button-sm" (click)="exportProducts()" [disabled]="isUploading()" [loading]="exporting()" pTooltip="Download all products to edit & re-upload"></button>
           <button pButton label="Template" icon="pi pi-download" class="p-button-outlined p-button-sm" (click)="downloadTemplate()" [disabled]="isUploading()"></button>
-          <button pButton label="Upload / Update" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()" pTooltip="Upload to add new or update existing products"></button>
-          <button pButton label="Add Product" icon="pi pi-plus" severity="success" routerLink="new" [disabled]="isUploading()"></button>
+          @if (perms.canWrite('products')) {
+            <button pButton label="Upload / Update" icon="pi pi-upload" class="p-button-sm" severity="info" (click)="fileInput.click()" [disabled]="isUploading()" [loading]="uploadStarting()" pTooltip="Upload to add new or update existing products"></button>
+            <button pButton label="Add Product" icon="pi pi-plus" severity="success" routerLink="new" [disabled]="isUploading()"></button>
+          }
         </div>
       </div>
 
@@ -283,6 +286,7 @@ export class ProductListComponent implements OnInit, OnDestroy {
   private readonly confirmationService = inject(ConfirmationService);
   private readonly messageService = inject(MessageService);
   private readonly productService = inject(ProductService);
+  readonly perms = inject(PermissionService);
 
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
 
