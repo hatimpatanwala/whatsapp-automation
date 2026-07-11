@@ -410,6 +410,45 @@ export class MiracleImportService {
       WHERE inv.product_id = sub.product_id
     `);
     state.counts['stock_reconciled'] = 1;
+
+    // Reconcile invoice payment status:
+    //   cash memos (QS) settle immediately → paid
+    //   credit sales (SS) settle FIFO from the customer's receipts (BR/CR),
+    //     oldest invoice first → paid / partial / unpaid
+    this.set(state, 'transactions', 'Reconciling payments');
+    await qr.query(`
+      UPDATE "${schema}".invoices
+      SET amount_paid = total, balance_due = 0, payment_status = 'paid', updated_at = NOW()
+      WHERE is_cash = true AND doc_type = 'tax_invoice'
+    `);
+    await qr.query(`
+      WITH cr AS (
+        SELECT la.source_id AS cust, SUM(v.amount) AS paid
+        FROM "${schema}".vouchers v
+        JOIN "${schema}".ledger_accounts la ON la.id = v.party_ledger_id
+        WHERE v.voucher_type = 'receipt' AND la.source_type = 'customer' AND la.source_id IS NOT NULL
+        GROUP BY la.source_id
+      ),
+      ranked AS (
+        SELECT i.id, i.customer_id, i.total::numeric AS tot,
+          COALESCE(SUM(i.total::numeric) OVER (
+            PARTITION BY i.customer_id ORDER BY i.issued_at, i.id
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS prior
+        FROM "${schema}".invoices i
+        WHERE i.is_cash = false AND i.doc_type = 'tax_invoice' AND i.customer_id IS NOT NULL
+      ),
+      applied AS (
+        SELECT r.id, r.tot, LEAST(r.tot, GREATEST(0, COALESCE(cr.paid, 0) - r.prior)) AS pay
+        FROM ranked r LEFT JOIN cr ON cr.cust = r.customer_id
+      )
+      UPDATE "${schema}".invoices i SET
+        amount_paid = a.pay,
+        balance_due = a.tot - a.pay,
+        payment_status = CASE WHEN a.pay >= a.tot THEN 'paid' WHEN a.pay > 0 THEN 'partial' ELSE 'unpaid' END,
+        updated_at = NOW()
+      FROM applied a WHERE i.id = a.id
+    `);
+    state.counts['payments_reconciled'] = 1;
   }
 
   private invoiceNumber(v: MiracleVoucher, year: string): string {
