@@ -31,8 +31,8 @@ export class ErpController {
       const q = (sql: string, p: any[] = []) => qr.query(sql, p);
       const baseCur = (await q(`SELECT symbol, code FROM "${schema}".erp_currencies WHERE is_base = true LIMIT 1`))[0] || { symbol: '₹', code: 'INR' };
       const recv = (await q(`SELECT COUNT(*)::int AS n, COALESCE(SUM(balance_due * exchange_rate),0)::float AS amt FROM "${schema}".invoices WHERE year IS NOT NULL AND payment_status <> 'paid'`))[0];
-      const today = (await q(`SELECT COALESCE(SUM(base_total),0)::float AS amt, COUNT(*)::int AS n FROM "${schema}".invoices WHERE year IS NOT NULL AND issued_at::date = CURRENT_DATE`))[0];
-      const month = (await q(`SELECT COALESCE(SUM(base_total),0)::float AS amt FROM "${schema}".invoices WHERE year IS NOT NULL AND issued_at >= date_trunc('month', NOW())`))[0];
+      const today = (await q(`SELECT COALESCE(SUM(COALESCE(base_total, total)),0)::float AS amt, COUNT(*)::int AS n FROM "${schema}".invoices WHERE year IS NOT NULL AND issued_at::date = CURRENT_DATE`))[0];
+      const month = (await q(`SELECT COALESCE(SUM(COALESCE(base_total, total)),0)::float AS amt FROM "${schema}".invoices WHERE year IS NOT NULL AND issued_at >= date_trunc('month', NOW())`))[0];
       const expMonth = (await q(`SELECT COALESCE(SUM(total),0)::float AS amt FROM "${schema}".expenses WHERE removed = false AND expense_date >= date_trunc('month', NOW())`))[0];
       const counts = (await q(`SELECT
           (SELECT COUNT(*)::int FROM "${schema}".invoices WHERE year IS NOT NULL) AS invoices,
@@ -44,7 +44,7 @@ export class ErpController {
       const recentInvoices = await q(`SELECT invoice_number, customer_name, total, payment_status, issued_at FROM "${schema}".invoices WHERE year IS NOT NULL ORDER BY created_at DESC LIMIT 5`);
       const topClients = await q(`SELECT name, company, total_spent FROM "${schema}".customers WHERE total_spent > 0 ORDER BY total_spent DESC NULLS LAST LIMIT 5`);
       const monthlySales = await q(`
-        SELECT to_char(date_trunc('month', issued_at), 'Mon') AS month, COALESCE(SUM(base_total),0)::float AS amt
+        SELECT to_char(date_trunc('month', issued_at), 'Mon') AS month, COALESCE(SUM(COALESCE(base_total, total)),0)::float AS amt
         FROM "${schema}".invoices
         WHERE year IS NOT NULL AND issued_at >= date_trunc('month', NOW()) - INTERVAL '5 months'
         GROUP BY date_trunc('month', issued_at) ORDER BY date_trunc('month', issued_at)`);
@@ -71,7 +71,7 @@ export class ErpController {
     const schema = req.tenantContext.schemaName;
     return this.cm.executeInTenantContext(schema, async (qr) => {
       const recv = (await qr.query(`SELECT COUNT(*)::int AS n, COALESCE(SUM(balance_due * exchange_rate),0)::float AS due FROM invoices WHERE year IS NOT NULL AND payment_status <> 'paid'`))[0];
-      const salesToday = (await qr.query(`SELECT COALESCE(SUM(base_total),0)::float AS amt, COUNT(*)::int AS n FROM invoices WHERE year IS NOT NULL AND issued_at::date = CURRENT_DATE`))[0];
+      const salesToday = (await qr.query(`SELECT COALESCE(SUM(COALESCE(base_total, total)),0)::float AS amt, COUNT(*)::int AS n FROM invoices WHERE year IS NOT NULL AND issued_at::date = CURRENT_DATE`))[0];
       const expMonth = (await qr.query(`SELECT COALESCE(SUM(total),0)::float AS amt FROM expenses WHERE removed = false AND expense_date >= date_trunc('month', NOW())`))[0];
       const leads = (await qr.query(`SELECT COUNT(*)::int AS n FROM leads WHERE removed = false AND status NOT IN ('converted','lost')`))[0];
       return {

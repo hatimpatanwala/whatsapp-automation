@@ -111,8 +111,8 @@ export class ErpService {
   }
 
   // ─── invoices ────────────────────────────────────────────────────────────────
-  listInvoices(params?: { status?: string; paymentStatus?: string; customerId?: string; page?: number; limit?: number }): Observable<Paginated<ErpInvoice>> {
-    return this.api.get<Paginated<ErpInvoice>>('/erp/invoices', params as any);
+  listInvoices(params?: { status?: string; paymentStatus?: string; customerId?: string; search?: string; page?: number; limit?: number }): Observable<Paginated<ErpInvoice> & { summary?: any }> {
+    return this.api.get<Paginated<ErpInvoice> & { summary?: any }>('/erp/invoices', params as any);
   }
   getInvoice(id: string): Observable<ErpInvoice> {
     return this.api.get<ErpInvoice>(`/erp/invoices/${id}`);

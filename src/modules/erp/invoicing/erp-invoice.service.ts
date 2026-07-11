@@ -110,10 +110,10 @@ export class ErpInvoiceService {
 
   async list(
     schema: string,
-    filters: { status?: string; paymentStatus?: string; customerId?: string; branchId?: string; page?: number; limit?: number } = {},
+    filters: { status?: string; paymentStatus?: string; customerId?: string; branchId?: string; search?: string; page?: number; limit?: number } = {},
   ) {
     const page = Math.max(1, filters.page ?? 1);
-    const limit = Math.min(200, Math.max(1, filters.limit ?? 50));
+    const limit = Math.min(500, Math.max(1, filters.limit ?? 50));
     const offset = (page - 1) * limit;
     const conditions: string[] = [];
     const params: any[] = [];
@@ -122,18 +122,44 @@ export class ErpInvoiceService {
     if (filters.paymentStatus) { conditions.push(`i.payment_status = $${p++}`); params.push(filters.paymentStatus); }
     if (filters.customerId) { conditions.push(`i.customer_id = $${p++}`); params.push(filters.customerId); }
     if (filters.branchId) { conditions.push(`i.branch_id = $${p++}`); params.push(filters.branchId); }
+    if (filters.search?.trim()) {
+      conditions.push(`(i.invoice_number ILIKE $${p} OR i.customer_name ILIKE $${p} OR i.customer_phone ILIKE $${p})`);
+      params.push(`%${filters.search.trim()}%`);
+      p++;
+    }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     return this.cm.executeInTenantContext(schema, async (qr) => {
-      const countRows = await qr.query(`SELECT COUNT(*)::int AS total FROM "${schema}".invoices i ${where}`, params);
-      const total = countRows[0]?.total ?? 0;
+      // Aggregate over the WHOLE filtered set (not just the page) so the summary
+      // cards stay correct when the list is paginated server-side.
+      const agg = (await qr.query(
+        `SELECT COUNT(*)::int AS total,
+                COALESCE(SUM(total), 0)::float AS total_amount,
+                COALESCE(SUM(balance_due), 0)::float AS outstanding,
+                COUNT(*) FILTER (WHERE payment_status = 'paid')::int AS paid,
+                COUNT(*) FILTER (WHERE payment_status = 'partial')::int AS partial,
+                COUNT(*) FILTER (WHERE payment_status = 'unpaid' OR payment_status IS NULL)::int AS unpaid
+         FROM "${schema}".invoices i ${where}`,
+        params,
+      ))[0];
+      const total = agg?.total ?? 0;
       const rows = await qr.query(
         `SELECT i.* FROM "${schema}".invoices i ${where}
          ORDER BY i.issued_at DESC NULLS LAST, i.created_at DESC
          LIMIT $${p++} OFFSET $${p++}`,
         [...params, limit, offset],
       );
-      return { data: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
+      return {
+        data: rows, total, page, limit, totalPages: Math.ceil(total / limit),
+        summary: {
+          total,
+          totalAmount: agg?.total_amount ?? 0,
+          outstanding: agg?.outstanding ?? 0,
+          paid: agg?.paid ?? 0,
+          partial: agg?.partial ?? 0,
+          unpaid: agg?.unpaid ?? 0,
+        },
+      };
     });
   }
 

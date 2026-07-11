@@ -428,6 +428,9 @@ export class MiracleImportService {
       }
     }
 
+    // Migrated customers are ERP clients (the dashboard/reports count these).
+    await qr.query(`UPDATE "${schema}".customers SET is_erp_client = true WHERE is_erp_client IS NOT TRUE`);
+
     // GST tax rates from Miracle → erp_tax_rates (drives the billing GST picker
     // and the /tax-rates page). Idempotent by name.
     const haveTax = new Set<string>(
@@ -551,6 +554,18 @@ export class MiracleImportService {
       FROM applied a WHERE i.id = a.id
     `);
     state.counts['payments_reconciled'] = 1;
+
+    // Roll invoice totals up onto each customer (drives dashboard top-clients +
+    // the customer list's lifetime value).
+    await qr.query(`
+      UPDATE "${schema}".customers c
+      SET total_spent = COALESCE(s.amt, 0), total_orders = COALESCE(s.cnt, 0)
+      FROM (
+        SELECT customer_id, SUM(total)::numeric AS amt, COUNT(*)::int AS cnt
+        FROM "${schema}".invoices WHERE customer_id IS NOT NULL AND doc_type = 'tax_invoice'
+        GROUP BY customer_id
+      ) s WHERE c.id = s.customer_id
+    `);
   }
 
   private invoiceNumber(v: MiracleVoucher, year: string): string {
@@ -582,8 +597,8 @@ export class MiracleImportService {
         `INSERT INTO "${schema}".invoices
            (invoice_number, doc_type, year, customer_id, customer_name, is_interstate, subtotal, discount,
             taxable_value, cgst, sgst, igst, total_tax, round_off, total, items, status, issued_at, is_cash,
-            amount_paid, balance_due, payment_status, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,'issued',$16,$17,0,$14,'unpaid',$18)
+            amount_paid, balance_due, payment_status, notes, base_total, exchange_rate, currency)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,'issued',$16,$17,0,$14,'unpaid',$18,$14,1,'INR')
          ON CONFLICT (invoice_number) DO NOTHING RETURNING id`,
         [
           num, v.kind === 'sales_return' ? 'credit_note' : 'tax_invoice', fyOf(year), customerId, customerName.slice(0, 250),

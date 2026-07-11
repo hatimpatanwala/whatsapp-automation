@@ -66,17 +66,19 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
         <div class="flex flex-wrap gap-3 items-center">
           <p-iconfield class="min-w-64">
             <p-inputicon styleClass="pi pi-search" />
-            <input pInputText type="text" placeholder="Search invoices..." [(ngModel)]="searchTerm" class="w-full" />
+            <input pInputText type="text" placeholder="Search all invoices…" [(ngModel)]="searchTerm" (ngModelChange)="onSearch()" class="w-full" />
           </p-iconfield>
           <p-select [options]="paymentStatusOptions" [(ngModel)]="selectedPaymentStatus" placeholder="All Payment Statuses"
-            [showClear]="true" (onChange)="load()" styleClass="w-56" />
+            [showClear]="true" (onChange)="reload()" styleClass="w-56" />
+          <span class="text-xs text-gray-400 ml-auto">{{ total() | number }} invoices</span>
         </div>
       </div>
 
-      <!-- Table -->
+      <!-- Table (server-side paginated over the full invoice set) -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <p-table [value]="filtered()" [scrollable]="true" scrollHeight="56vh" [rows]="15" [paginator]="true"
-          [rowsPerPageOptions]="[10, 15, 25, 50]" [loading]="loading()" styleClass="p-datatable-sm">
+        <p-table [value]="invoices()" [lazy]="true" [totalRecords]="total()" (onLazyLoad)="onLazy($event)"
+          [scrollable]="true" scrollHeight="56vh" [rows]="25" [first]="first()" [paginator]="true"
+          [rowsPerPageOptions]="[25, 50, 100, 200]" [loading]="loading()" styleClass="p-datatable-sm">
           <ng-template pTemplate="header">
             <tr>
               <th>Invoice #</th>
@@ -325,27 +327,21 @@ export class ErpInvoiceListComponent implements OnInit {
 
   paymentModeOptions = computed(() => this.paymentModes());
 
-  filtered = computed(() => {
-    const term = this.searchTerm.toLowerCase().trim();
-    if (!term) return this.invoices();
-    return this.invoices().filter(i =>
-      i.invoiceNumber?.toLowerCase().includes(term) ||
-      (i.customerName || '').toLowerCase().includes(term) ||
-      (i.customerPhone || '').includes(term),
-    );
-  });
+  total = signal(0);
+  first = signal(0);
+  private rows = 25;
+  private summary = signal<any>(null);
+  private searchDebounce: any = null;
 
   statsCards = computed(() => {
-    const list = this.invoices();
-    // Outstanding is aggregated in the BASE currency (each balance × its exchange rate).
-    const outstanding = list.reduce((s, i) => s + this.num(i.balanceDue) * (this.num(i.exchangeRate) || 1), 0);
-    const by = (st: string) => list.filter(i => i.paymentStatus === st).length;
+    // Summary is aggregated server-side over the WHOLE filtered set (not the page).
+    const s = this.summary() || {};
     return [
-      { label: 'Total', value: list.length, icon: 'pi-file', iconBg: 'bg-slate-100 text-slate-600' },
-      { label: 'Unpaid', value: by('unpaid'), icon: 'pi-clock', iconBg: 'bg-red-50 text-red-600' },
-      { label: 'Partial', value: by('partial'), icon: 'pi-hourglass', iconBg: 'bg-amber-50 text-amber-600' },
-      { label: 'Paid', value: by('paid'), icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
-      { label: 'Outstanding', value: this.baseSym() + this.fmt(outstanding), icon: 'pi-wallet', iconBg: 'bg-purple-50 text-purple-600' },
+      { label: 'Total', value: this.num(s.total), icon: 'pi-file', iconBg: 'bg-slate-100 text-slate-600' },
+      { label: 'Unpaid', value: this.num(s.unpaid), icon: 'pi-clock', iconBg: 'bg-red-50 text-red-600' },
+      { label: 'Partial', value: this.num(s.partial), icon: 'pi-hourglass', iconBg: 'bg-amber-50 text-amber-600' },
+      { label: 'Paid', value: this.num(s.paid), icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
+      { label: 'Outstanding', value: this.baseSym() + this.fmt(this.num(s.outstanding)), icon: 'pi-wallet', iconBg: 'bg-purple-50 text-purple-600' },
     ];
   });
 
@@ -377,7 +373,7 @@ export class ErpInvoiceListComponent implements OnInit {
   onFocusRefresh() { this.load(); }
 
   ngOnInit() {
-    this.load();
+    // Initial page load is triggered by the table's (onLazyLoad) on first render.
     this.erp.listPaymentModes().subscribe({ next: (r) => this.paymentModes.set(r.data || []) });
     this.erp.listCurrencies().subscribe({ next: (r) => this.currencies.set(r.data || []) });
     this.api.get<any>('/erp/branches', { limit: 200 }).subscribe({ next: (r) => this.branches.set(r?.data || []) });
@@ -385,12 +381,33 @@ export class ErpInvoiceListComponent implements OnInit {
 
   load() {
     this.loading.set(true);
-    const params: any = {};
+    const params: any = { page: Math.floor(this.first() / this.rows) + 1, limit: this.rows };
     if (this.selectedPaymentStatus) params.paymentStatus = this.selectedPaymentStatus;
+    if (this.searchTerm.trim()) params.search = this.searchTerm.trim();
     this.erp.listInvoices(params).subscribe({
-      next: (r) => { this.invoices.set(r.data || []); this.loading.set(false); },
+      next: (r) => {
+        this.invoices.set(r.data || []);
+        this.total.set(r.total ?? (r.data || []).length);
+        this.summary.set(r.summary ?? null);
+        this.loading.set(false);
+      },
       error: () => { this.loading.set(false); this.toast.add({ severity: 'error', summary: 'Failed to load invoices' }); },
     });
+  }
+
+  /** p-table server-side page/size change. */
+  onLazy(e: { first?: number; rows?: number }) {
+    this.rows = e.rows || this.rows;
+    this.first.set(e.first || 0);
+    this.load();
+  }
+
+  /** Filter/search change → jump back to the first page and reload from the server. */
+  reload() { this.first.set(0); this.load(); }
+
+  onSearch() {
+    clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => this.reload(), 350);
   }
 
   // ─── create ──────────────────────────────────────────────────────────────

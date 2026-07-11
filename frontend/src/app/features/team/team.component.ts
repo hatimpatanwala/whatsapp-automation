@@ -56,23 +56,23 @@ interface Feature { key: string; label: string; group: string; }
           </tr></thead>
           <tbody>
             @for (e of employees(); track e.id) {
-              <tr class="border-t border-slate-100" [class.opacity-50]="!e.is_active">
+              <tr class="border-t border-slate-100" [class.opacity-50]="!e.isActive">
                 <td class="px-3 py-2 font-medium">{{ e.name }} @if (e.role === 'owner') { <span class="text-[10px] bg-amber-100 text-amber-700 rounded px-1">Owner</span> }</td>
                 <td class="px-3 py-2 text-slate-500 text-xs">{{ e.email || e.phone }}</td>
                 <td class="px-3 py-2">
                   @if (canManage() && e.role !== 'owner') {
-                    <select [ngModel]="e.role_id" (ngModelChange)="changeRole(e, $event)" class="border rounded px-2 py-1 text-sm bg-white w-full">
+                    <select [ngModel]="e.roleId" (ngModelChange)="changeRole(e, $event)" class="border rounded px-2 py-1 text-sm bg-white w-full">
                       <option [ngValue]="null">— none —</option>
                       @for (r of roles(); track r.id) { <option [ngValue]="r.id">{{ r.name }}</option> }
                     </select>
-                  } @else { <span class="capitalize">{{ e.role_name || e.role }}</span> }
+                  } @else { <span class="capitalize">{{ e.roleName || e.role }}</span> }
                 </td>
-                <td class="px-3 py-2 text-center text-xs"><span [class.text-emerald-700]="e.is_active" [class.text-red-600]="!e.is_active">{{ e.is_active ? 'Active' : 'Off' }}</span></td>
-                <td class="px-3 py-2 text-xs text-slate-400">{{ e.last_login_at ? (e.last_login_at | date:'dd MMM, HH:mm') : '—' }}</td>
+                <td class="px-3 py-2 text-center text-xs"><span [class.text-emerald-700]="e.isActive" [class.text-red-600]="!e.isActive">{{ e.isActive ? 'Active' : 'Off' }}</span></td>
+                <td class="px-3 py-2 text-xs text-slate-400">{{ e.lastLoginAt ? (e.lastLoginAt | date:'dd MMM, HH:mm') : '—' }}</td>
                 <td class="px-3 py-2 text-right whitespace-nowrap">
                   @if (canManage() && e.role !== 'owner') {
                     <button (click)="resetPw(e)" class="text-xs px-2 py-1 rounded border mr-1">Reset password</button>
-                    <button (click)="toggleActive(e)" class="text-xs px-2 py-1 rounded border" [class.text-red-600]="e.is_active">{{ e.is_active ? 'Deactivate' : 'Activate' }}</button>
+                    <button (click)="toggleActive(e)" class="text-xs px-2 py-1 rounded border" [class.text-red-600]="e.isActive">{{ e.isActive ? 'Deactivate' : 'Activate' }}</button>
                   }
                 </td>
               </tr>
@@ -192,8 +192,8 @@ export class TeamComponent implements OnInit {
     });
   }
   toggleActive(e: any) {
-    this.api.patch(`/access/employees/${e.id}`, { isActive: !e.is_active }).subscribe({
-      next: () => { this.flash(e.is_active ? 'Deactivated' : 'Activated'); this.loadEmployees(); },
+    this.api.patch(`/access/employees/${e.id}`, { isActive: !e.isActive }).subscribe({
+      next: () => { this.flash(e.isActive ? 'Deactivated' : 'Activated'); this.loadEmployees(); },
       error: (x) => this.flashErr(x?.error?.message || 'Could not update'),
     });
   }

@@ -26,6 +26,7 @@ export class ErpInvoiceController {
     @Query('paymentStatus') paymentStatus?: string,
     @Query('customerId') customerId?: string,
     @Query('branchId') branchId?: string,
+    @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -34,6 +35,7 @@ export class ErpInvoiceController {
       paymentStatus,
       customerId,
       branchId,
+      search,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });
