@@ -28,3 +28,7 @@ order-detail-before.png
 # Desktop local artifacts (data dumps, diagnostics)
 desktop/cloud.sql
 desktop/dump-err.txt
+
+# Miracle client data exports (never commit)
+CMP*.zip
+*.CMP

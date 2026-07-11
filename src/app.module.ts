@@ -13,6 +13,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { SuperAdminModule } from './modules/super-admin/super-admin.module';
+import { MiracleImportModule } from './modules/miracle-import/miracle-import.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { OrderModule } from './modules/order/order.module';
@@ -65,6 +66,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     AuthModule,
     TenantModule,
     SuperAdminModule,
+    MiracleImportModule,
     WhatsAppModule,
     CatalogModule,
     OrderModule,

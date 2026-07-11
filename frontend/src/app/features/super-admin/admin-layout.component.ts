@@ -113,6 +113,7 @@ export class AdminLayoutComponent implements OnInit {
       items: [
         { label: 'Tenants', icon: 'pi-building', route: '/admin/tenants' },
         { label: 'Subscription Plans', icon: 'pi-star', route: '/admin/subscriptions' },
+        { label: 'Migrate from Miracle', icon: 'pi-cloud-upload', route: '/admin/miracle-import' },
       ],
     },
     {

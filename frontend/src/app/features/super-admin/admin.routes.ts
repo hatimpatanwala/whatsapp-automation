@@ -63,6 +63,10 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./billing/admin-billing.component').then(m => m.AdminBillingComponent),
   },
   {
+    path: 'miracle-import',
+    loadComponent: () => import('./miracle-import/miracle-import.component').then(m => m.MiracleImportComponent),
+  },
+  {
     path: 'settings',
     loadComponent: () => import('./settings/admin-settings.component').then(m => m.AdminSettingsComponent),
   },

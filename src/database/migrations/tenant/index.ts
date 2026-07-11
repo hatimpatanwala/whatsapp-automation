@@ -3038,6 +3038,41 @@ const migration080PushDevices: TenantMigration = {
   },
 };
 
+const migration081MiracleImport: TenantMigration = {
+  name: '081_miracle_import',
+  async up(qr, schema) {
+    // Cross-reference map: Miracle record code → our local row. Keyed by
+    // (entity_type, miracle_code) so re-importing the same export UPDATES rows
+    // instead of duplicating, and lets transactions resolve their party/item.
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".miracle_import_map (
+      entity_type VARCHAR(24) NOT NULL,
+      miracle_code VARCHAR(40) NOT NULL,
+      local_id UUID NOT NULL,
+      run_id UUID,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (entity_type, miracle_code)
+    )`);
+    await qr.query(
+      `CREATE INDEX IF NOT EXISTS idx_miracle_map_local ON "${schema}".miracle_import_map (entity_type, local_id)`,
+    );
+    // Audit trail of import runs (one row per upload).
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".miracle_import_runs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_file VARCHAR(255),
+      company_name VARCHAR(255),
+      status VARCHAR(16) NOT NULL DEFAULT 'running',
+      report JSONB NOT NULL DEFAULT '{}'::jsonb,
+      error TEXT,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at TIMESTAMPTZ
+    )`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".miracle_import_map`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".miracle_import_runs`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3119,4 +3154,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration078OrderSource,
   migration079Rbac,
   migration080PushDevices,
+  migration081MiracleImport,
 ];
