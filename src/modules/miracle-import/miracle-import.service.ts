@@ -241,11 +241,15 @@ export class MiracleImportService {
         p.area || null,
       ];
       if (existing) {
+        // Tight param list (phone/alias are left untouched on re-import to avoid
+        // unique-phone clashes) — every parameter must be referenced or Postgres
+        // can't infer its type.
         await qr.query(
-          `UPDATE "${schema}".${table} SET ${nameCol}=$2, party_code=$4, gst_registration_type=$5, gstin=$6, pan=$7,
-             state=$8, state_code=$9, billing_address=$10, pincode=$11, contact_person=$12,
-             opening_balance=$14, opening_dr_cr=$15, area=$16, updated_at=NOW() WHERE id=$1`,
-          [existing, ...vals],
+          `UPDATE "${schema}".${table} SET ${nameCol}=$2, party_code=$3, gst_registration_type=$4, gstin=$5, pan=$6,
+             state=$7, state_code=$8, billing_address=$9, pincode=$10, contact_person=$11,
+             opening_balance=$12, opening_dr_cr=$13, area=$14, updated_at=NOW() WHERE id=$1`,
+          [existing, p.name.slice(0, 250), p.code, reg, p.gstin || null, p.pan || null, p.state || null, p.stateCode || null,
+            p.address || null, p.pincode || null, p.contactPerson || null, p.openingBalance || null, p.openingDrCr, p.area || null],
         );
         c(`${type}_updated`);
       } else {
