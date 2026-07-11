@@ -395,10 +395,10 @@ export class ErpInvoiceListComponent implements OnInit {
     });
   }
 
-  /** p-table server-side page/size change. */
-  onLazy(e: { first?: number; rows?: number }) {
-    this.rows = e.rows || this.rows;
-    this.first.set(e.first || 0);
+  /** p-table server-side page/size change (PrimeNG TableLazyLoadEvent). */
+  onLazy(e: any) {
+    this.rows = e?.rows || this.rows;
+    this.first.set(e?.first || 0);
     this.load();
   }
 
