@@ -68,6 +68,20 @@ interface RunState {
           </div>
         </div>
 
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Company GSTIN <span class="font-normal text-gray-400">(for GST invoices)</span></label>
+            <input type="text" [(ngModel)]="sellerGstin" name="sellerGstin" maxlength="15" placeholder="27ABCDE1234F1Z5"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+            <p class="text-xs text-gray-400 mt-1">Miracle's export doesn't include the seller's own GSTIN — enter it here.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Company address <span class="font-normal text-gray-400">(optional)</span></label>
+            <input type="text" [(ngModel)]="sellerAddress" name="sellerAddress" placeholder="Shop / street, city"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+          </div>
+        </div>
+
         <div class="flex items-center gap-3">
           <button type="submit" [disabled]="!file || !email || running()"
                   class="px-5 py-2.5 rounded-lg bg-primary-600 text-white font-semibold text-sm hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -118,6 +132,51 @@ interface RunState {
           }
         </div>
       }
+
+      <!-- ── Stock-take: set current on-hand quantities ─────────────────────── -->
+      <div class="rounded-xl p-6 bg-white border border-gray-200 shadow-sm space-y-5">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900">Update stock levels (stock-take)</h2>
+          <p class="text-sm mt-1 text-gray-500">
+            Miracle's item catalogue was renumbered over the years, so historical stock can't be reconstructed
+            exactly. Upload a current count sheet (<code>.xlsx</code> / <code>.csv</code> — an <b>item name</b> column
+            and a <b>closing / quantity</b> column; an item-code column is used first if present) to set exact
+            on-hand quantities. Export it from Miracle's Stock report.
+          </p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Stock sheet (.xlsx / .csv)</label>
+            <input type="file" accept=".xlsx,.csv" (change)="onStockFile($event)"
+                   class="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 file:font-semibold hover:file:bg-primary-100" />
+            @if (stockFile) { <p class="text-xs text-gray-500 mt-1">{{ stockFile.name }}</p> }
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Owner email (target tenant)</label>
+            <input type="email" [(ngModel)]="stockEmail" name="stockEmail" placeholder="fitnflow@gmail.com"
+                   class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button type="button" (click)="submitStock()" [disabled]="!stockFile || !stockEmail || stockRunning()"
+                  class="px-5 py-2.5 rounded-lg bg-gray-800 text-white font-semibold text-sm hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed">
+            @if (stockRunning()) { <span class="pi pi-spin pi-spinner mr-2"></span> } Apply stock levels
+          </button>
+          @if (stockError()) { <span class="text-sm text-red-600">{{ stockError() }}</span> }
+        </div>
+        @if (stockReport(); as sr) {
+          <div class="text-sm rounded-lg bg-green-50 border border-green-200 px-4 py-3 space-y-1">
+            <div>✅ Updated <b>{{ sr.matched }}</b> of {{ sr.rows }} rows.
+              @if (sr.unmatchedCount) { <span class="text-amber-700">{{ sr.unmatchedCount }} unmatched.</span> }
+            </div>
+            @if (sr.unmatched?.length) {
+              <details class="text-xs text-gray-500"><summary class="cursor-pointer">Unmatched items</summary>
+                <div class="mt-1">{{ sr.unmatched.join(', ') }}</div>
+              </details>
+            }
+          </div>
+        }
+      </div>
     </div>
   `,
 })
@@ -129,11 +188,20 @@ export class MiracleImportComponent implements OnDestroy {
   password = '';
   businessName = '';
   importInvoices = true;
+  sellerGstin = '';
+  sellerAddress = '';
 
   running = signal(false);
   error = signal('');
   run = signal<RunState | null>(null);
   private timer: any = null;
+
+  // Stock-take
+  stockFile: File | null = null;
+  stockEmail = '';
+  stockRunning = signal(false);
+  stockError = signal('');
+  stockReport = signal<{ rows: number; matched: number; unmatchedCount: number; unmatched: string[] } | null>(null);
 
   private readonly LABELS: Record<string, string> = {
     customer: 'Customers', supplier: 'Suppliers', product: 'Products', ledger: 'Ledgers',
@@ -153,6 +221,30 @@ export class MiracleImportComponent implements OnDestroy {
     this.file = (e.target as HTMLInputElement).files?.[0] || null;
   }
 
+  onStockFile(e: Event) {
+    this.stockFile = (e.target as HTMLInputElement).files?.[0] || null;
+  }
+
+  submitStock() {
+    if (!this.stockFile || this.stockRunning()) return;
+    this.stockError.set('');
+    this.stockReport.set(null);
+    this.stockRunning.set(true);
+    const fd = new FormData();
+    fd.append('file', this.stockFile);
+    fd.append('email', this.stockEmail.trim());
+    this.api.http.post<any>(this.api.url('/admin/miracle-import/stock-take'), fd, { withCredentials: true }).subscribe({
+      next: (res) => {
+        this.stockRunning.set(false);
+        this.stockReport.set(res?.data ?? res);
+      },
+      error: (err) => {
+        this.stockRunning.set(false);
+        this.stockError.set(err?.error?.message || err?.error?.error?.message || 'Failed to apply stock levels');
+      },
+    });
+  }
+
   submit() {
     if (!this.file || this.running()) return;
     this.error.set('');
@@ -163,6 +255,8 @@ export class MiracleImportComponent implements OnDestroy {
     fd.append('email', this.email.trim());
     fd.append('password', this.password);
     if (this.businessName.trim()) fd.append('businessName', this.businessName.trim());
+    if (this.sellerGstin.trim()) fd.append('sellerGstin', this.sellerGstin.trim().toUpperCase());
+    if (this.sellerAddress.trim()) fd.append('sellerAddress', this.sellerAddress.trim());
     fd.append('importInvoices', String(this.importInvoices));
     this.api.http.post<{ runId: string }>(this.api.url('/admin/miracle-import'), fd, { withCredentials: true }).subscribe({
       next: (res) => this.poll(res.runId),

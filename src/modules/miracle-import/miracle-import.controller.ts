@@ -22,7 +22,7 @@ export class MiracleImportController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 256 * 1024 * 1024 } }))
   async start(
     @UploadedFile() file: { buffer: Buffer; originalname: string } | undefined,
-    @Body() body: { email?: string; password?: string; businessName?: string; importInvoices?: string; postAccounting?: string },
+    @Body() body: { email?: string; password?: string; businessName?: string; importInvoices?: string; postAccounting?: string; sellerGstin?: string; sellerAddress?: string },
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     if (!/\.zip$/i.test(file.originalname || '')) throw new BadRequestException('Upload the Miracle company .zip export');
@@ -37,8 +37,24 @@ export class MiracleImportController {
       businessName: body.businessName,
       importInvoices: body.importInvoices !== 'false',
       postAccounting: body.postAccounting !== 'false',
+      sellerGstin: body.sellerGstin?.trim(),
+      sellerAddress: body.sellerAddress?.trim(),
     });
     return { runId, status: 'started' };
+  }
+
+  /** Upload a physical stock-take (xlsx/csv: item name + closing quantity) to set on-hand levels. */
+  @Post('stock-take')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 32 * 1024 * 1024 } }))
+  async stockTake(
+    @UploadedFile() file: { buffer: Buffer; originalname: string } | undefined,
+    @Body() body: { email?: string },
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    if (!/\.(xlsx|csv)$/i.test(file.originalname || '')) throw new BadRequestException('Upload an .xlsx or .csv stock sheet');
+    const email = (body.email || '').trim().toLowerCase();
+    if (!email) throw new BadRequestException('The target tenant email is required');
+    return this.service.stockTake(file.buffer, file.originalname, email);
   }
 
   @Get('runs/:id')

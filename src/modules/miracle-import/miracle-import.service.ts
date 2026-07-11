@@ -1,11 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readdirSync, statSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readdirSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import AdmZip = require('adm-zip');
+import * as ExcelJS from 'exceljs';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
@@ -17,6 +18,16 @@ export interface ImportOptions {
   businessName?: string;
   importInvoices?: boolean;
   postAccounting?: boolean;
+  sellerGstin?: string;
+  sellerAddress?: string;
+}
+
+export interface StockTakeReport {
+  schema: string;
+  rows: number;
+  matched: number;
+  unmatchedCount: number;
+  unmatched: string[];
 }
 
 type Phase = 'queued' | 'extracting' | 'provisioning' | 'masters' | 'transactions' | 'done' | 'error';
@@ -100,6 +111,7 @@ export class MiracleImportService {
 
         this.set(state, 'masters', 'Importing parties, products, ledgers');
         await this.importMasters(qr, schema, parser, company, map, state);
+        await this.writeSellerProfile(qr, schema, parser, company, opts);
 
         if (opts.importInvoices !== false) {
           this.set(state, 'transactions', 'Importing invoices, purchases, payments');
@@ -182,6 +194,96 @@ export class MiracleImportService {
       if (!exists) return slug;
     }
     return `${root}-${Date.now().toString(36)}`;
+  }
+
+  /** Find an existing tenant schema by owner email (does NOT create one). */
+  private async findExistingTenant(email: string): Promise<string | null> {
+    const actives = await this.tenants.find({ where: { status: 'active' }, select: ['schemaName'] });
+    for (const t of actives) {
+      const found = await this.connection
+        .executeInTenantContext(t.schemaName, (qr) => qr.query(`SELECT 1 FROM users WHERE lower(email)=lower($1) LIMIT 1`, [email]))
+        .catch(() => []);
+      if (found[0]) return t.schemaName;
+    }
+    return null;
+  }
+
+  // ─── Seller profile (invoice_* settings, used on printed GST invoices) ─────
+  private async writeSellerProfile(qr: any, schema: string, parser: MiracleParser, company: { gstin: string; stateCode: string; name: string }, opts: ImportOptions) {
+    const cityCounts = new Map<string, number>();
+    for (const p of parser.parties()) if (p.city) cityCounts.set(p.city, (cityCounts.get(p.city) || 0) + 1);
+    const city = [...cityCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+    const gstin = (opts.sellerGstin || company.gstin || '').toUpperCase().replace(/\s/g, '');
+    const stateCode = gstin.length === 15 ? gstin.slice(0, 2) : company.stateCode;
+    const name = opts.businessName || company.name || '';
+    const kv: Record<string, string> = {
+      business_name: name,
+      invoice_legal_name: name,
+      invoice_state: STATE_NAMES[stateCode] || '',
+      invoice_state_code: stateCode || '',
+      invoice_city: city,
+    };
+    if (gstin) kv['invoice_gstin'] = gstin;
+    if (opts.sellerAddress) kv['invoice_address'] = opts.sellerAddress;
+    for (const [k, v] of Object.entries(kv)) {
+      if (!v) continue;
+      await qr.query(
+        `INSERT INTO "${schema}".settings (key, value) VALUES ($1, $2::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [k, JSON.stringify(v)],
+      );
+    }
+  }
+
+  // ─── Stock-take: set on-hand quantities from an uploaded count sheet ───────
+  async stockTake(buffer: Buffer, filename: string, email: string): Promise<StockTakeReport> {
+    const schema = await this.findExistingTenant(email);
+    if (!schema) throw new NotFoundException(`No tenant found for ${email}. Run the data migration first.`);
+    const rows = await this.parseStockFile(buffer, filename);
+    if (!rows.length) throw new BadRequestException('No stock rows found. Expected columns: item name + closing/quantity (optional item code).');
+    return this.connection.executeInTenantContext(schema, async (qr) => {
+      await qr.query(`SET "sync.apply" = 'on'`);
+      const prods: any[] = await qr.query(`SELECT p.id, p.name, p.metadata->>'sku' AS sku FROM "${schema}".products p WHERE p.is_active = true`);
+      const byName = new Map<string, string>();
+      const bySku = new Map<string, string>();
+      for (const p of prods) {
+        byName.set(normName(p.name), p.id);
+        if (p.sku) bySku.set(String(p.sku).toUpperCase(), p.id);
+      }
+      let matched = 0;
+      const unmatched: string[] = [];
+      for (const r of rows) {
+        const pid = (r.code && bySku.get(r.code.toUpperCase())) || byName.get(normName(r.name));
+        if (!pid) {
+          unmatched.push(r.name || r.code);
+          continue;
+        }
+        await qr.query(`UPDATE "${schema}".inventory SET stock_quantity = $2, updated_at = NOW() WHERE product_id = $1`, [pid, Math.max(0, Math.round(r.qty))]);
+        matched++;
+      }
+      return { schema, rows: rows.length, matched, unmatchedCount: unmatched.length, unmatched: unmatched.slice(0, 50) };
+    });
+  }
+
+  private async parseStockFile(buffer: Buffer, filename: string): Promise<{ name: string; code: string; qty: number }[]> {
+    let grid: string[][] = [];
+    if (/\.csv$/i.test(filename)) {
+      grid = buffer
+        .toString('utf8')
+        .split(/\r?\n/)
+        .filter((l) => l.trim())
+        .map((l) => l.split(',').map((c) => c.replace(/^"|"$/g, '').trim()));
+    } else {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer as any);
+      const ws = wb.worksheets[0];
+      if (!ws) return [];
+      ws.eachRow((row) => {
+        const vals = (row.values as any[]).slice(1).map((c) => cellText(c));
+        grid.push(vals);
+      });
+    }
+    return rowsFromGrid(grid);
   }
 
   // ─── Idempotency map ──────────────────────────────────────────────────────
@@ -653,4 +755,67 @@ function groupForNature(groupName: string, nature: string): string {
     default:
       return 'Current Assets';
   }
+}
+
+/** GST state code → state name (for the seller profile). */
+const STATE_NAMES: Record<string, string> = {
+  '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand',
+  '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim',
+  '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya',
+  '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
+  '24': 'Gujarat', '26': 'Dadra & Nagar Haveli and Daman & Diu', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa',
+  '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry', '35': 'Andaman & Nicobar',
+  '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh', '97': 'Other Territory',
+};
+
+/** Normalise an item name for tolerant matching (case/space/punctuation-insensitive). */
+function normName(s: string): string {
+  return String(s || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+}
+
+/** Extract plain text from an ExcelJS cell value (handles rich text / formula / hyperlink). */
+function cellText(c: any): string {
+  if (c == null) return '';
+  if (typeof c === 'object') {
+    if (c.text) return String(c.text);
+    if (c.result != null) return String(c.result);
+    if (c.richText) return c.richText.map((t: any) => t.text).join('');
+    if (c.hyperlink && c.text) return String(c.text);
+  }
+  return String(c);
+}
+
+/** Turn a raw sheet grid into {name, code, qty} rows by detecting the header. */
+function rowsFromGrid(grid: string[][]): { name: string; code: string; qty: number }[] {
+  const out: { name: string; code: string; qty: number }[] = [];
+  let header = -1, nameC = -1, qtyC = -1, codeC = -1;
+  for (let i = 0; i < Math.min(grid.length, 15); i++) {
+    const cells = (grid[i] || []).map((c) => String(c || '').toLowerCase());
+    const n = cells.findIndex((c) => /(item|product|particular|name|description)/.test(c));
+    const q = cells.findIndex((c) => /(clos|stock|qty|quantity|balance|on.?hand)/.test(c));
+    if (n >= 0 && q >= 0) {
+      header = i; nameC = n; qtyC = q;
+      codeC = cells.findIndex((c) => /(code|sku|item.?no|alias)/.test(c));
+      break;
+    }
+  }
+  const toQty = (v: string) => Number(String(v || '').replace(/[^0-9.\-]/g, ''));
+  if (header < 0) {
+    // No header detected: assume column 0 = name and the last numeric column = qty.
+    for (const g of grid) {
+      const name = String(g[0] || '').trim();
+      let qty = NaN;
+      for (let j = g.length - 1; j >= 1; j--) { const n = toQty(g[j]); if (!Number.isNaN(n) && g[j] !== '') { qty = n; break; } }
+      if (name && !Number.isNaN(qty)) out.push({ name, code: '', qty });
+    }
+    return out;
+  }
+  for (let i = header + 1; i < grid.length; i++) {
+    const g = grid[i] || [];
+    const name = String(g[nameC] || '').trim();
+    const qty = toQty(g[qtyC]);
+    if (!name || Number.isNaN(qty)) continue;
+    out.push({ name, code: codeC >= 0 ? String(g[codeC] || '').trim() : '', qty });
+  }
+  return out;
 }
