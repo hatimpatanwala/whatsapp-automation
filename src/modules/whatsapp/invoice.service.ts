@@ -85,9 +85,14 @@ export class InvoiceService {
   private round(n: number): number { return Math.round((n + Number.EPSILON) * 100) / 100; }
 
   async listInvoices(schema: string, orderId?: string): Promise<any[]> {
+    // Prefer the invoice's own ERP payment_status (set by the AR / receipts
+    // engine and by data migration); only fall back to the legacy order-payment
+    // lookup for old commerce invoices that never carried it.
     const cols = `i.id, i.order_id, i.invoice_number, i.doc_type, i.customer_name, i.customer_phone,
                   i.total, i.total_tax, i.currency, i.issued_at,
-                  COALESCE((SELECT pm.status FROM payments pm WHERE pm.order_id = i.order_id LIMIT 1), 'pending') AS payment_status`;
+                  COALESCE(NULLIF(i.payment_status, ''),
+                           (SELECT pm.status FROM payments pm WHERE pm.order_id = i.order_id LIMIT 1),
+                           'pending') AS payment_status`;
     const rows: any[] = await this.connectionManager.executeInTenantContext(schema, (qr) =>
       orderId
         ? qr.query(`SELECT ${cols} FROM invoices i WHERE i.order_id = $1 ORDER BY i.issued_at DESC`, [orderId])
