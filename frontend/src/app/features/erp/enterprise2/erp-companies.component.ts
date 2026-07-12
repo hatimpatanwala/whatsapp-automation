@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpCompaniesComponent {
   config: ErpCrudConfig = {
-    title: 'Companies', subtitle: 'CRM organisations — link contacts (People) to each company',
+    title: 'Companies', feature: 'customers', subtitle: 'CRM organisations — link contacts (People) to each company',
     apiPath: '/erp/companies', newLabel: 'New Company', labelField: 'name', searchFields: ['name', 'email', 'phone', 'taxNumber'],
     columns: [
       { field: 'name', header: 'Name' },

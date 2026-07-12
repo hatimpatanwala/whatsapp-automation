@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpBranchesComponent {
   config: ErpCrudConfig = {
-    title: 'Branches', subtitle: 'Operate multiple branches within your company',
+    title: 'Branches', feature: 'settings', subtitle: 'Operate multiple branches within your company',
     apiPath: '/erp/branches', newLabel: 'New Branch', labelField: 'name', searchFields: ['name', 'code', 'manager'],
     columns: [
       { field: 'name', header: 'Name' },

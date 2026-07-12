@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpPeopleComponent {
   config: ErpCrudConfig = {
-    title: 'People', subtitle: 'Contacts — optionally linked to a company',
+    title: 'People', feature: 'customers', subtitle: 'Contacts — optionally linked to a company',
     apiPath: '/erp/people', newLabel: 'New Person', labelField: 'firstName', searchFields: ['firstName', 'lastName', 'email', 'phone'],
     columns: [
       { field: 'firstName', header: 'First Name' },

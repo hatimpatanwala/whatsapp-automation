@@ -7,7 +7,7 @@ import { ErpDocComponent, ErpDocConfig } from '../shared/erp-doc.component';
 })
 export class ErpOffersComponent {
   config: ErpDocConfig = {
-    title: 'Offers', subtitle: 'Proposals to leads — convert accepted offers into invoices',
+    title: 'Offers', feature: 'schemes', subtitle: 'Proposals to leads — convert accepted offers into invoices',
     apiPath: '/erp/offers', numberField: 'offerNumber',
     partyLabel: 'Lead', partyField: 'leadId', partyNameField: 'leadName',
     partyOptionsPath: '/erp/leads', partyLabelExpr: (r) => [r.firstName, r.lastName].filter(Boolean).join(' ') + (r.company ? ` (${r.company})` : ''),

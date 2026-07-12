@@ -19,6 +19,8 @@ import { ErpAccessService } from '../../../core/services/erp-access.service';
 export interface ErpDocConfig {
   title: string;
   subtitle?: string;
+  /** RBAC feature key; when set, writes require the role's `write` on it. */
+  feature?: string;
   apiPath: string;                // '/erp/offers'
   numberField: string;            // 'offerNumber'
   partyLabel: string;             // 'Lead' | 'Supplier'
@@ -48,7 +50,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
           <h2 class="text-2xl font-bold text-gray-900">{{ config.title }}</h2>
           @if (config.subtitle) { <p class="text-sm text-gray-500 mt-1">{{ config.subtitle }}</p> }
         </div>
-        @if (!erpAccess.readOnly()) { <p-button label="New" icon="pi pi-plus" (onClick)="openCreate()" /> }
+        @if (erpAccess.canEdit(config.feature)) { <p-button label="New" icon="pi pi-plus" (onClick)="openCreate()" /> }
       </div>
 
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -64,7 +66,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <td><p-tag [value]="(row.status || '') | titlecase" [severity]="badge(row.status)" /></td>
               <td class="text-sm text-gray-500">{{ row.createdAt | date:'mediumDate' }}</td>
               <td class="text-right" (click)="$event.stopPropagation()">
-                @if (!erpAccess.readOnly()) {
+                @if (erpAccess.canEdit(config.feature)) {
                   <p-select [options]="config.statuses" [ngModel]="row.status" (onChange)="setStatus(row, $event.value)" optionLabel="label" optionValue="value" styleClass="w-36 mr-1" appendTo="body" />
                 } @else {
                   <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 mr-1">{{ row.status | titlecase }}</span>
@@ -72,7 +74,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
                 @if (config.hasPdf !== false) {
                   <button pButton icon="pi pi-file-pdf" class="p-button-text p-button-sm" pTooltip="Download PDF" (click)="downloadPdf(row)"></button>
                 }
-                @if (!erpAccess.readOnly()) {
+                @if (erpAccess.canEdit(config.feature)) {
                   @if (config.convertLabel && row.status !== 'converted') {
                     <button pButton icon="pi pi-arrow-right-arrow-left" class="p-button-text p-button-sm p-button-success" [pTooltip]="config.convertLabel" (click)="convert(row)"></button>
                   }

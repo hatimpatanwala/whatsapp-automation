@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpLeadsComponent {
   config: ErpCrudConfig = {
-    title: 'Leads', subtitle: 'Sales pipeline — capture and qualify prospects',
+    title: 'Leads', feature: 'customers', subtitle: 'Sales pipeline — capture and qualify prospects',
     apiPath: '/erp/leads', newLabel: 'New Lead', labelField: 'firstName',
     searchFields: ['firstName', 'lastName', 'company', 'phone', 'email'],
     columns: [

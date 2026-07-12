@@ -15,6 +15,7 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OrderService } from '../../core/services/order.service';
+import { PermissionService } from '../../core/services/permission.service';
 import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
 import { PdfExportService } from '../../core/services/pdf-export.service';
@@ -68,7 +69,9 @@ interface OrderRow {
           @if (waEnabled) {
             <button pButton label="Create on WhatsApp" icon="pi pi-whatsapp" class="p-button-outlined p-button-sm" [loading]="openingBuilder()" (click)="openBuilder()"></button>
           }
-          <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" routerLink="/orders/new"></button>
+          @if (perms.canWrite('orders')) {
+            <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" routerLink="/orders/new"></button>
+          }
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportCsv()"></button>
           <button pButton label="PDF" icon="pi pi-file-pdf" class="p-button-outlined p-button-sm" [disabled]="!orders().length" (click)="exportPdf()"></button>
         </div>
@@ -182,6 +185,7 @@ export class OrderListComponent implements OnInit, OnDestroy {
   private readonly messageService = inject(MessageService);
   private readonly orderService = inject(OrderService);
   private readonly datePipe = inject(DatePipe);
+  readonly perms = inject(PermissionService);
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
   private readonly pdf = inject(PdfExportService);

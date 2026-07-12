@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpTaxRatesComponent {
   config: ErpCrudConfig = {
-    title: 'Tax Rates', subtitle: 'Reusable tax rates for products, invoices and documents',
+    title: 'Tax Rates', feature: 'products', subtitle: 'Reusable tax rates for products, invoices and documents',
     apiPath: '/erp/tax-rates', newLabel: 'New Tax Rate', labelField: 'name', searchFields: ['name'],
     columns: [
       { field: 'name', header: 'Name' },

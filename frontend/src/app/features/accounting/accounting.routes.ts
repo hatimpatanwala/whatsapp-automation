@@ -10,6 +10,7 @@ export const ACCOUNTING_ROUTES: Routes = [
   {
     path: 'vouchers/new',
     canActivate: [writeGuard],
+    data: { feature: 'accounting' },
     loadComponent: () => import('./voucher-entry.component').then((m) => m.VoucherEntryComponent),
   },
   {

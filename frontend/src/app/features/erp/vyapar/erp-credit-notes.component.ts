@@ -7,7 +7,7 @@ import { ErpDocComponent, ErpDocConfig } from '../shared/erp-doc.component';
 })
 export class ErpCreditNotesComponent {
   config: ErpDocConfig = {
-    title: 'Credit Notes', subtitle: 'Sale returns — credit issued to customers',
+    title: 'Credit Notes', feature: 'invoices', subtitle: 'Sale returns — credit issued to customers',
     apiPath: '/erp/credit-notes', numberField: 'noteNumber',
     partyLabel: 'Customer', partyField: 'customerId', partyNameField: 'customerName',
     partyOptionsPath: '/erp/clients', partyLabelExpr: (r) => r.name + (r.company ? ` (${r.company})` : ''),

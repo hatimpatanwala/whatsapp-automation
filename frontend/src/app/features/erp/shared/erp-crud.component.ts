@@ -46,6 +46,9 @@ export interface CrudField {
 export interface ErpCrudConfig {
   title: string;
   subtitle?: string;
+  /** RBAC feature key (e.g. 'products','customers','suppliers'). When set, create/
+   *  edit/delete require the role's `write` on it; omitted → global read-only. */
+  feature?: string;
   apiPath: string;            // e.g. '/erp/leads'
   columns: CrudColumn[];
   fields: CrudField[];
@@ -84,7 +87,7 @@ export interface ErpCrudConfig {
           <h2 class="text-2xl font-bold text-gray-900">{{ config.title }}</h2>
           @if (config.subtitle) { <p class="text-sm text-gray-500 mt-1">{{ config.subtitle }}</p> }
         </div>
-        @if (!erpAccess.readOnly()) {
+        @if (erpAccess.canEdit(config.feature)) {
           <p-button [label]="config.newLabel || 'New'" icon="pi pi-plus" (onClick)="openCreate()" />
         }
       </div>
@@ -119,7 +122,7 @@ export interface ErpCrudConfig {
                 </td>
               }
               <td class="text-right" (click)="$event.stopPropagation()">
-                @if (!erpAccess.readOnly()) {
+                @if (erpAccess.canEdit(config.feature)) {
                   <button pButton icon="pi pi-pencil" class="p-button-text p-button-sm" pTooltip="Edit" (click)="openEdit(row)"></button>
                   <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger" pTooltip="Delete" (click)="confirmDelete(row)"></button>
                 }
@@ -230,7 +233,7 @@ export class ErpCrudComponent implements OnInit {
     }
     this.showDialog.set(true);
   }
-  openEdit(row: any) { if (this.erpAccess.readOnly()) return; this.editing.set(true); this.model = { ...row }; this.showDialog.set(true); }
+  openEdit(row: any) { if (!this.erpAccess.canEdit(this.config.feature)) return; this.editing.set(true); this.model = { ...row }; this.showDialog.set(true); }
 
   submit() {
     for (const f of this.config.fields) {

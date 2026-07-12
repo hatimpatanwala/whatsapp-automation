@@ -7,7 +7,7 @@ import { ErpDocComponent, ErpDocConfig } from '../shared/erp-doc.component';
 })
 export class ErpDebitNotesComponent {
   config: ErpDocConfig = {
-    title: 'Debit Notes', subtitle: 'Purchase returns — debit raised to suppliers',
+    title: 'Debit Notes', feature: 'purchases', subtitle: 'Purchase returns — debit raised to suppliers',
     apiPath: '/erp/debit-notes', numberField: 'noteNumber',
     partyLabel: 'Supplier', partyField: 'supplierId', partyNameField: 'supplierName',
     partyOptionsPath: '/erp/suppliers', partyLabelExpr: (r) => r.company,

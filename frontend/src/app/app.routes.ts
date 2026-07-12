@@ -47,41 +47,49 @@ export const routes: Routes = [
       {
         path: 'entry/sales',
         canActivate: [writeGuard],
+        data: { feature: 'invoices' },
         loadComponent: () => import('./features/entry/sales-invoice-entry.component').then(m => m.SalesInvoiceEntryComponent),
       },
       {
         path: 'entry/purchase',
         canActivate: [writeGuard],
+        data: { feature: 'purchases' },
         loadComponent: () => import('./features/entry/purchase-entry.component').then(m => m.PurchaseEntryComponent),
       },
       {
         path: 'entry/receipt',
         canActivate: [writeGuard],
+        data: { feature: 'payments' },
         loadComponent: () => import('./features/entry/receipt-entry.component').then(m => m.ReceiptEntryComponent),
       },
       {
         path: 'entry/payment',
         canActivate: [writeGuard],
+        data: { feature: 'payments' },
         loadComponent: () => import('./features/entry/payment-entry.component').then(m => m.PaymentEntryComponent),
       },
       {
         path: 'entry/quote',
         canActivate: [writeGuard],
+        data: { feature: 'quotes' },
         loadComponent: () => import('./features/entry/quote-entry.component').then(m => m.QuoteEntryComponent),
       },
       {
         path: 'entry/order',
         canActivate: [writeGuard],
+        data: { feature: 'orders' },
         loadComponent: () => import('./features/entry/order-entry.component').then(m => m.OrderEntryComponent),
       },
       {
         path: 'entry/returns',
         canActivate: [writeGuard],
+        data: { feature: 'invoices' },
         loadComponent: () => import('./features/entry/returns-entry.component').then(m => m.ReturnsEntryComponent),
       },
       {
         path: 'entry/stock',
         canActivate: [writeGuard],
+        data: { feature: 'inventory' },
         loadComponent: () => import('./features/entry/stock-journal.component').then(m => m.StockJournalComponent),
       },
       {

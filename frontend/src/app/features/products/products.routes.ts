@@ -9,11 +9,13 @@ export const PRODUCTS_ROUTES: Routes = [
   {
     path: 'new',
     canActivate: [writeGuard],
+    data: { feature: 'products' },
     loadComponent: () => import('./product-form.component').then(m => m.ProductFormComponent),
   },
   {
     path: ':id/edit',
     canActivate: [writeGuard],
+    data: { feature: 'products' },
     loadComponent: () => import('./product-form.component').then(m => m.ProductFormComponent),
   },
 ];

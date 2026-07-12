@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpExpensesComponent {
   config: ErpCrudConfig = {
-    title: 'Expenses', subtitle: 'Track business spending',
+    title: 'Expenses', feature: 'purchases', subtitle: 'Track business spending',
     apiPath: '/erp/expenses', newLabel: 'New Expense', labelField: 'name',
     searchFields: ['name', 'description', 'ref'],
     columns: [

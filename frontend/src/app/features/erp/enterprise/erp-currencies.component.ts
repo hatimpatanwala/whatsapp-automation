@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpCurrenciesComponent {
   config: ErpCrudConfig = {
-    title: 'Currencies', subtitle: 'Multi-currency — exchange rate is base units per 1 unit of the currency',
+    title: 'Currencies', feature: 'accounting', subtitle: 'Multi-currency — exchange rate is base units per 1 unit of the currency',
     apiPath: '/erp/currencies', newLabel: 'New Currency', labelField: 'code', searchFields: ['code', 'name'],
     columns: [
       { field: 'code', header: 'Code' },

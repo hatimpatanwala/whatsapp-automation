@@ -11,11 +11,16 @@ import { PermissionService } from '../services/permission.service';
  *
  * Owners and any role with write permission pass through unchanged.
  */
-export const writeGuard: CanActivateFn = async (_route, state) => {
+export const writeGuard: CanActivateFn = async (route, state) => {
   const perms = inject(PermissionService);
   const router = inject(Router);
   await perms.ensure();
-  if (!perms.isReadOnly()) return true;
+
+  // Per-feature when the route declares one (data.feature) — the role needs
+  // `write` on it; otherwise fall back to the global read-only check.
+  const feature = route.data?.['feature'] as string | undefined;
+  const blocked = feature ? !perms.canWrite(feature) : perms.isReadOnly();
+  if (!blocked) return true;
 
   try {
     inject(MessageService).add({

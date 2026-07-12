@@ -7,7 +7,7 @@ import { ErpDocComponent, ErpDocConfig } from '../shared/erp-doc.component';
 })
 export class ErpSupplierOrdersComponent {
   config: ErpDocConfig = {
-    title: 'Purchase Orders', subtitle: 'Orders raised to your suppliers',
+    title: 'Purchase Orders', feature: 'purchases', subtitle: 'Orders raised to your suppliers',
     apiPath: '/erp/supplier-orders', numberField: 'orderNumber',
     partyLabel: 'Supplier', partyField: 'supplierId', partyNameField: 'supplierName',
     partyOptionsPath: '/erp/suppliers', partyLabelExpr: (r) => r.company,

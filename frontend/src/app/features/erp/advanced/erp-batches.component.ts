@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpBatchesComponent {
   config: ErpCrudConfig = {
-    title: 'Batch & Serial Tracking', subtitle: 'Track product lots (batch/expiry) and serialised units',
+    title: 'Batch & Serial Tracking', feature: 'inventory', subtitle: 'Track product lots (batch/expiry) and serialised units',
     apiPath: '/erp/batches', newLabel: 'New Batch / Serial', labelField: 'batchNumber', searchFields: ['batchNumber', 'serialNumber'],
     columns: [
       { field: 'productName', header: 'Product' },

@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpWarehousesComponent {
   config: ErpCrudConfig = {
-    title: 'Warehouses', subtitle: 'Stock locations for multi-warehouse inventory',
+    title: 'Warehouses', feature: 'inventory', subtitle: 'Stock locations for multi-warehouse inventory',
     apiPath: '/erp/warehouses', newLabel: 'New Warehouse', labelField: 'name', searchFields: ['name', 'code'],
     columns: [
       { field: 'name', header: 'Name' },

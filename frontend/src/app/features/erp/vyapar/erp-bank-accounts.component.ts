@@ -7,7 +7,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 })
 export class ErpBankAccountsComponent {
   config: ErpCrudConfig = {
-    title: 'Cash & Bank', subtitle: 'Money accounts — cash in hand and bank accounts',
+    title: 'Cash & Bank', feature: 'payments', subtitle: 'Money accounts — cash in hand and bank accounts',
     apiPath: '/erp/bank-accounts', newLabel: 'New Account', labelField: 'name', searchFields: ['name', 'bankName', 'accountNumber'],
     columns: [
       { field: 'name', header: 'Account' },

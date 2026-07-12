@@ -40,7 +40,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
         </div>
         <div class="flex gap-2">
           <p-button label="Refresh" icon="pi pi-refresh" [outlined]="true" [loading]="loading()" (onClick)="load()" pTooltip="Reload the latest invoices" />
-          @if (!access.readOnly()) {
+          @if (access.canWrite('invoices')) {
             <p-button label="New Invoice" icon="pi pi-plus" (onClick)="openCreate()" />
           }
         </div>
@@ -105,7 +105,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <td class="text-sm text-gray-500">{{ (inv.issuedAt || inv.createdAt) | date:'mediumDate' }}</td>
               <td class="text-right" (click)="$event.stopPropagation()">
                 <div class="flex gap-1 justify-end">
-                  @if (inv.paymentStatus !== 'paid' && !access.readOnly()) {
+                  @if (inv.paymentStatus !== 'paid' && access.canWrite('invoices')) {
                     <button pButton icon="pi pi-wallet" class="p-button-text p-button-sm p-button-success" pTooltip="Record Payment" (click)="openPayment(inv)"></button>
                     <button pButton icon="pi pi-bell" class="p-button-text p-button-sm p-button-warning" pTooltip="WhatsApp Reminder" (click)="remind(inv)"></button>
                   }
@@ -287,7 +287,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
         <ng-template pTemplate="footer">
           @if (detail(); as inv) {
             <p-button label="Download PDF" icon="pi pi-file-pdf" [text]="true" (onClick)="downloadPdf(inv)" />
-            @if (inv.paymentStatus !== 'paid' && !access.readOnly()) {
+            @if (inv.paymentStatus !== 'paid' && access.canWrite('invoices')) {
               <p-button label="Record Payment" icon="pi pi-wallet" [outlined]="true" (onClick)="openPayment(inv); showDetail.set(false)" />
             }
           }
@@ -411,7 +411,7 @@ export class ErpInvoiceListComponent implements OnInit {
   }
 
   // ─── create ──────────────────────────────────────────────────────────────
-  openCreate() { if (this.access.readOnly()) return; this.form = this.blankForm(); this.showCreate.set(true); }
+  openCreate() { if (!this.access.canWrite('invoices')) return; this.form = this.blankForm(); this.showCreate.set(true); }
   addLine() { this.form.items.push({ description: '', quantity: 1, unitPrice: 0 }); }
   removeLine(i: number) { this.form.items.splice(i, 1); }
 
@@ -442,7 +442,7 @@ export class ErpInvoiceListComponent implements OnInit {
 
   // ─── payment ─────────────────────────────────────────────────────────────
   openPayment(inv: ErpInvoice) {
-    if (this.access.readOnly()) return;
+    if (!this.access.canWrite('invoices')) return;
     this.activeInvoice.set(inv);
     const def = this.paymentModes().find(m => m.isDefault);
     this.payForm = { amount: this.num(inv.balanceDue), paymentModeId: def?.id ?? null, ref: '' };

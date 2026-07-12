@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { writeGuard } from '../../core/guards/write.guard';
 
 export const ORDERS_ROUTES: Routes = [
   {
@@ -7,6 +8,8 @@ export const ORDERS_ROUTES: Routes = [
   },
   {
     path: 'new',
+    canActivate: [writeGuard],
+    data: { feature: 'orders' },
     loadComponent: () => import('./order-form.component').then(m => m.OrderFormComponent),
   },
   {

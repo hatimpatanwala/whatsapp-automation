@@ -33,6 +33,16 @@ export class ErpAccessService {
   canWrite(feature: string): boolean {
     return !this.planReadOnly() && this.perms.canWrite(feature);
   }
+
+  /**
+   * Can the current user create/edit here? Per-feature when a feature key is
+   * given (role must have `write`), else falls back to the global read-only flag
+   * (covers pages that haven't declared their feature yet). Single check used by
+   * the shared ERP list/document components.
+   */
+  canEdit(feature?: string): boolean {
+    return feature ? this.canWrite(feature) : !this.readOnly();
+  }
   /**
    * The tenant's full live plan-feature map from /erp/status (erp, erpOffline,
    * sfa, …). This endpoint is NOT erp-gated, so it is the single live source of

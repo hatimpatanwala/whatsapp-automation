@@ -10,6 +10,7 @@ import { ErpCrudComponent, ErpCrudConfig } from '../shared/erp-crud.component';
 export class ErpPaymentModesComponent {
   config: ErpCrudConfig = {
     title: 'Payment Modes',
+    feature: 'payments',
     subtitle: 'Methods you accept for invoice payments',
     apiPath: '/erp/payment-modes',
     newLabel: 'New Mode',
