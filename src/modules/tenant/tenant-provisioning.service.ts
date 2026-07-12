@@ -1,7 +1,7 @@
 import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { Subscription } from '../../database/entities/public/subscription.entity';
 import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';

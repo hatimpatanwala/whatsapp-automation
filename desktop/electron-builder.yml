@@ -2,14 +2,28 @@ appId: com.beatroute.wacommerce.erp
 productName: WhatsApp Commerce ERP
 copyright: Copyright © BeatRoute
 
+# The embedded NestJS backend runs as its own Node process (Node ABI), so native
+# modules must NOT be rebuilt against Electron's ABI. Auth now uses pure-JS
+# bcryptjs and the only other native dep (msgpackr-extract) has a JS fallback,
+# so skip the native rebuild (this machine also lacks the C toolchain for it).
+npmRebuild: false
+
 directories:
   output: release
   buildResources: build
 
-# The Electron app itself (main/preload/etc.).
+# The Electron app itself (main/preload/etc.). The trailing negations keep the
+# packer from sweeping in repo-root dot-dirs (.claude, .docker, .git, …) when it
+# widens its scan to resolve the ../ extraResources below.
 files:
   - dist/**/*
   - package.json
+  - '!**/.claude/**'
+  - '!**/.docker/**'
+  - '!**/.github/**'
+  - '!**/.vscode/**'
+  - '!**/.idea/**'
+  - '!**/*.pem'
 
 # embedded-postgres ships real Postgres binaries that must live on disk (not inside
 # app.asar) so they can be spawned.

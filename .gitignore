@@ -32,3 +32,6 @@ desktop/dump-err.txt
 # Miracle client data exports (never commit)
 CMP*.zip
 *.CMP
+
+# Claude Code local settings (machine-local)
+.claude/settings.local.json

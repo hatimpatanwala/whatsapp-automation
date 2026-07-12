@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { firstRow } from '../erp/common/sql-result.util';
 import { ACCESS_FEATURES, FEATURE_KEYS, Level, fullAccess } from './access.constants';

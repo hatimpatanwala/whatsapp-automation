@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 /**
  * Seed script to create the default super admin user.

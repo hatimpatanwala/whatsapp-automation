@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { SuperAdmin } from '../../database/entities/public/super-admin.entity';
 import { Tenant } from '../../database/entities/public/tenant.entity';
