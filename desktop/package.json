@@ -1,7 +1,7 @@
 {
   "name": "wacommerce-desktop",
   "version": "0.1.0",
-  "description": "WhatsApp-Commerce ERP — Windows desktop shell (Electron)",
+  "description": "WhatsApp-Commerce ERP \u00e2\u20ac\u201d Windows desktop shell (Electron)",
   "author": "BeatRoute",
   "license": "UNLICENSED",
   "private": true,
@@ -28,7 +28,6 @@
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
-    "embedded-postgres": "17.10.0-beta.17",
-    "whatsapp-automation": "file:.."
+    "embedded-postgres": "17.10.0-beta.17"
   }
 }

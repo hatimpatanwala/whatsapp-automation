@@ -12,18 +12,16 @@ directories:
   output: release
   buildResources: build
 
-# The Electron app itself (main/preload/etc.). The trailing negations keep the
-# packer from sweeping in repo-root dot-dirs (.claude, .docker, .git, …) when it
-# widens its scan to resolve the ../ extraResources below.
+# The Electron app itself (main/preload/etc.). CRITICAL: exclude the
+# `whatsapp-automation` production dep — it's a `file:..` symlink back to the repo
+# root (used only for local dev types; the backend is bundled via extraResources
+# below). Without this, electron-builder follows the symlink and tries to package
+# the ENTIRE repo root, failing on every non-app file (.dockerignore, .claude, …).
 files:
   - dist/**/*
   - package.json
-  - '!**/.claude/**'
-  - '!**/.docker/**'
-  - '!**/.github/**'
-  - '!**/.vscode/**'
-  - '!**/.idea/**'
-  - '!**/*.pem'
+  - '!**/node_modules/whatsapp-automation/**'
+  - '!**/node_modules/whatsapp-automation'
 
 # embedded-postgres ships real Postgres binaries that must live on disk (not inside
 # app.asar) so they can be spawned.
