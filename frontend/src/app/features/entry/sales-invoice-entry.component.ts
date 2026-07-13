@@ -1308,7 +1308,7 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
   existingProductIds(): string[] { return this.rows.filter((r) => r.productId).map((r) => r.productId!); }
 
   @HostListener('document:keydown.alt.d', ['$event'])
-  onAltD(e: KeyboardEvent): void {
+  onAltD(e: Event): void {
     e.preventDefault();
     this.showCatDisc.set(true);
   }
