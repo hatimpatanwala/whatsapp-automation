@@ -117,12 +117,14 @@ export class InsightsService {
       try {
         products = await qr.query(
           `WITH lines AS (
-             SELECT NULLIF(trim(it->>'description'),'') AS name,
+             SELECT COALESCE(p.name, NULLIF(trim(it->>'description'),'')) AS name,
                     date_trunc('month', iv.issued_at) AS m,
                     COALESCE(NULLIF(it->>'lineTotal','')::numeric, 0) AS val,
                     COALESCE(NULLIF(it->>'quantity','')::numeric, 0) AS qty
-             FROM "${schema}".invoices iv,
-                  jsonb_array_elements(CASE WHEN jsonb_typeof(iv.items)='array' THEN iv.items ELSE '[]'::jsonb END) it
+             FROM "${schema}".invoices iv
+             CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(iv.items)='array' THEN iv.items ELSE '[]'::jsonb END) it
+             LEFT JOIN "${schema}".products p
+               ON p.id = CASE WHEN (it->>'productId') ~ '^[0-9a-fA-F-]{36}$' THEN (it->>'productId')::uuid END
              WHERE iv.issued_at >= date_trunc('month',$1::date) - interval '1 month'
                AND iv.issued_at < date_trunc('month',$1::date) + interval '1 month'
            )
@@ -183,8 +185,11 @@ export class InsightsService {
 
       const income = Number(thisMonth.sales) || 0;
       const exp = Number(expenses.this_month) || 0;
-      const netProfit = r2(income - exp);
-      const marginPct = income > 0 ? Math.round((netProfit / income) * 100) : 0;
+      const hasExpenses = exp > 0;
+      // Profit is only meaningful once expenses are recorded — otherwise "100% margin"
+      // would mislead. Report it as unknown when no expenses exist.
+      const netProfit = hasExpenses ? r2(income - exp) : null;
+      const marginPct = hasExpenses && income > 0 ? Math.round(((income - exp) / income) * 100) : null;
       const concShare = income > 0 ? Math.round((Number(concentration.val || 0) / income) * 100) : 0;
 
       return {
@@ -205,7 +210,7 @@ export class InsightsService {
           salesThisMonth: r0(thisMonth.sales),
           salesLastMonth: r0(lastMonth.sales),
           growthPct: pct(Number(thisMonth.sales) || 0, Number(lastMonth.sales) || 0),
-          netProfit, marginPct,
+          netProfit, marginPct, profitKnown: hasExpenses,
           receivables: r0(recv?.total),
           overdue90: r0(recv?.overdue90),
           topProduct: topProducts[0]?.name || null,

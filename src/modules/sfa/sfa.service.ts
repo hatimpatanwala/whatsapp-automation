@@ -675,19 +675,21 @@ export class SfaService {
     const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100);
     return this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
-        `SELECT oi.product_id, oi.product_name,
+        `SELECT oi.product_id,
+                COALESCE(NULLIF(oi.product_name,''), p.name, 'Item') AS product_name,
                 SUM(oi.quantity)::numeric AS qty,
                 SUM(oi.total_price) AS value,
                 COUNT(DISTINCT o.id)::int AS orders,
                 COUNT(DISTINCT o.customer_id)::int AS customers
          FROM "${schema}".order_items oi
          JOIN "${schema}".orders o ON o.id = oi.order_id
+         LEFT JOIN "${schema}".products p ON p.id = oi.product_id
          WHERE o.salesman_id IS NOT NULL
            AND ($3::uuid IS NULL OR o.salesman_id = $3)
            AND oi.unit_price > 0
            AND o.placed_at >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
            AND o.placed_at < COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'
-         GROUP BY oi.product_id, oi.product_name
+         GROUP BY oi.product_id, COALESCE(NULLIF(oi.product_name,''), p.name, 'Item')
          ORDER BY qty DESC, value DESC
          LIMIT ${limit}`,
         [opts.from || null, opts.to || null, opts.salesmanId || null],

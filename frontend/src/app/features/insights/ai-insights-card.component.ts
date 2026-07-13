@@ -53,28 +53,33 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
             @if (kpis()) {
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
                 <div class="bg-white rounded-xl border border-gray-100 p-3">
-                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Sales (mo)</p>
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Sales this month</p>
                   <p class="text-[15px] font-bold tabular-nums text-gray-900">₹{{ inr(kpis().salesThisMonth) }}</p>
                   @if (kpis().growthPct) {
                     <p class="text-[11px] font-semibold" [class.text-emerald-600]="kpis().growthPct > 0" [class.text-red-500]="kpis().growthPct < 0">
                       <i class="pi" [class.pi-arrow-up]="kpis().growthPct > 0" [class.pi-arrow-down]="kpis().growthPct < 0" style="font-size:.6rem"></i>
-                      {{ abs(kpis().growthPct) }}%
+                      {{ abs(kpis().growthPct) }}% vs last month
                     </p>
                   }
                 </div>
                 <div class="bg-white rounded-xl border border-gray-100 p-3">
-                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Net profit</p>
-                  <p class="text-[15px] font-bold tabular-nums" [class.text-red-500]="kpis().netProfit < 0" [class.text-gray-900]="kpis().netProfit >= 0">₹{{ inr(kpis().netProfit) }}</p>
-                  <p class="text-[11px] text-gray-400">{{ kpis().marginPct }}% margin</p>
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Profit this month</p>
+                  @if (kpis().profitKnown) {
+                    <p class="text-[15px] font-bold tabular-nums" [class.text-red-500]="kpis().netProfit < 0" [class.text-gray-900]="kpis().netProfit >= 0">₹{{ inr(kpis().netProfit) }}</p>
+                    <p class="text-[11px] text-gray-400">{{ kpis().marginPct }}% margin</p>
+                  } @else {
+                    <p class="text-[15px] font-bold text-gray-300">—</p>
+                    <p class="text-[11px] text-gray-400">Add expenses to see profit</p>
+                  }
                 </div>
                 <div class="bg-white rounded-xl border border-gray-100 p-3">
-                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">To collect</p>
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Money to collect</p>
                   <p class="text-[15px] font-bold tabular-nums text-gray-900">₹{{ inr(kpis().receivables) }}</p>
-                  @if (kpis().overdue90 > 0) { <p class="text-[11px] font-semibold text-red-500">₹{{ inr(kpis().overdue90) }} 90d+</p> }
+                  @if (kpis().overdue90 > 0) { <p class="text-[11px] font-semibold text-red-500">₹{{ inr(kpis().overdue90) }} over 90 days late</p> }
                 </div>
                 <div class="bg-white rounded-xl border border-gray-100 p-3">
-                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Top product</p>
-                  <p class="text-[13px] font-bold text-gray-900 truncate">{{ kpis().topProduct || '—' }}</p>
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Best-selling item</p>
+                  <p class="text-[13px] font-bold text-gray-900 truncate" [title]="kpis().topProduct || ''">{{ kpis().topProduct || '—' }}</p>
                 </div>
               </div>
             }

@@ -504,17 +504,17 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                           <div class="text-[11px] text-gray-400">{{ v.customer_phone }}</div>
                         </td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ v.area || '—' }}</td>
-                        <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ v.purpose || '—' }}</td>
+                        <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ human(v.purpose) }}</td>
                         <td class="px-4 py-2.5">
                           <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                             [class.bg-emerald-100]="v.status === 'completed'" [class.text-emerald-700]="v.status === 'completed'"
                             [class.bg-indigo-100]="v.status === 'checked_in'" [class.text-indigo-700]="v.status === 'checked_in'"
                             [class.bg-gray-100]="v.status !== 'completed' && v.status !== 'checked_in'"
-                            [class.text-gray-600]="v.status !== 'completed' && v.status !== 'checked_in'">{{ v.status || '—' }}</span>
+                            [class.text-gray-600]="v.status !== 'completed' && v.status !== 'checked_in'">{{ human(v.status) }}</span>
                         </td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ v.checkin_at ? fmtDateTime(v.checkin_at) : '—' }}</td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ v.checkout_at ? fmtDateTime(v.checkout_at) : '—' }}</td>
-                        <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ v.outcome || '—' }}</td>
+                        <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ human(v.outcome) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ +v.order_amount > 0 ? '₹' + inr(v.order_amount) : '—' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700">{{ +v.collected_amount > 0 ? '₹' + inr(v.collected_amount) : '—' }}</td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500 max-w-[16rem]">{{ v.note || '—' }}</td>
@@ -893,6 +893,12 @@ export class FieldSalesComponent implements OnInit {
   isPast(v: any): boolean {
     const d = new Date(v);
     return !isNaN(d.getTime()) && d.setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
+  }
+  /** Turn machine values like "order_taken" / "checked_in" into "Order taken". */
+  human(v: any): string {
+    const s = String(v ?? '').trim();
+    if (!s) return '—';
+    return s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
   }
   fmtDateTime(v: any): string {
     const d = new Date(v);

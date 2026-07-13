@@ -212,10 +212,10 @@ interface OrderLine {
               <div class="bg-white rounded-2xl border border-red-100 p-4 shadow-sm">
                 <div class="flex items-center gap-1.5 text-red-500 mb-1">
                   <i class="pi pi-exclamation-circle text-[12px]"></i>
-                  <p class="text-[11px] font-semibold text-slate-400 uppercase">Market due</p>
+                  <p class="text-[11px] font-semibold text-slate-400 uppercase">To collect (market)</p>
                 </div>
                 <p class="text-xl font-bold tabular-nums text-red-600">₹{{ fmt(me()?.pendingTotal) }}</p>
-                <p class="text-[11px] text-slate-400">{{ me()?.pendingBills || 0 }} open bill(s)</p>
+                <p class="text-[11px] text-slate-400">{{ me()?.pendingBills || 0 }} unpaid bill(s)</p>
               </div>
             </div>
 
@@ -678,28 +678,28 @@ interface OrderLine {
                 <div class="w-10 shrink-0 flex justify-center pt-3.5 z-10">
                   <span class="w-3 h-3 rounded-full ring-4 ring-slate-50"
                     [class.bg-emerald-500]="v.status === 'completed'"
-                    [class.bg-indigo-500]="v.status === 'in_progress'"
-                    [class.bg-slate-300]="v.status !== 'completed' && v.status !== 'in_progress'"></span>
+                    [class.bg-indigo-500]="v.status === 'checked_in'"
+                    [class.bg-slate-300]="v.status !== 'completed' && v.status !== 'checked_in'"></span>
                 </div>
                 <div class="flex-1 bg-white rounded-2xl border border-slate-100 p-3 shadow-sm">
                   <div class="flex items-center justify-between gap-2">
                     <div class="min-w-0">
                       <p class="text-sm font-semibold truncate">{{ v.customer_name || 'Customer' }}</p>
-                      <p class="text-[11px] text-slate-400 truncate">{{ v.area || '—' }}{{ v.purpose ? ' · ' + v.purpose : '' }}</p>
+                      <p class="text-[11px] text-slate-400 truncate">{{ v.area || '—' }}{{ v.purpose ? ' · ' + human(v.purpose) : '' }}</p>
                     </div>
                     <span class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1"
                       [class.bg-emerald-100]="v.status === 'completed'" [class.text-emerald-700]="v.status === 'completed'"
-                      [class.bg-indigo-100]="v.status === 'in_progress'" [class.text-indigo-700]="v.status === 'in_progress'"
-                      [class.bg-slate-100]="v.status !== 'completed' && v.status !== 'in_progress'"
-                      [class.text-slate-500]="v.status !== 'completed' && v.status !== 'in_progress'">
-                      <i class="pi text-[8px]" [ngClass]="v.status === 'completed' ? 'pi-check' : v.status === 'in_progress' ? 'pi-clock' : 'pi-circle'"></i>
-                      {{ v.status === 'in_progress' ? 'Checked in' : v.status === 'completed' ? 'Completed' : (v.status || 'planned') }}
+                      [class.bg-indigo-100]="v.status === 'checked_in'" [class.text-indigo-700]="v.status === 'checked_in'"
+                      [class.bg-slate-100]="v.status !== 'completed' && v.status !== 'checked_in'"
+                      [class.text-slate-500]="v.status !== 'completed' && v.status !== 'checked_in'">
+                      <i class="pi text-[8px]" [ngClass]="v.status === 'completed' ? 'pi-check' : v.status === 'checked_in' ? 'pi-clock' : 'pi-circle'"></i>
+                      {{ v.status === 'checked_in' ? 'Checked in' : v.status === 'completed' ? 'Completed' : human(v.status || 'planned') }}
                     </span>
                   </div>
                   <p class="text-[11px] text-slate-400 mt-1 tabular-nums">
                     {{ (v.checkin_at) ? 'In ' + (v.checkin_at | date:'d MMM, h:mm a') : '' }}{{ (v.checkout_at) ? ' · Out ' + (v.checkout_at | date:'h:mm a') : '' }}
                   </p>
-                  @if (v.outcome) { <p class="text-[11px] text-slate-500 mt-0.5"><span class="font-semibold">Outcome:</span> {{ v.outcome }}</p> }
+                  @if (v.outcome) { <p class="text-[11px] text-slate-500 mt-0.5"><span class="font-semibold">Outcome:</span> {{ human(v.outcome) }}</p> }
                   @if (v.note) { <p class="text-[11px] text-slate-500 italic">"{{ v.note }}"</p> }
                 </div>
               </div>
@@ -1139,6 +1139,13 @@ export class MySalesComponent implements OnInit {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
   num(n: any): number { return Number(n) || 0; }
+
+  /** Machine value → readable, e.g. "order_taken" → "Order taken". */
+  human(v: any): string {
+    const s = String(v ?? '').trim();
+    if (!s) return '';
+    return s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  }
 
   fmt(n: any) { return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   fmtQty(n: any) { return (Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
