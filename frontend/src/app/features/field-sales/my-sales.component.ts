@@ -246,8 +246,8 @@ interface OrderLine {
                       <i class="pi pi-calendar-clock text-sm"></i>
                     </div>
                     <div class="min-w-0">
-                      <p class="text-sm font-semibold truncate">{{ p.customerName || p.customer_name || 'Customer' }}</p>
-                      <p class="text-[11px] text-slate-400 truncate">{{ p.invoiceNumber || p.invoice_number || 'On account' }}</p>
+                      <p class="text-sm font-semibold truncate">{{ p.customerName || p.customerName || 'Customer' }}</p>
+                      <p class="text-[11px] text-slate-400 truncate">{{ p.invoiceNumber || p.invoiceNumber || 'On account' }}</p>
                     </div>
                   </div>
                   <div class="flex items-center gap-3 shrink-0">
@@ -269,8 +269,8 @@ interface OrderLine {
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
-                <p class="text-sm font-bold flex-1 truncate">Checked in · {{ activeCustomer()?.name || v.customer_name || 'Customer' }}</p>
-                <span class="text-[11px] text-slate-400 tabular-nums">{{ (v.checkin_at || v.checkinAt) ? 'since ' + timeShort(v.checkin_at || v.checkinAt) : 'now' }}</span>
+                <p class="text-sm font-bold flex-1 truncate">Checked in · {{ activeCustomer()?.name || v.customerName || 'Customer' }}</p>
+                <span class="text-[11px] text-slate-400 tabular-nums">{{ (v.checkinAt || v.checkinAt) ? 'since ' + timeShort(v.checkinAt || v.checkinAt) : 'now' }}</span>
               </div>
               <div class="grid grid-cols-2 gap-2 mb-3">
                 <button (click)="orderFromVisit()" class="text-[13px] font-semibold bg-indigo-600 text-white rounded-xl py-2.5 flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform">
@@ -321,7 +321,7 @@ interface OrderLine {
           @if (loading()) {
             @for (i of [1,2,3]; track i) { <div class="h-24 rounded-2xl bg-slate-200/60 animate-pulse mb-2"></div> }
           }
-          @for (c of beat(); track c.customer_id) {
+          @for (c of beat(); track c.customerId) {
             <div class="bg-white rounded-2xl border border-slate-100 p-3.5 mb-2 shadow-sm">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex items-start gap-3">
@@ -334,16 +334,16 @@ interface OrderLine {
                       <i class="pi pi-map-marker text-[9px]"></i> {{ c.area || c.route || 'No area' }}
                     </p>
                     <span class="inline-flex items-center gap-1 text-[10px] font-semibold mt-1 px-1.5 py-0.5 rounded-md"
-                      [class.bg-slate-100]="!c.last_visit_at" [class.text-slate-500]="!c.last_visit_at"
-                      [class.bg-emerald-50]="c.last_visit_at" [class.text-emerald-700]="c.last_visit_at">
-                      <i class="pi pi-clock text-[9px]"></i>{{ lastVisitLabel(c.last_visit_at) }}
+                      [class.bg-slate-100]="!c.lastVisitAt" [class.text-slate-500]="!c.lastVisitAt"
+                      [class.bg-emerald-50]="c.lastVisitAt" [class.text-emerald-700]="c.lastVisitAt">
+                      <i class="pi pi-clock text-[9px]"></i>{{ lastVisitLabel(c.lastVisitAt) }}
                     </span>
                   </div>
                 </div>
                 <div class="text-right shrink-0">
                   <p class="text-sm font-bold tabular-nums" [class.text-red-600]="num(c.outstanding) > 0" [class.text-slate-400]="num(c.outstanding) <= 0">₹{{ fmt(c.outstanding) }}</p>
-                  @if ((c.open_bills || 0) > 0) {
-                    <span class="inline-block text-[10px] font-bold text-red-600 bg-red-50 rounded-md px-1.5 py-0.5 mt-1">{{ c.open_bills }} due</span>
+                  @if ((c.openBills || 0) > 0) {
+                    <span class="inline-block text-[10px] font-bold text-red-600 bg-red-50 rounded-md px-1.5 py-0.5 mt-1">{{ c.openBills }} due</span>
                   } @else {
                     <span class="inline-block text-[10px] font-semibold text-emerald-600 bg-emerald-50 rounded-md px-1.5 py-0.5 mt-1">Clear</span>
                   }
@@ -535,13 +535,13 @@ interface OrderLine {
               <div class="bg-white rounded-2xl border p-3.5 mb-2 shadow-sm" [class.border-red-200]="overdueDays(b) > 0" [class.border-slate-100]="overdueDays(b) <= 0">
                 <div class="flex items-center justify-between">
                   <div class="min-w-0">
-                    <p class="text-sm font-semibold truncate">{{ b.invoice_number || b.invoiceNumber }}</p>
-                    <p class="text-[11px] text-slate-400">{{ (b.issued_at || b.issuedAt) | date:'d MMM yy' }}{{ (b.due_date || b.dueDate) ? ' · due ' + ((b.due_date || b.dueDate) | date:'d MMM') : '' }}</p>
+                    <p class="text-sm font-semibold truncate">{{ b.invoiceNumber || b.invoiceNumber }}</p>
+                    <p class="text-[11px] text-slate-400">{{ (b.issuedAt || b.issuedAt) | date:'d MMM yy' }}{{ (b.dueDate || b.dueDate) ? ' · due ' + ((b.dueDate || b.dueDate) | date:'d MMM') : '' }}</p>
                     @if (overdueDays(b) > 0) {
                       <span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 rounded-md px-1.5 py-0.5 mt-1"><i class="pi pi-exclamation-triangle text-[9px]"></i> {{ overdueDays(b) }} day(s) overdue</span>
                     }
                   </div>
-                  <p class="text-base font-bold tabular-nums shrink-0" [class.text-red-600]="overdueDays(b) > 0" [class.text-slate-700]="overdueDays(b) <= 0">₹{{ fmt(b.balance_due ?? b.balanceDue) }}</p>
+                  <p class="text-base font-bold tabular-nums shrink-0" [class.text-red-600]="overdueDays(b) > 0" [class.text-slate-700]="overdueDays(b) <= 0">₹{{ fmt(b.balanceDue ?? b.balanceDue) }}</p>
                 </div>
                 <div class="flex gap-2 mt-2.5">
                   <button (click)="openCollect(b)" class="flex-1 text-[12px] font-semibold bg-emerald-600 text-white rounded-xl py-2 flex items-center justify-center gap-1.5"><i class="pi pi-wallet text-[10px]"></i> Collect</button>
@@ -588,7 +588,7 @@ interface OrderLine {
             <div class="grid grid-cols-2 gap-3">
               <div class="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
                 <div class="flex items-center gap-1.5 text-indigo-600 mb-1"><i class="pi pi-shopping-cart text-[12px]"></i><p class="text-[11px] font-semibold text-slate-400 uppercase">Order value</p></div>
-                <p class="text-xl font-bold tabular-nums">₹{{ fmt(pf.summary?.order_value) }}</p>
+                <p class="text-xl font-bold tabular-nums">₹{{ fmt(pf.summary?.orderValue) }}</p>
                 <p class="text-[11px] text-slate-400">{{ fmtQty(pf.summary?.orders) }} order(s)</p>
               </div>
               <div class="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
@@ -598,14 +598,14 @@ interface OrderLine {
               </div>
             </div>
 
-            @if (pf.summary?.target_amount) {
+            @if (pf.summary?.targetAmount) {
               <div class="bg-white rounded-2xl border border-slate-100 p-4 mt-3 shadow-sm">
                 <div class="flex items-baseline justify-between mb-1">
                   <p class="text-[12px] font-semibold text-slate-500">Order value vs target</p>
-                  <p class="text-[12px] tabular-nums text-slate-500">{{ pct(pf.summary?.order_value, pf.summary?.target_amount) }}%</p>
+                  <p class="text-[12px] tabular-nums text-slate-500">{{ pct(pf.summary?.orderValue, pf.summary?.targetAmount) }}%</p>
                 </div>
                 <div class="h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                  <div class="h-full rounded-full transition-all duration-700" [class.bg-emerald-500]="pct(pf.summary?.order_value, pf.summary?.target_amount) >= 100" [class.bg-indigo-500]="pct(pf.summary?.order_value, pf.summary?.target_amount) < 100" [style.width.%]="pct(pf.summary?.order_value, pf.summary?.target_amount)"></div>
+                  <div class="h-full rounded-full transition-all duration-700" [class.bg-emerald-500]="pct(pf.summary?.orderValue, pf.summary?.targetAmount) >= 100" [class.bg-indigo-500]="pct(pf.summary?.orderValue, pf.summary?.targetAmount) < 100" [style.width.%]="pct(pf.summary?.orderValue, pf.summary?.targetAmount)"></div>
                 </div>
               </div>
             }
@@ -635,7 +635,7 @@ interface OrderLine {
                   <div class="min-w-0 flex items-center gap-3">
                     <div class="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 text-[12px] font-bold tabular-nums">{{ $index + 1 }}</div>
                     <div class="min-w-0">
-                      <p class="text-sm font-semibold truncate">{{ tp.product_name }}</p>
+                      <p class="text-sm font-semibold truncate">{{ tp.productName }}</p>
                       <p class="text-[11px] text-slate-400 tabular-nums">{{ fmtQty(tp.qty) }} sold</p>
                     </div>
                   </div>
@@ -684,7 +684,7 @@ interface OrderLine {
                 <div class="flex-1 bg-white rounded-2xl border border-slate-100 p-3 shadow-sm">
                   <div class="flex items-center justify-between gap-2">
                     <div class="min-w-0">
-                      <p class="text-sm font-semibold truncate">{{ v.customer_name || 'Customer' }}</p>
+                      <p class="text-sm font-semibold truncate">{{ v.customerName || 'Customer' }}</p>
                       <p class="text-[11px] text-slate-400 truncate">{{ v.area || '—' }}{{ v.purpose ? ' · ' + human(v.purpose) : '' }}</p>
                     </div>
                     <span class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1"
@@ -697,7 +697,7 @@ interface OrderLine {
                     </span>
                   </div>
                   <p class="text-[11px] text-slate-400 mt-1 tabular-nums">
-                    {{ (v.checkin_at) ? 'In ' + (v.checkin_at | date:'d MMM, h:mm a') : '' }}{{ (v.checkout_at) ? ' · Out ' + (v.checkout_at | date:'h:mm a') : '' }}
+                    {{ (v.checkinAt) ? 'In ' + (v.checkinAt | date:'d MMM, h:mm a') : '' }}{{ (v.checkoutAt) ? ' · Out ' + (v.checkoutAt | date:'h:mm a') : '' }}
                   </p>
                   @if (v.outcome) { <p class="text-[11px] text-slate-500 mt-0.5"><span class="font-semibold">Outcome:</span> {{ human(v.outcome) }}</p> }
                   @if (v.note) { <p class="text-[11px] text-slate-500 italic">"{{ v.note }}"</p> }
@@ -722,7 +722,7 @@ interface OrderLine {
           <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5" (click)="$event.stopPropagation()">
             <div class="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-3 sm:hidden"></div>
             <h3 class="text-base font-bold mb-1 flex items-center gap-2"><i class="pi pi-wallet text-emerald-600"></i> Collect payment</h3>
-            <p class="text-[12px] text-slate-400 mb-3">{{ bill.invoice_number || bill.invoiceNumber }} · balance ₹{{ fmt(bill.balance_due ?? bill.balanceDue) }}</p>
+            <p class="text-[12px] text-slate-400 mb-3">{{ bill.invoiceNumber || bill.invoiceNumber }} · balance ₹{{ fmt(bill.balanceDue ?? bill.balanceDue) }}</p>
             <label class="text-[11px] font-semibold text-slate-400 uppercase">Amount received</label>
             <input type="number" [(ngModel)]="colAmount" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-lg font-bold tabular-nums mb-3" />
             <label class="text-[11px] font-semibold text-slate-400 uppercase">Payment type</label>
@@ -757,7 +757,7 @@ interface OrderLine {
           <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5" (click)="$event.stopPropagation()">
             <div class="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-3 sm:hidden"></div>
             <h3 class="text-base font-bold mb-1 flex items-center gap-2"><i class="pi pi-calendar-clock text-amber-500"></i> Promise to pay</h3>
-            <p class="text-[12px] text-slate-400 mb-3">{{ promiseBill()?.invoice_number || promiseBill()?.invoiceNumber || 'On account' }}</p>
+            <p class="text-[12px] text-slate-400 mb-3">{{ promiseBill()?.invoiceNumber || promiseBill()?.invoiceNumber || 'On account' }}</p>
             <label class="text-[11px] font-semibold text-slate-400 uppercase">Amount promised</label>
             <input type="number" [(ngModel)]="prAmount" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-lg font-bold tabular-nums mb-3" />
             <label class="text-[11px] font-semibold text-slate-400 uppercase">Will pay on</label>
@@ -934,8 +934,8 @@ export class MySalesComponent implements OnInit {
   }
 
   collectForPromise(p: any) {
-    const id = p?.customerId || p?.customer_id;
-    const name = p?.customerName || p?.customer_name || 'Customer';
+    const id = p?.customerId || p?.customerId;
+    const name = p?.customerName || p?.customerName || 'Customer';
     if (id) this.pickCollectCustomer({ id, name, outstanding: p?.amount });
     this.go('collect');
   }
@@ -943,7 +943,7 @@ export class MySalesComponent implements OnInit {
   // ─── Beat: check-in / check-out ─────────────────────────────────────────────
   checkIn(c: any) {
     this.busy.set(true);
-    this.sfa.appCheckin({ customerId: c.customer_id || c.id, customerName: c.name }).subscribe({
+    this.sfa.appCheckin({ customerId: c.customerId || c.id, customerName: c.name }).subscribe({
       next: (v) => {
         this.busy.set(false);
         this.activeVisit.set(v);
@@ -977,13 +977,13 @@ export class MySalesComponent implements OnInit {
 
   orderFromVisit() {
     const c = this.activeCustomer();
-    if (c) this.pickOrderCustomer({ id: c.customer_id || c.id, name: c.name });
+    if (c) this.pickOrderCustomer({ id: c.customerId || c.id, name: c.name });
     this.go('order');
   }
 
   collectFromVisit() {
     const c = this.activeCustomer();
-    if (c) this.pickCollectCustomer({ id: c.customer_id || c.id, name: c.name, outstanding: c.outstanding });
+    if (c) this.pickCollectCustomer({ id: c.customerId || c.id, name: c.name, outstanding: c.outstanding });
     this.go('collect');
   }
 
@@ -1064,14 +1064,14 @@ export class MySalesComponent implements OnInit {
     this.collectBills.set([]);
     this.billsLoading.set(true);
     this.sfa.appCustomer(c.id).subscribe({
-      next: (d) => { this.collectBills.set((d?.bills || []).filter((b: any) => Number(b.balance_due ?? b.balanceDue) > 0)); this.billsLoading.set(false); },
+      next: (d) => { this.collectBills.set((d?.bills || []).filter((b: any) => Number(b.balanceDue ?? b.balanceDue) > 0)); this.billsLoading.set(false); },
       error: () => { this.collectBills.set([]); this.billsLoading.set(false); },
     });
   }
 
   openCollect(b: any) {
     this.collectFor.set(b);
-    this.colAmount = Number(b.balance_due ?? b.balanceDue) || null;
+    this.colAmount = Number(b.balanceDue ?? b.balanceDue) || null;
     this.colMethod.set('cash');
     this.colInstrument = '';
     this.colInstrumentDate = '';
@@ -1108,8 +1108,8 @@ export class MySalesComponent implements OnInit {
   // ─── Promise ────────────────────────────────────────────────────────────────
   openPromise(b: any) {
     this.promiseBill.set(b);
-    this.promiseCustomerId = b?.customer_id || b?.customerId || this.collectCustomer()?.id || null;
-    this.prAmount = b ? Number(b.balance_due ?? b.balanceDue) || null : null;
+    this.promiseCustomerId = b?.customerId || b?.customerId || this.collectCustomer()?.id || null;
+    this.prAmount = b ? Number(b.balanceDue ?? b.balanceDue) || null : null;
     this.prDate = '';
     this.prNote = '';
     this.sheetError.set('');
@@ -1245,7 +1245,7 @@ export class MySalesComponent implements OnInit {
 
   /** Days a bill is past its due date (0 if not overdue / no due date). */
   overdueDays(b: any): number {
-    const due = b?.due_date || b?.dueDate;
+    const due = b?.dueDate || b?.dueDate;
     if (!due) return 0;
     const d = new Date(due);
     if (isNaN(d.getTime())) return 0;

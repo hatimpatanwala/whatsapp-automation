@@ -97,15 +97,15 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                         <td class="px-4 py-2.5">
                           <div class="font-semibold">{{ r.name }}</div>
                           <div class="text-[11px] text-gray-400">{{ r.phone }}
-                            @if (!r.is_active) { <span class="ml-1 text-red-500 font-semibold">· inactive</span> }
+                            @if (!r.isActive) { <span class="ml-1 text-red-500 font-semibold">· inactive</span> }
                           </div>
                         </td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ r.route || '—' }}{{ r.area ? ' · ' + r.area : '' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ r.visits || 0 }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ r.orders || 0 }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(r.order_value) }}</td>
+                        <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(r.orderValue) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700">₹{{ inr(r.collected) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ r.target_amount ? '₹' + inr(r.target_amount) : '—' }}</td>
+                        <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ r.targetAmount ? '₹' + inr(r.targetAmount) : '—' }}</td>
                         <td class="px-4 py-2.5">
                           @if (achievement(r); as pct) {
                             <div class="flex items-center gap-2">
@@ -147,9 +147,9 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                     </tr>
                   </thead>
                   <tbody>
-                    @for (p of topProducts().slice(0, 10); track p.product_id) {
+                    @for (p of topProducts().slice(0, 10); track p.productId) {
                       <tr class="border-b border-gray-50">
-                        <td class="px-4 py-2.5 font-medium">{{ p.product_name }}</td>
+                        <td class="px-4 py-2.5 font-medium">{{ p.productName }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ inrQty(p.qty) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(p.value) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ p.orders || 0 }}</td>
@@ -260,9 +260,9 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                         <td class="px-4 py-2.5">
                           <button (click)="toggleActive(s)"
                             class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                            [class.bg-emerald-500]="s.is_active" [class.bg-gray-200]="!s.is_active">
+                            [class.bg-emerald-500]="s.isActive" [class.bg-gray-200]="!s.isActive">
                             <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
-                              [class.translate-x-6]="s.is_active" [class.translate-x-1]="!s.is_active"></span>
+                              [class.translate-x-6]="s.isActive" [class.translate-x-1]="!s.isActive"></span>
                           </button>
                         </td>
                         <td class="px-4 py-2.5 text-right whitespace-nowrap">
@@ -344,7 +344,7 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                       </tr>
                     </thead>
                     <tbody>
-                      @for (c of beat(); track c.customer_id) {
+                      @for (c of beat(); track c.customerId) {
                         <tr class="border-b border-gray-50">
                           <td class="px-4 py-2.5">
                             <div class="font-medium">{{ c.name }}</div>
@@ -352,8 +352,8 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                           </td>
                           <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ c.area || '—' }}{{ c.route ? ' · ' + c.route : '' }}</td>
                           <td class="px-4 py-2.5 text-right tabular-nums" [class.text-red-600]="+c.outstanding > 0">₹{{ inr(c.outstanding) }}</td>
-                          <td class="px-4 py-2.5 text-right tabular-nums">{{ c.open_bills || 0 }}</td>
-                          <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ c.last_visit_at ? fmtDate(c.last_visit_at) : 'Never' }}</td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">{{ c.openBills || 0 }}</td>
+                          <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ c.lastVisitAt ? fmtDate(c.lastVisitAt) : 'Never' }}</td>
                         </tr>
                       }
                     </tbody>
@@ -432,10 +432,10 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                       <tbody>
                         @for (t of targets(); track t.id) {
                           <tr class="border-b border-gray-50">
-                            <td class="px-4 py-2.5 font-medium">{{ fmtMonth(t.period_month) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ t.target_amount ? '₹' + inr(t.target_amount) : '—' }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ t.target_collection ? '₹' + inr(t.target_collection) : '—' }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ t.target_visits || '—' }}</td>
+                            <td class="px-4 py-2.5 font-medium">{{ fmtMonth(t.periodMonth) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">{{ t.targetAmount ? '₹' + inr(t.targetAmount) : '—' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">{{ t.targetCollection ? '₹' + inr(t.targetCollection) : '—' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums">{{ t.targetVisits || '—' }}</td>
                           </tr>
                         }
                       </tbody>
@@ -498,10 +498,10 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                   <tbody>
                     @for (v of visits(); track v.id) {
                       <tr class="border-b border-gray-50 hover:bg-gray-50/60 align-top">
-                        <td class="px-4 py-2.5 font-medium whitespace-nowrap">{{ v.salesman_name }}</td>
+                        <td class="px-4 py-2.5 font-medium whitespace-nowrap">{{ v.salesmanName }}</td>
                         <td class="px-4 py-2.5 whitespace-nowrap">
-                          <div>{{ v.customer_name }}</div>
-                          <div class="text-[11px] text-gray-400">{{ v.customer_phone }}</div>
+                          <div>{{ v.customerName }}</div>
+                          <div class="text-[11px] text-gray-400">{{ v.customerPhone }}</div>
                         </td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ v.area || '—' }}</td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ human(v.purpose) }}</td>
@@ -512,11 +512,11 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                             [class.bg-gray-100]="v.status !== 'completed' && v.status !== 'checked_in'"
                             [class.text-gray-600]="v.status !== 'completed' && v.status !== 'checked_in'">{{ human(v.status) }}</span>
                         </td>
-                        <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ v.checkin_at ? fmtDateTime(v.checkin_at) : '—' }}</td>
-                        <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ v.checkout_at ? fmtDateTime(v.checkout_at) : '—' }}</td>
+                        <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ v.checkinAt ? fmtDateTime(v.checkinAt) : '—' }}</td>
+                        <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ v.checkoutAt ? fmtDateTime(v.checkoutAt) : '—' }}</td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ human(v.outcome) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ +v.order_amount > 0 ? '₹' + inr(v.order_amount) : '—' }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700">{{ +v.collected_amount > 0 ? '₹' + inr(v.collected_amount) : '—' }}</td>
+                        <td class="px-4 py-2.5 text-right tabular-nums">{{ +v.orderAmount > 0 ? '₹' + inr(v.orderAmount) : '—' }}</td>
+                        <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700">{{ +v.collectedAmount > 0 ? '₹' + inr(v.collectedAmount) : '—' }}</td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500 max-w-[16rem]">{{ v.note || '—' }}</td>
                       </tr>
                     }
@@ -559,14 +559,14 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                   @for (p of followups(); track p.id) {
                     <tr class="hover:bg-gray-50">
                       <td class="px-4 py-2.5">
-                        <p class="font-semibold text-gray-800">{{ p.customer_name || '—' }}</p>
-                        <p class="text-[11px] text-gray-400">{{ p.customer_phone || '' }}</p>
+                        <p class="font-semibold text-gray-800">{{ p.customerName || '—' }}</p>
+                        <p class="text-[11px] text-gray-400">{{ p.customerPhone || '' }}</p>
                       </td>
-                      <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ p.invoice_number || '—' }}</td>
+                      <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ p.invoiceNumber || '—' }}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(p.amount) }}</td>
                       <td class="px-4 py-2.5 text-[12px] whitespace-nowrap"
-                        [class.text-red-600]="p.status === 'open' && isPast(p.promise_date)"
-                        [class.text-gray-500]="!(p.status === 'open' && isPast(p.promise_date))">{{ fmtDate(p.promise_date) }}</td>
+                        [class.text-red-600]="p.status === 'open' && isPast(p.promiseDate)"
+                        [class.text-gray-500]="!(p.status === 'open' && isPast(p.promiseDate))">{{ fmtDate(p.promiseDate) }}</td>
                       <td class="px-4 py-2.5">
                         <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                           [class.bg-emerald-100]="p.status === 'kept'" [class.text-emerald-700]="p.status === 'kept'"
@@ -719,9 +719,9 @@ export class FieldSalesComponent implements OnInit {
     });
   }
   achievement(r: any): number | null {
-    const target = Number(r?.target_amount) || 0;
+    const target = Number(r?.targetAmount) || 0;
     if (target <= 0) return null;
-    return Math.round((Number(r?.order_value) || 0) / target * 100);
+    return Math.round((Number(r?.orderValue) || 0) / target * 100);
   }
 
   // ── Salesmen management ─────────────────────────────────────────────────────
@@ -753,16 +753,16 @@ export class FieldSalesComponent implements OnInit {
     });
   }
   toggleActive(s: any) {
-    const next = !s.is_active;
+    const next = !s.isActive;
     this.sfa.updateSalesman(s.id, { isActive: next }).subscribe({
-      next: () => { s.is_active = next; },
+      next: () => { s.isActive = next; },
       error: (e) => this.salesmenError.set(this.msg(e, 'Could not update salesman.')),
     });
   }
   rotate(s: any) {
     this.sfa.updateSalesman(s.id, { rotateToken: true }).subscribe({
       next: (r) => {
-        if (r?.access_token) s.access_token = r.access_token;
+        if (r?.accessToken) s.accessToken = r.accessToken;
         if (r?.webviewPath) { this.newLink.set(this.origin() + r.webviewPath); this.copy(this.newLink()); }
         this.loadSalesmen();
       },
@@ -770,7 +770,7 @@ export class FieldSalesComponent implements OnInit {
     });
   }
   linkFor(s: any): string {
-    return this.origin() + (s.webviewPath || `/m/sales?t=${s.id}&token=${s.access_token || ''}`);
+    return this.origin() + (s.webviewPath || `/m/sales?t=${s.id}&token=${s.accessToken || ''}`);
   }
 
   // ── Beats ───────────────────────────────────────────────────────────────────
@@ -787,7 +787,7 @@ export class FieldSalesComponent implements OnInit {
   }
   startEditBeat() {
     // Seed selection from the current beat.
-    const seed = new Set<string>((this.beat() || []).map((c: any) => String(c.customer_id)));
+    const seed = new Set<string>((this.beat() || []).map((c: any) => String(c.customerId)));
     this.beatSelected.set(seed);
     this.beatQ = '';
     this.beatEditing.set(true);
