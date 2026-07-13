@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AccountingService } from '../../core/services/accounting.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'wa-vouchers',
@@ -108,10 +109,12 @@ import { AccountingService } from '../../core/services/accounting.service';
                           </tbody>
                         </table>
                       } @else { <span class="text-xs text-slate-400 ml-6">Loading entries…</span> }
+                      @if (perms.canWrite('accounting')) {
                       <button (click)="cancelVoucher(v.id); $event.stopPropagation()"
                               class="ml-6 mt-1 text-xs px-2 py-0.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
                         Cancel voucher
                       </button>
+                      }
                     </td>
                   </tr>
                 }
@@ -125,6 +128,7 @@ import { AccountingService } from '../../core/services/accounting.service';
 })
 export class VouchersComponent {
   private readonly acc = inject(AccountingService);
+  readonly perms = inject(PermissionService);
   readonly vouchers = signal<any[]>([]);
   readonly loading = signal(true);
   readonly types = [
@@ -148,6 +152,7 @@ export class VouchersComponent {
   }
 
   cancelVoucher(id: string): void {
+    if (!this.perms.canWrite('accounting')) return;
     if (!confirm('Cancel this voucher? It will be excluded from all reports.')) return;
     this.acc.cancelVoucher(id).subscribe(() => {
       this.expanded.set(null);

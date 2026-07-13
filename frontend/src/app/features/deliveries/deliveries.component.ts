@@ -14,6 +14,7 @@ import { MessageService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { DeliveryService } from '../../core/services/delivery.service';
 import { exportToCsv } from '../../core/utils/csv-export';
+import { PermissionService } from '../../core/services/permission.service';
 
 interface DeliveryRow {
   id: string;
@@ -123,12 +124,14 @@ interface DeliveryRow {
                 <p-tag [value]="delivery.status.replace('_', ' ')" [severity]="getStatusSeverity(delivery.status)" styleClass="text-xs capitalize" />
               </td>
               <td>
+                @if (perms.canWrite('orders')) {
                 <div class="flex gap-1">
                   @if (delivery.status === 'pending') {
                     <button pButton icon="pi pi-user-plus" class="p-button-text p-button-sm p-button-rounded" pTooltip="Assign courier" (click)="openAssignDialog(delivery)"></button>
                   }
                   <button pButton icon="pi pi-refresh" class="p-button-text p-button-sm p-button-rounded" pTooltip="Update status" (click)="openStatusDialog(delivery)"></button>
                 </div>
+                }
               </td>
             </tr>
           </ng-template>
@@ -190,6 +193,7 @@ interface DeliveryRow {
 export class DeliveriesComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly deliveryService = inject(DeliveryService);
+  readonly perms = inject(PermissionService);
 
   loading = signal(true);
   assignDialog = false;
@@ -333,6 +337,7 @@ export class DeliveriesComponent implements OnInit {
   }
 
   openAssignDialog(delivery: DeliveryRow) {
+    if (!this.perms.canWrite('orders')) return;
     this.selectedDelivery.set(delivery);
     this.selectedCourier = '';
     this.trackingInput = '';
@@ -341,6 +346,7 @@ export class DeliveriesComponent implements OnInit {
   }
 
   assignCourier() {
+    if (!this.perms.canWrite('orders')) return;
     const delivery = this.selectedDelivery();
     if (!delivery || !this.selectedCourier) return;
     this.deliveryService.assignCourier(delivery.id, {
@@ -360,6 +366,7 @@ export class DeliveriesComponent implements OnInit {
   }
 
   openStatusDialog(delivery: DeliveryRow) {
+    if (!this.perms.canWrite('orders')) return;
     this.selectedDelivery.set(delivery);
     this.newStatus = delivery.status;
     this.statusNote = '';
@@ -367,6 +374,7 @@ export class DeliveriesComponent implements OnInit {
   }
 
   updateStatus() {
+    if (!this.perms.canWrite('orders')) return;
     const delivery = this.selectedDelivery();
     if (!delivery) return;
 

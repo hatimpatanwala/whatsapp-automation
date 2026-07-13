@@ -15,6 +15,7 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { FormsModule } from '@angular/forms';
 import { ImageModule } from 'primeng/image';
 import { PaymentService } from '../../core/services/payment.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 interface PaymentRow {
   id: string;
@@ -136,7 +137,7 @@ interface PaymentRow {
               </td>
               <td class="text-gray-500 text-xs">{{ payment.submittedAt }}</td>
               <td>
-                @if (payment.status === 'pending') {
+                @if (payment.status === 'pending' && perms.canWrite('payments')) {
                   <div class="flex gap-1">
                     <button
                       pButton
@@ -195,7 +196,7 @@ interface PaymentRow {
           </div>
         }
         <ng-template pTemplate="footer">
-          @if (selectedPayment()?.status === 'pending') {
+          @if (selectedPayment()?.status === 'pending' && perms.canWrite('payments')) {
             <button pButton label="Reject" class="p-button-outlined p-button-danger" (click)="proofDialog = false; openRejectDialog(selectedPayment()!)"></button>
             <button pButton label="Verify Payment" severity="success" icon="pi pi-check" (click)="verifyPayment(selectedPayment()!); proofDialog = false"></button>
           } @else {
@@ -222,6 +223,7 @@ export class PaymentsComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly paymentService = inject(PaymentService);
+  readonly perms = inject(PermissionService);
 
   loading = signal(true);
   proofDialog = false;
@@ -311,6 +313,7 @@ export class PaymentsComponent implements OnInit {
   }
 
   verifyPayment(payment: PaymentRow) {
+    if (!this.perms.canWrite('payments')) return;
     this.paymentService.verify(payment.id).subscribe({
       next: () => {
         this.messageService.add({ severity: 'success', summary: 'Payment Verified', detail: `Payment for ${payment.orderNumber} has been verified` });
@@ -323,12 +326,14 @@ export class PaymentsComponent implements OnInit {
   }
 
   openRejectDialog(payment: PaymentRow) {
+    if (!this.perms.canWrite('payments')) return;
     this.selectedPayment.set(payment);
     this.rejectReason = '';
     this.rejectDialog = true;
   }
 
   confirmReject() {
+    if (!this.perms.canWrite('payments')) return;
     const payment = this.selectedPayment();
     if (!payment) return;
     this.paymentService.reject(payment.id, { reason: this.rejectReason }).subscribe({

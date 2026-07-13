@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 interface Taxon { id: string; name: string; }
 
@@ -28,18 +29,22 @@ interface Taxon { id: string; name: string; }
         <!-- Categories -->
         <section class="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="pi pi-tag mr-2 text-green-600"></i>Categories</h2>
+          @if (perms.canWrite('products')) {
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newCategory" (keyup.enter)="addCategory()" placeholder="New category name"
               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             <button class="bg-green-600 text-white text-sm font-semibold rounded-lg px-4 hover:bg-green-700 disabled:opacity-50"
               [disabled]="!newCategory.trim() || savingCat()" (click)="addCategory()">Add</button>
           </div>
+          }
           @if (categories().length) {
             <ul class="divide-y divide-gray-100 max-h-[26rem] overflow-y-auto -mr-2 pr-2">
               @for (c of categories(); track c.id) {
                 <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <span class="text-sm text-gray-700">{{ c.name }}</span>
-                  <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('categories', c)"><i class="pi pi-trash"></i></button>
+                  @if (perms.canWrite('products')) {
+                    <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('categories', c)"><i class="pi pi-trash"></i></button>
+                  }
                 </li>
               }
             </ul>
@@ -49,18 +54,22 @@ interface Taxon { id: string; name: string; }
         <!-- Brands -->
         <section class="bg-white rounded-2xl border border-gray-200 p-5">
           <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="pi pi-bookmark mr-2 text-blue-600"></i>Brands</h2>
+          @if (perms.canWrite('products')) {
           <div class="flex gap-2 mb-4">
             <input [(ngModel)]="newBrand" (keyup.enter)="addBrand()" placeholder="New brand name"
               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             <button class="bg-green-600 text-white text-sm font-semibold rounded-lg px-4 hover:bg-green-700 disabled:opacity-50"
               [disabled]="!newBrand.trim() || savingBrand()" (click)="addBrand()">Add</button>
           </div>
+          }
           @if (brands().length) {
             <ul class="divide-y divide-gray-100 max-h-[26rem] overflow-y-auto -mr-2 pr-2">
               @for (b of brands(); track b.id) {
                 <li class="flex items-center justify-between py-2 px-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors">
                   <span class="text-sm text-gray-700">{{ b.name }}</span>
-                  <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('brands', b)"><i class="pi pi-trash"></i></button>
+                  @if (perms.canWrite('products')) {
+                    <button class="text-gray-300 hover:text-red-500 transition-colors" (click)="remove('brands', b)"><i class="pi pi-trash"></i></button>
+                  }
                 </li>
               }
             </ul>
@@ -73,6 +82,7 @@ interface Taxon { id: string; name: string; }
 export class CatalogTaxonomyComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly toast = inject(MessageService);
+  readonly perms = inject(PermissionService);
 
   categories = signal<Taxon[]>([]);
   brands = signal<Taxon[]>([]);
@@ -94,6 +104,7 @@ export class CatalogTaxonomyComponent implements OnInit {
   }
 
   addCategory(): void {
+    if (!this.perms.canWrite('products')) return;
     const name = this.newCategory.trim();
     if (!name) return;
     this.savingCat.set(true);
@@ -104,6 +115,7 @@ export class CatalogTaxonomyComponent implements OnInit {
   }
 
   addBrand(): void {
+    if (!this.perms.canWrite('products')) return;
     const name = this.newBrand.trim();
     if (!name) return;
     this.savingBrand.set(true);
@@ -114,6 +126,7 @@ export class CatalogTaxonomyComponent implements OnInit {
   }
 
   remove(kind: 'categories' | 'brands', t: Taxon): void {
+    if (!this.perms.canWrite('products')) return;
     this.api.delete(`/${kind}/${t.id}`).subscribe({
       next: () => this.load(kind),
       error: () => this.toast.add({ severity: 'error', summary: 'Could not remove' }),

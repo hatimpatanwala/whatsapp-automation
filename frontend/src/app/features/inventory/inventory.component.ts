@@ -16,6 +16,7 @@ import { exportToCsv } from '../../core/utils/csv-export';
 import { FormsModule } from '@angular/forms';
 import { InventoryService } from '../../core/services/inventory.service';
 import { InventoryItem, InventoryMovementType } from '../../core/models';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'wa-inventory',
@@ -144,13 +145,15 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
               </td>
               <td class="text-gray-500 text-xs">{{ item.warehouseLocation || '-' }}</td>
               <td>
-                <button
-                  pButton
-                  icon="pi pi-sliders-h"
-                  class="p-button-text p-button-sm p-button-rounded"
-                  pTooltip="Adjust Stock"
-                  (click)="openAdjustDialog(item)"
-                ></button>
+                @if (perms.canWrite('inventory')) {
+                  <button
+                    pButton
+                    icon="pi pi-sliders-h"
+                    class="p-button-text p-button-sm p-button-rounded"
+                    pTooltip="Adjust Stock"
+                    (click)="openAdjustDialog(item)"
+                  ></button>
+                }
               </td>
             </tr>
           </ng-template>
@@ -191,7 +194,9 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
         }
         <ng-template pTemplate="footer">
           <button pButton label="Cancel" class="p-button-outlined" (click)="adjustDialog = false"></button>
-          <button pButton label="Apply Adjustment" severity="success" [loading]="adjusting()" (click)="applyAdjustment()"></button>
+          @if (perms.canWrite('inventory')) {
+            <button pButton label="Apply Adjustment" severity="success" [loading]="adjusting()" (click)="applyAdjustment()"></button>
+          }
         </ng-template>
       </p-dialog>
     </div>
@@ -200,6 +205,7 @@ import { InventoryItem, InventoryMovementType } from '../../core/models';
 export class InventoryComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly inventoryService = inject(InventoryService);
+  readonly perms = inject(PermissionService);
 
   loading = signal(true);
   adjusting = signal(false);
@@ -319,6 +325,7 @@ export class InventoryComponent implements OnInit {
   }
 
   openAdjustDialog(item: InventoryItem) {
+    if (!this.perms.canWrite('inventory')) return;
     this.selectedItem.set(item);
     this.adjustType = 'add';
     this.adjustQty = 0;
@@ -338,6 +345,7 @@ export class InventoryComponent implements OnInit {
   }
 
   applyAdjustment() {
+    if (!this.perms.canWrite('inventory')) return;
     const item = this.selectedItem();
     if (!item) return;
 

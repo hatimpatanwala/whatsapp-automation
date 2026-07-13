@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AccountingService, Ledger, LedgerGroup } from '../../core/services/accounting.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'wa-ledgers',
@@ -30,6 +31,7 @@ import { AccountingService, Ledger, LedgerGroup } from '../../core/services/acco
           </table>
         </div>
 
+        @if (perms.canWrite('accounting')) {
         <div class="border rounded-lg p-4 h-fit">
           <h2 class="font-semibold mb-3">New Ledger</h2>
           <label class="text-sm block mb-2">Name
@@ -57,12 +59,14 @@ import { AccountingService, Ledger, LedgerGroup } from '../../core/services/acco
             {{ saving() ? 'Saving…' : 'Create Ledger' }}
           </button>
         </div>
+        }
       </div>
     </div>
   `,
 })
 export class LedgersComponent {
   private readonly acc = inject(AccountingService);
+  readonly perms = inject(PermissionService);
   readonly ledgers = signal<Ledger[]>([]);
   readonly groups = signal<LedgerGroup[]>([]);
   readonly saving = signal(false);
@@ -83,6 +87,7 @@ export class LedgersComponent {
   }
 
   create(): void {
+    if (!this.perms.canWrite('accounting')) return;
     this.saving.set(true);
     this.error.set(null);
     this.acc

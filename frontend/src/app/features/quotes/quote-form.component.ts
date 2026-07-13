@@ -14,6 +14,7 @@ import { CardModule } from 'primeng/card';
 import { MessageService } from 'primeng/api';
 import { forkJoin } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
+import { PermissionService } from '../../core/services/permission.service';
 import { PromoCartService } from '../shared/promo-cart.service';
 import { PromoSectionComponent } from '../shared/promo-section.component';
 
@@ -160,8 +161,10 @@ interface QuoteItem {
             }
 
             <div class="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100"><span>Total</span><span class="tabular-nums">\u20B9{{ total() | number:'1.2-2' }}</span></div>
-            <button pButton class="w-full mt-3" [label]="saving() ? 'Saving\u2026' : (isEdit() ? 'Update & send quote' : 'Create quote')"
-              icon="pi pi-check" severity="success" [disabled]="!canSave() || saving()" (click)="save()"></button>
+            @if (perms.canWrite('quotes')) {
+              <button pButton class="w-full mt-3" [label]="saving() ? 'Saving\u2026' : (isEdit() ? 'Update & send quote' : 'Create quote')"
+                icon="pi pi-check" severity="success" [disabled]="!canSave() || saving()" (click)="save()"></button>
+            }
             <button pButton class="w-full" label="Cancel" icon="pi pi-times" severity="secondary" [outlined]="true" routerLink="/quotes"></button>
           </div>
         </div>
@@ -174,6 +177,7 @@ export class QuoteFormComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly messageService = inject(MessageService);
+  readonly perms = inject(PermissionService);
   readonly promo = inject(PromoCartService);
 
   isEdit = signal(false);
@@ -331,6 +335,7 @@ export class QuoteFormComponent implements OnInit {
   }
 
   save() {
+    if (!this.perms.canWrite('quotes')) return;
     if (!this.canSave()) return;
     this.saving.set(true);
 

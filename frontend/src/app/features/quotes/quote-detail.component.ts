@@ -11,6 +11,7 @@ import { CardModule } from 'primeng/card';
 import { TableModule } from 'primeng/table';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'wa-quote-detail',
@@ -43,6 +44,7 @@ import { ApiService } from '../../core/services/api.service';
               <p class="text-sm text-gray-500 mt-0.5">{{ quote()!.title }}</p>
             </div>
           </div>
+          @if (perms.canWrite('quotes')) {
           <div class="flex flex-wrap gap-2">
             <!-- Edit/add is allowed any time the quote isn't already an order. -->
             @if (canEdit()) {
@@ -66,6 +68,7 @@ import { ApiService } from '../../core/services/api.service';
             <p-button label="Duplicate" icon="pi pi-copy" severity="secondary" [outlined]="true" (onClick)="duplicate()" />
             <p-button icon="pi pi-trash" severity="danger" [outlined]="true" (onClick)="confirmDelete()" />
           </div>
+          }
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -234,6 +237,7 @@ export class QuoteDetailComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
+  readonly perms = inject(PermissionService);
 
   quoteId = '';
   loading = signal(true);
@@ -297,6 +301,7 @@ export class QuoteDetailComponent implements OnInit {
   }
 
   updateStatus(status: string) {
+    if (!this.perms.canWrite('quotes')) return;
     this.api.patch<any>(`/quotes/${this.quoteId}/status`, { status }).subscribe({
       next: (q) => {
         this.quote.set(this.normalizeQuote(q));
@@ -307,6 +312,7 @@ export class QuoteDetailComponent implements OnInit {
   }
 
   duplicate() {
+    if (!this.perms.canWrite('quotes')) return;
     this.api.post<any>(`/quotes/${this.quoteId}/duplicate`, {}).subscribe({
       next: (newQuote) => {
         this.messageService.add({ severity: 'success', summary: 'Duplicated', detail: 'Quote duplicated' });
@@ -316,6 +322,7 @@ export class QuoteDetailComponent implements OnInit {
   }
 
   confirmDelete() {
+    if (!this.perms.canWrite('quotes')) return;
     this.confirmationService.confirm({
       message: 'Are you sure you want to delete this quote?',
       header: 'Delete Quote',

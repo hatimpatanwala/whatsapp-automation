@@ -14,6 +14,7 @@ import { TextareaModule } from 'primeng/textarea';
 import { MessageService } from 'primeng/api';
 import { SchemeService, Scheme, Coupon } from '../../core/services/scheme.service';
 import { ApiService } from '../../core/services/api.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'app-schemes',
@@ -32,10 +33,12 @@ import { ApiService } from '../../core/services/api.service';
           <h1 class="text-2xl font-bold text-gray-900">Schemes & Offers</h1>
           <p class="text-gray-500 text-sm mt-1">Offers auto-apply in the cart; coupons are codes customers enter.</p>
         </div>
-        @if (tab() === 'schemes') {
-          <button pButton label="New Scheme" icon="pi pi-plus" severity="success" (click)="openNew()"></button>
-        } @else {
-          <button pButton label="New Coupon" icon="pi pi-plus" severity="success" (click)="openNewCoupon()"></button>
+        @if (perms.canWrite('schemes')) {
+          @if (tab() === 'schemes') {
+            <button pButton label="New Scheme" icon="pi pi-plus" severity="success" (click)="openNew()"></button>
+          } @else {
+            <button pButton label="New Coupon" icon="pi pi-plus" severity="success" (click)="openNewCoupon()"></button>
+          }
         }
       </div>
 
@@ -54,7 +57,9 @@ import { ApiService } from '../../core/services/api.service';
             <i class="pi pi-ticket text-gray-200" style="font-size:2.5rem"></i>
             <h3 class="text-lg font-semibold text-gray-700 mt-3">No coupons yet</h3>
             <p class="text-gray-400 text-sm mt-1">Create a code like SAVE10 that customers can enter at checkout.</p>
-            <button pButton label="New Coupon" icon="pi pi-plus" class="mt-4" severity="success" (click)="openNewCoupon()"></button>
+            @if (perms.canWrite('schemes')) {
+              <button pButton label="New Coupon" icon="pi pi-plus" class="mt-4" severity="success" (click)="openNewCoupon()"></button>
+            }
           </div>
         } @else {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -71,11 +76,13 @@ import { ApiService } from '../../core/services/api.service';
                   </div>
                   <span class="inline-flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-lg text-sm font-bold whitespace-nowrap">{{ couponBadge(c) }}</span>
                 </div>
+                @if (perms.canWrite('schemes')) {
                 <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50">
                   <button pButton [label]="c.status === 'active' ? 'Pause' : 'Activate'" [icon]="c.status === 'active' ? 'pi pi-pause' : 'pi pi-play'" class="p-button-text p-button-sm" (click)="toggleCoupon(c)"></button>
                   <button pButton label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" (click)="openEditCoupon(c)"></button>
                   <button pButton label="Delete" icon="pi pi-trash" class="p-button-text p-button-sm" severity="danger" (click)="removeCoupon(c)"></button>
                 </div>
+                }
               </div>
             }
           </div>
@@ -87,7 +94,9 @@ import { ApiService } from '../../core/services/api.service';
           <i class="pi pi-percentage text-gray-200" style="font-size:2.5rem"></i>
           <h3 class="text-lg font-semibold text-gray-700 mt-3">No schemes yet</h3>
           <p class="text-gray-400 text-sm mt-1">Create your first offer — e.g. 10% off a category — and it auto-applies in the cart.</p>
-          <button pButton label="New Scheme" icon="pi pi-plus" class="mt-4" severity="success" (click)="openNew()"></button>
+          @if (perms.canWrite('schemes')) {
+            <button pButton label="New Scheme" icon="pi pi-plus" class="mt-4" severity="success" (click)="openNew()"></button>
+          }
         </div>
       } @else {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -106,11 +115,13 @@ import { ApiService } from '../../core/services/api.service';
                 </div>
                 <span class="inline-flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-lg text-sm font-bold whitespace-nowrap">{{ badge(s) }}</span>
               </div>
+              @if (perms.canWrite('schemes')) {
               <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-50">
                 <button pButton [label]="s.status === 'active' ? 'Pause' : 'Activate'" [icon]="s.status === 'active' ? 'pi pi-pause' : 'pi pi-play'" class="p-button-text p-button-sm" (click)="toggle(s)"></button>
                 <button pButton label="Edit" icon="pi pi-pencil" class="p-button-text p-button-sm" (click)="openEdit(s)"></button>
                 <button pButton label="Delete" icon="pi pi-trash" class="p-button-text p-button-sm" severity="danger" (click)="remove(s)"></button>
               </div>
+              }
             </div>
           }
         </div>
@@ -394,6 +405,7 @@ export class SchemesComponent implements OnInit {
   private readonly svc = inject(SchemeService);
   private readonly api = inject(ApiService);
   private readonly toast = inject(MessageService);
+  readonly perms = inject(PermissionService);
 
   loading = signal(true);
   saving = signal(false);
@@ -509,9 +521,10 @@ export class SchemesComponent implements OnInit {
     return false;
   }
 
-  openNew() { this.form = this.blankForm(); this.dialogOpen = true; }
+  openNew() { if (!this.perms.canWrite('schemes')) return; this.form = this.blankForm(); this.dialogOpen = true; }
 
   openEdit(s: Scheme) {
+    if (!this.perms.canWrite('schemes')) return;
     const c = s.conditions || {};
     const r = (s as any).reward || {};
     this.form = {
@@ -533,6 +546,7 @@ export class SchemesComponent implements OnInit {
   }
 
   save() {
+    if (!this.perms.canWrite('schemes')) return;
     if (this.isLoyalty()) return this.saveLoyalty();
     const conditions: any = {};
     if (this.isDiscount()) {
@@ -594,10 +608,12 @@ export class SchemesComponent implements OnInit {
   }
 
   toggle(s: Scheme) {
+    if (!this.perms.canWrite('schemes')) return;
     this.svc.setStatus(s.id, s.status === 'active' ? 'paused' : 'active').subscribe({ next: () => this.load() });
   }
 
   remove(s: Scheme) {
+    if (!this.perms.canWrite('schemes')) return;
     this.svc.delete(s.id).subscribe({ next: () => { this.load(); this.toast.add({ severity: 'success', summary: 'Deleted', detail: 'Scheme removed.' }); } });
   }
 
@@ -656,9 +672,10 @@ export class SchemesComponent implements OnInit {
       (this.cForm.scope === 'all' || (this.cForm.scopeIds && this.cForm.scopeIds.length > 0));
   }
 
-  openNewCoupon() { this.cForm = this.blankCoupon(); this.couponDialog = true; }
+  openNewCoupon() { if (!this.perms.canWrite('schemes')) return; this.cForm = this.blankCoupon(); this.couponDialog = true; }
 
   openEditCoupon(c: Coupon) {
+    if (!this.perms.canWrite('schemes')) return;
     this.cForm = {
       id: c.id, code: c.code, description: c.description || '',
       discountType: c.discountType ?? c.discount_type ?? 'percent',
@@ -678,6 +695,7 @@ export class SchemesComponent implements OnInit {
   }
 
   saveCoupon() {
+    if (!this.perms.canWrite('schemes')) return;
     const payload: Partial<Coupon> = {
       code: this.cForm.code.trim().toUpperCase(), description: this.cForm.description?.trim() || undefined,
       discountType: this.cForm.discountType, discountValue: Number(this.cForm.discountValue) || 0,
@@ -698,8 +716,8 @@ export class SchemesComponent implements OnInit {
     });
   }
 
-  toggleCoupon(c: Coupon) { this.svc.setCouponStatus(c.id, c.status === 'active' ? 'paused' : 'active').subscribe({ next: () => { this.couponsLoaded = false; this.loadCoupons(); } }); }
-  removeCoupon(c: Coupon) { this.svc.deleteCoupon(c.id).subscribe({ next: () => { this.couponsLoaded = false; this.loadCoupons(); this.toast.add({ severity: 'success', summary: 'Deleted', detail: 'Coupon removed.' }); } }); }
+  toggleCoupon(c: Coupon) { if (!this.perms.canWrite('schemes')) return; this.svc.setCouponStatus(c.id, c.status === 'active' ? 'paused' : 'active').subscribe({ next: () => { this.couponsLoaded = false; this.loadCoupons(); } }); }
+  removeCoupon(c: Coupon) { if (!this.perms.canWrite('schemes')) return; this.svc.deleteCoupon(c.id).subscribe({ next: () => { this.couponsLoaded = false; this.loadCoupons(); this.toast.add({ severity: 'success', summary: 'Deleted', detail: 'Coupon removed.' }); } }); }
 
   couponBadge(c: Coupon): string {
     const t = c.discountType ?? c.discount_type; const v = c.discountValue ?? c.discount_value;

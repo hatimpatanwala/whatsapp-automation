@@ -15,6 +15,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { CardModule } from 'primeng/card';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 interface Quote {
   id: string;
@@ -50,10 +51,12 @@ interface Quote {
           <h2 class="text-2xl font-bold text-gray-900">Quotes</h2>
           <p class="text-sm text-gray-500 mt-1">Create and manage customer quotes</p>
         </div>
-        <div class="flex gap-2">
-          <p-button label="Create on WhatsApp" icon="pi pi-whatsapp" [outlined]="true" [loading]="openingBuilder()" (onClick)="openBuilder()" />
-          <p-button label="New Quote" icon="pi pi-plus" routerLink="/quotes/new" />
-        </div>
+        @if (perms.canWrite('quotes')) {
+          <div class="flex gap-2">
+            <p-button label="Create on WhatsApp" icon="pi pi-whatsapp" [outlined]="true" [loading]="openingBuilder()" (onClick)="openBuilder()" />
+            <p-button label="New Quote" icon="pi pi-plus" routerLink="/quotes/new" />
+          </div>
+        }
       </div>
 
       <!-- Stats cards -->
@@ -134,6 +137,7 @@ interface Quote {
               <td class="text-sm text-gray-500">{{ quote.valid_until ? (quote.valid_until | date:'mediumDate') : '-' }}</td>
               <td class="text-sm text-gray-500">{{ quote.created_at | date:'mediumDate' }}</td>
               <td class="text-right" (click)="$event.stopPropagation()">
+                @if (perms.canWrite('quotes')) {
                 <div class="flex gap-1 justify-end">
                   @if (quote.status === 'draft') {
                     <button pButton icon="pi pi-send" class="p-button-text p-button-sm p-button-success" pTooltip="Mark as Sent" (click)="updateStatus(quote, 'sent')"></button>
@@ -149,6 +153,7 @@ interface Quote {
                   <button pButton icon="pi pi-copy" class="p-button-text p-button-sm" pTooltip="Duplicate" (click)="duplicateQuote(quote)"></button>
                   <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger" pTooltip="Delete" (click)="confirmDelete(quote)"></button>
                 </div>
+                }
               </td>
             </tr>
           </ng-template>
@@ -187,6 +192,7 @@ export class QuoteListComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
+  readonly perms = inject(PermissionService);
 
   loading = signal(true);
   quotes = signal<Quote[]>([]);
@@ -231,6 +237,7 @@ export class QuoteListComponent implements OnInit {
 
   /** Mint a token-secured Builder session and open the quote builder (WhatsApp webview). */
   openBuilder() {
+    if (!this.perms.canWrite('quotes')) return;
     if (this.openingBuilder()) return;
     this.openingBuilder.set(true);
     this.api.post<{ token: string }>('/builder/sessions', { type: 'quote' }).subscribe({
@@ -283,6 +290,7 @@ export class QuoteListComponent implements OnInit {
   }
 
   updateStatus(quote: Quote, status: string) {
+    if (!this.perms.canWrite('quotes')) return;
     this.api.patch<any>(`/quotes/${quote.id}/status`, { status }).subscribe({
       next: () => {
         this.messageService.add({ severity: 'success', summary: 'Updated', detail: `Quote marked as ${status}` });
@@ -294,6 +302,7 @@ export class QuoteListComponent implements OnInit {
   }
 
   duplicateQuote(quote: Quote) {
+    if (!this.perms.canWrite('quotes')) return;
     this.api.post<any>(`/quotes/${quote.id}/duplicate`, {}).subscribe({
       next: (newQuote) => {
         this.messageService.add({ severity: 'success', summary: 'Duplicated', detail: 'Quote duplicated successfully' });
@@ -305,6 +314,7 @@ export class QuoteListComponent implements OnInit {
   }
 
   confirmDelete(quote: Quote) {
+    if (!this.perms.canWrite('quotes')) return;
     this.confirmationService.confirm({
       message: `Delete quote ${quote.quote_number}?`,
       header: 'Confirm Delete',

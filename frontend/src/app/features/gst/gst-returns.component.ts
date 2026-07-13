@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { GstService } from '../../core/services/gst.service';
 import { PdfExportService } from '../../core/services/pdf-export.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 type Report = 'gstr1' | 'gstr3b' | 'hsn' | 'gstr2b';
 
@@ -102,10 +103,12 @@ type Report = 'gstr1' | 'gstr3b' | 'hsn' | 'gstr2b';
             </div>
           }
           @case ('gstr2b') {
+            @if (perms.canWrite('gst')) {
             <div class="mb-4 flex items-center gap-3 text-sm">
               <label class="font-medium">Import GSTR-2B JSON (from the GST portal):</label>
               <input type="file" accept="application/json" (change)="importFile($event)" />
             </div>
+            }
             @if (error()) { <p class="text-red-600 text-sm mb-3">{{ error() }}</p> }
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 max-w-3xl">
               <div class="border rounded-lg p-3"><div class="text-slate-500 text-xs">ITC as per 2B</div><div class="text-lg font-semibold">{{ fmt(data().summary.itcAsPer2b) }}</div></div>
@@ -169,6 +172,7 @@ type Report = 'gstr1' | 'gstr3b' | 'hsn' | 'gstr2b';
 export class GstReturnsComponent {
   private readonly gst = inject(GstService);
   private readonly pdf = inject(PdfExportService);
+  readonly perms = inject(PermissionService);
   readonly report = signal<Report>('gstr1');
   readonly data = signal<any>(null);
   readonly loading = signal(true);
@@ -242,6 +246,7 @@ export class GstReturnsComponent {
 
   /** Upload a GSTR-2B JSON downloaded from the portal, then re-reconcile. */
   importFile(e: Event): void {
+    if (!this.perms.canWrite('gst')) return;
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     file.text().then((txt) => {

@@ -20,6 +20,7 @@ import { CustomerService } from '../../core/services/customer.service';
 import { SchemeService } from '../../core/services/scheme.service';
 import { ApiService } from '../../core/services/api.service';
 import { ErpAccessService } from '../../core/services/erp-access.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'wa-customer-detail',
@@ -47,7 +48,9 @@ import { ErpAccessService } from '../../core/services/erp-access.service';
           <!-- Left: profile card -->
           <div class="space-y-5">
             <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 text-center relative">
-              <button pButton icon="pi pi-pencil" class="p-button-text p-button-rounded p-button-sm absolute top-3 right-3" pTooltip="Edit profile" (click)="openEdit()"></button>
+              @if (perms.canWrite('customers')) {
+                <button pButton icon="pi pi-pencil" class="p-button-text p-button-rounded p-button-sm absolute top-3 right-3" pTooltip="Edit profile" (click)="openEdit()"></button>
+              }
               <div class="flex justify-center mb-4">
                 <p-avatar [label]="initials()" styleClass="bg-primary-500 text-white font-bold" size="xlarge" shape="circle" />
               </div>
@@ -75,13 +78,17 @@ import { ErpAccessService } from '../../core/services/erp-access.service';
               }
               <div class="flex gap-2 mt-4">
                 <a pButton label="Message" icon="pi pi-whatsapp" class="flex-1 p-button-outlined" severity="success" [href]="waLink()" target="_blank"></a>
-                @if (c().status === 'blocked') {
-                  <button pButton label="Unblock" icon="pi pi-check" class="p-button-outlined" severity="success" (click)="setBlocked(false)"></button>
-                } @else {
-                  <button pButton label="Block" icon="pi pi-ban" class="p-button-outlined p-button-danger" severity="danger" (click)="setBlocked(true)"></button>
+                @if (perms.canWrite('customers')) {
+                  @if (c().status === 'blocked') {
+                    <button pButton label="Unblock" icon="pi pi-check" class="p-button-outlined" severity="success" (click)="setBlocked(false)"></button>
+                  } @else {
+                    <button pButton label="Block" icon="pi pi-ban" class="p-button-outlined p-button-danger" severity="danger" (click)="setBlocked(true)"></button>
+                  }
                 }
               </div>
-              <button pButton label="Give reward" icon="pi pi-gift" class="w-full mt-2" severity="help" (click)="openReward()"></button>
+              @if (perms.canWrite('customers')) {
+                <button pButton label="Give reward" icon="pi pi-gift" class="w-full mt-2" severity="help" (click)="openReward()"></button>
+              }
             </div>
 
             <!-- Active cart -->
@@ -102,13 +109,17 @@ import { ErpAccessService } from '../../core/services/erp-access.service';
             <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-900">Tags</h3>
-                <button pButton icon="pi pi-plus" class="p-button-text p-button-sm p-button-rounded" pTooltip="Add tag" (click)="tagDialog = true"></button>
+                @if (perms.canWrite('customers')) {
+                  <button pButton icon="pi pi-plus" class="p-button-text p-button-sm p-button-rounded" pTooltip="Add tag" (click)="tagDialog = true"></button>
+                }
               </div>
               <div class="flex flex-wrap gap-2">
                 @for (tag of c().tags; track tag) {
                   <div class="flex items-center gap-1 bg-primary-50 text-primary-700 border border-primary-100 rounded-full px-3 py-1">
                     <span class="text-xs font-medium">{{ tag }}</span>
-                    <button class="text-primary-400 hover:text-red-500 leading-none" (click)="removeTag(tag)"><i class="pi pi-times" style="font-size:0.6rem"></i></button>
+                    @if (perms.canWrite('customers')) {
+                      <button class="text-primary-400 hover:text-red-500 leading-none" (click)="removeTag(tag)"><i class="pi pi-times" style="font-size:0.6rem"></i></button>
+                    }
                   </div>
                 }
                 @if (!c().tags.length) { <p class="text-xs text-gray-400">No tags assigned</p> }
@@ -318,9 +329,11 @@ import { ErpAccessService } from '../../core/services/erp-access.service';
                   <p-tabpanel value="notes">
                     <div class="p-4">
                       <textarea pTextarea class="w-full" rows="6" [(ngModel)]="notes" placeholder="Add private notes about this customer..."></textarea>
-                      <div class="flex justify-end mt-2">
-                        <button pButton label="Save Notes" icon="pi pi-check" class="p-button-sm" severity="success" [disabled]="savingNotes()" (click)="saveNotes()"></button>
-                      </div>
+                      @if (perms.canWrite('customers')) {
+                        <div class="flex justify-end mt-2">
+                          <button pButton label="Save Notes" icon="pi pi-check" class="p-button-sm" severity="success" [disabled]="savingNotes()" (click)="saveNotes()"></button>
+                        </div>
+                      }
                     </div>
                   </p-tabpanel>
                 </p-tabpanels>
@@ -421,6 +434,7 @@ export class CustomerDetailComponent implements OnInit {
   private readonly schemeService = inject(SchemeService);
   private readonly api = inject(ApiService);
   readonly erpAccess = inject(ErpAccessService);
+  readonly perms = inject(PermissionService);
 
   readonly cur = '₹';
   customerFieldDefs = signal<any[]>([]);
@@ -555,10 +569,12 @@ export class CustomerDetailComponent implements OnInit {
 
   // ─── Edit profile ──────────────────────────────────────────────────────────
   openEdit() {
+    if (!this.perms.canWrite('customers')) return;
     this.edit = { name: this.c().whatsappName || '', displayName: this.c().displayName || '', email: this.c().email || '' };
     this.editDialog = true;
   }
   saveEdit() {
+    if (!this.perms.canWrite('customers')) return;
     const id = this.c().id;
     this.savingEdit.set(true);
     this.customerService.update(id, { name: this.edit.name, displayName: this.edit.displayName, email: this.edit.email }).subscribe({
@@ -568,6 +584,7 @@ export class CustomerDetailComponent implements OnInit {
   }
 
   saveNotes() {
+    if (!this.perms.canWrite('customers')) return;
     const id = this.c().id;
     this.savingNotes.set(true);
     this.customerService.update(id, { notes: this.notes }).subscribe({
@@ -577,6 +594,7 @@ export class CustomerDetailComponent implements OnInit {
   }
 
   setBlocked(block: boolean) {
+    if (!this.perms.canWrite('customers')) return;
     const id = this.c().id;
     const obs = block ? this.customerService.block(id) : this.customerService.unblock(id);
     obs.subscribe({
@@ -587,6 +605,7 @@ export class CustomerDetailComponent implements OnInit {
 
   // ─── Tags ────────────────────────────────────────────────────────────────────
   addTag() {
+    if (!this.perms.canWrite('customers')) return;
     if (!this.newTag.trim()) return;
     const id = this.c().id;
     const tags = [...this.c().tags, this.newTag.trim()];
@@ -597,6 +616,7 @@ export class CustomerDetailComponent implements OnInit {
     this.toast.add({ severity: 'success', summary: 'Tag added' });
   }
   removeTag(tag: string) {
+    if (!this.perms.canWrite('customers')) return;
     const id = this.c().id;
     const tags = this.c().tags.filter((t: string) => t !== tag);
     this.customerService.updateTags(id, tags).subscribe();
@@ -608,12 +628,14 @@ export class CustomerDetailComponent implements OnInit {
     return { kind: 'coupon', discountType: 'percent', discountValue: 10, maxDiscount: null, minCart: null, validDays: 30, code: '' };
   }
   openReward() {
+    if (!this.perms.canWrite('customers')) return;
     this.reward = this.blankReward();
     const last4 = (this.c().whatsappPhone || '').replace(/[^0-9]/g, '').slice(-4);
     this.reward.code = `VIP${last4}${Math.floor(Math.random() * 90 + 10)}`;
     this.rewardDialog = true;
   }
   giveReward() {
+    if (!this.perms.canWrite('customers')) return;
     const id = this.c().id;
     const validUntil = new Date(Date.now() + (Number(this.reward.validDays) || 30) * 86400000).toISOString();
     this.savingReward.set(true);

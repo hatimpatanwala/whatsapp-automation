@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { EntryService } from '../../core/services/entry.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 /**
  * SFA admin — register salesmen by WhatsApp number and hand each a tokenized
@@ -28,6 +29,7 @@ import { EntryService } from '../../core/services/entry.service';
 
       @if (tab() === 'salesmen') {
         <!-- Add form -->
+        @if (perms.canWrite('salesmen')) {
         <div class="flex flex-wrap items-end gap-2 mb-4 bg-slate-50 border border-slate-200 rounded p-3">
           <label class="text-xs text-slate-500">Name<br/>
             <input #nameEl [(ngModel)]="fName" class="border rounded px-2 py-1 text-sm w-44" placeholder="Ramesh Kumar" /></label>
@@ -39,6 +41,7 @@ import { EntryService } from '../../core/services/entry.service';
             <input [(ngModel)]="fArea" class="border rounded px-2 py-1 text-sm w-32" placeholder="optional" /></label>
           <button (click)="add()" [disabled]="busy()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm disabled:opacity-50">+ Add salesman</button>
         </div>
+        }
 
         <table class="w-full text-sm border border-slate-300" style="border-collapse: collapse">
           <thead><tr class="bg-slate-100 text-slate-600">
@@ -65,10 +68,12 @@ import { EntryService } from '../../core/services/entry.service';
                   <button (click)="openApp(s)" class="text-xs px-2 py-1 rounded bg-indigo-600 text-white mr-1" title="Open this salesman's field app yourself">▶ Open field app</button>
                   <button (click)="copy(s)" class="text-xs px-2 py-1 rounded border mr-1">Copy link</button>
                   <a [href]="waShare(s)" target="_blank" class="text-xs px-2 py-1 rounded bg-emerald-600 text-white mr-1 inline-block">Send on WhatsApp</a>
+                  @if (perms.canWrite('salesmen')) {
                   <button (click)="rotate(s)" class="text-xs px-2 py-1 rounded border mr-1" title="Old link stops working">↻ New link</button>
                   <button (click)="toggle(s)" class="text-xs px-2 py-1 rounded border" [class.text-red-600]="s.isActive">
                     {{ s.isActive ? 'Deactivate' : 'Activate' }}
                   </button>
+                  }
                 </td>
               </tr>
             } @empty { <tr><td colspan="6" class="border border-slate-300 px-2 py-4 text-center text-slate-400">No salesmen yet — add one above and share the link on WhatsApp.</td></tr> }
@@ -114,6 +119,7 @@ import { EntryService } from '../../core/services/entry.service';
 })
 export class SalesmenComponent implements OnInit {
   private readonly entry = inject(EntryService);
+  readonly perms = inject(PermissionService);
 
   readonly tabs = ['salesmen', 'follow-ups'];
   readonly tab = signal('salesmen');
@@ -138,6 +144,7 @@ export class SalesmenComponent implements OnInit {
   }
 
   add() {
+    if (!this.perms.canWrite('salesmen')) return;
     if (!this.fName.trim() || !this.fPhone.trim()) { this.flashErr('Name and WhatsApp number are required'); return; }
     this.busy.set(true);
     this.entry.sfaAddSalesman({ name: this.fName.trim(), phone: this.fPhone.trim(), route: this.fRoute.trim() || undefined, area: this.fArea.trim() || undefined })
@@ -147,12 +154,14 @@ export class SalesmenComponent implements OnInit {
       });
   }
   rotate(s: any) {
+    if (!this.perms.canWrite('salesmen')) return;
     this.entry.sfaUpdateSalesman(s.id, { rotateToken: true }).subscribe({
       next: () => { this.flash('New link generated — the old one no longer works'); this.load(); },
       error: () => this.flashErr('Could not rotate'),
     });
   }
   toggle(s: any) {
+    if (!this.perms.canWrite('salesmen')) return;
     this.entry.sfaUpdateSalesman(s.id, { isActive: !s.isActive }).subscribe({
       next: () => { this.flash(s.isActive ? 'Deactivated' : 'Activated'); this.load(); },
       error: () => this.flashErr('Could not update'),

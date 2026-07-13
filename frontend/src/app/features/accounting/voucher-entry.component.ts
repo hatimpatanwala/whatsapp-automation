@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AccountingService, Ledger, VoucherEntry } from '../../core/services/accounting.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 @Component({
   selector: 'wa-voucher-entry',
@@ -79,10 +80,12 @@ import { AccountingService, Ledger, VoucherEntry } from '../../core/services/acc
 
       @if (error()) { <p class="text-red-600 text-sm mb-3">{{ error() }}</p> }
 
-      <button (click)="save()" [disabled]="!balanced() || saving()"
-              class="px-4 py-2 rounded-md bg-emerald-600 text-white disabled:opacity-50">
-        {{ saving() ? 'Saving…' : 'Save Voucher (Ctrl+A)' }}
-      </button>
+      @if (perms.canWrite('accounting')) {
+        <button (click)="save()" [disabled]="!balanced() || saving()"
+                class="px-4 py-2 rounded-md bg-emerald-600 text-white disabled:opacity-50">
+          {{ saving() ? 'Saving…' : 'Save Voucher (Ctrl+A)' }}
+        </button>
+      }
     </div>
   `,
 })
@@ -90,6 +93,7 @@ export class VoucherEntryComponent {
   private readonly acc = inject(AccountingService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  readonly perms = inject(PermissionService);
 
   readonly ledgers = signal<Ledger[]>([]);
   readonly saving = signal(false);
@@ -119,6 +123,7 @@ export class VoucherEntryComponent {
   fmt(n: number): string { return n.toFixed(2); }
 
   save(): void {
+    if (!this.perms.canWrite('accounting')) return;
     if (!this.balanced()) { this.error.set('Debit and credit must be equal and greater than zero'); return; }
     this.saving.set(true);
     this.error.set(null);
