@@ -12,13 +12,13 @@ import { InsightsService } from './insights.service';
  * the ERP plan feature (same as the rest of the business suite).
  */
 @Controller('erp/insights')
-@UseGuards(ErpFeatureGuard)
-@RequiresFeature('erp')
-@Roles('owner', 'seller', 'admin')
 export class InsightsController {
   constructor(private readonly insights: InsightsService) {}
 
   @Get()
+  @Roles('owner', 'seller')
+  @UseGuards(ErpFeatureGuard)
+  @RequiresFeature('erp')
   get(@Req() req: Request, @Query('refresh') refresh?: string) {
     const schema = req.tenantContext?.schemaName;
     if (!schema) throw new UnauthorizedException('No tenant context');
