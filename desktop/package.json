@@ -13,7 +13,7 @@
     "start:cloud": "cross-env DESKTOP_SHELL_ONLY=1 npm run start",
     "start:docker": "cross-env DESKTOP_DB=docker npm run start",
     "import:dump": "node scripts/import-dump.mjs",
-    "dist": "npm run build && electron-builder --win --publish never",
+    "dist": "npm run prepack:backend && npm run build && electron-builder --win --publish never",
     "release": "npm run build && electron-builder --win --publish always",
     "prepack:backend": "npm --prefix .. run build && npm --prefix ../frontend run build",
     "pack:full": "npm run prepack:backend && npm run dist"

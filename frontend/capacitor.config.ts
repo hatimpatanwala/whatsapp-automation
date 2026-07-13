@@ -13,14 +13,22 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const variant = (process.env.WA_VARIANT || 'full').toLowerCase();
 const erp = variant === 'erp';
 
+/**
+ * Live auto-update: when WA_LIVE_URL is set, the app loads the SPA straight from
+ * the server, so every server deploy updates the app UI/logic with no re-install
+ * (the Capacitor native bridge — push, notifications — still works over the
+ * remote page). Leave it unset to ship a fully-bundled offline build instead.
+ */
+const liveUrl = process.env.WA_LIVE_URL || 'https://staging-whatsappdemo.duckdns.org';
+
 const config: CapacitorConfig = {
   appId: erp ? 'com.wacommerce.erp' : 'com.wacommerce.app',
   appName: erp ? 'WA Commerce ERP' : 'WA Commerce',
   webDir: 'dist/wa-commerce/browser',
-  // Bundle the SPA and hit the cloud API over https (apiUrl in the mobile env).
   server: {
     androidScheme: 'https',
     iosScheme: 'https',
+    ...(liveUrl ? { url: liveUrl } : {}),
   },
   plugins: {
     // Splash/keyboard defaults are fine; add plugin config here as needed.

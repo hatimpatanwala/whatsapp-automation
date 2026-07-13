@@ -71,4 +71,4 @@ nsis:
 # GitHub Releases instead.
 publish:
   - provider: generic
-    url: https://downloads.example.com/wacommerce-desktop/
+    url: https://staging-whatsappdemo.duckdns.org/desktop-updates/

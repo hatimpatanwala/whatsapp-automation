@@ -83,6 +83,6 @@ export const SHELL_ONLY = IS_DEV || process.env.DESKTOP_SHELL_ONLY === '1';
 
 /** Auto-update feed (matches publish in electron-builder.yml). */
 export const UPDATE_FEED_URL =
-  process.env.DESKTOP_UPDATE_FEED || 'https://downloads.example.com/wacommerce-desktop/';
+  process.env.DESKTOP_UPDATE_FEED || 'https://staging-whatsappdemo.duckdns.org/desktop-updates/';
 
 export const PRODUCT_NAME = 'WhatsApp Commerce ERP';
