@@ -69,9 +69,12 @@ export class EntryContextService {
    */
   categoryProducts(schema: string) {
     return this.cm.executeInTenantContext(schema, async (qr) => {
+      // Group by the real category if linked; else fall back to the category/group
+      // name the importer preserved in metadata (e.g. Miracle groups) so the feature
+      // works even before products are formally categorised. Else "Uncategorised".
       const rows = await qr.query(
-        `SELECT COALESCE(c.id::text, 'uncategorised') AS category_id,
-                COALESCE(c.name, 'Uncategorised') AS category_name,
+        `SELECT COALESCE(c.id::text, 'meta:' || lower(NULLIF(trim(p.metadata->>'category'), '')), 'uncategorised') AS category_id,
+                COALESCE(c.name, NULLIF(trim(p.metadata->>'category'), ''), 'Uncategorised') AS category_name,
                 p.id, p.name, p.hsn_code, p.uom, COALESCE(p.gst_rate, 0) AS gst_rate,
                 COALESCE(p.sale_price, p.base_price) AS sale_price, p.base_price,
                 p.price_includes_tax, COALESCE(p.sale_discount_pct, 0) AS sale_discount_pct
