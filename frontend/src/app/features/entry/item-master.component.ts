@@ -1,6 +1,7 @@
 import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntryService, ItemMasterRow } from '../../core/services/entry.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 const FIELDS = ['name', 'unit', 'altUnit', 'factor', 'uqc', 'hsn', 'barcode', 'gst', 'pRate', 'sRate', 'mrp', 'saleDisc', 'oRate', 'minStock', 'stockQty'] as const;
 type Field = (typeof FIELDS)[number];
@@ -43,7 +44,7 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
             <label class="flex items-center gap-1 text-xs whitespace-nowrap" title="Only items at or below min stock">
               <input type="checkbox" [(ngModel)]="lowOnly" /> low stock
             </label>
-            <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New (Ins)</button>
+            @if (writable()) { <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New (Ins)</button> }
           </div>
           <table class="w-full text-sm" style="border-collapse: collapse">
             <thead>
@@ -310,10 +311,12 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
           }
 
           <div class="flex items-center gap-3 mt-4">
+            @if (writable()) {
             <button (click)="save()" [disabled]="saving() || !canSave()"
                     class="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-50">
               {{ saving() ? 'Saving…' : (editId() ? 'Save Changes (Ctrl+A)' : 'Save Item (Ctrl+A)') }}
             </button>
+            } @else { <span class="text-xs text-amber-600">Read-only — you can view items but not add or edit.</span> }
             @if (editId()) {
               <button (click)="startNew()" class="px-3 py-2 rounded border text-sm">New Item (Ins)</button>
             }
@@ -326,6 +329,8 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
 })
 export class ItemMasterComponent {
   private readonly entry = inject(EntryService);
+  readonly perms = inject(PermissionService);
+  writable(): boolean { return this.perms.canWrite('products'); }
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly tick = signal(0);
@@ -513,7 +518,7 @@ export class ItemMasterComponent {
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }
 
   save(): void {
-    if (!this.canSave() || this.saving()) return;
+    if (!this.writable() || !this.canSave() || this.saving()) return;
     this.saving.set(true);
     this.error.set(null);
     const customFields: Record<string, any> = {};

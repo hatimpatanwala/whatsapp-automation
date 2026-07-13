@@ -1,6 +1,7 @@
 import { Component, ElementRef, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntryService } from '../../core/services/entry.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 /** GST states (code → name) — drives the state picker and GSTIN cross-check. */
 const GST_STATES: Array<[string, string]> = [
@@ -69,7 +70,7 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
             <label class="flex items-center gap-1 text-xs whitespace-nowrap">
               <input type="checkbox" [(ngModel)]="activeOnly" /> active
             </label>
-            <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New</button>
+            @if (writable()) { <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New</button> }
           </div>
           <table class="w-full text-sm">
             <thead><tr class="bg-slate-100 text-slate-600 text-xs">
@@ -265,10 +266,12 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
           }
 
           <div class="flex items-center gap-3">
+            @if (writable()) {
             <button (click)="save()" [disabled]="saving() || !canSave()"
                     class="px-4 py-2 rounded bg-emerald-600 text-white disabled:opacity-50">
               {{ saving() ? 'Saving…' : (editId() ? 'Save Changes (Ctrl+A)' : 'Create Party (Ctrl+A)') }}
             </button>
+            } @else { <span class="text-xs text-amber-600">Read-only — you can view parties but not add or edit.</span> }
             @if (!canSave() && f.partyName) { <span class="text-xs text-amber-600">fix the highlighted fields to save</span> }
             @if (apiError()) { <span class="text-red-600 text-xs">{{ apiError() }}</span> }
           </div>
@@ -287,6 +290,8 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
 })
 export class PartyMasterComponent {
   private readonly entry = inject(EntryService);
+  readonly perms = inject(PermissionService);
+  writable(): boolean { return this.perms.canWrite('customers'); }
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly tick = signal(0);
@@ -495,6 +500,7 @@ export class PartyMasterComponent {
   onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
 
   save(): void {
+    if (!this.writable()) return;
     if (!this.canSave() || this.saving()) return;
     this.saving.set(true);
     this.apiError.set(null);

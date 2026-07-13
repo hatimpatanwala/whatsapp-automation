@@ -4,6 +4,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { filter } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
+import { PermissionService } from '../../core/services/permission.service';
 
 interface MenuEntry {
   label: string;
@@ -52,7 +53,7 @@ interface MenuGroup {
               <div class="mcl-dropdown">
                 @for (e of m.entries; track e.label) {
                   @if (e.divider) { <div class="mcl-sep"></div> }
-                  @else {
+                  @else if (canShow(e)) {
                     <button class="mcl-item" (click)="go(e)">
                       <span>{{ e.label }}</span>
                       @if (e.key) { <span class="mcl-item-key">{{ e.key }}</span> }
@@ -69,10 +70,12 @@ interface MenuGroup {
       <!-- Function-key toolbar -->
       <div class="mcl-toolbar">
         @for (b of toolbar; track b.label) {
+          @if (canShow(b)) {
           <button class="mcl-fkey" [class.mcl-fkey-active]="isActive(b)" (click)="go(b)">
             <span class="mcl-fkey-key">{{ b.key }}</span>
             <span class="mcl-fkey-lbl">{{ b.label }}</span>
           </button>
+          }
         }
       </div>
 
@@ -258,6 +261,23 @@ interface MenuGroup {
 export class TallyLayoutComponent {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private readonly perms = inject(PermissionService);
+
+  /** Write-only entry routes → the RBAC feature the role must have `write` on.
+   *  Entries whose route is here are hidden from the menu + F-key rail when the
+   *  role can't write them (view/report/master entries always show). */
+  private readonly writeFeature: Record<string, string> = {
+    '/entry/sales': 'invoices', '/entry/purchase': 'purchases',
+    '/entry/receipt': 'payments', '/entry/payment': 'payments', '/entry/collect': 'payments',
+    '/accounting/vouchers/new': 'accounting', '/entry/quote': 'quotes', '/entry/order': 'orders',
+    '/entry/returns': 'invoices', '/entry/stock': 'inventory',
+  };
+
+  /** A menu/toolbar entry is shown unless it's a write action the role can't do. */
+  canShow(e: { route?: string }): boolean {
+    const f = e.route ? this.writeFeature[e.route] : undefined;
+    return !f || this.perms.canWrite(f);
+  }
 
   readonly today = new Date();
   readonly fy = this.finYear();
@@ -266,6 +286,9 @@ export class TallyLayoutComponent {
   private helpPrevFocus: HTMLElement | null = null;
 
   constructor() {
+    // The ERP keyboard shell is a separate layout from the web portal, so load
+    // the role's permissions here too (drives the write-action gating above).
+    this.perms.load();
     // Miracle behaviour: every screen opens with the cursor already in its first
     // field (party A/c on vouchers) — the operator types immediately, no mouse.
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {

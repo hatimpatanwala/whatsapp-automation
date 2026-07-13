@@ -97,9 +97,9 @@ interface Feature { key: string; label: string; group: string; }
                 [class.border-indigo-400]="sel()?.id === r.id" [class.bg-indigo-50]="sel()?.id === r.id" [class.border-slate-200]="sel()?.id !== r.id">
                 <div class="flex items-center justify-between">
                   <span class="font-medium text-sm">{{ r.name }}</span>
-                  @if (r.is_system) { <span class="text-[10px] bg-slate-200 text-slate-600 rounded px-1">system</span> }
+                  @if (r.isSystem) { <span class="text-[10px] bg-slate-200 text-slate-600 rounded px-1">system</span> }
                 </div>
-                <span class="text-xs text-slate-400">{{ r.user_count || 0 }} user(s)</span>
+                <span class="text-xs text-slate-400">{{ r.userCount || 0 }} user(s)</span>
               </button>
             }
           </div>
@@ -111,7 +111,7 @@ interface Feature { key: string; label: string; group: string; }
                 @if (r.name === 'Owner') { <span class="text-xs text-amber-600">Owner always has full access.</span> }
                 @if (canManage() && r.name !== 'Owner') {
                   <button (click)="saveRole()" [disabled]="busy()" class="ml-auto px-3 py-1.5 rounded bg-emerald-600 text-white text-sm disabled:opacity-50">Save permissions</button>
-                  @if (!r.is_system) { <button (click)="deleteRole(r)" class="px-3 py-1.5 rounded border text-red-600 text-sm">Delete role</button> }
+                  @if (!r.isSystem) { <button (click)="deleteRole(r)" class="px-3 py-1.5 rounded border text-red-600 text-sm">Delete role</button> }
                 }
               </div>
               <input [(ngModel)]="selDesc" [disabled]="!canManage() || r.name === 'Owner'" class="border rounded px-2 py-1.5 text-sm w-full mb-4" placeholder="Description" />
