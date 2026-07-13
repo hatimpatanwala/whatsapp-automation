@@ -52,7 +52,7 @@ export class SalesmanCommandService {
       tenant.phoneNumberId,
       tenant.accessToken,
       to,
-      `👋 Hi ${first}! Tap below to open your Sales App — take orders for your customers, collect payments (cash / cheque / UPI) and check pending bills & promises.`,
+      `👋 Hi ${first}! Tap below to open your Sales App — check in at your beat customers, take orders, collect payments (cash / cheque / UPI), log visits and track your targets & performance.`,
       '🧾 Open Sales App',
       url,
       '🛍️ Salesman Field App',

@@ -1,18 +1,35 @@
 import { app } from 'electron';
 import { spawn, execSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as http from 'http';
-import { backendEntry, frontendDir } from './paths';
+import { backendEntry, frontendDir, stateFile } from './paths';
 import { LOCAL_PORT, PG_PORT, PG_USER, PG_PASSWORD, DB_NAME, DB_MODE, DOCKER_PG_PORT, DOCKER_REDIS_PORT, CLOUD_API_URL } from './config';
 import { getSecrets } from './secrets';
 
 let child: ChildProcess | null = null;
+
+/** Persistent on-disk log of the backend's output — survives a failed launch so the
+ * real error can be inspected (the in-memory tail is only the last 40 lines). */
+let logStream: fs.WriteStream | null = null;
+function backendLogPath(): string {
+  return stateFile('backend.log');
+}
+function openBackendLog(): void {
+  try {
+    fs.mkdirSync(path.dirname(backendLogPath()), { recursive: true });
+    logStream = fs.createWriteStream(backendLogPath(), { flags: 'w' });
+  } catch {
+    logStream = null;
+  }
+}
 
 /** Tail of the backend's output — attached to startup errors for diagnosis. */
 const outputTail: string[] = [];
 function remember(chunk: unknown, stream: NodeJS.WriteStream): void {
   const text = String(chunk);
   stream.write(`[backend] ${text}`);
+  logStream?.write(text);
   for (const line of text.split(/\r?\n/)) {
     const l = line.trim();
     if (!l) continue;
@@ -88,7 +105,12 @@ export async function startBackend(): Promise<void> {
   const env = { ...backendEnv() };
   const exe = packaged ? process.execPath : systemNode();
   if (packaged) env.ELECTRON_RUN_AS_NODE = '1';
-  console.log(`[backend] spawning: ${exe} ${backendEntry()}`);
+  openBackendLog();
+  const header = `[backend] spawning: ${exe} ${backendEntry()}\n` +
+    `[backend] port=${LOCAL_PORT} db=${DB_NAME}@127.0.0.1:${DB_MODE === 'docker' ? DOCKER_PG_PORT : PG_PORT} packaged=${packaged}\n` +
+    `[backend] entry exists: ${fs.existsSync(backendEntry())}\n`;
+  console.log(header.trim());
+  logStream?.write(header);
 
   child = spawn(exe, [backendEntry()], {
     env,
@@ -110,11 +132,18 @@ export async function startBackend(): Promise<void> {
     child = null;
   });
 
-  await waitForHealth(LOCAL_PORT, 90_000, () => {
-    if (spawnError) return `The backend process could not be started: ${spawnError.message}`;
-    if (exited) return `The backend exited early (code ${exited.code}).\n\nLast output:\n${outputTail.slice(-15).join('\n')}`;
-    return null;
-  });
+  // First run compiles nothing but does connect the embedded DB and instantiate the
+  // whole Nest graph, which is slow on cold disks — be generous before giving up.
+  try {
+    await waitForHealth(LOCAL_PORT, 180_000, () => {
+      if (spawnError) return `The backend process could not be started: ${spawnError.message}`;
+      if (exited) return `The backend exited early (code ${exited.code}).\n\nLast output:\n${outputTail.slice(-15).join('\n')}`;
+      return null;
+    });
+  } catch (err) {
+    const hint = `\n\nFull backend log: ${backendLogPath()}`;
+    throw new Error(`${(err as Error).message}${hint}`);
+  }
 }
 
 export function stopBackend(): void {

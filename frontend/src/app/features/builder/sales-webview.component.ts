@@ -5,7 +5,7 @@ import { HttpBackend, HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
 
-type Tab = 'home' | 'catalog' | 'offers' | 'customers' | 'pending' | 'followups';
+type Tab = 'home' | 'catalog' | 'offers' | 'customers' | 'pending' | 'followups' | 'beat' | 'visits' | 'perf';
 
 const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.data : r) as T;
 
@@ -357,6 +357,180 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
               </div>
             } @empty { <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">No follow-ups here.</p> }
           }
+
+          <!-- ── BEAT (assigned customers · check in/out) ──────────── -->
+          @if (view() === 'beat') {
+            @if (beatLoading()) {
+              <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">Loading your beat…</p>
+            }
+            @for (c of beat(); track c.customer_id) {
+              <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-3">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="text-sm font-bold truncate">{{ c.name }}</p>
+                    <p class="text-[11px] text-gray-400 truncate">{{ c.phone }} {{ c.area ? '· ' + c.area : '' }} {{ c.route ? '· ' + c.route : '' }}</p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <p class="text-sm font-bold tabular-nums" [class.text-red-600]="+c.outstanding > 0">₹{{ fmt(c.outstanding) }}</p>
+                    <p class="text-[11px] text-gray-400">{{ c.open_bills || 0 }} bill(s)</p>
+                  </div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-1">Last visit: {{ c.last_visit_at ? (c.last_visit_at | date:'d MMM yy, h:mm a') : 'never' }}</p>
+
+                @if (activeVisit()?.customer_id === c.customer_id || activeVisitCustomerId() === c.customer_id) {
+                  <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mt-3">
+                    <p class="text-[12px] font-bold text-emerald-800 mb-2"><i class="pi pi-map-marker text-[11px]"></i> Checked in</p>
+                    <textarea [(ngModel)]="visitNote" rows="2" placeholder="Visit note…"
+                      class="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm mb-2 bg-white"></textarea>
+                    <label class="text-[11px] font-semibold text-gray-500 uppercase">Outcome</label>
+                    <select [(ngModel)]="visitOutcome" class="w-full rounded-xl border border-emerald-200 px-3 py-2 text-sm mb-2 mt-1 bg-white">
+                      <option value="order_taken">Order taken</option>
+                      <option value="payment_collected">Payment collected</option>
+                      <option value="no_order">No order</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                    <div class="flex gap-2">
+                      <button (click)="checkOut()" [disabled]="busy()"
+                        class="flex-1 text-[12px] font-semibold bg-emerald-600 text-white rounded-lg py-2 disabled:opacity-50">
+                        {{ busy() ? 'Saving…' : 'Check out' }}
+                      </button>
+                      <button (click)="takeOrderFor(c)" class="text-[12px] font-semibold text-indigo-700 border border-indigo-200 rounded-lg px-3">Take order</button>
+                    </div>
+                  </div>
+                } @else {
+                  <div class="flex gap-2 mt-3">
+                    <button (click)="checkIn(c)" [disabled]="busy()"
+                      class="flex-1 text-[12px] font-semibold bg-indigo-600 text-white rounded-lg py-2 disabled:opacity-50">
+                      {{ busy() ? '…' : 'Check in' }}
+                    </button>
+                    <button (click)="takeOrderFor(c)" class="text-[12px] font-semibold text-indigo-700 border border-indigo-200 rounded-lg px-3">Take order</button>
+                  </div>
+                }
+              </div>
+            } @empty {
+              @if (!beatLoading()) { <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">No customers assigned to your beat.</p> }
+            }
+          }
+
+          <!-- ── VISITS (history for a date range) ─────────────────── -->
+          @if (view() === 'visits') {
+            <div class="flex items-end gap-2 mb-3">
+              <div class="flex-1">
+                <label class="text-[10px] font-semibold text-gray-400 uppercase">From</label>
+                <input type="date" [(ngModel)]="visitFrom" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white" />
+              </div>
+              <div class="flex-1">
+                <label class="text-[10px] font-semibold text-gray-400 uppercase">To</label>
+                <input type="date" [(ngModel)]="visitTo" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white" />
+              </div>
+              <button (click)="loadVisits()" class="text-[12px] font-semibold bg-indigo-600 text-white rounded-xl px-4 py-2">Refresh</button>
+            </div>
+            @if (visitsLoading()) {
+              <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">Loading…</p>
+            }
+            @for (v of visits(); track v.id) {
+              <div class="bg-white rounded-xl border border-gray-100 p-3 mb-2">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold truncate">{{ v.customer_name }}</p>
+                    <p class="text-[11px] text-gray-400 truncate">{{ v.customer_phone }} {{ v.area ? '· ' + v.area : '' }} {{ v.purpose ? '· ' + v.purpose : '' }}</p>
+                  </div>
+                  <span class="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    [class.bg-emerald-100]="v.status === 'completed'" [class.text-emerald-700]="v.status === 'completed'"
+                    [class.bg-amber-100]="v.status !== 'completed'" [class.text-amber-700]="v.status !== 'completed'">{{ v.status || 'open' }}</span>
+                </div>
+                <div class="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-[11px] text-gray-500">
+                  <span>In: {{ v.checkin_at ? (v.checkin_at | date:'d MMM, h:mm a') : '—' }}</span>
+                  <span>Out: {{ v.checkout_at ? (v.checkout_at | date:'d MMM, h:mm a') : '—' }}</span>
+                  @if (v.outcome) { <span class="text-indigo-600 font-semibold">{{ v.outcome }}</span> }
+                </div>
+                @if (v.note) { <p class="text-[11px] text-gray-500 mt-1">{{ v.note }}</p> }
+              </div>
+            } @empty {
+              @if (!visitsLoading()) { <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">No visits in this range.</p> }
+            }
+          }
+
+          <!-- ── PERF (my stats) ───────────────────────────────────── -->
+          @if (view() === 'perf') {
+            @if (statsLoading()) {
+              <p class="text-sm text-gray-400 bg-white rounded-xl border border-gray-100 p-4">Loading your stats…</p>
+            }
+            @if (stats(); as st) {
+              <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2">Today</h2>
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-white rounded-2xl border border-gray-100 p-4">
+                  <p class="text-[11px] font-semibold text-gray-400 uppercase">Sales</p>
+                  <p class="text-xl font-bold tabular-nums mt-1">₹{{ fmt(st.today?.sales) }}</p>
+                  <p class="text-[11px] text-gray-400">{{ st.today?.orders || 0 }} order(s)</p>
+                </div>
+                <div class="bg-white rounded-2xl border border-gray-100 p-4">
+                  <p class="text-[11px] font-semibold text-gray-400 uppercase">Collected</p>
+                  <p class="text-xl font-bold tabular-nums mt-1 text-emerald-700">₹{{ fmt(st.today?.collected) }}</p>
+                  <p class="text-[11px] text-gray-400">{{ st.today?.visits || 0 }} visit(s)</p>
+                </div>
+              </div>
+
+              <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2">This month vs target</h2>
+              <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-4 space-y-3">
+                <div>
+                  <div class="flex justify-between text-[12px] mb-1">
+                    <span class="font-semibold text-gray-600">Sales</span>
+                    <span class="tabular-nums text-gray-400">₹{{ fmt(st.month?.sales) }} / ₹{{ fmt(st.target?.amount) }}</span>
+                  </div>
+                  <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div class="h-full bg-indigo-600 rounded-full" [style.width.%]="pct(st.month?.sales, st.target?.amount)"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-[12px] mb-1">
+                    <span class="font-semibold text-gray-600">Collection</span>
+                    <span class="tabular-nums text-gray-400">₹{{ fmt(st.month?.collected) }} / ₹{{ fmt(st.target?.collection) }}</span>
+                  </div>
+                  <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div class="h-full bg-emerald-600 rounded-full" [style.width.%]="pct(st.month?.collected, st.target?.collection)"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-[12px] mb-1">
+                    <span class="font-semibold text-gray-600">Visits</span>
+                    <span class="tabular-nums text-gray-400">{{ st.month?.visits || 0 }} / {{ st.target?.visits || 0 }}</span>
+                  </div>
+                  <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div class="h-full bg-amber-500 rounded-full" [style.width.%]="pct(st.month?.visits, st.target?.visits)"></div>
+                  </div>
+                </div>
+                @if (st.beatSize) { <p class="text-[11px] text-gray-400">Beat size: {{ st.beatSize }} customer(s)</p> }
+              </div>
+            }
+
+            @if (perf(); as pf) {
+              @if (pf.dayWise?.length) {
+                <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2">Last {{ perfBars().length }} days · sales</h2>
+                <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+                  <div class="flex items-end gap-1 h-28">
+                    @for (d of perfBars(); track d.day) {
+                      <div class="flex-1 flex flex-col items-center justify-end h-full" [title]="d.day + ': ₹' + fmt(d.sales)">
+                        <div class="w-full rounded-t bg-indigo-500" [style.height.%]="d.h"></div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+              @if (pf.topProducts?.length) {
+                <h2 class="text-[13px] font-bold text-gray-500 uppercase mb-2">Top products</h2>
+                @for (p of pf.topProducts; track p.product_name) {
+                  <div class="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                      <p class="text-[13px] font-semibold truncate">{{ p.product_name }}</p>
+                      <p class="text-[11px] text-gray-400">{{ fmtQty(p.qty) }} unit(s) · {{ p.orders || 0 }} order(s)</p>
+                    </div>
+                    <p class="text-sm font-bold tabular-nums shrink-0">₹{{ fmt(p.value) }}</p>
+                  </div>
+                }
+              }
+            }
+          }
         </main>
       }
 
@@ -542,6 +716,9 @@ export class SalesWebviewComponent implements OnInit {
     { id: 'customers', label: '👥 Customers' },
     { id: 'pending', label: '₹ Pending' },
     { id: 'followups', label: '📅 Follow-ups' },
+    { id: 'beat', label: '🧭 Beat' },
+    { id: 'visits', label: '📍 Visits' },
+    { id: 'perf', label: '📊 My Stats' },
   ];
 
   private t = '';
@@ -570,6 +747,26 @@ export class SalesWebviewComponent implements OnInit {
   readonly busy = signal(false);
   readonly sheetError = signal('');
   readonly toast = signal('');
+
+  // ── Beat / Visits / Perf ────────────────────────────────────────────────────
+  readonly beat = signal<any[]>([]);
+  readonly beatLoading = signal(false);
+  readonly activeVisit = signal<any>(null);
+  /** customer_id whose inline check-in panel is open (visit row may lack customer_id) */
+  readonly activeVisitCustomerId = signal<string | null>(null);
+  readonly visits = signal<any[]>([]);
+  readonly visitsLoading = signal(false);
+  readonly stats = signal<any>(null);
+  readonly statsLoading = signal(false);
+  readonly perf = signal<any>(null);
+  /** last ~14 day sales bars, height normalised to the max for CSS chart */
+  readonly perfBars = computed(() => {
+    const rows: any[] = (this.perf()?.dayWise || []).slice(-14);
+    const max = rows.reduce((m, r) => Math.max(m, Number(r?.sales) || 0), 0);
+    return rows.map((r) => ({ day: r?.day, sales: Number(r?.sales) || 0, h: max > 0 ? Math.round(((Number(r?.sales) || 0) / max) * 100) : 0 }));
+  });
+  visitNote = ''; visitOutcome = 'order_taken';
+  visitFrom = ''; visitTo = '';
 
   // Cart (global — built from the catalog, checked out per customer)
   readonly cart = signal<Array<{ productId: string; productName: string; quantity: number; unitPrice: number; thumbnail?: string }>>([]);
@@ -623,6 +820,9 @@ export class SalesWebviewComponent implements OnInit {
     if (t === 'customers' && !this.customers().length) this.searchCustomers();
     if (t === 'pending') this.get('pending').subscribe((r) => this.pending.set(unwrap(r)));
     if (t === 'followups') this.loadPromises();
+    if (t === 'beat' && !this.beat().length) this.loadBeat();
+    if (t === 'visits') { if (!this.visitFrom || !this.visitTo) this.initVisitRange(); this.loadVisits(); }
+    if (t === 'perf') this.loadPerf();
   }
 
   refreshHome() {
@@ -848,6 +1048,112 @@ export class SalesWebviewComponent implements OnInit {
     this.http.patch(`${this.base}/promises/${p.id}`, { status }, this.qs()).subscribe({
       next: () => { this.showToast(status === 'broken' ? 'Marked not paid' : 'Updated'); this.loadPromises(); this.refreshHome(); },
       error: () => this.showToast('Could not update'),
+    });
+  }
+
+  // ─── Beat / Visits / Perf ─────────────────────────────────────────────────────
+  private ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  private initVisitRange() {
+    const to = new Date();
+    const from = new Date(); from.setDate(from.getDate() - 6);
+    this.visitFrom = this.ymd(from); this.visitTo = this.ymd(to);
+  }
+  pct(v: any, target: any) {
+    const t = Number(target) || 0;
+    if (t <= 0) return 0;
+    return Math.min(100, Math.round(((Number(v) || 0) / t) * 100));
+  }
+
+  loadBeat() {
+    this.beatLoading.set(true);
+    this.get('beat').subscribe({
+      next: (r) => { this.beat.set(unwrap<any[]>(r) || []); this.beatLoading.set(false); },
+      error: () => { this.beat.set([]); this.beatLoading.set(false); },
+    });
+  }
+
+  /** Best-effort geolocation — never blocks or fails the check-in. */
+  private tryGeo(): Promise<{ latitude?: number; longitude?: number }> {
+    return new Promise((resolve) => {
+      try {
+        if (!navigator?.geolocation) { resolve({}); return; }
+        let done = false;
+        const finish = (v: { latitude?: number; longitude?: number }) => { if (!done) { done = true; resolve(v); } };
+        navigator.geolocation.getCurrentPosition(
+          (pos) => finish({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+          () => finish({}),
+          { timeout: 4000, maximumAge: 60000 },
+        );
+        setTimeout(() => finish({}), 4500);
+      } catch { resolve({}); }
+    });
+  }
+
+  async checkIn(c: any) {
+    if (this.busy()) return;
+    this.busy.set(true);
+    const geo = await this.tryGeo();
+    this.visitNote = ''; this.visitOutcome = 'order_taken';
+    this.post('checkin', {
+      customerId: c.customer_id, customerName: c.name, purpose: 'sales',
+      latitude: geo.latitude, longitude: geo.longitude,
+    }).subscribe({
+      next: (r) => {
+        const v = unwrap<any>(r);
+        this.activeVisit.set(v);
+        this.activeVisitCustomerId.set(c.customer_id);
+        this.busy.set(false);
+        this.showToast('📍 Checked in');
+      },
+      error: (e) => { this.busy.set(false); this.showToast(e?.error?.message || 'Could not check in'); },
+    });
+  }
+
+  checkOut() {
+    const v = this.activeVisit();
+    if (!v?.id) { this.showToast('No active visit'); return; }
+    this.busy.set(true);
+    this.post(`visits/${v.id}/checkout`, { outcome: this.visitOutcome, note: this.visitNote || undefined }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.activeVisit.set(null);
+        this.activeVisitCustomerId.set(null);
+        this.visitNote = '';
+        this.showToast('✅ Checked out');
+        this.loadBeat();
+      },
+      error: (e) => { this.busy.set(false); this.showToast(e?.error?.message || 'Could not check out'); },
+    });
+  }
+
+  /** Jump to the existing catalog order flow for a beat customer. */
+  takeOrderFor(c: any) {
+    this.cartCustomer.set({ id: c.customer_id, name: c.name, phone: c.phone });
+    this.loadCartCustSchemes(c.customer_id);
+    this.editTarget.set(null);
+    this.go('catalog');
+  }
+
+  loadVisits() {
+    if (!this.visitFrom || !this.visitTo) this.initVisitRange();
+    this.visitsLoading.set(true);
+    this.get('visits', { from: this.visitFrom, to: this.visitTo }).subscribe({
+      next: (r) => { this.visits.set(unwrap<any[]>(r) || []); this.visitsLoading.set(false); },
+      error: () => { this.visits.set([]); this.visitsLoading.set(false); },
+    });
+  }
+
+  loadPerf() {
+    this.statsLoading.set(true);
+    this.get('stats').subscribe({
+      next: (r) => { this.stats.set(unwrap<any>(r)); this.statsLoading.set(false); },
+      error: () => { this.stats.set(null); this.statsLoading.set(false); },
+    });
+    const to = new Date();
+    const from = new Date(); from.setDate(from.getDate() - 13);
+    this.get('performance', { from: this.ymd(from), to: this.ymd(to) }).subscribe({
+      next: (r) => this.perf.set(unwrap<any>(r)),
+      error: () => this.perf.set(null),
     });
   }
 

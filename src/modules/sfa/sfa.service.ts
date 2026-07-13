@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcryptjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
@@ -45,18 +46,80 @@ export class SfaService {
     );
   }
 
-  async addSalesman(schema: string, s: { name: string; phone: string; route?: string; area?: string }) {
+  async addSalesman(
+    schema: string,
+    s: { name: string; phone: string; route?: string; area?: string; code?: string; email?: string; password?: string; createLogin?: boolean },
+  ) {
     if (!s?.name?.trim() || !s?.phone?.trim()) throw new BadRequestException('Name and WhatsApp number are required');
     const token = randomBytes(24).toString('hex');
     return this.cm.executeInTenantContext(schema, async (qr) => {
       const rows = await qr.query(
-        `INSERT INTO "${schema}".salesmen (name, phone, route, area, access_token)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, is_active = true
+        `INSERT INTO "${schema}".salesmen (name, phone, route, area, access_token, code, email)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, route = EXCLUDED.route, area = EXCLUDED.area,
+           code = EXCLUDED.code, email = COALESCE(EXCLUDED.email, "${schema}".salesmen.email), is_active = true
          RETURNING id, access_token`,
-        [s.name.trim(), s.phone.trim(), s.route?.trim() || null, s.area?.trim() || null, token],
+        [s.name.trim(), s.phone.trim(), s.route?.trim() || null, s.area?.trim() || null, token, s.code?.trim() || null, s.email?.trim()?.toLowerCase() || null],
       );
-      return rows[0];
+      const salesman = rows[0];
+      // Unify identity: optionally back the salesman with an email/password login so
+      // the same person can also sign into the portal (and the mobile app), seeing
+      // the same beat/visits/orders as their WhatsApp field app.
+      if (s.createLogin && s.email?.trim() && s.password?.trim()) {
+        const userId = await this.ensureSalesmanLogin(qr, schema, salesman.id, {
+          name: s.name.trim(), phone: s.phone.trim(), email: s.email.trim().toLowerCase(), password: s.password.trim(),
+        });
+        await qr.query(`UPDATE "${schema}".salesmen SET user_id = $2 WHERE id = $1`, [salesman.id, userId]);
+      }
+      return salesman;
+    });
+  }
+
+  /** Create (or update) a Salesman-role users login and link it to the salesman row. */
+  private async ensureSalesmanLogin(
+    qr: any, schema: string, salesmanId: string,
+    u: { name: string; phone: string; email: string; password: string },
+  ): Promise<string> {
+    const role = (await qr.query(`SELECT id FROM "${schema}".roles WHERE lower(name) = 'salesman' LIMIT 1`))[0];
+    const hash = await bcrypt.hash(u.password, 12);
+    const rows = await qr.query(
+      `INSERT INTO "${schema}".users (phone, email, password_hash, name, role, role_id, is_active)
+       VALUES ($1,$2,$3,$4,'seller',$5,true)
+       ON CONFLICT (phone) DO UPDATE SET
+         email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, name = EXCLUDED.name,
+         role_id = EXCLUDED.role_id, is_active = true, updated_at = NOW()
+       RETURNING id`,
+      [u.phone, u.email, hash, u.name, role?.id || null],
+    );
+    return rows[0].id;
+  }
+
+  /**
+   * Portal/app login path: resolve the salesman behind the signed-in user. If a
+   * Salesman-role user has no salesman row yet (e.g. created via the Team screen),
+   * lazily create + link one so their field-sales identity always exists.
+   */
+  async resolveByUser(schema: string, userId: string) {
+    if (!(await this.tenantHasSfa(schema))) {
+      throw new UnauthorizedException('The salesman module is not enabled for this business.');
+    }
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      let s = (await qr.query(
+        `SELECT id, name, phone, route, area, code FROM "${schema}".salesmen WHERE user_id = $1 AND is_active = true`,
+        [userId],
+      ))[0];
+      if (s) return s;
+      const user = (await qr.query(`SELECT id, name, phone, email FROM "${schema}".users WHERE id = $1`, [userId]))[0];
+      if (!user) throw new UnauthorizedException('User not found');
+      const token = randomBytes(24).toString('hex');
+      s = (await qr.query(
+        `INSERT INTO "${schema}".salesmen (name, phone, access_token, email, user_id)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (phone) DO UPDATE SET user_id = EXCLUDED.user_id, is_active = true
+         RETURNING id, name, phone, route, area, code`,
+        [user.name, user.phone, token, user.email || null, userId],
+      ))[0];
+      return s;
     });
   }
 
@@ -409,6 +472,288 @@ export class SfaService {
       ));
       if (!row) throw new NotFoundException('Promise not found');
       return row;
+    });
+  }
+
+  // ─── Beats (the customers a salesman covers) ────────────────────────────────
+  /** Assigned customers for a salesman, with outstanding + last-visit context. */
+  beat(schema: string, salesmanId: string) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT b.id AS beat_id, b.day_of_week, b.sort_order,
+                c.id AS customer_id, COALESCE(c.display_name, c.name) AS name, c.phone, c.area, c.route,
+                COALESCE(ar.outstanding, 0) AS outstanding, COALESCE(ar.open_bills, 0) AS open_bills,
+                lv.last_visit_at
+         FROM "${schema}".salesman_beats b
+         JOIN "${schema}".customers c ON c.id = b.customer_id AND c.deleted_at IS NULL
+         LEFT JOIN LATERAL (
+           SELECT SUM(balance_due) AS outstanding, COUNT(*) FILTER (WHERE balance_due > 0) AS open_bills
+           FROM "${schema}".invoices i WHERE i.customer_id = c.id
+         ) ar ON true
+         LEFT JOIN LATERAL (
+           SELECT MAX(checkin_at) AS last_visit_at FROM "${schema}".salesman_visits v
+           WHERE v.customer_id = c.id AND v.salesman_id = b.salesman_id
+         ) lv ON true
+         WHERE b.salesman_id = $1
+         ORDER BY b.sort_order, name`,
+        [salesmanId],
+      ),
+    );
+  }
+
+  /** Replace a salesman's beat with the given customer set (manager action). */
+  async setBeat(schema: string, salesmanId: string, customerIds: string[]) {
+    const ids = Array.from(new Set((customerIds || []).filter(Boolean)));
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      await qr.query(`DELETE FROM "${schema}".salesman_beats WHERE salesman_id = $1`, [salesmanId]);
+      let i = 0;
+      for (const cid of ids) {
+        await qr.query(
+          `INSERT INTO "${schema}".salesman_beats (salesman_id, customer_id, sort_order)
+           VALUES ($1,$2,$3) ON CONFLICT (salesman_id, customer_id) DO NOTHING`,
+          [salesmanId, cid, i++],
+        );
+      }
+      return { count: ids.length };
+    });
+  }
+
+  // ─── Visits (check-in / check-out journal) ──────────────────────────────────
+  visits(schema: string, opts: { salesmanId?: string; from?: string; to?: string; customerId?: string }) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT v.*, COALESCE(c.display_name, c.name, v.customer_name) AS customer_name,
+                c.phone AS customer_phone, c.area, c.route, s.name AS salesman_name
+         FROM "${schema}".salesman_visits v
+         LEFT JOIN "${schema}".customers c ON c.id = v.customer_id
+         LEFT JOIN "${schema}".salesmen s ON s.id = v.salesman_id
+         WHERE ($1::uuid IS NULL OR v.salesman_id = $1)
+           AND ($2::uuid IS NULL OR v.customer_id = $2)
+           AND (COALESCE(v.checkin_at, v.planned_date::timestamptz, v.created_at) >= COALESCE($3::date, CURRENT_DATE - INTERVAL '30 days'))
+           AND (COALESCE(v.checkin_at, v.planned_date::timestamptz, v.created_at) < COALESCE($4::date, CURRENT_DATE) + INTERVAL '1 day')
+         ORDER BY COALESCE(v.checkin_at, v.planned_date::timestamptz, v.created_at) DESC
+         LIMIT 200`,
+        [opts.salesmanId || null, opts.customerId || null, opts.from || null, opts.to || null],
+      ),
+    );
+  }
+
+  /** Salesman checks in at a customer — creates (or advances) a visit. */
+  async checkIn(schema: string, salesmanId: string, body: {
+    customerId?: string; customerName?: string; purpose?: string; note?: string; latitude?: number; longitude?: number; locationLabel?: string; visitId?: string;
+  }) {
+    if (!body?.customerId && !body?.customerName?.trim()) throw new BadRequestException('Customer is required');
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      if (body.visitId) {
+        const row = firstRow(await qr.query(
+          `UPDATE "${schema}".salesman_visits SET status = 'checked_in', checkin_at = NOW(),
+             latitude = COALESCE($3, latitude), longitude = COALESCE($4, longitude),
+             location_label = COALESCE($5, location_label), note = COALESCE($6, note)
+           WHERE id = $1 AND salesman_id = $2 RETURNING *`,
+          [body.visitId, salesmanId, body.latitude ?? null, body.longitude ?? null, body.locationLabel ?? null, body.note?.trim() || null],
+        ));
+        if (!row) throw new NotFoundException('Visit not found');
+        return row;
+      }
+      const rows = await qr.query(
+        `INSERT INTO "${schema}".salesman_visits
+           (salesman_id, customer_id, customer_name, purpose, status, checkin_at, latitude, longitude, location_label, note)
+         VALUES ($1,$2,$3,$4,'checked_in',NOW(),$5,$6,$7,$8) RETURNING *`,
+        [salesmanId, body.customerId || null, body.customerName?.trim() || null, body.purpose || 'sales',
+         body.latitude ?? null, body.longitude ?? null, body.locationLabel ?? null, body.note?.trim() || null],
+      );
+      return rows[0];
+    });
+  }
+
+  /** Close a visit with an outcome; order/collection totals get stamped on it. */
+  async checkOut(schema: string, salesmanId: string, visitId: string, body: { outcome?: string; note?: string }) {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const row = firstRow(await qr.query(
+        `UPDATE "${schema}".salesman_visits SET status = 'completed', checkout_at = NOW(),
+           outcome = COALESCE($3, outcome), note = COALESCE($4, note)
+         WHERE id = $1 AND salesman_id = $2 RETURNING *`,
+        [visitId, salesmanId, body.outcome || null, body.note?.trim() || null],
+      ));
+      if (!row) throw new NotFoundException('Visit not found');
+      return row;
+    });
+  }
+
+  /** Plan a future visit (added to the salesman's day plan). */
+  async planVisit(schema: string, salesmanId: string, body: { customerId: string; plannedDate?: string; purpose?: string; note?: string }) {
+    if (!body?.customerId) throw new BadRequestException('Customer is required');
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `INSERT INTO "${schema}".salesman_visits (salesman_id, customer_id, purpose, status, planned_date, note)
+         VALUES ($1,$2,$3,'planned',$4::date,$5) RETURNING *`,
+        [salesmanId, body.customerId, body.purpose || 'sales', body.plannedDate || null, body.note?.trim() || null],
+      );
+      return rows[0];
+    });
+  }
+
+  // ─── Targets ────────────────────────────────────────────────────────────────
+  targets(schema: string, salesmanId: string) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT id, period_month, target_amount, target_collection, target_visits
+         FROM "${schema}".salesman_targets WHERE salesman_id = $1 ORDER BY period_month DESC LIMIT 24`,
+        [salesmanId],
+      ),
+    );
+  }
+
+  async setTarget(schema: string, salesmanId: string, body: { periodMonth: string; targetAmount?: number; targetCollection?: number; targetVisits?: number }) {
+    if (!body?.periodMonth) throw new BadRequestException('Period month is required');
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `INSERT INTO "${schema}".salesman_targets (salesman_id, period_month, target_amount, target_collection, target_visits)
+         VALUES ($1, date_trunc('month',$2::date)::date, $3, $4, $5)
+         ON CONFLICT (salesman_id, period_month) DO UPDATE SET
+           target_amount = EXCLUDED.target_amount, target_collection = EXCLUDED.target_collection,
+           target_visits = EXCLUDED.target_visits, updated_at = NOW()
+         RETURNING id, period_month, target_amount, target_collection, target_visits`,
+        [salesmanId, body.periodMonth, round2(Number(body.targetAmount) || 0), round2(Number(body.targetCollection) || 0), Number(body.targetVisits) || 0],
+      );
+      return rows[0];
+    });
+  }
+
+  // ─── Reports ────────────────────────────────────────────────────────────────
+  /** Per-salesman performance for a date range: orders, sales, collections, visits, target achievement. */
+  performance(schema: string, opts: { from?: string; to?: string; salesmanId?: string }) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT s.id, s.name, s.phone, s.route, s.area, s.is_active,
+                COALESCE(ord.orders,0)::int AS orders,
+                COALESCE(ord.order_value,0) AS order_value,
+                COALESCE(ord.customers_ordered,0)::int AS customers_ordered,
+                COALESCE(col.collected,0) AS collected,
+                COALESCE(col.collections,0)::int AS collections,
+                COALESCE(vis.visits,0)::int AS visits,
+                COALESCE(vis.visited_customers,0)::int AS visited_customers,
+                COALESCE(tgt.target_amount,0) AS target_amount,
+                COALESCE(tgt.target_collection,0) AS target_collection,
+                COALESCE(tgt.target_visits,0)::int AS target_visits
+         FROM "${schema}".salesmen s
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS order_value, COUNT(DISTINCT customer_id) AS customers_ordered
+           FROM "${schema}".orders o
+           WHERE o.salesman_id = s.id
+             AND o.placed_at >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+             AND o.placed_at < COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'
+         ) ord ON true
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(amount),0) AS collected, COUNT(*) AS collections
+           FROM "${schema}".payments p
+           WHERE p.collected_by = s.id::text AND COALESCE(p.status,'') <> 'failed'
+             AND p.created_at >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+             AND p.created_at < COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'
+         ) col ON true
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) FILTER (WHERE checkin_at IS NOT NULL) AS visits,
+                  COUNT(DISTINCT customer_id) FILTER (WHERE checkin_at IS NOT NULL) AS visited_customers
+           FROM "${schema}".salesman_visits v
+           WHERE v.salesman_id = s.id
+             AND v.checkin_at >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+             AND v.checkin_at < COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'
+         ) vis ON true
+         LEFT JOIN LATERAL (
+           SELECT target_amount, target_collection, target_visits FROM "${schema}".salesman_targets t
+           WHERE t.salesman_id = s.id AND t.period_month = date_trunc('month', COALESCE($1::date, CURRENT_DATE))::date
+         ) tgt ON true
+         WHERE ($3::uuid IS NULL OR s.id = $3)
+         ORDER BY order_value DESC, s.name`,
+        [opts.from || null, opts.to || null, opts.salesmanId || null],
+      ),
+    );
+  }
+
+  /** Products a salesman (or the whole team) sells most in a range — qty + value. */
+  topProducts(schema: string, opts: { from?: string; to?: string; salesmanId?: string; limit?: number }) {
+    const limit = Math.min(Math.max(Number(opts.limit) || 20, 1), 100);
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT oi.product_id, oi.product_name,
+                SUM(oi.quantity)::numeric AS qty,
+                SUM(oi.total_price) AS value,
+                COUNT(DISTINCT o.id)::int AS orders,
+                COUNT(DISTINCT o.customer_id)::int AS customers
+         FROM "${schema}".order_items oi
+         JOIN "${schema}".orders o ON o.id = oi.order_id
+         WHERE o.salesman_id IS NOT NULL
+           AND ($3::uuid IS NULL OR o.salesman_id = $3)
+           AND oi.unit_price > 0
+           AND o.placed_at >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+           AND o.placed_at < COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'
+         GROUP BY oi.product_id, oi.product_name
+         ORDER BY qty DESC, value DESC
+         LIMIT ${limit}`,
+        [opts.from || null, opts.to || null, opts.salesmanId || null],
+      ),
+    );
+  }
+
+  /** Day-wise orders + collections for one salesman (their trend line). */
+  dayWise(schema: string, salesmanId: string, opts: { from?: string; to?: string }) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `WITH days AS (
+           SELECT generate_series(
+             COALESCE($2::date, CURRENT_DATE - INTERVAL '30 days')::date,
+             COALESCE($3::date, CURRENT_DATE)::date, '1 day')::date AS d
+         )
+         SELECT d.d AS day,
+           COALESCE((SELECT SUM(total) FROM "${schema}".orders o WHERE o.salesman_id = $1 AND o.placed_at::date = d.d),0) AS sales,
+           COALESCE((SELECT COUNT(*) FROM "${schema}".orders o WHERE o.salesman_id = $1 AND o.placed_at::date = d.d),0)::int AS orders,
+           COALESCE((SELECT SUM(amount) FROM "${schema}".payments p WHERE p.collected_by = $1::text AND p.created_at::date = d.d AND COALESCE(p.status,'') <> 'failed'),0) AS collected,
+           COALESCE((SELECT COUNT(*) FROM "${schema}".salesman_visits v WHERE v.salesman_id = $1 AND v.checkin_at::date = d.d),0)::int AS visits
+         FROM days d ORDER BY d.d`,
+        [salesmanId, opts.from || null, opts.to || null],
+      ),
+    );
+  }
+
+  /** A salesman's own snapshot for the app home (today + this month + target). */
+  async myStats(schema: string, salesmanId: string) {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const [today] = await qr.query(
+        `SELECT
+           COALESCE((SELECT SUM(total) FROM "${schema}".orders o WHERE o.salesman_id = $1 AND o.placed_at::date = CURRENT_DATE),0) AS sales_today,
+           COALESCE((SELECT COUNT(*) FROM "${schema}".orders o WHERE o.salesman_id = $1 AND o.placed_at::date = CURRENT_DATE),0)::int AS orders_today,
+           COALESCE((SELECT SUM(amount) FROM "${schema}".payments p WHERE p.collected_by = $1::text AND p.created_at::date = CURRENT_DATE AND COALESCE(p.status,'') <> 'failed'),0) AS collected_today,
+           COALESCE((SELECT COUNT(*) FROM "${schema}".salesman_visits v WHERE v.salesman_id = $1 AND v.checkin_at::date = CURRENT_DATE),0)::int AS visits_today`,
+        [salesmanId],
+      );
+      const [month] = await qr.query(
+        `SELECT
+           COALESCE((SELECT SUM(total) FROM "${schema}".orders o WHERE o.salesman_id = $1 AND o.placed_at >= date_trunc('month',CURRENT_DATE)),0) AS sales_month,
+           COALESCE((SELECT SUM(amount) FROM "${schema}".payments p WHERE p.collected_by = $1::text AND p.created_at >= date_trunc('month',CURRENT_DATE) AND COALESCE(p.status,'') <> 'failed'),0) AS collected_month,
+           COALESCE((SELECT COUNT(*) FROM "${schema}".salesman_visits v WHERE v.salesman_id = $1 AND v.checkin_at >= date_trunc('month',CURRENT_DATE)),0)::int AS visits_month`,
+        [salesmanId],
+      );
+      const [target] = await qr.query(
+        `SELECT target_amount, target_collection, target_visits FROM "${schema}".salesman_targets
+         WHERE salesman_id = $1 AND period_month = date_trunc('month',CURRENT_DATE)::date`,
+        [salesmanId],
+      );
+      const [beatCount] = await qr.query(`SELECT COUNT(*)::int AS n FROM "${schema}".salesman_beats WHERE salesman_id = $1`, [salesmanId]);
+      return {
+        today: {
+          sales: round2(Number(today?.sales_today) || 0), orders: Number(today?.orders_today) || 0,
+          collected: round2(Number(today?.collected_today) || 0), visits: Number(today?.visits_today) || 0,
+        },
+        month: {
+          sales: round2(Number(month?.sales_month) || 0), collected: round2(Number(month?.collected_month) || 0),
+          visits: Number(month?.visits_month) || 0,
+        },
+        target: {
+          amount: round2(Number(target?.target_amount) || 0), collection: round2(Number(target?.target_collection) || 0),
+          visits: Number(target?.target_visits) || 0,
+        },
+        beatSize: Number(beatCount?.n) || 0,
+      };
     });
   }
 }

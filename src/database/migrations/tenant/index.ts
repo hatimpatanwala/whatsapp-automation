@@ -3108,6 +3108,109 @@ const migration082RbacErp: TenantMigration = {
   async down() { /* additive/idempotent — no rollback */ },
 };
 
+/** New SFA tables that replicate desktop ↔ cloud (parents before children). */
+const SYNC_TABLES_083 = ['salesman_visits', 'salesman_beats', 'salesman_targets'];
+
+/**
+ * 083 — Full Salesman (SFA) module. Unifies the salesman identity (links a
+ * `salesmen` row to a `users` login so the same person works via WhatsApp AND an
+ * email/password portal login) and adds the field-sales data model:
+ *   • salesman_visits  — check-in/out journal (who was visited, when, outcome, GPS)
+ *   • salesman_beats   — the customers each salesman covers (route/beat plan)
+ *   • salesman_targets — monthly sales/collection/visit targets for achievement %
+ * All three replicate via the existing sync_stamp/sync_enqueue triggers. Idempotent.
+ */
+const migration083SfaModule: TenantMigration = {
+  name: '083_sfa_module',
+  async up(qr, schema) {
+    // Unify identity: a salesman can be backed by a users login (email/password).
+    await qr.query(`ALTER TABLE "${schema}".salesmen
+      ADD COLUMN IF NOT EXISTS user_id UUID,
+      ADD COLUMN IF NOT EXISTS email VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS code VARCHAR(40)`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_salesmen_user ON "${schema}".salesmen (user_id) WHERE user_id IS NOT NULL`);
+
+    // Visit journal — the heart of "who visited whom, when, and what happened".
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".salesman_visits (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      salesman_id UUID NOT NULL,
+      customer_id UUID,
+      customer_name VARCHAR(255),
+      purpose VARCHAR(30) NOT NULL DEFAULT 'sales',
+      status VARCHAR(20) NOT NULL DEFAULT 'planned',
+      planned_date DATE,
+      checkin_at TIMESTAMPTZ,
+      checkout_at TIMESTAMPTZ,
+      latitude NUMERIC(9,6),
+      longitude NUMERIC(9,6),
+      location_label TEXT,
+      note TEXT,
+      outcome VARCHAR(30),
+      order_id UUID,
+      order_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      collected_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_visits_salesman_date ON "${schema}".salesman_visits (salesman_id, planned_date)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_visits_customer ON "${schema}".salesman_visits (customer_id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_visits_checkin ON "${schema}".salesman_visits (checkin_at)`);
+
+    // Beat plan — the customers a salesman is responsible for.
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".salesman_beats (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      salesman_id UUID NOT NULL,
+      customer_id UUID NOT NULL,
+      day_of_week SMALLINT,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_beat_salesman_customer ON "${schema}".salesman_beats (salesman_id, customer_id)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_beat_customer ON "${schema}".salesman_beats (customer_id)`);
+
+    // Monthly targets for achievement tracking.
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".salesman_targets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      salesman_id UUID NOT NULL,
+      period_month DATE NOT NULL,
+      target_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      target_collection NUMERIC(14,2) NOT NULL DEFAULT 0,
+      target_visits INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_target_salesman_month ON "${schema}".salesman_targets (salesman_id, period_month)`);
+
+    // Wire desktop ↔ cloud sync (reuses the per-schema sync_stamp/sync_enqueue fns).
+    const hasSync = await qr.query(
+      `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = $1 AND p.proname = 'sync_enqueue'`, [schema],
+    );
+    if (hasSync.length) {
+      for (const t of SYNC_TABLES_083) {
+        await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+        await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0`);
+        await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS origin_node UUID`);
+        await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+        await qr.query(`CREATE INDEX IF NOT EXISTS idx_${t}_sync_version ON "${schema}".${t}(sync_version)`);
+        await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+        await qr.query(`CREATE TRIGGER trg_${t}_sync_stamp BEFORE INSERT OR UPDATE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_stamp()`);
+        await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+        await qr.query(`CREATE TRIGGER trg_${t}_sync_enqueue AFTER INSERT OR UPDATE OR DELETE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_enqueue()`);
+      }
+    }
+  },
+  async down(qr, schema) {
+    for (const t of SYNC_TABLES_083) {
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+    }
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".salesman_visits`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".salesman_beats`);
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".salesman_targets`);
+    await qr.query(`ALTER TABLE "${schema}".salesmen DROP COLUMN IF EXISTS user_id, DROP COLUMN IF EXISTS email, DROP COLUMN IF EXISTS code`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3191,4 +3294,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration080PushDevices,
   migration081MiracleImport,
   migration082RbacErp,
+  migration083SfaModule,
 ];

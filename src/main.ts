@@ -33,6 +33,9 @@ try {
 }
 
 async function bootstrap() {
+  // Unbuffered, dependency-free markers so the desktop launcher can see how far
+  // boot got even before Nest's logger is wired up (helps diagnose startup hangs).
+  process.stdout.write('[boot] bootstrap() entered\n');
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
     // Payment webhooks verify an HMAC over the RAW request body — a re-stringified
@@ -99,24 +102,34 @@ async function bootstrap() {
 
   // Session setup — use Redis if available, otherwise in-memory (dev only)
   let sessionStore: any = undefined; // undefined = express-session default MemoryStore
+  const isDesktopSession = configService.get<string>('DESKTOP_MODE') === '1';
   const redisUrl = configService.get<string>('REDIS_URL');
   const redisHost = configService.get<string>('REDIS_HOST', 'localhost');
   const redisPort = configService.get<number>('REDIS_PORT', 6379);
 
-  try {
-    // TLS cert validation on by default; opt out only via REDIS_TLS_INSECURE=true.
-    const redisTlsInsecure = configService.get<string>('REDIS_TLS_INSECURE', 'false') === 'true';
-    const redisClient = redisUrl
-      ? new Redis(redisUrl, { tls: { rejectUnauthorized: !redisTlsInsecure }, maxRetriesPerRequest: null, enableReadyCheck: false, connectTimeout: 3000 })
-      : new Redis({ host: redisHost, port: redisPort, password: configService.get<string>('REDIS_PASSWORD', undefined), connectTimeout: 3000, lazyConnect: true });
+  // Desktop mode is single-user and offline — there is no Redis. Skip the connect
+  // attempt entirely: `ioredis.connect()` to a down server never settles (its default
+  // retryStrategy reconnects forever), which would hang bootstrap before app.listen()
+  // and leave the local backend "never healthy". The in-memory store is exactly right
+  // for one desktop user.
+  if (isDesktopSession) {
+    logger.log('Desktop mode: using in-memory session store (no Redis)');
+  } else {
+    try {
+      // TLS cert validation on by default; opt out only via REDIS_TLS_INSECURE=true.
+      const redisTlsInsecure = configService.get<string>('REDIS_TLS_INSECURE', 'false') === 'true';
+      const redisClient = redisUrl
+        ? new Redis(redisUrl, { tls: { rejectUnauthorized: !redisTlsInsecure }, maxRetriesPerRequest: null, enableReadyCheck: false, connectTimeout: 3000 })
+        : new Redis({ host: redisHost, port: redisPort, password: configService.get<string>('REDIS_PASSWORD', undefined), connectTimeout: 3000, lazyConnect: true, retryStrategy: () => null });
 
-    if (!redisUrl) await redisClient.connect();
-    // Quick ping test
-    await redisClient.ping();
-    sessionStore = new RedisStore({ client: redisClient, prefix: 'sess:' });
-    logger.log('Session store: Redis');
-  } catch {
-    logger.warn('Redis unavailable — using in-memory session store (sessions lost on restart)');
+      if (!redisUrl) await redisClient.connect();
+      // Quick ping test
+      await redisClient.ping();
+      sessionStore = new RedisStore({ client: redisClient, prefix: 'sess:' });
+      logger.log('Session store: Redis');
+    } catch {
+      logger.warn('Redis unavailable — using in-memory session store (sessions lost on restart)');
+    }
   }
 
   // app.use(
@@ -197,4 +210,8 @@ async function bootstrap() {
   logger.log(`Application running on port ${port}`);
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  // Never fail silently — the desktop launcher only sees stdout/stderr.
+  process.stderr.write(`[boot] FATAL: backend failed to start\n${err?.stack || err}\n`);
+  process.exit(1);
+});

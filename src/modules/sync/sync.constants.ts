@@ -35,6 +35,10 @@ export const SYNCABLE_TABLES = [
   'payment_methods',
   'payment_collections',
   'payment_promises',
+  // full SFA module (migration 083)
+  'salesman_beats',
+  'salesman_targets',
+  'salesman_visits',
 ] as const;
 
 export type SyncableTable = (typeof SYNCABLE_TABLES)[number];

@@ -148,6 +148,21 @@ export const routes: Routes = [
         loadComponent: () => import('./features/entry/salesmen.component').then(m => m.SalesmenComponent),
       },
       {
+        // Field Sales (SFA) manager console — team performance, beats, targets,
+        // visits + salesmen management. Gated by the `sfa` plan feature + RBAC.
+        path: 'field-sales',
+        canActivate: [featureGuard('sfa')],
+        loadComponent: () => import('./features/field-sales/field-sales.component').then(m => m.FieldSalesComponent),
+      },
+      {
+        // The signed-in salesman's own field workspace (beat, visits, orders,
+        // collections, my performance) — the email/password counterpart to the
+        // WhatsApp /m/sales webview.
+        path: 'my-sales',
+        canActivate: [featureGuard('sfa')],
+        loadComponent: () => import('./features/field-sales/my-sales.component').then(m => m.MySalesComponent),
+      },
+      {
         // Offline desktop app info + download (portal only advertises it when the
         // tenant's plan includes erpOffline).
         path: 'desktop-app',
