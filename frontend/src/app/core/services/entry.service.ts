@@ -3,14 +3,19 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 
 export interface CustomerHit { id: string; name: string; phone: string; gstin?: string; company?: string; totalOrders?: number; totalSpent?: number; }
-export interface RateHistoryRow { at: string; doc: string; qty: number; price: number; }
+export interface RateHistoryRow { at: string; doc: string; qty: number; price: number; discount?: number | null; }
 export interface ProductHit {
   id: string; name: string; uom?: string; altUom?: string | null; uomFactor?: number | null;
   hsnCode?: string; gstRate?: number;
   salePrice?: number; basePrice?: number; purchasePrice?: number | null; mrp?: number | null;
   stock?: number;
 }
-export interface LastSale { price: number; at: string; }
+export interface LastSale { price: number; at: string; qty?: number | null; d1?: number | null; d2?: number | null; discount?: number | null; }
+export interface CategoryProduct {
+  id: string; name: string; hsnCode?: string; uom?: string; gstRate?: number;
+  salePrice?: number; basePrice?: number; priceIncludesTax?: boolean; saleDiscountPct?: number;
+}
+export interface CategoryGroup { id: string; name: string; products: CategoryProduct[]; }
 export interface ItemContext extends ProductHit {
   lastToCustomer?: LastSale | null;
   lastOverall?: LastSale | null;
@@ -76,6 +81,7 @@ export class EntryService {
 
   customers(q: string): Observable<CustomerHit[]> { return this.api.get<CustomerHit[]>('/entry/customers', { q }); }
   products(q: string): Observable<ProductHit[]> { return this.api.get<ProductHit[]>('/entry/products', { q }); }
+  categoryProducts(): Observable<CategoryGroup[]> { return this.api.get<CategoryGroup[]>('/entry/category-products'); }
   customerContext(id: string): Observable<CustomerContext> { return this.api.get<CustomerContext>(`/entry/customer/${id}/context`); }
   itemContext(productId: string, customerId?: string): Observable<ItemContext> {
     return this.api.get<ItemContext>(`/entry/product/${productId}/context`, customerId ? { customerId } : undefined);

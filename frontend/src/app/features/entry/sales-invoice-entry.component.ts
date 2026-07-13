@@ -11,6 +11,8 @@ import {
   SavedAddress,
 } from '../../core/services/entry.service';
 import { EntryLookupComponent } from './entry-lookup.component';
+import { CategoryDiscountDialogComponent } from './category-discount-dialog.component';
+import { CategoryProduct } from '../../core/services/entry.service';
 import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { QuickCreateComponent, QuickCreated, QuickKind } from './quick-create.component';
 
@@ -27,8 +29,8 @@ interface Row {
   d2: number | null;
   gstRate: number | null;
   stock?: number;
-  lastToCustomer?: { price: number; at: string } | null;
-  lastOverall?: { price: number; at: string } | null;
+  lastToCustomer?: { price: number; at: string; discount?: number | null } | null;
+  lastOverall?: { price: number; at: string; discount?: number | null } | null;
   levelPrice?: { price: number; levelName: string } | null;
   /** Optional per-line trade details (Alt+B): batch/expiry/godown ride along in JSONB. */
   batchNo?: string;
@@ -60,7 +62,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 @Component({
   selector: 'wa-sales-invoice-entry',
   standalone: true,
-  imports: [FormsModule, QuickCreateComponent, EntryLookupComponent],
+  imports: [FormsModule, QuickCreateComponent, EntryLookupComponent, CategoryDiscountDialogComponent],
   template: `
     <div class="p-3 md:p-5 max-w-7xl select-none">
       <span class="hidden">{{ tick() }}</span>
@@ -417,8 +419,11 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                       @if (row.free) { · Free: <b class="text-emerald-700">{{ row.free }} {{ row.uom }}</b> }
                       @if (row.levelPrice) { · List ({{ row.levelPrice.levelName }}): <b class="text-emerald-700">₹{{ fmt(row.levelPrice.price) }}</b> }
                       @if (row.lastToCustomer) {
-                        · Last to {{ customer()?.name || 'party' }}: <b class="text-indigo-600">₹{{ fmt(row.lastToCustomer.price) }}</b>
+                        · Last to {{ customer()?.name || 'party' }}: <b class="text-indigo-600">₹{{ fmt(row.lastToCustomer.price) }}</b>@if (row.lastToCustomer.discount) { <span class="text-amber-600 font-semibold"> ({{ row.lastToCustomer.discount }}% disc)</span> }
                       } @else if (customer()) { · First sale to {{ customer()!.name }} }
+                      @if (!row.lastToCustomer && row.lastOverall) {
+                        · Last rate: <b class="text-slate-600">₹{{ fmt(row.lastOverall.price) }}</b>@if (row.lastOverall.discount) { <span class="text-amber-600"> ({{ row.lastOverall.discount }}% disc)</span> }
+                      }
                     </td>
                   </tr>
                 }
@@ -520,12 +525,15 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <p class="text-slate-400">Select a party — or switch to <b>Cash Memo</b> for a walk-in sale.</p>
           }
           <div class="mt-4 pt-3 border-t text-xs text-slate-400 leading-5">
-            <b class="text-slate-500">Keys:</b> Enter next · <b>PgDn items</b> · Ins +row · Ctrl+Del −row · Esc close · <b>Ctrl+Enter save</b>
+            <b class="text-slate-500">Keys:</b> Enter next · <b>PgDn items</b> · Ins +row · Ctrl+Del −row · <b>Alt+D category disc</b> · Esc close · <b>Ctrl+Enter save</b>
           </div>
         </div>
       </div>
 
       <wa-entry-lookup [kind]="'customer'" [party]="customer()" [rows]="rows" (applyRate)="onApplyRate($event)" />
+
+      <wa-category-discount-dialog [open]="showCatDisc()" [existingProductIds]="existingProductIds()"
+                                   (applied)="applyCategoryDiscount($event)" (closed)="showCatDisc.set(false)" />
 
       @if (qc(); as q) {
         <wa-quick-create [kind]="q.kind" [prefillName]="q.name"
@@ -1292,6 +1300,48 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
     if (!row) return;
     row.rate = e.rate;
     this.tick.update((t) => t + 1);
+  }
+
+  // ─── Category discount (Alt+D) ──────────────────────────────────────────────
+  readonly showCatDisc = signal(false);
+  /** Product ids already on the grid — the dialog pre-checks + badges these. */
+  existingProductIds(): string[] { return this.rows.filter((r) => r.productId).map((r) => r.productId!); }
+
+  @HostListener('document:keydown.alt.d', ['$event'])
+  onAltD(e: KeyboardEvent): void {
+    e.preventDefault();
+    this.showCatDisc.set(true);
+  }
+
+  /**
+   * Fill the chosen discount % (D1) across the picked category's products: existing
+   * lines get their D1 set; products not yet billed are added as fresh lines.
+   */
+  applyCategoryDiscount(ev: { products: CategoryProduct[]; discountPct: number }): void {
+    const disc = Number(ev.discountPct) || 0;
+    for (const cp of ev.products) {
+      const existing = this.rows.filter((r) => r.productId === cp.id);
+      if (existing.length) {
+        for (const r of existing) r.d1 = disc;
+      } else {
+        this.rows.push(this.rowFromProduct(cp, disc));
+        this.loadItemContext(this.rows.length - 1);
+      }
+    }
+    // Ensure a trailing blank row remains for further entry.
+    if (this.rows.length === 0 || this.rows[this.rows.length - 1].productId) this.rows.push(this.blankRow());
+    this.tick.update((t) => t + 1);
+  }
+
+  private rowFromProduct(cp: CategoryProduct, d1: number): Row {
+    const gstRate = Number(cp.gstRate) || 0;
+    let rate = Number(cp.salePrice ?? cp.basePrice) || null;
+    if (cp.priceIncludesTax && rate && gstRate) rate = money(rate / (1 + gstRate / 100));
+    return {
+      ...this.blankRow(),
+      productId: cp.id, name: cp.name, hsn: cp.hsnCode || '', uom: cp.uom || 'pcs',
+      gstRate, rate: rate != null ? money(rate) : null, qty: 1, d1,
+    };
   }
 
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }

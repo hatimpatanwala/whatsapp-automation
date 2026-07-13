@@ -10,12 +10,14 @@ import { MessageService } from 'primeng/api';
 import { ApiService } from '../../../core/services/api.service';
 import { ErpService } from '../../../core/services/erp.service';
 import { ErpCurrencyService } from '../../../core/services/erp-currency.service';
+import { PartyPickerComponent } from '../../entry/party-picker.component';
+import { CustomerContext } from '../../../core/services/entry.service';
 
 interface CartLine { productId?: string; description: string; quantity: number; unitPrice: number; }
 
 @Component({
   selector: 'wa-erp-pos', standalone: true,
-  imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, InputNumberModule, SelectModule, ToastModule],
+  imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, InputNumberModule, SelectModule, ToastModule, PartyPickerComponent],
   providers: [MessageService],
   template: `
     <div class="p-4 max-w-7xl mx-auto">
@@ -65,6 +67,9 @@ interface CartLine { productId?: string; description: string; quantity: number; 
           </div>
 
           <div class="border-t border-gray-100 pt-3 mt-2 space-y-2">
+            <!-- Named-party autofill (tally-style). Leave blank for a walk-in / cash sale. -->
+            <wa-party-picker (selected)="onParty($event)" (cleared)="onPartyCleared()"
+                             placeholder="Search a party — or leave blank for walk-in…" />
             <div class="grid grid-cols-2 gap-2">
               <input pInputText [(ngModel)]="customerName" placeholder="Customer (optional)" class="w-full" />
               <input pInputText [(ngModel)]="customerPhone" placeholder="Phone (optional)" class="w-full" />
@@ -106,6 +111,8 @@ export class ErpPosComponent implements OnInit {
   taxPct = 0; discount = 0; paymentModeId: string | null = null;
   saving = signal(false);
   private searchTimer: any;
+  /** The selected party's agreed discount % — re-applied to the bill as the cart changes. */
+  private partyDiscountPct = 0;
 
   totals = computed(() => {
     const subtotal = this.cart().reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0);
@@ -142,11 +149,29 @@ export class ErpPosComponent implements OnInit {
     else this.cart.set([...this.cart(), { productId: p.id, description: p.name, quantity: 1, unitPrice: price }]);
     // Default the tax rate from the first scanned product if not set.
     if (!this.taxPct && Number(p.gstRate)) this.taxPct = Number(p.gstRate);
+    this.applyPartyDiscount();
     this.query = ''; this.results.set([]);
     this.searchBox?.nativeElement.focus();
   }
-  removeLine(i: number) { const c = [...this.cart()]; c.splice(i, 1); this.cart.set(c); }
-  recompute() { this.cart.set([...this.cart()]); }
+  removeLine(i: number) { const c = [...this.cart()]; c.splice(i, 1); this.cart.set(c); this.applyPartyDiscount(); }
+  recompute() { this.cart.set([...this.cart()]); this.applyPartyDiscount(); }
+
+  /** Party picked → fill the walk-in name/phone and apply the party's agreed discount. */
+  onParty(ctx: CustomerContext) {
+    this.customerName = ctx.name || '';
+    this.customerPhone = ctx.phone || '';
+    this.partyDiscountPct = Number(ctx.defaultDiscountPct) || 0;
+    this.applyPartyDiscount();
+  }
+  onPartyCleared() {
+    this.customerName = ''; this.customerPhone = '';
+    this.partyDiscountPct = 0; this.discount = 0;
+  }
+  /** POS discount is a currency amount — derive it from the party's % on the live subtotal. */
+  private applyPartyDiscount() {
+    if (this.partyDiscountPct <= 0) return;
+    this.discount = Math.round(this.totals().subtotal * (this.partyDiscountPct / 100) * 100) / 100;
+  }
 
   checkout(paid: boolean) {
     if (!this.cart().length) return;
@@ -169,6 +194,7 @@ export class ErpPosComponent implements OnInit {
   }
   private reset() {
     this.cart.set([]); this.customerName = ''; this.customerPhone = ''; this.discount = 0; this.paymentModeId = null;
+    this.partyDiscountPct = 0;
     this.searchBox?.nativeElement.focus();
   }
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }

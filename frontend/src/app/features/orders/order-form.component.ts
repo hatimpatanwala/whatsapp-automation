@@ -12,6 +12,8 @@ import { MessageService } from 'primeng/api';
 import { ApiService } from '../../core/services/api.service';
 import { PromoCartService } from '../shared/promo-cart.service';
 import { PromoSectionComponent } from '../shared/promo-section.component';
+import { PartyPickerComponent } from '../entry/party-picker.component';
+import { CustomerContext } from '../../core/services/entry.service';
 
 interface OrderItem {
   productId?: string | null;
@@ -31,7 +33,7 @@ interface OrderItem {
   imports: [
     CommonModule, FormsModule, RouterLink,
     ButtonModule, InputTextModule, TextareaModule, InputNumberModule, SelectModule, ToastModule,
-    PromoSectionComponent,
+    PromoSectionComponent, PartyPickerComponent,
   ],
   providers: [MessageService, PromoCartService],
   template: `
@@ -56,18 +58,8 @@ interface OrderItem {
           <!-- Customer -->
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
             <h3 class="text-base font-semibold text-gray-900">Order for</h3>
-            <p-select
-              [options]="customers()"
-              [(ngModel)]="customerId"
-              optionLabel="label"
-              optionValue="value"
-              placeholder="Select a customer"
-              [filter]="true"
-              filterPlaceholder="Search customers..."
-              styleClass="w-full"
-              appendTo="body"
-              (onChange)="refreshPromo()"
-            />
+            <wa-party-picker (selected)="onParty($event)" (cleared)="onPartyCleared()"
+                             placeholder="Type customer name / phone / GSTIN…" />
           </div>
 
           <!-- Line items -->
@@ -196,6 +188,8 @@ export class OrderFormComponent implements OnInit {
 
   /** Lines fed to the promotions engine. */
   private promoLines() { return this.items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })); }
+  onParty(ctx: CustomerContext) { this.customerId = ctx.id; this.refreshPromo(); }
+  onPartyCleared() { this.customerId = ''; this.refreshPromo(); }
   refreshPromo() { this.promo.refresh(this.promoLines(), this.customerId || undefined); }
   applyCoupon(code: string) { this.promo.applyCoupon(code, this.promoLines(), this.customerId || undefined); }
 

@@ -62,6 +62,38 @@ export class EntryContextService {
     );
   }
 
+  /**
+   * Catalog grouped by category — powers the "category discount" dialog: pick a
+   * category, set a discount, and every product of that category can be billed at
+   * once. Returns each product with the fields needed to build an invoice line.
+   */
+  categoryProducts(schema: string) {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const rows = await qr.query(
+        `SELECT COALESCE(c.id::text, 'uncategorised') AS category_id,
+                COALESCE(c.name, 'Uncategorised') AS category_name,
+                p.id, p.name, p.hsn_code, p.uom, COALESCE(p.gst_rate, 0) AS gst_rate,
+                COALESCE(p.sale_price, p.base_price) AS sale_price, p.base_price,
+                p.price_includes_tax, COALESCE(p.sale_discount_pct, 0) AS sale_discount_pct
+         FROM "${schema}".products p
+         LEFT JOIN "${schema}".categories c ON c.id = p.category_id
+         WHERE p.is_active = true AND p.deleted_at IS NULL
+           AND COALESCE(p.item_type, 'product') <> 'service'
+         ORDER BY category_name, p.name`,
+      );
+      const map = new Map<string, any>();
+      for (const r of rows) {
+        if (!map.has(r.category_id)) map.set(r.category_id, { id: r.category_id, name: r.category_name, products: [] });
+        map.get(r.category_id).products.push({
+          id: r.id, name: r.name, hsnCode: r.hsn_code, uom: r.uom,
+          gstRate: num(r.gst_rate), salePrice: num(r.sale_price), basePrice: num(r.base_price),
+          priceIncludesTax: !!r.price_includes_tax, saleDiscountPct: num(r.sale_discount_pct),
+        });
+      }
+      return Array.from(map.values());
+    });
+  }
+
   /** Party panel: who is this customer and where do we stand with them. */
   async customerContext(schema: string, customerId: string) {
     return this.cm.executeInTenantContext(schema, async (qr) => {
@@ -473,13 +505,17 @@ export class EntryContextService {
       // invoices JSONB branch as text — without casts Postgres can't type them.
       return qr.query(
         `SELECT * FROM (
-           SELECT o.created_at AS at, o.order_number AS doc, oi.quantity::numeric AS qty, oi.unit_price AS price
+           SELECT o.created_at AS at, o.order_number AS doc, oi.quantity::numeric AS qty, oi.unit_price AS price, NULL::numeric AS discount
            FROM "${schema}".order_items oi
            JOIN "${schema}".orders o ON o.id = oi.order_id
            WHERE oi.product_id = $1::uuid AND ($2::uuid IS NULL OR o.customer_id = $2::uuid)
            UNION ALL
            SELECT i.issued_at AS at, i.invoice_number AS doc,
-                  (item->>'quantity')::numeric AS qty, (item->>'unitPrice')::numeric AS price
+                  (item->>'quantity')::numeric AS qty, (item->>'unitPrice')::numeric AS price,
+                  CASE WHEN item->>'d1' IS NOT NULL OR item->>'d2' IS NOT NULL
+                       THEN round((100 - (100 - COALESCE(NULLIF(item->>'d1','')::numeric, 0))
+                                       * (100 - COALESCE(NULLIF(item->>'d2','')::numeric, 0)) / 100)::numeric, 2)
+                       ELSE NULL END AS discount
            FROM "${schema}".invoices i, jsonb_array_elements(i.items) item
            WHERE item->>'productId' = $1::text AND ($2::uuid IS NULL OR i.customer_id = $2::uuid)
          ) t
@@ -511,15 +547,20 @@ export class EntryContextService {
     const params = customerId ? [productId, customerId] : [productId];
 
     const [fromOrders] = await qr.query(
-      `SELECT oi.unit_price AS price, o.created_at AS at
+      `SELECT oi.unit_price AS price, o.created_at AS at, NULL::numeric AS d1, NULL::numeric AS d2, NULL::numeric AS qty
        FROM "${schema}".order_items oi
        JOIN "${schema}".orders o ON o.id = oi.order_id
        WHERE oi.product_id = $1 ${custOrder}
        ORDER BY o.created_at DESC LIMIT 1`,
       params,
     );
+    // Native tally invoices keep the cascading Disc-1/Disc-2 (d1/d2) in the line JSONB,
+    // so we can surface the last discount actually given for this item — to this party.
     const [fromInvoices] = await qr.query(
-      `SELECT (item->>'unitPrice')::numeric AS price, i.issued_at AS at
+      `SELECT (item->>'unitPrice')::numeric AS price, i.issued_at AS at,
+              NULLIF(item->>'d1','')::numeric AS d1,
+              NULLIF(item->>'d2','')::numeric AS d2,
+              NULLIF(item->>'quantity','')::numeric AS qty
        FROM "${schema}".invoices i, jsonb_array_elements(i.items) item
        WHERE item->>'productId' = $1 ${custInv}
        ORDER BY i.issued_at DESC LIMIT 1`,
@@ -529,6 +570,13 @@ export class EntryContextService {
     const candidates = [fromOrders, fromInvoices].filter((r) => r && r.at);
     if (!candidates.length) return null;
     candidates.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-    return { price: num(candidates[0].price), at: candidates[0].at };
+    const best = candidates[0];
+    const d1 = best.d1 != null ? num(best.d1) : null;
+    const d2 = best.d2 != null ? num(best.d2) : null;
+    // Effective discount % after cascading D1 then D2 (Miracle semantics).
+    const discount = d1 != null || d2 != null
+      ? Math.round((100 - (100 - (d1 || 0)) * (100 - (d2 || 0)) / 100) * 100) / 100
+      : null;
+    return { price: num(best.price), at: best.at, qty: best.qty != null ? num(best.qty) : null, d1, d2, discount };
   }
 }

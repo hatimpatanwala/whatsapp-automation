@@ -17,6 +17,8 @@ import { ApiService } from '../../core/services/api.service';
 import { PermissionService } from '../../core/services/permission.service';
 import { PromoCartService } from '../shared/promo-cart.service';
 import { PromoSectionComponent } from '../shared/promo-section.component';
+import { PartyPickerComponent } from '../entry/party-picker.component';
+import { CustomerContext } from '../../core/services/entry.service';
 
 interface QuoteItem {
   productId?: string;
@@ -33,7 +35,7 @@ interface QuoteItem {
     CommonModule, FormsModule, RouterLink,
     ButtonModule, InputTextModule, TextareaModule, InputNumberModule,
     SelectModule, DatePickerModule, DividerModule, ToastModule, CardModule,
-    PromoSectionComponent,
+    PromoSectionComponent, PartyPickerComponent,
   ],
   providers: [MessageService, PromoCartService],
   template: `
@@ -58,18 +60,8 @@ interface QuoteItem {
           <!-- Customer -->
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
             <h3 class="text-base font-semibold text-gray-900">Quote for</h3>
-            <p-select
-              [options]="customers()"
-              [(ngModel)]="customerId"
-              optionLabel="label"
-              optionValue="value"
-              placeholder="Select a customer"
-              [filter]="true"
-              filterPlaceholder="Search customers..."
-              styleClass="w-full"
-              appendTo="body"
-              (onChange)="refreshPromo()"
-            />
+            <wa-party-picker [party]="editParty()" (selected)="onParty($event)" (cleared)="onPartyCleared()"
+                             placeholder="Type customer name / phone / GSTIN…" />
           </div>
 
           <!-- Line items -->
@@ -206,6 +198,22 @@ export class QuoteFormComponent implements OnInit {
     return Math.max(0, gross - (gross * pct) / 100);
   }
 
+  readonly editParty = signal<{ id: string; name: string } | null>(null);
+  /** The party's agreed discount — applied to fresh line items automatically. */
+  partyDiscount = 0;
+
+  onParty(ctx: CustomerContext) {
+    this.customerId = ctx.id;
+    this.partyDiscount = Number(ctx.defaultDiscountPct) || 0;
+    // Fill the party's default discount on any line that hasn't set one yet.
+    if (this.partyDiscount > 0) {
+      for (const it of this.items) if (!it.discount) it.discount = this.partyDiscount;
+      this.recalculate();
+    }
+    this.refreshPromo();
+  }
+  onPartyCleared() { this.customerId = ''; this.partyDiscount = 0; this.refreshPromo(); }
+
   private promoLines() { return this.items.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })); }
   refreshPromo() { this.promo.refresh(this.promoLines(), this.customerId || undefined); }
   applyCoupon(code: string) { this.promo.applyCoupon(code, this.promoLines(), this.customerId || undefined); }
@@ -279,6 +287,7 @@ export class QuoteFormComponent implements OnInit {
         // The API interceptor returns camelCase; keep snake_case as a fallback.
         this.title = q.title ?? '';
         this.customerId = q.customerId ?? q.customer_id ?? '';
+        if (this.customerId) this.editParty.set({ id: this.customerId, name: q.customerName ?? q.customer_name ?? '' });
         this.notes = q.notes || '';
         const validUntil = q.validUntil ?? q.valid_until;
         this.validUntil = validUntil ? new Date(validUntil) : null;
@@ -297,7 +306,7 @@ export class QuoteFormComponent implements OnInit {
   }
 
   addItem() {
-    this.items.push({ description: '', quantity: 1, unitPrice: 0, discount: 0 });
+    this.items.push({ description: '', quantity: 1, unitPrice: 0, discount: this.partyDiscount || 0 });
   }
 
   removeItem(index: number) {

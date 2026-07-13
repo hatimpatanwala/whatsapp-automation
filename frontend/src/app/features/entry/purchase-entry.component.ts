@@ -7,8 +7,10 @@ import {
   SupplierHit,
   SupplierContext,
   ProductHit,
+  CategoryProduct,
 } from '../../core/services/entry.service';
 import { EntryLookupComponent } from './entry-lookup.component';
+import { CategoryDiscountDialogComponent } from './category-discount-dialog.component';
 import { QuickCreateComponent, QuickCreated, QuickKind } from './quick-create.component';
 
 interface Row {
@@ -54,7 +56,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 @Component({
   selector: 'wa-purchase-entry',
   standalone: true,
-  imports: [FormsModule, DatePipe, QuickCreateComponent, EntryLookupComponent],
+  imports: [FormsModule, DatePipe, QuickCreateComponent, EntryLookupComponent, CategoryDiscountDialogComponent],
   template: `
     <div class="p-3 md:p-5 max-w-7xl select-none">
       <span class="hidden">{{ tick() }}</span>
@@ -288,12 +290,15 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
             <p class="text-slate-400">Select a supplier to see payables, recent purchases and their usual items & costs.</p>
           }
           <div class="mt-4 pt-3 border-t text-xs text-slate-400 leading-5">
-            <b class="text-slate-500">Keys:</b> Enter/Tab next · Shift+Tab back · ↑↓ rows/popup · Esc close · <b>Ctrl+A save</b>
+            <b class="text-slate-500">Keys:</b> Enter/Tab next · Shift+Tab back · ↑↓ rows/popup · <b>Alt+D category disc</b> · Esc close · <b>Ctrl+A save</b>
           </div>
         </div>
       </div>
 
       <wa-entry-lookup [kind]="'supplier'" [party]="supplier()" [rows]="rows" (applyRate)="onApplyRate($event)" />
+
+      <wa-category-discount-dialog [open]="showCatDisc()" [existingProductIds]="existingProductIds()"
+                                   (applied)="applyCategoryDiscount($event)" (closed)="showCatDisc.set(false)" />
 
       @if (qc(); as q) {
         <wa-quick-create [kind]="q.kind" [prefillName]="q.name"
@@ -620,6 +625,48 @@ export class PurchaseEntryComponent implements OnInit, OnDestroy {
     if (!row) return;
     row.rate = e.rate;
     this.tick.update((t) => t + 1);
+  }
+
+  // ─── Category discount (Alt+D) ──────────────────────────────────────────────
+  readonly showCatDisc = signal(false);
+  /** Product ids already on the grid — the dialog pre-checks + badges these. */
+  existingProductIds(): string[] { return this.rows.filter((r) => r.productId).map((r) => r.productId!); }
+
+  @HostListener('document:keydown.alt.d', ['$event'])
+  onAltD(e: KeyboardEvent): void {
+    e.preventDefault();
+    this.showCatDisc.set(true);
+  }
+
+  /**
+   * Fill the chosen discount % (D1) across the picked category's products: existing
+   * lines get their D1 set; products not yet on the bill are added as fresh lines.
+   */
+  applyCategoryDiscount(ev: { products: CategoryProduct[]; discountPct: number }): void {
+    const disc = Number(ev.discountPct) || 0;
+    for (const cp of ev.products) {
+      const existing = this.rows.filter((r) => r.productId === cp.id);
+      if (existing.length) {
+        for (const r of existing) r.d1 = disc;
+      } else {
+        this.rows.push(this.rowFromProduct(cp, disc));
+        this.loadItemContext(this.rows.length - 1);
+      }
+    }
+    // Ensure a trailing blank row remains for further entry.
+    if (this.rows.length === 0 || this.rows[this.rows.length - 1].productId) this.rows.push(this.blankRow());
+    this.tick.update((t) => t + 1);
+  }
+
+  private rowFromProduct(cp: CategoryProduct, d1: number): Row {
+    const gstRate = Number(cp.gstRate) || 0;
+    let rate = Number(cp.salePrice ?? cp.basePrice) || null;
+    if (cp.priceIncludesTax && rate && gstRate) rate = money(rate / (1 + gstRate / 100));
+    return {
+      ...this.blankRow(),
+      productId: cp.id, name: cp.name, hsn: cp.hsnCode || '', uom: cp.uom || 'pcs',
+      gstRate, rate: rate != null ? money(rate) : null, qty: 1, d1,
+    };
   }
 
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }

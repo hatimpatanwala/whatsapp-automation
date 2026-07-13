@@ -27,6 +27,12 @@ export class EntryContextController {
     return this.ctx.searchProducts(this.schema(req), q);
   }
 
+  /** Catalog grouped by category for the "category discount" dialog. */
+  @Get('category-products')
+  categoryProducts(@Req() req: Request) {
+    return this.ctx.categoryProducts(this.schema(req));
+  }
+
   @Get('customer/:id/context')
   customerContext(@Req() req: Request, @Param('id') id: string) {
     return this.ctx.customerContext(this.schema(req), id);

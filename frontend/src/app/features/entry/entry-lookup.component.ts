@@ -112,9 +112,11 @@ import { EntryService, RateHistoryRow } from '../../core/services/entry.service'
                   @if (kind === 'customer') {
                     <tr><td>Last to {{ party?.name || 'this party' }}</td>
                         <td class="lk-r">{{ it.lastToCustomer ? '₹' + fmt(it.lastToCustomer.price) : '—' }}</td>
+                        <td class="lk-r">{{ it.lastToCustomer?.discount ? it.lastToCustomer.discount + '% disc' : '' }}</td>
                         <td>{{ it.lastToCustomer ? (it.lastToCustomer.at | date: 'dd-MM-yy') : '' }}</td></tr>
                     <tr><td>Last overall sale</td>
                         <td class="lk-r">{{ it.lastOverall ? '₹' + fmt(it.lastOverall.price) : '—' }}</td>
+                        <td class="lk-r">{{ it.lastOverall?.discount ? it.lastOverall.discount + '% disc' : '' }}</td>
                         <td>{{ it.lastOverall ? (it.lastOverall.at | date: 'dd-MM-yy') : '' }}</td></tr>
                   } @else {
                     <tr><td>Last from {{ party?.name || 'this supplier' }}</td>
@@ -140,7 +142,7 @@ import { EntryService, RateHistoryRow } from '../../core/services/entry.service'
               <p class="lk-none">Loading…</p>
             } @else {
               <table class="lk-table">
-                <thead><tr><th></th><th>Date</th><th>Doc</th><th class="lk-r">Qty</th><th class="lk-r">Rate</th></tr></thead>
+                <thead><tr><th></th><th>Date</th><th>Doc</th><th class="lk-r">Qty</th><th class="lk-r">Rate</th><th class="lk-r">Disc</th></tr></thead>
                 <tbody>
                   @for (r of rates(); track $index; let i = $index) {
                     <tr (click)="applyRateRow(i)" class="lk-pick" [class.lk-sel]="i === rateIdx()">
@@ -149,9 +151,10 @@ import { EntryService, RateHistoryRow } from '../../core/services/entry.service'
                       <td class="lk-mono">{{ r.doc }}</td>
                       <td class="lk-r">{{ num(r.qty) }}</td>
                       <td class="lk-r"><b>₹{{ fmt(r.price) }}</b></td>
+                      <td class="lk-r">{{ r.discount != null ? r.discount + '%' : '—' }}</td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="5" class="lk-none">{{ party ? 'Never billed to ' + party.name + ' yet.' : 'No sales of this item yet.' }}</td></tr>
+                    <tr><td colspan="6" class="lk-none">{{ party ? 'Never billed to ' + party.name + ' yet.' : 'No sales of this item yet.' }}</td></tr>
                   }
                 </tbody>
               </table>
