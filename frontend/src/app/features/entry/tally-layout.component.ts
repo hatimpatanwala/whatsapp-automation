@@ -454,8 +454,10 @@ export class TallyLayoutComponent {
         { label: 'Price Levels & Credit Limits', route: '/entry/masters', key: 'F11' },
         { label: 'Salesmen (Field App / SFA)', route: '/entry/salesmen' },
         { divider: true, label: 'd1' },
-        { label: 'Products (web portal)', route: '/products' },
-        { label: 'Customers', route: '/customers' },
+        // Item Master + Party Master (above) are the ERP-native product/customer
+        // masters, so the portal "Products"/"Customers" cross-links are dropped
+        // here to avoid duplicate entries. Suppliers/Warehouses/Tax Rates have no
+        // ERP-native equivalent in this menu, so they stay.
         { label: 'Suppliers', route: '/erp/suppliers' },
         { label: 'Warehouses (Godowns)', route: '/erp/warehouses' },
         { label: 'Tax Rates', route: '/tax-rates' },

@@ -91,8 +91,8 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
           </table>
         </div>
 
-        <!-- Form -->
-        <div class="lg:col-span-3 border rounded-lg p-4 text-sm">
+        <!-- Form — disabled entirely for roles without customers:write -->
+        <fieldset [disabled]="!writable()" class="lg:col-span-3 border rounded-lg p-4 text-sm min-w-0">
           <div class="flex items-center gap-4 mb-3">
             <h2 class="font-semibold">{{ editId() ? 'Edit Party' : 'New Party' }}</h2>
             <div class="flex rounded overflow-hidden border text-xs">
@@ -275,7 +275,7 @@ interface ShipAddr { id?: string; label?: string; fullAddress: string; city?: st
             @if (!canSave() && f.partyName) { <span class="text-xs text-amber-600">fix the highlighted fields to save</span> }
             @if (apiError()) { <span class="text-red-600 text-xs">{{ apiError() }}</span> }
           </div>
-        </div>
+        </fieldset>
       </div>
     </div>
   `,

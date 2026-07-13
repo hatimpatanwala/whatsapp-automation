@@ -78,8 +78,8 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
           </table>
         </div>
 
-        <!-- Master form -->
-        <div class="lg:col-span-3 border rounded-lg p-4">
+        <!-- Master form — disabled entirely for roles without products:write -->
+        <fieldset [disabled]="!writable()" class="lg:col-span-3 border rounded-lg p-4 min-w-0">
           <h2 class="font-semibold text-sm mb-3 flex items-center gap-3 flex-wrap">
             {{ editId() ? 'Edit Item' : 'Add Item' }}
             <select [(ngModel)]="itemType" class="border rounded px-2 py-1 text-xs"
@@ -322,7 +322,7 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
             }
             @if (error()) { <span class="text-red-600 text-xs">{{ error() }}</span> }
           </div>
-        </div>
+        </fieldset>
       </div>
     </div>
   `,
