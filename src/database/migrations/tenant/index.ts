@@ -3211,6 +3211,21 @@ const migration083SfaModule: TenantMigration = {
   },
 };
 
+/**
+ * 084 — A salesman backed only by a portal/email login (no WhatsApp number) is
+ * valid, so `salesmen.phone` must be nullable. The unique phone index already
+ * tolerates NULLs (Postgres treats them as distinct). Idempotent.
+ */
+const migration084SalesmanPhoneOptional: TenantMigration = {
+  name: '084_salesman_phone_optional',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".salesmen ALTER COLUMN phone DROP NOT NULL`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".salesmen ALTER COLUMN phone SET NOT NULL`).catch(() => undefined);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3295,4 +3310,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration081MiracleImport,
   migration082RbacErp,
   migration083SfaModule,
+  migration084SalesmanPhoneOptional,
 ];
