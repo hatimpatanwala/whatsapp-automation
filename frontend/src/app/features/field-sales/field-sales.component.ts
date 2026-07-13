@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SfaService } from '../../core/services/sfa.service';
 
-type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits';
+type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'followups';
 
 /**
  * Field Sales (SFA) manager console — the paid, session-authed cockpit a manager
@@ -526,6 +526,61 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits';
             }
           </div>
         }
+
+        <!-- ══ FOLLOW-UPS (promise-to-pay) ══════════════════════════════ -->
+        @if (tab() === 'followups') {
+          <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-5 flex flex-wrap items-center gap-2">
+            <label class="text-[11px] font-semibold text-gray-400 uppercase mr-1">Show</label>
+            @for (s of ['due','open','all']; track s) {
+              <button (click)="followScope = $any(s); loadFollowups()"
+                class="px-3 py-1.5 rounded-lg text-[13px] font-semibold capitalize"
+                [class.bg-indigo-600]="followScope === s" [class.text-white]="followScope === s"
+                [class.bg-gray-100]="followScope !== s" [class.text-gray-600]="followScope !== s">{{ s === 'due' ? 'Due today' : s }}</button>
+            }
+          </div>
+          @if (followError()) { <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4">{{ followError() }}</div> }
+          @if (followLoading()) { <p class="text-sm text-gray-400 py-8 text-center">Loading follow-ups…</p> }
+          @else if (!followups().length) {
+            <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400 text-sm">No promise-to-pay follow-ups for this filter.</div>
+          } @else {
+            <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-[11px] uppercase text-gray-400">
+                  <tr>
+                    <th class="px-4 py-2.5 text-left font-semibold">Customer</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Invoice</th>
+                    <th class="px-4 py-2.5 text-right font-semibold">Amount</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Promised</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Status</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Note</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                  @for (p of followups(); track p.id) {
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-2.5">
+                        <p class="font-semibold text-gray-800">{{ p.customer_name || '—' }}</p>
+                        <p class="text-[11px] text-gray-400">{{ p.customer_phone || '' }}</p>
+                      </td>
+                      <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ p.invoice_number || '—' }}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(p.amount) }}</td>
+                      <td class="px-4 py-2.5 text-[12px] whitespace-nowrap"
+                        [class.text-red-600]="p.status === 'open' && isPast(p.promise_date)"
+                        [class.text-gray-500]="!(p.status === 'open' && isPast(p.promise_date))">{{ fmtDate(p.promise_date) }}</td>
+                      <td class="px-4 py-2.5">
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                          [class.bg-emerald-100]="p.status === 'kept'" [class.text-emerald-700]="p.status === 'kept'"
+                          [class.bg-red-100]="p.status === 'broken'" [class.text-red-700]="p.status === 'broken'"
+                          [class.bg-amber-100]="p.status === 'open'" [class.text-amber-700]="p.status === 'open'">{{ p.status }}</span>
+                      </td>
+                      <td class="px-4 py-2.5 text-[12px] text-gray-500 max-w-[16rem]">{{ p.note || '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
       </main>
     </div>
   `,
@@ -539,6 +594,7 @@ export class FieldSalesComponent implements OnInit {
     { id: 'beats', label: 'Beats' },
     { id: 'targets', label: 'Targets' },
     { id: 'visits', label: 'Visits' },
+    { id: 'followups', label: 'Follow-ups' },
   ];
 
   readonly tab = signal<Tab>('performance');
@@ -596,6 +652,12 @@ export class FieldSalesComponent implements OnInit {
   readonly visitLoading = signal(false);
   readonly visitError = signal('');
 
+  // ── Follow-ups tab (promise-to-pay across the team) ─────────────────────────
+  followScope: 'all' | 'due' | 'open' = 'due';
+  readonly followups = signal<any[]>([]);
+  readonly followLoading = signal(false);
+  readonly followError = signal('');
+
   ngOnInit() {
     const today = new Date();
     const past = new Date();
@@ -614,7 +676,18 @@ export class FieldSalesComponent implements OnInit {
     this.tab.set(t);
     if (t === 'performance' && !this.performance().length) this.loadPerformance();
     if (t === 'visits' && !this.visits().length) this.loadVisits();
+    if (t === 'followups' && !this.followups().length) this.loadFollowups();
     if (!this.salesmen().length) this.loadSalesmen();
+  }
+
+  // ── Follow-ups ──────────────────────────────────────────────────────────────
+  loadFollowups() {
+    this.followLoading.set(true);
+    this.followError.set('');
+    this.sfa.promises(this.followScope).subscribe({
+      next: (r) => { this.followups.set(r || []); this.followLoading.set(false); },
+      error: (e) => { this.followError.set(this.msg(e, 'Could not load follow-ups.')); this.followLoading.set(false); },
+    });
   }
 
   // ── Salesmen roster ─────────────────────────────────────────────────────────
@@ -816,6 +889,10 @@ export class FieldSalesComponent implements OnInit {
   fmtDate(v: any): string {
     const d = new Date(v);
     return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+  }
+  isPast(v: any): boolean {
+    const d = new Date(v);
+    return !isNaN(d.getTime()) && d.setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
   }
   fmtDateTime(v: any): string {
     const d = new Date(v);

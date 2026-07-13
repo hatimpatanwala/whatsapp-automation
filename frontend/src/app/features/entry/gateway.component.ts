@@ -92,7 +92,7 @@ export class GatewayComponent {
         { label: 'Item Master (Add Item / Stock)', route: '/entry/items' },
         { label: 'Ledgers (Chart of Accounts)', route: '/accounting/ledgers' },
         { label: 'Price Levels & Credit Limits', route: '/entry/masters' },
-        { label: 'Salesmen (Field App / SFA)', route: '/entry/salesmen' },
+        { label: 'Salesmen (Field App / SFA)', route: '/field-sales' },
         { label: 'Products (web portal)', route: '/products' },
         { label: 'Customers', route: '/customers' },
         { label: 'Suppliers', route: '/erp/suppliers' },

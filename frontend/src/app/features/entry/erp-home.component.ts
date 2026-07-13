@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { EntryService, ItemMasterRow } from '../../core/services/entry.service';
 import { AccountingService } from '../../core/services/accounting.service';
+import { AiInsightsCardComponent } from '../insights/ai-insights-card.component';
 
 interface MonthBar { label: string; value: number; }
 interface DueRow { id: string; no: string; party: string; due: string; balance: number; overdue: boolean; }
@@ -21,7 +22,7 @@ const ymdLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 @Component({
   selector: 'wa-erp-home',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, AiInsightsCardComponent],
   template: `
     <div class="p-3 md:p-5 select-none">
       <div class="flex items-center gap-4 mb-3 border-b pb-2">
@@ -30,6 +31,9 @@ const ymdLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
         @if (loading()) { <span class="text-xs text-slate-400">refreshing…</span> }
         <button (click)="refresh()" class="ml-auto text-xs px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-50" title="Reload the latest figures">↻ Refresh</button>
       </div>
+
+      <!-- AI Insights -->
+      <div class="mb-4"><wa-ai-insights-card /></div>
 
       <!-- KPI cards -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">

@@ -4,10 +4,11 @@ import { RouterLink } from '@angular/router';
 import { TagModule } from 'primeng/tag';
 import { ButtonModule } from 'primeng/button';
 import { ErpService } from '../../../core/services/erp.service';
+import { AiInsightsCardComponent } from '../../insights/ai-insights-card.component';
 
 @Component({
   selector: 'wa-erp-dashboard', standalone: true,
-  imports: [CommonModule, RouterLink, TagModule, ButtonModule],
+  imports: [CommonModule, RouterLink, TagModule, ButtonModule, AiInsightsCardComponent],
   template: `
     <div class="p-4 max-w-7xl mx-auto">
       <div class="flex items-center justify-between mb-6">
@@ -17,6 +18,8 @@ import { ErpService } from '../../../core/services/erp.service';
         </div>
         <p-button label="New Invoice" icon="pi pi-plus" routerLink="/erp/invoices" />
       </div>
+
+      <div class="mb-6"><wa-ai-insights-card /></div>
 
       @if (loading()) {
         <div class="text-center py-20 text-gray-400"><i class="pi pi-spin pi-spinner text-3xl"></i></div>

@@ -452,7 +452,7 @@ export class TallyLayoutComponent {
         { label: 'Item Master (Add Item / Stock)', route: '/entry/items', key: 'Alt+K' },
         { label: 'Ledgers (Chart of Accounts)', route: '/accounting/ledgers' },
         { label: 'Price Levels & Credit Limits', route: '/entry/masters', key: 'F11' },
-        { label: 'Salesmen (Field App / SFA)', route: '/entry/salesmen' },
+        { label: 'Salesmen (Field App / SFA)', route: '/field-sales' },
         { divider: true, label: 'd1' },
         // Item Master + Party Master (above) are the ERP-native product/customer
         // masters, so the portal "Products"/"Customers" cross-links are dropped

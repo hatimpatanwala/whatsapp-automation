@@ -23,6 +23,9 @@ export class SfaService {
   updateSalesman(id: string, body: { isActive?: boolean; rotateToken?: boolean }): Observable<any> {
     return this.api.patch<any>(`/sfa/salesmen/${id}`, body);
   }
+  promises(scope: 'due' | 'open' | 'all' = 'all'): Observable<any[]> {
+    return this.api.get<any[]>('/sfa/promises', { scope });
+  }
 
   // ─── Manager: reports ───────────────────────────────────────────────────────
   performance(q: { from?: string; to?: string; salesmanId?: string } = {}): Observable<any[]> {

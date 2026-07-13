@@ -107,9 +107,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/entry/party-master.component').then(m => m.PartyMasterComponent),
       },
       {
-        // SFA admin — register salesmen, share field-app links, follow-ups.
+        // SFA admin consolidated into the portal Field Sales console (single point
+        // to register salesmen, share links, targets, beats, visits, follow-ups).
         path: 'entry/salesmen',
-        loadComponent: () => import('./features/entry/salesmen.component').then(m => m.SalesmenComponent),
+        redirectTo: '/field-sales',
+        pathMatch: 'full',
       },
       {
         // Item master — Miracle Add Item / Add Stock (dual units, HSN, rates, min stock).
@@ -142,14 +144,15 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
       },
       {
-        // Salesman field-app admin — usable even when the ERP suite is off (SFA is
-        // its own plan feature). Reuses the ERP salesmen screen inside the portal.
+        // Legacy salesman-admin path — consolidated into the Field Sales console
+        // (single registration point). Redirect so old links/bookmarks still work.
         path: 'salesmen',
-        loadComponent: () => import('./features/entry/salesmen.component').then(m => m.SalesmenComponent),
+        redirectTo: 'field-sales',
+        pathMatch: 'full',
       },
       {
-        // Field Sales (SFA) manager console — team performance, beats, targets,
-        // visits + salesmen management. Gated by the `sfa` plan feature + RBAC.
+        // Field Sales (SFA) manager console — the ONE place to register salesmen +
+        // team performance, beats, targets, visits, follow-ups. Gated by `sfa`.
         path: 'field-sales',
         canActivate: [featureGuard('sfa')],
         loadComponent: () => import('./features/field-sales/field-sales.component').then(m => m.FieldSalesComponent),

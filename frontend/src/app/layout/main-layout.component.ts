@@ -339,11 +339,10 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Point of Sale', icon: 'pi-shopping-cart', route: '/erp/pos', featureKey: 'erp', perm: 'invoices' },
         { label: 'Orders', icon: 'pi-shopping-cart', route: '/orders', perm: 'orders' },
         // Salesman field app (SFA) — a standalone module: works even with ERP off.
-        // Field Sales = manager console (reports/beats/targets); My Field App =
-        // the signed-in salesman's own workspace.
+        // Field Sales = the single manager hub (register salesmen + reports, beats,
+        // targets, visits, follow-ups); My Field App = the salesman's own workspace.
         { label: 'Field Sales', icon: 'pi-chart-bar', route: '/field-sales', featureLive: 'sfa', perm: 'salesmen' },
         { label: 'My Field App', icon: 'pi-briefcase', route: '/my-sales', featureLive: 'sfa', perm: 'salesmen' },
-        { label: 'Register Salesmen', icon: 'pi-user-plus', route: '/salesmen', featureLive: 'sfa', perm: 'salesmen' },
         // Base Invoices (GST/order docs) — superseded by ERP Invoices (same `invoices` table).
         { label: 'Invoices', icon: 'pi-receipt', route: '/invoices', hideWhenErp: true, perm: 'invoices' },
         { label: 'Invoices', icon: 'pi-receipt', route: '/erp/invoices', featureKey: 'erp', perm: 'invoices' },

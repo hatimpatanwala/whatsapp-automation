@@ -11,6 +11,7 @@ import { BadgeModule } from 'primeng/badge';
 import { forkJoin } from 'rxjs';
 
 import { OrderService } from '../../core/services/order.service';
+import { AiInsightsCardComponent } from '../insights/ai-insights-card.component';
 import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
 import { Order, OrderStats, InventoryItem } from '../../core/models';
@@ -53,6 +54,7 @@ interface LowStockItem {
     CardModule,
     SkeletonModule,
     BadgeModule,
+    AiInsightsCardComponent,
   ],
   template: `
     <div class="p-6 space-y-6">
@@ -68,6 +70,9 @@ interface LowStockItem {
           <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" severity="success" routerLink="/orders"></button>
         </div>
       </div>
+
+      <!-- AI Insights -->
+      <wa-ai-insights-card />
 
       <!-- Stats grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
