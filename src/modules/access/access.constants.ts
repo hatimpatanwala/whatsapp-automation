@@ -6,6 +6,11 @@
  */
 export const ACCESS_FEATURES: { key: string; label: string; group: string }[] = [
   { key: 'dashboard', label: 'Dashboard', group: 'Overview' },
+  // ERP Access gates the whole ERP suite for a role (independent of the plan's
+  // ERP entitlement). Set 'none' for a field-sales/SFA-only role so they get the
+  // lightweight commerce views instead of the ERP screens.
+  { key: 'erp', label: 'ERP Access', group: 'Overview' },
+  { key: 'business_overview', label: 'Business Overview', group: 'Overview' },
   { key: 'orders', label: 'Orders', group: 'Sales' },
   { key: 'invoices', label: 'Invoices', group: 'Sales' },
   { key: 'quotes', label: 'Quotes', group: 'Sales' },

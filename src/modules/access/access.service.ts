@@ -45,6 +45,11 @@ export class AccessService {
     return this.cm.executeInTenantContext(schema, async (qr) => {
       const role = (await qr.query(`SELECT * FROM "${schema}".roles WHERE id = $1`, [id]))[0];
       if (!role) throw new NotFoundException('Role not found');
+      // System roles (Owner, Salesman, …) are locked presets — they can't be
+      // renamed or have their permissions changed. Duplicate one to customise.
+      if (role.is_system && role.name !== 'Owner') {
+        throw new BadRequestException('System roles are locked and cannot be edited');
+      }
       // The Owner system role is always full-access and cannot be weakened.
       const perms = role.is_system && role.name === 'Owner'
         ? fullAccess()

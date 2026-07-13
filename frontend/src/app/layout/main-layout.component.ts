@@ -326,7 +326,7 @@ export class MainLayoutComponent implements OnInit {
         // Back into the keyboard-first ERP chrome (Miracle view) — the reverse of
         // the ERP status bar's "Web Portal ⤴" link.
         { label: 'ERP (Keyboard view)', icon: 'pi-table', route: '/home', featureKey: 'erp' },
-        { label: 'Business Overview', icon: 'pi-chart-bar', route: '/erp/dashboard', featureKey: 'erp', perm: 'reports' },
+        { label: 'Business Overview', icon: 'pi-chart-bar', route: '/erp/dashboard', featureKey: 'erp', perm: 'business_overview' },
         { label: 'Reports & Analytics', icon: 'pi-chart-line', route: '/erp/reports', featureKey: 'erp', perm: 'reports' },
         // Downgraded tenants: a single entry to view & download their preserved ERP data.
         { label: 'Download My Data', icon: 'pi-download', route: '/erp/export', erpReadOnlyEntry: true },
@@ -439,8 +439,14 @@ export class MainLayoutComponent implements OnInit {
     // briefly appeared (locked/teaser) before status loaded and then vanished on
     // refresh. Base items stay visible throughout (erpFull is false while loading).
     const ready = this.erpAccess.ready();
-    const erpFull = ready && this.erpAccess.enabled();      // plan includes ERP → full access
+    const planErp = ready && this.erpAccess.enabled();      // plan includes ERP
     const erpReadOnly = ready && this.erpAccess.readOnly(); // downgraded but data preserved → read-only
+    // The ERP suite is shown only when the PLAN has ERP AND the user's ROLE has
+    // ERP access. A field-sales/SFA role (erp:'none') falls back to the base
+    // commerce views instead — no ERP screens. (Assume access until permissions
+    // resolve to avoid a flash for the common owner case.)
+    const roleErp = !this.permissions.ready() || this.permissions.can('erp', 'read');
+    const erpFull = planErp && roleErp;
     return this.navSections
       .map((s) => ({
         title: s.title,
@@ -450,10 +456,10 @@ export class MainLayoutComponent implements OnInit {
           // Single "ERP Data (read-only)" entry, only when downgraded.
           if (it.erpReadOnlyEntry) return erpReadOnly;
           // Upsell teaser only when status is known AND the tenant has no ERP at all.
-          if (it.erpTeaser) return ready && !erpFull && !erpReadOnly;
-          // Base item is superseded by its ERP version only when ERP is FULLY enabled.
+          if (it.erpTeaser) return ready && !planErp && !erpReadOnly;
+          // Base item is superseded by its ERP version only when the USER sees ERP.
           if (it.hideWhenErp && erpFull) return false;
-          // Individual ERP items show only with full ERP (hidden — not locked — otherwise).
+          // Individual ERP items show only when the user has ERP (plan + role).
           if (it.featureKey === 'erp') return erpFull;
           // Live-feature items (salesman app, offline desktop) — shown only when the
           // tenant is actually entitled, independent of the ERP master switch.

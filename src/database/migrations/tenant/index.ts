@@ -2976,19 +2976,21 @@ const migration079Rbac: TenantMigration = {
       ADD COLUMN IF NOT EXISTS permissions JSONB`);
 
     // Seed starter roles once. Features map: none | read | write (write implies read).
-    const ALL = ['dashboard','orders','invoices','quotes','purchases','customers','suppliers','products','inventory','payments','accounting','gst','salesmen','schemes','reports','settings','employees'];
+    const ALL = ['dashboard','erp','business_overview','orders','invoices','quotes','purchases','customers','suppliers','products','inventory','payments','accounting','gst','salesmen','schemes','reports','settings','employees'];
     const lvl = (level: string) => JSON.stringify(Object.fromEntries(ALL.map((f) => [f, level])));
     const owner = lvl('write');
     const viewer = lvl('read');
-    const salesman = JSON.stringify({ dashboard: 'read', orders: 'write', quotes: 'write', customers: 'write', products: 'read', invoices: 'read', payments: 'write', salesmen: 'read', schemes: 'read', reports: 'read', purchases: 'none', suppliers: 'none', accounting: 'none', gst: 'none', inventory: 'read', settings: 'none', employees: 'none' });
-    const accountant = JSON.stringify({ dashboard: 'read', orders: 'read', quotes: 'read', customers: 'read', products: 'read', invoices: 'write', payments: 'write', accounting: 'write', gst: 'write', reports: 'read', purchases: 'read', suppliers: 'read', inventory: 'read', salesmen: 'none', schemes: 'read', settings: 'none', employees: 'none' });
+    // Salesman = field-sales / SFA only: NO ERP access, full access to the SFA
+    // surface (orders, quotes, customers, collections, their field app).
+    const salesman = JSON.stringify({ erp: 'none', business_overview: 'none', dashboard: 'read', orders: 'write', quotes: 'write', customers: 'write', products: 'read', invoices: 'read', payments: 'write', salesmen: 'write', schemes: 'read', reports: 'none', purchases: 'none', suppliers: 'none', accounting: 'none', gst: 'none', inventory: 'read', settings: 'none', employees: 'none' });
+    const accountant = JSON.stringify({ erp: 'write', business_overview: 'read', dashboard: 'read', orders: 'read', quotes: 'read', customers: 'read', products: 'read', invoices: 'write', payments: 'write', accounting: 'write', gst: 'write', reports: 'read', purchases: 'read', suppliers: 'read', inventory: 'read', salesmen: 'none', schemes: 'read', settings: 'none', employees: 'none' });
     await qr.query(
       `INSERT INTO "${schema}".roles (name, description, permissions, is_system)
        SELECT * FROM (VALUES
          ('Owner', 'Full access to everything', $1::jsonb, true),
          ('Manager', 'Manage sales, purchases and customers', $1::jsonb, false),
          ('Accountant', 'Invoicing, payments, accounting and GST', $2::jsonb, false),
-         ('Salesman', 'Orders, quotes and customers', $3::jsonb, false),
+         ('Salesman', 'Field-sales app (SFA) — no ERP access', $3::jsonb, true),
          ('Viewer', 'Read-only across the app', $4::jsonb, false)
        ) AS r(name, description, permissions, is_system)
        WHERE NOT EXISTS (SELECT 1 FROM "${schema}".roles)`,
@@ -3073,6 +3075,39 @@ const migration081MiracleImport: TenantMigration = {
   },
 };
 
+const migration082RbacErp: TenantMigration = {
+  name: '082_rbac_erp_access',
+  async up(qr, schema) {
+    // 1) Backfill the two new permission features into every existing role,
+    //    preserving any value already set. Sensible defaults per seeded role;
+    //    custom roles inherit from a related feature.
+    await qr.query(`
+      UPDATE "${schema}".roles SET permissions = permissions || jsonb_build_object(
+        'erp', COALESCE(permissions->>'erp',
+                 CASE WHEN name IN ('Owner','Manager','Accountant') THEN 'write'
+                      WHEN name = 'Viewer' THEN 'read'
+                      WHEN name = 'Salesman' THEN 'none'
+                      ELSE COALESCE(NULLIF(permissions->>'accounting',''), 'none') END),
+        'business_overview', COALESCE(permissions->>'business_overview',
+                 CASE WHEN name IN ('Owner','Manager') THEN 'write'
+                      WHEN name IN ('Accountant','Viewer') THEN 'read'
+                      WHEN name = 'Salesman' THEN 'none'
+                      ELSE COALESCE(NULLIF(permissions->>'reports',''), 'none') END)
+      ), updated_at = NOW()
+    `);
+    // 2) Lock the Salesman role to the canonical SFA permission set (no ERP) and
+    //    make it a protected system role (non-editable/deletable).
+    const salesman = JSON.stringify({ erp: 'none', business_overview: 'none', dashboard: 'read', orders: 'write', quotes: 'write', customers: 'write', products: 'read', invoices: 'read', payments: 'write', salesmen: 'write', schemes: 'read', reports: 'none', purchases: 'none', suppliers: 'none', accounting: 'none', gst: 'none', inventory: 'read', settings: 'none', employees: 'none' });
+    await qr.query(
+      `UPDATE "${schema}".roles
+       SET permissions = $1::jsonb, is_system = true, description = 'Field-sales app (SFA) — no ERP access', updated_at = NOW()
+       WHERE lower(name) = 'salesman'`,
+      [salesman],
+    );
+  },
+  async down() { /* additive/idempotent — no rollback */ },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3155,4 +3190,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration079Rbac,
   migration080PushDevices,
   migration081MiracleImport,
+  migration082RbacErp,
 ];

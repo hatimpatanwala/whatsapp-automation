@@ -109,12 +109,13 @@ interface Feature { key: string; label: string; group: string; }
               <div class="flex items-center gap-3 mb-3 flex-wrap">
                 <h2 class="text-lg font-bold">{{ r.name }}</h2>
                 @if (r.name === 'Owner') { <span class="text-xs text-amber-600">Owner always has full access.</span> }
-                @if (canManage() && r.name !== 'Owner') {
+                @else if (r.isSystem) { <span class="text-xs text-amber-600">System role — locked. Duplicate it to customise.</span> }
+                @if (canManage() && !r.isSystem) {
                   <button (click)="saveRole()" [disabled]="busy()" class="ml-auto px-3 py-1.5 rounded bg-emerald-600 text-white text-sm disabled:opacity-50">Save permissions</button>
-                  @if (!r.isSystem) { <button (click)="deleteRole(r)" class="px-3 py-1.5 rounded border text-red-600 text-sm">Delete role</button> }
+                  <button (click)="deleteRole(r)" class="px-3 py-1.5 rounded border text-red-600 text-sm">Delete role</button>
                 }
               </div>
-              <input [(ngModel)]="selDesc" [disabled]="!canManage() || r.name === 'Owner'" class="border rounded px-2 py-1.5 text-sm w-full mb-4" placeholder="Description" />
+              <input [(ngModel)]="selDesc" [disabled]="!canManage() || r.isSystem" class="border rounded px-2 py-1.5 text-sm w-full mb-4" placeholder="Description" />
 
               @for (g of featureGroups(); track g) {
                 <div class="mb-3">
@@ -124,7 +125,7 @@ interface Feature { key: string; label: string; group: string; }
                       <span class="text-sm flex-1">{{ f.label }}</span>
                       <div class="flex rounded-lg overflow-hidden border text-xs">
                         @for (lv of levels; track lv) {
-                          <button (click)="setLevel(f.key, lv)" [disabled]="!canManage() || r.name === 'Owner'"
+                          <button (click)="setLevel(f.key, lv)" [disabled]="!canManage() || r.isSystem"
                             class="px-3 py-1 capitalize"
                             [class.bg-slate-800]="matrix[f.key] === lv" [class.text-white]="matrix[f.key] === lv"
                             [class.text-slate-400]="matrix[f.key] !== lv">{{ lv }}</button>
