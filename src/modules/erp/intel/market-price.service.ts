@@ -184,22 +184,26 @@ export class MarketPriceService {
     const name = String(product.name);
     const refPrice = Number(product.ref_price) || 0;
 
+    // Time budget: an interactive refresh must answer fast; bulk gets longer.
+    const deadline = Date.now() + (this.bulk.get(schema)?.running ? 120_000 : 45_000);
+
     // PRIMARY: the marketplace CATEGORY page (server-rendered, many priced listings;
     // cached 12h so one polite fetch prices every product of the category). This
     // avoids general search engines entirely — they block datacenter IPs quickly.
     let contexts: string[] = [];
-    const catText = await this.categoryPageText(name);
+    const catText = await this.categoryPageText(name, deadline);
     if (catText) contexts = this.windowsFromText(name, catText);
 
     // FALLBACK: metasearch → listing URLs → window extraction (works when the
-    // engines aren't rate-limiting; skipped when the category page already matched).
+    // engines aren't rate-limiting; skipped when the category page already matched
+    // or the time budget is spent).
     let searched = 0;
     let relevant: Array<{ title: string; content: string; url: string }> = [];
-    if (contexts.length < 2) {
+    if (contexts.length < 2 && Date.now() < deadline - 20_000) {
       const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
       searched = snippets.length;
       relevant = this.relevantSnippets(name, snippets);
-      const pageContexts = await this.fetchListingContexts(name, snippets);
+      const pageContexts = await this.fetchListingContexts(name, snippets, deadline);
       contexts = [...contexts, ...pageContexts];
     }
 
@@ -339,38 +343,36 @@ export class MarketPriceService {
    * a given host, with one 60s backoff-and-retry on HTTP 429. Without this the
    * marketplaces 429 the server IP within minutes (observed live).
    */
-  private fetchPolite(url: string): Promise<string | null> {
+  private fetchPolite(url: string, deadline?: number): Promise<string | null> {
     const run = async (): Promise<string | null> => {
       const host = new URL(url).host;
       const waitUntil = this.hostNextAt.get(host) || 0;
       const delay = Math.max(0, waitUntil - Date.now());
+      // FAIL-FAST: never sleep past the caller's budget — a cooling host simply
+      // isn't available this round; the 12h cache means a later round fills it.
+      if (deadline && Date.now() + delay + 16_000 > deadline) return null;
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       this.hostNextAt.set(host, Date.now() + MarketPriceService.HOST_GAP_MS);
 
-      const attempt = async (): Promise<{ status: number; text: string | null }> => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15_000);
-        try {
-          const res = await fetch(url, {
-            signal: controller.signal,
-            headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', accept: 'text/html' },
-          });
-          return { status: res.status, text: res.ok ? await res.text() : null };
-        } catch {
-          return { status: 0, text: null };
-        } finally {
-          clearTimeout(timer);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', accept: 'text/html' },
+        });
+        if (res.status === 429) {
+          // Mark the host cooling for 90s and move on (no in-request sleeps).
+          this.hostNextAt.set(host, Date.now() + 90_000);
+          this.logger.warn(`429 from ${host} — cooling 90s`);
+          return null;
         }
-      };
-
-      let r = await attempt();
-      if (r.status === 429) {
-        this.logger.warn(`429 from ${host} — backing off 60s`);
-        await new Promise((res) => setTimeout(res, 60_000));
-        this.hostNextAt.set(host, Date.now() + MarketPriceService.HOST_GAP_MS);
-        r = await attempt();
+        return res.ok ? await res.text() : null;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
       }
-      return r.text;
     };
     // Chain so all polite fetches are strictly serialized process-wide.
     const p = this.hostChain.then(run, run);
@@ -408,17 +410,22 @@ export class MarketPriceService {
   }
 
   /** Fetch (or reuse) the first category page that resolves; null when none do. */
-  private async categoryPageText(productName: string): Promise<string | null> {
+  private async categoryPageText(productName: string, deadline?: number): Promise<string | null> {
     for (const slug of this.slugCandidates(productName)) {
       const hit = this.catPageCache.get(slug);
-      if (hit && Date.now() - hit.at < this.CAT_TTL) {
-        if (hit.text) return hit.text;
-        continue; // negative-cached miss
+      if (hit) {
+        // Positive entries live CAT_TTL; misses retry after 2 min (host cool-downs pass).
+        const ttl = hit.text ? this.CAT_TTL : 2 * 60 * 1000;
+        if (Date.now() - hit.at < ttl) {
+          if (hit.text) return hit.text;
+          continue;
+        }
       }
-      const html = await this.fetchPolite(`https://dir.indiamart.com/impcat/${slug}.html`);
+      const html = await this.fetchPolite(`https://dir.indiamart.com/impcat/${slug}.html`, deadline);
       const text = html && html.length > 20_000 ? MarketPriceService.toText(html) : null;
       this.catPageCache.set(slug, { at: Date.now(), text });
       if (text) return text;
+      if (deadline && Date.now() > deadline - 16_000) break;
     }
     return null;
   }
@@ -446,7 +453,7 @@ export class MarketPriceService {
    * size number from its name — i.e. the price is proven to sit next to THIS product,
    * not just anywhere on the page.
    */
-  private async fetchListingContexts(productName: string, snippets: Array<{ title: string; content: string; url: string }>): Promise<string[]> {
+  private async fetchListingContexts(productName: string, snippets: Array<{ title: string; content: string; url: string }>, deadline?: number): Promise<string[]> {
     const tokens = productName.toLowerCase().split(/[^a-z0-9/.]+/).filter((t) => t.length >= 2 && !STOPWORDS.has(t));
     const brand = tokens[0] || '';
     const numbers = tokens.filter((t) => /\d/.test(t));
@@ -454,7 +461,7 @@ export class MarketPriceService {
     const contexts: string[] = [];
 
     for (const url of urls.slice(0, 2)) { // polite: serialized, few pages
-      const html = await this.fetchPolite(url);
+      const html = await this.fetchPolite(url, deadline);
       if (!html) continue;
       const text = MarketPriceService.toText(html);
       const re = /(?:₹|Rs\.?|INR)\s*[\d,]+(?:\.\d{1,2})?/gi;
