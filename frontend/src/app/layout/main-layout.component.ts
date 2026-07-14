@@ -328,6 +328,9 @@ export class MainLayoutComponent implements OnInit {
         { label: 'ERP (Keyboard view)', icon: 'pi-table', route: '/home', featureKey: 'erp' },
         { label: 'Business Overview', icon: 'pi-chart-bar', route: '/erp/dashboard', featureKey: 'erp', perm: 'business_overview' },
         { label: 'Reports & Analytics', icon: 'pi-chart-line', route: '/erp/reports', featureKey: 'erp', perm: 'reports' },
+        // Premium BI — visible to every ERP tenant; the page shows the upgrade
+        // lock until the `premiumInsights` plan feature is enabled.
+        { label: 'AI Insights Pro', icon: 'pi-sparkles', route: '/erp/intel', featureKey: 'erp', perm: 'reports' },
         // Downgraded tenants: a single entry to view & download their preserved ERP data.
         { label: 'Download My Data', icon: 'pi-download', route: '/erp/export', erpReadOnlyEntry: true },
         { label: 'Unlock Business Suite', icon: 'pi-star', route: '/settings/upgrade', erpTeaser: true },

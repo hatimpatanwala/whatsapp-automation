@@ -7,6 +7,9 @@ import { Routes } from '@angular/router';
 export const ERP_ROUTES: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'dashboard', loadComponent: () => import('./dashboard/erp-dashboard.component').then((m) => m.ErpDashboardComponent) },
+  // AI Insights Pro — premium BI (the page itself shows the upgrade lock until the
+  // `premiumInsights` plan feature is on; the included /erp/insights card is separate).
+  { path: 'intel', loadComponent: () => import('./intel/erp-intel.component').then((m) => m.ErpIntelComponent) },
   // Data export centre (download all ERP data; also the landing for read-only/downgraded tenants)
   { path: 'export', loadComponent: () => import('./export/erp-export.component').then((m) => m.ErpExportComponent) },
   // Invoicing

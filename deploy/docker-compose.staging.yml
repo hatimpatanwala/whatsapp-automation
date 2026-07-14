@@ -123,6 +123,9 @@ services:
       QUEUE_REDIS_PORT: 6379
       QUEUE_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
 
+      # Self-hosted metasearch (AI Insights Pro market pricing) — internal only
+      SEARX_URL: http://searxng:8080
+
       # Session
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       SESSION_TTL: ${SESSION_TTL:-86400}
@@ -234,6 +237,24 @@ services:
         limits:
           memory: 64M
           cpus: "0.25"
+
+  # ─── SearXNG (self-hosted metasearch — AI Insights Pro market pricing) ────
+  # INTERNAL ONLY: no host port; the backend reaches it at http://searxng:8080.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: wa-staging-searxng
+    restart: unless-stopped
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+    networks:
+      - wa-staging-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
 volumes:
   pgdata-staging:

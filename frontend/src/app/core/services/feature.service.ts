@@ -27,6 +27,8 @@ export const FEATURE_KEYS = {
   // Offline desktop app (installable Windows build) + standalone salesman module.
   erpOffline: 'erpOffline',
   sfa: 'sfa',
+  /** AI Insights Pro — premium BI (market pricing, forecast, stock planner). */
+  premiumInsights: 'premiumInsights',
 } as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[keyof typeof FEATURE_KEYS];

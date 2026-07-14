@@ -1,0 +1,24 @@
+# SearXNG settings for the INTERNAL market-pricing search service (AI Insights Pro).
+# The container has no published host port — only the backend reaches it over the
+# docker network — so the limiter/bot-detection is off and the JSON API is enabled
+# (it is disabled by default and would 403 the backend's format=json calls).
+use_default_settings: true
+
+server:
+  # Internal-only service (never exposed publicly); a static key is acceptable here.
+  secret_key: "wa-staging-searxng-internal-only-4f2c9d1e8b7a"
+  limiter: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false

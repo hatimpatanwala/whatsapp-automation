@@ -228,6 +228,7 @@ export class PlanFormComponent implements OnInit {
     { key: 'erp', label: 'ERP — Business Suite (online)', desc: 'Full ERP: invoicing, accounting, CRM, procurement, inventory, POS, GST, HR. The online (browser) version is always available.' },
     { key: 'erpOffline', label: 'ERP — Offline Desktop App', desc: 'The installable Windows desktop app (embedded database, works offline, two-way sync). The downloaded app refuses login without this.' },
     { key: 'sfa', label: 'Salesman Field App (SFA)', desc: 'Standalone salesman module — take orders, collect payments, promise-to-pay. Works even when the ERP suite is off.' },
+    { key: 'premiumInsights', label: 'AI Insights Pro (Premium)', desc: 'Advanced business intelligence — product performance scores, market price comparison, 4-month demand forecast & stock planner. Requires ERP.' },
   ];
 
   planForm = this.fb.group({
@@ -257,6 +258,7 @@ export class PlanFormComponent implements OnInit {
     erp: [false],
     erpOffline: [false],
     sfa: [false],
+    premiumInsights: [false],
     // Display
     isActive: [true],
     sortOrder: [1],
@@ -301,6 +303,7 @@ export class PlanFormComponent implements OnInit {
           erp: plan.features?.erp ?? false,
           erpOffline: plan.features?.erpOffline ?? false,
           sfa: plan.features?.sfa ?? false,
+          premiumInsights: plan.features?.premiumInsights ?? false,
           // Display
           isActive: plan.isActive,
           sortOrder: plan.sortOrder,
@@ -362,6 +365,7 @@ export class PlanFormComponent implements OnInit {
         erp: v.erp ?? false,
         erpOffline: v.erpOffline ?? false,
         sfa: v.sfa ?? false,
+        premiumInsights: v.premiumInsights ?? false,
         // Mirror the single ERP switch onto the legacy sub-flags so any code still
         // reading them stays consistent (the suite is all-or-nothing now).
         erpInvoicing: v.erp ?? false,

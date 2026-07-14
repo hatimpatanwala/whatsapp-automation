@@ -3269,6 +3269,35 @@ const migration085BackfillCategories: TenantMigration = {
   async down() { /* additive backfill — no rollback */ },
 };
 
+/**
+ * 086 — Market price intelligence (AI Insights Pro). One row per product per source:
+ * 'manual' (user-entered competitor price — always wins), 'search' (self-hosted
+ * SearXNG web-search extraction), 'benchmark' (reserved). Confidence 0–1 reflects
+ * how many independent price points backed the figure.
+ */
+const migration086MarketPrices: TenantMigration = {
+  name: '086_market_prices',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".market_prices (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      product_id UUID NOT NULL,
+      source VARCHAR(16) NOT NULL DEFAULT 'manual',
+      price_low NUMERIC(14,2),
+      price_median NUMERIC(14,2),
+      price_high NUMERIC(14,2),
+      region VARCHAR(60),
+      confidence NUMERIC(3,2) NOT NULL DEFAULT 0.5,
+      source_note TEXT,
+      fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_market_price_product_source ON "${schema}".market_prices (product_id, source)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".market_prices`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3355,4 +3384,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration083SfaModule,
   migration084SalesmanPhoneOptional,
   migration085BackfillCategories,
+  migration086MarketPrices,
 ];

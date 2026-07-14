@@ -46,6 +46,7 @@ import { EntryModule } from './modules/entry/entry.module';
 import { CollectModule } from './modules/collect/collect.module';
 import { SfaModule } from './modules/sfa/sfa.module';
 import { InsightsModule } from './modules/erp/insights/insights.module';
+import { IntelModule } from './modules/erp/intel/intel.module';
 import { AccessModule } from './modules/access/access.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
@@ -100,6 +101,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     CollectModule,
     SfaModule,
     InsightsModule,
+    IntelModule,
     AccessModule,
   ],
   providers: [
