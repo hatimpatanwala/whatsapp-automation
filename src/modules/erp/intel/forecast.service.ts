@@ -27,6 +27,16 @@ export interface StockPlanRow {
   recommendedOrderQty: number;
   overstock: boolean;
   confidence: 'high' | 'medium' | 'low';
+  /** Inventory-optimizer figures (blueprint): daily velocity, reorder trigger, EOQ. */
+  avgDailySales: number;
+  reorderPoint: number;
+  eoq: number | null;
+  /** Expected demand over the next 7 / 30 / 90 days. */
+  demand7: number;
+  demand30: number;
+  demand90: number;
+  /** Days until the current stock runs out at the forecast rate (null = no demand). */
+  runsOutInDays: number | null;
 }
 
 const HORIZON = 4; // months
@@ -104,6 +114,11 @@ export class ForecastService {
     const stockBy = new Map<string, number>(stocks.map((s: any) => [s.product_id, Number(s.stock) || 0]));
     const { series } = await this.loadSeries(schema);
 
+    const { meta } = await this.loadSeries(schema);
+    // EOQ assumptions (classic Wilson formula) — surfaced so users know the basis.
+    const ORDER_COST = 500; // ₹ per purchase order (paperwork/freight share)
+    const HOLDING_RATE = 0.2; // 20% of unit cost per year
+
     const products: StockPlanRow[] = fc.products.map((p) => {
       const monthly = p.months.map((m) => m.qty);
       const avgMonthly = monthly.reduce((s, x) => s + x, 0) / (monthly.length || 1);
@@ -115,6 +130,16 @@ export class ForecastService {
       const stock = stockBy.get(p.productId) || 0;
       const need = p.totalQty + leadDemand + safety - stock;
       const coverMonths = avgMonthly > 0 ? stock / avgMonthly : Infinity;
+
+      // Blueprint optimizer figures: ADS, reorder point, EOQ, 7/30/90d demand.
+      const ads = avgMonthly / 30;
+      const reorderPoint = r0(ads * leadTimeDays + safety);
+      const cost = meta.get(p.productId)?.cost || 0;
+      const annualDemand = avgMonthly * 12;
+      const eoq = cost > 0 && annualDemand > 0
+        ? r0(Math.sqrt((2 * annualDemand * ORDER_COST) / (cost * HOLDING_RATE)))
+        : null;
+
       return {
         productId: p.productId,
         name: p.name,
@@ -125,10 +150,20 @@ export class ForecastService {
         recommendedOrderQty: r0(Math.max(0, need)),
         overstock: coverMonths > HORIZON * 1.5,
         confidence: p.confidence,
+        avgDailySales: r1(ads),
+        reorderPoint,
+        eoq,
+        demand7: r1(ads * 7),
+        demand30: r1(avgMonthly),
+        demand90: r1(avgMonthly * 3),
+        runsOutInDays: ads > 0 ? r0(stock / ads) : null,
       };
     });
 
-    return { assumptions: { leadTimeDays, serviceLevelPct: 95, horizonMonths: HORIZON }, products };
+    return {
+      assumptions: { leadTimeDays, serviceLevelPct: 95, horizonMonths: HORIZON, orderCost: ORDER_COST, holdingRatePct: HOLDING_RATE * 100 },
+      products,
+    };
   }
 
   /**
@@ -243,6 +278,12 @@ export class ForecastService {
         if (cost > 0 && recommendedPrice !== null && recommendedPrice < cost * 1.02) {
           recommendedPrice = r1(cost * 1.05); priceBasis += ' · floored above cost';
         }
+        // Blueprint dynamic-pricing triple: never sell below min; premium for
+        // low-competition/urgent demand (capped at the market high when known).
+        const minPrice = cost > 0 ? r1(cost * 1.05) : (recommendedPrice !== null ? r1(recommendedPrice * 0.9) : null);
+        const premiumPrice = recommendedPrice !== null
+          ? r1(market ? Math.min(market * 1.15, recommendedPrice * 1.1) : recommendedPrice * 1.08)
+          : null;
 
         return {
           productId: r.id, name: r.name, uom: r.uom,
@@ -256,7 +297,7 @@ export class ForecastService {
           yourPrice: own > 0 ? r1(own) : null,
           marketMedian: market ? r1(market) : null,
           marketSource: r.market_source || null,
-          recommendedPrice, priceBasis,
+          recommendedPrice, priceBasis, minPrice, premiumPrice,
           estProfitPotential: recommendedStock > 0 && recommendedPrice && cost > 0 ? r0(recommendedStock * (recommendedPrice - cost)) : null,
         };
       })
@@ -289,11 +330,12 @@ export class ForecastService {
          GROUP BY 1, 2 ORDER BY 1, 2`,
       );
       const metaRows = await qr.query(
-        `SELECT id, name, COALESCE(uom,'pcs') AS uom, COALESCE(sale_price, base_price, 0)::float AS price
+        `SELECT id, name, COALESCE(uom,'pcs') AS uom, COALESCE(sale_price, base_price, 0)::float AS price,
+                COALESCE(purchase_price, 0)::float AS cost
          FROM "${schema}".products WHERE is_active = true AND deleted_at IS NULL`,
       );
-      const meta = new Map<string, { name: string; uom: string; price: number }>(
-        metaRows.map((m: any) => [m.id, { name: m.name, uom: m.uom, price: Number(m.price) || 0 }]),
+      const meta = new Map<string, { name: string; uom: string; price: number; cost: number }>(
+        metaRows.map((m: any) => [m.id, { name: m.name, uom: m.uom, price: Number(m.price) || 0, cost: Number(m.cost) || 0 }]),
       );
 
       // Dense monthly series per product (gaps = 0), from first sale to asOf month.

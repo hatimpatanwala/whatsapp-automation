@@ -6,6 +6,7 @@ import { ErpFeatureGuard } from '../../../common/guards/erp-feature.guard';
 import { ProductAnalyticsService } from './product-analytics.service';
 import { ForecastService } from './forecast.service';
 import { MarketPriceService } from './market-price.service';
+import { RecommendationService } from './recommendation.service';
 
 /**
  * AI Insights Pro — premium business intelligence (plan feature `premiumInsights`):
@@ -18,6 +19,7 @@ export class IntelController {
     private readonly analytics: ProductAnalyticsService,
     private readonly forecasts: ForecastService,
     private readonly market: MarketPriceService,
+    private readonly recs: RecommendationService,
   ) {}
 
   private schema(req: Request): string {
@@ -70,6 +72,20 @@ export class IntelController {
   stockPlan(@Req() req: Request, @Query('leadTimeDays') leadTimeDays?: string) {
     const lt = Math.min(90, Math.max(1, parseInt(leadTimeDays || '14', 10) || 14));
     return this.forecasts.stockPlan(this.schema(req), lt);
+  }
+
+  /** Actionable AI recommendations — buy / reprice / promote / switch supplier. */
+  @Get('recommendations')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  recommendations(@Req() req: Request, @Query('refresh') refresh?: string) {
+    return this.recs.recommendations(this.schema(req), refresh === '1');
+  }
+
+  /** Supplier comparison for one product (avg/last price, order count, recency). */
+  @Get('suppliers/:productId')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  suppliers(@Req() req: Request, @Param('productId') productId: string) {
+    return this.recs.supplierOptions(this.schema(req), productId);
   }
 
   /** Month Planner — same-month history (2 yrs), profit, recommended stock + price. */

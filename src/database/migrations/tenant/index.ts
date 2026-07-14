@@ -3298,6 +3298,31 @@ const migration086MarketPrices: TenantMigration = {
   },
 };
 
+/**
+ * 087 — Market price HISTORY (blueprint: Price History / price-trend tracking).
+ * Append-only: every successful market refresh also writes a history row, so price
+ * movement over time is queryable (the market_prices table keeps only the latest).
+ */
+const migration087MarketPriceHistory: TenantMigration = {
+  name: '087_market_price_history',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".market_price_history (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      product_id UUID NOT NULL,
+      source VARCHAR(16) NOT NULL,
+      price_low NUMERIC(14,2),
+      price_median NUMERIC(14,2),
+      price_high NUMERIC(14,2),
+      confidence NUMERIC(3,2),
+      fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_mph_product_time ON "${schema}".market_price_history (product_id, fetched_at DESC)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".market_price_history`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3385,4 +3410,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration084SalesmanPhoneOptional,
   migration085BackfillCategories,
   migration086MarketPrices,
+  migration087MarketPriceHistory,
 ];

@@ -4,6 +4,7 @@ import { IntelController } from './intel.controller';
 import { ProductAnalyticsService } from './product-analytics.service';
 import { ForecastService } from './forecast.service';
 import { MarketPriceService } from './market-price.service';
+import { RecommendationService } from './recommendation.service';
 
 /**
  * AI Insights Pro (premium BI). Imports ErpModule so the ErpFeatureGuard's
@@ -12,7 +13,7 @@ import { MarketPriceService } from './market-price.service';
 @Module({
   imports: [ErpModule],
   controllers: [IntelController],
-  providers: [ProductAnalyticsService, ForecastService, MarketPriceService],
-  exports: [ProductAnalyticsService, ForecastService, MarketPriceService],
+  providers: [ProductAnalyticsService, ForecastService, MarketPriceService, RecommendationService],
+  exports: [ProductAnalyticsService, ForecastService, MarketPriceService, RecommendationService],
 })
 export class IntelModule {}

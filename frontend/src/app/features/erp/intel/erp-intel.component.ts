@@ -8,7 +8,7 @@ import { FeatureService } from '../../../core/services/feature.service';
 type TabId = 'overview' | 'monthplan' | 'performance' | 'pricing' | 'forecast';
 type SortDir = 'asc' | 'desc';
 type FcView = 'forecast' | 'plan';
-type PerfFilter = 'all' | 'A' | 'B' | 'C' | 'rising' | 'declining' | 'stockout-risk' | 'overstock' | 'dead-stock';
+type PerfFilter = 'all' | 'A' | 'B' | 'C' | 'fast-moving' | 'rising' | 'declining' | 'stockout-risk' | 'overstock' | 'dead-stock';
 type MpFilter = 'all' | 'needs-stock' | 'sold-before' | 'has-market';
 type BulkStatus = 'pending' | 'running' | 'ok' | 'no-data' | 'error';
 
@@ -25,12 +25,27 @@ interface OverviewData {
   searchAvailable?: boolean;
 }
 
+type RecoType = 'buy' | 'reorder-soon' | 'price-up' | 'price-down' | 'promote-dead' | 'switch-supplier';
+/** Chip groups over recommendation types: Buy={buy,reorder-soon}, Pricing={price-up,price-down}, Dead stock={promote-dead}, Supplier={switch-supplier}. */
+type RecoFilter = 'all' | 'buy' | 'pricing' | 'dead' | 'supplier';
+
+interface Recommendation {
+  type: RecoType; productId: string; productName: string;
+  title: string; reason: string;
+  confidence: 'high' | 'medium' | 'low';
+  impact: number | null; impactLabel?: string | null;
+  action?: Record<string, unknown>;
+}
+interface RecoData { generatedAt?: string; recommendations?: Recommendation[]; }
+
 interface PerfProduct {
   productId: string; name: string; uom?: string;
   revenue90?: number; qty90?: number; orders90?: number; velocityPerWeek?: number;
   momentumPct?: number | null; marginPct?: number | null;
   abcClass?: 'A' | 'B' | 'C'; stock?: number; daysOfCover?: number | null;
   score?: number; flags?: string[];
+  healthClass?: 'fast-moving' | 'slow-moving' | 'dead-stock' | 'inactive';
+  marginClass?: 'high' | 'low' | null;
 }
 interface PerfData { asOf?: string; products?: PerfProduct[]; }
 
@@ -47,9 +62,15 @@ interface PlanProduct {
   productId: string; name: string; uom?: string;
   stock?: number; forecastQty?: number; safetyStock?: number; recommendedOrderQty?: number;
   overstock?: boolean | number; confidence?: string;
+  avgDailySales?: number; reorderPoint?: number; eoq?: number | null;
+  demand7?: number; demand30?: number; demand90?: number;
+  runsOutInDays?: number | null;
 }
 interface PlanData {
-  assumptions?: { leadTimeDays?: number; serviceLevelPct?: number; horizonMonths?: number };
+  assumptions?: {
+    leadTimeDays?: number; serviceLevelPct?: number; horizonMonths?: number;
+    orderCost?: number; holdingRatePct?: number;
+  };
   products?: PlanProduct[];
 }
 
@@ -76,6 +97,7 @@ interface MpProduct {
   currentStock?: number; recommendedStock?: number; stockBasis?: string;
   shortfall?: number; yourPrice?: number | null; marketMedian?: number | null;
   marketSource?: string | null; recommendedPrice?: number | null; priceBasis?: string;
+  minPrice?: number | null; premiumPrice?: number | null;
   estProfitPotential?: number | null;
 }
 interface MonthPlanData {
@@ -86,7 +108,9 @@ interface MonthPlanData {
 /**
  * AI Insights Pro — the premium business-intelligence cockpit for the ERP.
  * Five tabs backed by /erp/intel/*:
- *   • Overview — headline winners (top performer / rising star / forecast winner)
+ *   • Overview — the AI Recommendations action feed (buy / pricing / dead-stock /
+ *     supplier suggestions with impact & confidence, type-filter chips), then the
+ *     headline winners (top performer / rising star / forecast winner)
  *     plus clickable risk counters that jump to the relevant tab.
  *   • Month Planner — "what should I stock next month": per-product history for
  *     the same calendar month in the last two years, growth-adjusted recommended
@@ -176,6 +200,74 @@ interface MonthPlanData {
                 <button (click)="loadOverview()" class="font-semibold underline shrink-0">Retry</button>
               </div>
             }
+
+            <!-- AI Recommendations feed — the star of the page -->
+            <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-5">
+              <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                  <i class="pi pi-bolt" style="font-size:.7rem"></i>
+                </div>
+                <h2 class="text-sm font-bold text-gray-700">AI Recommendations</h2>
+                @if (recos()?.generatedAt) { <span class="text-[11px] text-gray-400">Generated {{ fmtDate(recos()!.generatedAt) }}</span> }
+                @if (recoLoading()) { <span class="ml-auto text-[12px] text-gray-400">Loading…</span> }
+              </div>
+              @if (recoError()) {
+                <div class="px-4 py-3 bg-red-50 text-red-700 text-sm flex items-center justify-between gap-3">
+                  <span>{{ recoError() }}</span>
+                  <button (click)="loadRecos()" class="font-semibold underline shrink-0">Retry</button>
+                </div>
+              } @else if (recoLoading() && !recos()) {
+                <div class="animate-pulse p-4 space-y-3">
+                  <div class="h-12 bg-gray-100 rounded-xl"></div>
+                  <div class="h-12 bg-gray-100 rounded-xl"></div>
+                  <div class="h-12 bg-gray-100 rounded-xl"></div>
+                </div>
+              } @else if (recos()) {
+                <!-- type filter chips -->
+                <div class="px-4 py-2.5 border-b border-gray-100 flex flex-wrap gap-1.5">
+                  @for (c of recoChips(); track c.id) {
+                    <button (click)="setRecoFilter(c.id)"
+                      class="px-2.5 py-1 rounded-full text-[12px] font-semibold transition-colors whitespace-nowrap"
+                      [class.bg-indigo-600]="recoFilter() === c.id" [class.text-white]="recoFilter() === c.id"
+                      [class.bg-gray-100]="recoFilter() !== c.id" [class.text-gray-500]="recoFilter() !== c.id">
+                      {{ c.label }} ({{ c.count }})</button>
+                  }
+                </div>
+                @if (!recoShown().length) {
+                  <p class="text-sm text-gray-400 px-4 py-8 text-center">No actions needed right now — you're on top of things ✅</p>
+                } @else {
+                  <div class="divide-y divide-gray-50">
+                    @for (r of recoShown(); track $index) {
+                      <div class="px-4 py-3 flex items-start gap-3 hover:bg-gray-50/60 transition-colors">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" [class]="recoIconCls(r.type)">
+                          <i class="pi {{ recoIcon(r.type) }}" style="font-size:.8rem"></i>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <p class="text-[13.5px] font-bold text-gray-900">{{ r.title }}</p>
+                          <p class="text-[13px] text-slate-500">{{ r.reason }}</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                          @if (r.impact != null) {
+                            <p class="text-[14px] font-bold text-gray-900 tabular-nums leading-tight">₹{{ inr(r.impact) }}</p>
+                            @if (r.impactLabel) { <p class="text-[10px] text-gray-400">{{ r.impactLabel }}</p> }
+                          } @else {
+                            <p class="text-[14px] font-bold text-gray-300 leading-tight">—</p>
+                          }
+                          <span class="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize" [class]="confCls(r.confidence)">{{ r.confidence }}</span>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                  @if (recoFiltered().length > 10) {
+                    <button (click)="recoExpanded.set(!recoExpanded())"
+                      class="w-full py-2.5 text-[12.5px] font-semibold text-indigo-600 hover:bg-indigo-50/50 border-t border-gray-50 transition-colors">
+                      {{ recoExpanded() ? 'Show less' : 'Show all ' + recoFiltered().length }}
+                    </button>
+                  }
+                }
+              }
+            </div>
+
             @if (ovLoading() && !overview()) {
               <div class="animate-pulse grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
                 <div class="h-28 bg-white rounded-2xl border border-gray-100"></div>
@@ -371,6 +463,7 @@ interface MonthPlanData {
                           <td class="px-4 py-2.5 text-right tabular-nums">
                             @if (p.recommendedPrice != null) {
                               <div class="font-bold">₹{{ inr(p.recommendedPrice) }}</div>
+                              @if (priceRange(p); as range) { <div class="text-[10px] text-gray-400 whitespace-nowrap">{{ range }}</div> }
                               @if (p.priceBasis) { <div class="text-[10px] text-gray-400 whitespace-normal max-w-[9rem] ml-auto">{{ p.priceBasis }}</div> }
                             } @else { <span class="text-gray-300">—</span> }
                           </td>
@@ -446,6 +539,14 @@ interface MonthPlanData {
                           </td>
                           <td class="px-4 py-2.5">
                             <span class="text-[11px] font-bold px-2 py-0.5 rounded-full" [class]="abcCls(p.abcClass)">{{ p.abcClass || '—' }}</span>
+                          </td>
+                          <td class="px-4 py-2.5 whitespace-nowrap">
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full" [class]="healthCls(p.healthClass)">{{ healthLabel(p.healthClass) }}</span>
+                            @if (p.marginClass === 'high') {
+                              <span class="ml-1 text-[9px] font-bold px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700" title="High margin">HM</span>
+                            } @else if (p.marginClass === 'low') {
+                              <span class="ml-1 text-[9px] font-bold px-1 py-0.5 rounded-full bg-rose-100 text-rose-700" title="Low margin">LM</span>
+                            }
                           </td>
                           <td class="px-4 py-2.5 min-w-[7rem]">
                             <div class="flex items-center gap-2">
@@ -734,7 +835,7 @@ interface MonthPlanData {
                 </div>
                 @if (stockPlan()?.assumptions; as a) {
                   <p class="text-[12px] text-gray-400 pb-2">
-                    Assumes {{ a.leadTimeDays ?? leadTime() }}-day lead time · {{ a.serviceLevelPct ?? 95 }}% service level · {{ a.horizonMonths ?? 4 }}-month horizon
+                    Assumes {{ a.leadTimeDays ?? leadTime() }}-day lead time · {{ a.serviceLevelPct ?? 95 }}% service level · {{ a.horizonMonths ?? 4 }}-month horizon@if (a.orderCost != null) { <span> · order cost ₹{{ inr(a.orderCost) }}</span> }@if (a.holdingRatePct != null) { <span> · holding {{ inrQty(a.holdingRatePct) }}%/yr</span> }
                   </p>
                 }
                 <button (click)="exportCsv()" [disabled]="!stockPlan()?.products?.length"
@@ -743,9 +844,17 @@ interface MonthPlanData {
                 </button>
               </div>
               <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
                   <h2 class="text-sm font-bold text-gray-700">What to reorder</h2>
                   @if (planLoading()) { <span class="text-[12px] text-gray-400">Loading…</span> }
+                  @if ((stockPlan()?.products || []).length) {
+                    <div class="ml-auto flex items-center gap-2.5 text-[11px] text-gray-400 tabular-nums whitespace-nowrap">
+                      <span class="text-[10px] font-semibold uppercase tracking-wide">Demand next</span>
+                      <span>7d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d7) }}</span></span>
+                      <span>30d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d30) }}</span></span>
+                      <span>90d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d90) }}</span></span>
+                    </div>
+                  }
                 </div>
                 @if (planLoading() && !stockPlan()) {
                   <div class="animate-pulse p-4 space-y-3">
@@ -762,8 +871,12 @@ interface MonthPlanData {
                         <tr class="text-left text-[11px] font-semibold text-gray-400 uppercase border-b border-gray-100">
                           <th class="px-4 py-2.5">Product</th>
                           <th class="px-4 py-2.5 text-right">Current stock</th>
+                          <th class="px-4 py-2.5 text-right">Runs out</th>
+                          <th class="px-4 py-2.5 text-right">ADS/day</th>
                           <th class="px-4 py-2.5 text-right">Forecast demand (4 mo)</th>
                           <th class="px-4 py-2.5 text-right">Safety stock</th>
+                          <th class="px-4 py-2.5 text-right">Reorder at</th>
+                          <th class="px-4 py-2.5 text-right">EOQ</th>
                           <th class="px-4 py-2.5 text-right">Recommended order</th>
                           <th class="px-4 py-2.5">Status</th>
                           <th class="px-4 py-2.5">Confidence</th>
@@ -774,8 +887,16 @@ interface MonthPlanData {
                           <tr class="border-b border-gray-50 hover:bg-gray-50/60">
                             <td class="px-4 py-2.5 font-semibold max-w-[14rem]"><div class="truncate" [title]="p.name">{{ p.name }}</div></td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ inrQty(p.stock) }} <span class="text-[10px] text-gray-400">{{ p.uom || '' }}</span></td>
+                            <td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap">
+                              @if (p.runsOutInDays != null) {
+                                <span [class]="runsOutCls(p.runsOutInDays)">{{ inr(p.runsOutInDays) }}d</span>
+                              } @else { <span class="text-gray-300">—</span> }
+                            </td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.avgDailySales) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ inrQty(p.forecastQty) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.safetyStock) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.reorderPoint) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ p.eoq != null ? inrQty(p.eoq) : '—' }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">
                               @if ((p.recommendedOrderQty || 0) > 0) {
                                 <span class="font-bold text-indigo-700">{{ inrQty(p.recommendedOrderQty) }}</span>
@@ -874,6 +995,71 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
   readonly ovLoading = signal(false);
   readonly ovError = signal('');
 
+  // ── AI Recommendations feed ─────────────────────────────────────────────────
+  readonly recos = signal<RecoData | null>(null);
+  readonly recoLoading = signal(false);
+  readonly recoError = signal('');
+  readonly recoFilter = signal<RecoFilter>('all');
+  readonly recoExpanded = signal(false);
+
+  private readonly recoChipDefs: { id: RecoFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'buy', label: 'Buy' },
+    { id: 'pricing', label: 'Pricing' },
+    { id: 'dead', label: 'Dead stock' },
+    { id: 'supplier', label: 'Supplier' },
+  ];
+  readonly recoChips = computed<{ id: RecoFilter; label: string; count: number }[]>(() => {
+    const rows = this.recos()?.recommendations || [];
+    return this.recoChipDefs.map((c) => ({
+      ...c,
+      count: c.id === 'all' ? rows.length : rows.filter((r) => this.recoGroup(r?.type) === c.id).length,
+    }));
+  });
+
+  readonly recoFiltered = computed<Recommendation[]>(() => {
+    const f = this.recoFilter();
+    const rows = this.recos()?.recommendations || [];
+    return f === 'all' ? rows : rows.filter((r) => this.recoGroup(r?.type) === f);
+  });
+  readonly recoShown = computed(() => this.recoExpanded() ? this.recoFiltered() : this.recoFiltered().slice(0, 10));
+
+  private recoGroup(t: RecoType | undefined): RecoFilter {
+    if (t === 'buy' || t === 'reorder-soon') return 'buy';
+    if (t === 'price-up' || t === 'price-down') return 'pricing';
+    if (t === 'promote-dead') return 'dead';
+    return 'supplier';
+  }
+
+  setRecoFilter(f: RecoFilter) {
+    this.recoFilter.set(f);
+    this.recoExpanded.set(false); // collapse when switching so the top 10 of the new group shows
+  }
+
+  recoIcon(t: RecoType): string {
+    const map: Record<RecoType, string> = {
+      'buy': 'pi-shopping-cart',
+      'reorder-soon': 'pi-clock',
+      'price-up': 'pi-arrow-up',
+      'price-down': 'pi-arrow-down',
+      'promote-dead': 'pi-tag',
+      'switch-supplier': 'pi-sync',
+    };
+    return map[t] || 'pi-bolt';
+  }
+
+  recoIconCls(t: RecoType): string {
+    const map: Record<RecoType, string> = {
+      'buy': 'bg-indigo-50 text-indigo-600',
+      'reorder-soon': 'bg-slate-100 text-slate-600',
+      'price-up': 'bg-emerald-50 text-emerald-600',
+      'price-down': 'bg-amber-50 text-amber-600',
+      'promote-dead': 'bg-rose-50 text-rose-600',
+      'switch-supplier': 'bg-violet-50 text-violet-600',
+    };
+    return map[t] || 'bg-gray-100 text-gray-500';
+  }
+
   // ── Product performance ─────────────────────────────────────────────────────
   readonly perf = signal<PerfData | null>(null);
   readonly perfLoading = signal(false);
@@ -888,6 +1074,7 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     { id: 'A', label: 'A-class' },
     { id: 'B', label: 'B' },
     { id: 'C', label: 'C' },
+    { id: 'fast-moving', label: 'Fast movers' },
     { id: 'rising', label: 'Rising' },
     { id: 'declining', label: 'Declining' },
     { id: 'stockout-risk', label: 'Stockout risk' },
@@ -902,12 +1089,14 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
   private perfMatch(p: PerfProduct, f: PerfFilter): boolean {
     if (f === 'all') return true;
     if (f === 'A' || f === 'B' || f === 'C') return p?.abcClass === f;
+    if (f === 'fast-moving') return p?.healthClass === 'fast-moving';
     return (p?.flags || []).includes(f);
   }
 
   readonly perfCols: { key: string; label: string; right?: boolean }[] = [
     { key: 'name', label: 'Product' },
     { key: 'abcClass', label: 'ABC' },
+    { key: 'healthClass', label: 'Health' },
     { key: 'score', label: 'Score' },
     { key: 'revenue90', label: 'Revenue 90d', right: true },
     { key: 'qty90', label: 'Qty', right: true },
@@ -925,13 +1114,18 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     const filtered = rows.filter((p) => this.perfMatch(p, f) && (!q || (p?.name || '').toLowerCase().includes(q)));
     const key = this.perfSortKey();
     const dir = this.perfSortDir();
-    return filtered.sort((a, b) => this.cmp(
-      (a as unknown as Record<string, unknown>)[key],
-      (b as unknown as Record<string, unknown>)[key],
-      dir,
-    ));
+    return filtered.sort((a, b) => this.cmp(this.perfVal(a, key), this.perfVal(b, key), dir));
   });
   readonly perfShown = computed(() => this.perfFiltered().slice(0, 100));
+
+  /** Sortable cell value — healthClass sorts by rank (fast → inactive), not alphabetically. */
+  private perfVal(p: PerfProduct, key: string): unknown {
+    if (key === 'healthClass') {
+      const order: Record<string, number> = { 'fast-moving': 0, 'slow-moving': 1, 'dead-stock': 2, 'inactive': 3 };
+      return p?.healthClass != null ? order[p.healthClass] : null;
+    }
+    return (p as unknown as Record<string, unknown>)[key];
+  }
 
   /** Generic table comparator — strings locale-compared, numbers numeric, nulls always last. */
   private cmp(av: unknown, bv: unknown, dir: SortDir): number {
@@ -1089,6 +1283,14 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     return (p?.history && p.history[i]) || null;
   }
 
+  /** "min ₹X · premium ₹Y" under the recommended price — skips whichever is null. */
+  priceRange(p: MpProduct): string {
+    const parts: string[] = [];
+    if (p?.minPrice != null) parts.push('min ₹' + this.inr(p.minPrice));
+    if (p?.premiumPrice != null) parts.push('premium ₹' + this.inr(p.premiumPrice));
+    return parts.join(' · ');
+  }
+
   // ── Forecast ────────────────────────────────────────────────────────────────
   readonly forecast = signal<ForecastData | null>(null);
   readonly fcLoading = signal(false);
@@ -1110,10 +1312,18 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
   readonly leadTime = signal(14);
   private ltTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Demand-horizon totals (7/30/90 days) summed across the plan rows. */
+  readonly planDemand = computed(() => {
+    const rows = this.stockPlan()?.products || [];
+    const sum = (k: 'demand7' | 'demand30' | 'demand90') =>
+      rows.reduce((s, p) => s + (Number(p?.[k]) || 0), 0);
+    return { d7: sum('demand7'), d30: sum('demand30'), d90: sum('demand90') };
+  });
+
   // ── Header ──────────────────────────────────────────────────────────────────
   readonly asOf = computed(() => this.overview()?.asOf || this.monthPlan()?.asOf || this.perf()?.asOf || this.forecast()?.asOf || '');
   readonly anyLoading = computed(() =>
-    this.ovLoading() || this.mpLoading() || this.perfLoading() || this.marketLoading() || this.fcLoading() || this.planLoading());
+    this.ovLoading() || this.recoLoading() || this.mpLoading() || this.perfLoading() || this.marketLoading() || this.fcLoading() || this.planLoading());
 
   ngOnInit() {
     if (this.locked()) return; // premium off → lock screen only, no API calls
@@ -1167,11 +1377,21 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
 
   // ── Loaders ─────────────────────────────────────────────────────────────────
   loadOverview() {
+    if (!this.recoLoading()) this.loadRecos(); // the feed rides along with the overview
     this.ovLoading.set(true);
     this.ovError.set('');
     this.api.get<OverviewData>('/erp/intel/overview').subscribe({
       next: (r) => { this.overview.set(r || {}); this.ovLoading.set(false); },
       error: (e) => { this.ovError.set(this.msg(e, 'Could not load the overview.')); this.ovLoading.set(false); },
+    });
+  }
+
+  loadRecos() {
+    this.recoLoading.set(true);
+    this.recoError.set('');
+    this.api.get<RecoData>('/erp/intel/recommendations').subscribe({
+      next: (r) => { this.recos.set(r || { recommendations: [] }); this.recoLoading.set(false); },
+      error: (e) => { this.recoError.set(this.msg(e, 'Could not load recommendations.')); this.recoLoading.set(false); },
     });
   }
 
@@ -1226,7 +1446,8 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
       this.perfSortDir.set(this.perfSortDir() === 'asc' ? 'desc' : 'asc');
     } else {
       this.perfSortKey.set(key);
-      this.perfSortDir.set(key === 'name' || key === 'abcClass' ? 'asc' : 'desc');
+      // healthClass ranks fast→inactive, so ascending puts fast movers first.
+      this.perfSortDir.set(key === 'name' || key === 'abcClass' || key === 'healthClass' ? 'asc' : 'desc');
     }
   }
 
@@ -1440,12 +1661,34 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     return !!p?.overstock && Number(p.overstock) !== 0;
   }
 
+  /** Urgency colour for "Runs out in X days": red inside the lead time, amber under a month. */
+  runsOutCls(d: number | null | undefined): string {
+    if (d == null) return 'text-gray-300';
+    const lt = Number(this.stockPlan()?.assumptions?.leadTimeDays ?? this.leadTime()) || 0;
+    if (d <= lt) return 'text-red-600 font-bold';
+    if (d <= 30) return 'text-amber-600 font-semibold';
+    return 'text-gray-400';
+  }
+
   exportCsv() {
     const rows = this.stockPlan()?.products || [];
     if (!rows.length) return;
     const lines = [
-      'name,stock,forecastQty,safetyStock,recommendedOrderQty',
-      ...rows.map((p) => [this.csvEsc(p.name), Number(p.stock) || 0, Number(p.forecastQty) || 0, Number(p.safetyStock) || 0, Number(p.recommendedOrderQty) || 0].join(',')),
+      'name,stock,forecastQty,safetyStock,recommendedOrderQty,avgDailySales,reorderPoint,eoq,demand7,demand30,demand90,runsOutInDays',
+      ...rows.map((p) => [
+        this.csvEsc(p.name),
+        Number(p.stock) || 0,
+        Number(p.forecastQty) || 0,
+        Number(p.safetyStock) || 0,
+        Number(p.recommendedOrderQty) || 0,
+        Number(p.avgDailySales) || 0,
+        Number(p.reorderPoint) || 0,
+        p.eoq != null ? Number(p.eoq) : '',
+        Number(p.demand7) || 0,
+        Number(p.demand30) || 0,
+        Number(p.demand90) || 0,
+        p.runsOutInDays != null ? Number(p.runsOutInDays) : '',
+      ].join(',')),
     ];
     this.saveCsv('stock-plan.csv', lines);
   }
@@ -1485,6 +1728,20 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     if (c === 'A') return 'bg-emerald-100 text-emerald-700';
     if (c === 'B') return 'bg-indigo-100 text-indigo-700';
     return 'bg-gray-100 text-gray-600';
+  }
+
+  healthLabel(h: string | undefined): string {
+    const map: Record<string, string> = { 'fast-moving': 'Fast', 'slow-moving': 'Slow', 'dead-stock': 'Dead' };
+    return (h && map[h]) || '—';
+  }
+
+  healthCls(h: string | undefined): string {
+    const map: Record<string, string> = {
+      'fast-moving': 'bg-emerald-100 text-emerald-700',
+      'slow-moving': 'bg-amber-100 text-amber-700',
+      'dead-stock': 'bg-rose-100 text-rose-700',
+    };
+    return (h && map[h]) || 'bg-gray-100 text-gray-500';
   }
 
   confCls(c: string | null | undefined): string {

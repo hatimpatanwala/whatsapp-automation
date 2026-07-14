@@ -139,7 +139,19 @@ export class MarketPriceService {
         [body.productId, r2(Math.min(low, median)), r2(median), r2(Math.max(high, median)), body.note?.trim() || 'Entered manually'],
       ),
     );
+    await this.appendHistory(schema, body.productId, 'manual', Math.min(low, median), median, Math.max(high, median), 1.0);
     return { saved: true };
+  }
+
+  /** Append-only price history (blueprint: price trend over time). Best-effort. */
+  private async appendHistory(schema: string, productId: string, source: string, low: number, median: number, high: number, confidence: number) {
+    await this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `INSERT INTO "${schema}".market_price_history (product_id, source, price_low, price_median, price_high, confidence)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [productId, source, r2(low), r2(median), r2(high), confidence],
+      ),
+    ).catch(() => undefined);
   }
 
   // ─── Single refresh ──────────────────────────────────────────────────────────
@@ -200,6 +212,7 @@ export class MarketPriceService {
         [productId, r2(result.low), r2(result.median), r2(result.high), result.confidence, `${via === 'llm' ? 'LLM' : 'Web'} · ${result.points} matched price point(s)`],
       ),
     );
+    await this.appendHistory(schema, productId, 'search', result.low, result.median, result.high, result.confidence);
     return { status: 'ok', low: r2(result.low), median: r2(result.median), high: r2(result.high), points: result.points, via };
   }
 

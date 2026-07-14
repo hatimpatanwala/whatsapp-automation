@@ -20,6 +20,9 @@ export interface ProductPerformance {
   daysOfCover: number | null;
   score: number;
   flags: string[];
+  /** Blueprint product-health class: fast-moving / slow-moving / dead-stock / inactive. */
+  healthClass: 'fast-moving' | 'slow-moving' | 'dead-stock' | 'inactive';
+  marginClass: 'high' | 'low' | null;
 }
 
 /**
@@ -85,6 +88,9 @@ export class ProductAnalyticsService {
         abc.set(r.product_id, cum / totalRev <= 0.8 ? 'A' : cum / totalRev <= 0.95 ? 'B' : 'C');
       }
       const maxRev = Math.max(...sorted.map((r: any) => r.revenue90), 1);
+      // Fast-mover threshold: median weekly velocity among products that actually sold.
+      const velocities = rows.map((r: any) => r.qty90 / (90 / 7)).filter((v: number) => v > 0).sort((a: number, b: number) => a - b);
+      const medianVelocity = velocities.length ? velocities[Math.floor(velocities.length / 2)] : 0;
 
       const products: ProductPerformance[] = rows.map((r: any) => {
         const velocity = r.qty90 / (90 / 7);
@@ -109,6 +115,11 @@ export class ProductAnalyticsService {
         const marScore = margin === null ? 7.5 : 15 * Math.max(0, Math.min(1, margin / 40));
         const avlScore = daysOfCover === null ? (r.stock > 0 ? 7.5 : 0) : (daysOfCover >= 14 && daysOfCover <= 180 ? 15 : 7.5);
 
+        const healthClass: ProductPerformance['healthClass'] =
+          r.stock > 0 && r.qty90 <= 0 ? 'dead-stock'
+          : r.qty90 <= 0 ? 'inactive'
+          : velocity >= medianVelocity ? 'fast-moving' : 'slow-moving';
+
         return {
           productId: r.product_id,
           name: r.name,
@@ -124,6 +135,8 @@ export class ProductAnalyticsService {
           daysOfCover,
           score: r0(revScore + momScore + marScore + avlScore),
           flags,
+          healthClass,
+          marginClass: margin === null ? null : margin >= 25 ? 'high' : margin < 10 ? 'low' : null,
         };
       }).sort((a, b) => b.score - a.score);
 
