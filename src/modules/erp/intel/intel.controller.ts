@@ -72,10 +72,30 @@ export class IntelController {
     return this.forecasts.stockPlan(this.schema(req), lt);
   }
 
+  /** Month Planner — same-month history (2 yrs), profit, recommended stock + price. */
+  @Get('month-plan')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  monthPlan(@Req() req: Request, @Query('month') month?: string) {
+    return this.forecasts.monthPlan(this.schema(req), month);
+  }
+
   @Get('market-prices')
   @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
   marketPrices(@Req() req: Request) {
     return this.market.list(this.schema(req));
+  }
+
+  /** Queue a web-price refresh for every (non-manual) product; poll refresh-status. */
+  @Post('market-prices/refresh-all')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  refreshAll(@Req() req: Request) {
+    return this.market.refreshAll(this.schema(req));
+  }
+
+  @Get('market-prices/refresh-status')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  refreshStatus(@Req() req: Request) {
+    return this.market.refreshStatus(this.schema(req));
   }
 
   @Post('market-prices/manual')

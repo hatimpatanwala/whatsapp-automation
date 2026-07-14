@@ -131,6 +131,146 @@ export class ForecastService {
     return { assumptions: { leadTimeDays, serviceLevelPct: 95, horizonMonths: HORIZON }, products };
   }
 
+  /**
+   * Month Planner — "what should I stock and at what price for month X?".
+   * For the target calendar month it returns, per product:
+   *   • the same month's actuals for the last 2 years (qty sold, revenue, est. profit
+   *     at the current purchase cost — labeled as an estimate)
+   *   • current stock and a recommended stock level: same-month average weighted
+   *     toward the recent year, scaled by the business's year-on-year growth
+   *     (capped 0.7–1.5×) + a 10% buffer; falls back to the model forecast when the
+   *     product has no same-month history
+   *   • a recommended selling price: your recent realized price nudged toward the
+   *     market median (never more than ±10% in one step), with the basis explained.
+   * Deterministic and explainable — no paid APIs, no black boxes.
+   */
+  async monthPlan(schema: string, targetYm?: string) {
+    const fc = await this.forecast(schema);
+    const asOf = fc.asOf;
+    // Default target = the month after the latest data month.
+    const anchor = new Date(`${asOf.slice(0, 7)}-01T00:00:00Z`);
+    const next = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1));
+    const ym = /^\d{4}-\d{2}$/.test(targetYm || '') ? (targetYm as string) : next.toISOString().slice(0, 7);
+    const y = parseInt(ym.slice(0, 4), 10);
+    const ym1 = `${y - 1}-${ym.slice(5, 7)}`; // same month, last year
+    const ym2 = `${y - 2}-${ym.slice(5, 7)}`; // same month, 2 years ago
+
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      // Company-wide YoY growth factor (last 90d vs the same 90d a year earlier).
+      const [g] = await qr.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN iv.issued_at >= $1::date - interval '90 days' THEN
+             (CASE WHEN iv.doc_type='credit_note' THEN -1 ELSE 1 END)*COALESCE(iv.base_total,iv.total) END),0)::float AS cur,
+           COALESCE(SUM(CASE WHEN iv.issued_at >= $1::date - interval '455 days' AND iv.issued_at < $1::date - interval '365 days' THEN
+             (CASE WHEN iv.doc_type='credit_note' THEN -1 ELSE 1 END)*COALESCE(iv.base_total,iv.total) END),0)::float AS prior
+         FROM "${schema}".invoices iv`,
+        [asOf],
+      );
+      const growth = g?.prior > 0 ? Math.min(1.5, Math.max(0.7, g.cur / g.prior)) : 1;
+
+      const rows = await qr.query(
+        `WITH lines AS (
+           SELECT (it->>'productId')::uuid AS pid,
+                  to_char(date_trunc('month', iv.issued_at),'YYYY-MM') AS ym,
+                  iv.issued_at,
+                  (CASE WHEN iv.doc_type='credit_note' THEN -1 ELSE 1 END)*COALESCE(NULLIF(it->>'lineTotal','')::numeric,0) AS val,
+                  (CASE WHEN iv.doc_type='credit_note' THEN -1 ELSE 1 END)*COALESCE(NULLIF(it->>'quantity','')::numeric,0) AS qty
+           FROM "${schema}".invoices iv
+           CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(iv.items)='array' THEN iv.items ELSE '[]'::jsonb END) it
+           WHERE (it->>'productId') ~ '^[0-9a-fA-F-]{36}$'
+         )
+         SELECT p.id, p.name, COALESCE(p.uom,'pcs') AS uom,
+                COALESCE(p.purchase_price,0)::float AS purchase_price,
+                COALESCE(p.sale_price, p.base_price, 0)::float AS list_price,
+                COALESCE(inv.stock_quantity,0)::float AS stock,
+                COALESCE(SUM(l.qty) FILTER (WHERE l.ym = $1),0)::float AS qty_y1,
+                COALESCE(SUM(l.val) FILTER (WHERE l.ym = $1),0)::float AS rev_y1,
+                COALESCE(SUM(l.qty) FILTER (WHERE l.ym = $2),0)::float AS qty_y2,
+                COALESCE(SUM(l.val) FILTER (WHERE l.ym = $2),0)::float AS rev_y2,
+                CASE WHEN COALESCE(SUM(l.qty) FILTER (WHERE l.issued_at >= $3::date - interval '90 days'),0) > 0
+                     THEN SUM(l.val) FILTER (WHERE l.issued_at >= $3::date - interval '90 days')
+                        / SUM(l.qty) FILTER (WHERE l.issued_at >= $3::date - interval '90 days') END::float AS recent_price,
+                mp.price_median::float AS market_median, mp.source AS market_source
+         FROM "${schema}".products p
+         LEFT JOIN "${schema}".inventory inv ON inv.product_id = p.id
+         LEFT JOIN lines l ON l.pid = p.id
+         LEFT JOIN LATERAL (
+           SELECT price_median, source FROM "${schema}".market_prices m WHERE m.product_id = p.id
+           ORDER BY CASE m.source WHEN 'manual' THEN 0 ELSE 1 END, m.fetched_at DESC LIMIT 1
+         ) mp ON true
+         WHERE p.is_active = true AND p.deleted_at IS NULL AND COALESCE(p.item_type,'product') <> 'service'
+         GROUP BY p.id, p.name, p.uom, p.purchase_price, p.sale_price, p.base_price, inv.stock_quantity, mp.price_median, mp.source`,
+        [ym1, ym2, asOf],
+      );
+
+      const fcByPid = new Map(fc.products.map((p) => [p.productId, p]));
+      const monthName = new Date(`${ym}-01T00:00:00Z`).toLocaleString('en-IN', { month: 'long', timeZone: 'UTC' });
+
+      const products = rows.map((r: any) => {
+        const qty1 = Math.max(0, Number(r.qty_y1) || 0);
+        const qty2 = Math.max(0, Number(r.qty_y2) || 0);
+        const rev1 = Number(r.rev_y1) || 0;
+        const rev2 = Number(r.rev_y2) || 0;
+        const cost = Number(r.purchase_price) || 0;
+        const profit1 = qty1 > 0 && cost > 0 ? r1(rev1 - qty1 * cost) : null;
+        const profit2 = qty2 > 0 && cost > 0 ? r1(rev2 - qty2 * cost) : null;
+
+        // Recommended stock: same-month history first (recent year weighted 60/40),
+        // scaled by growth + 10% buffer; else the model forecast for that month.
+        let recommendedStock = 0;
+        let stockBasis = '';
+        if (qty1 > 0 || qty2 > 0) {
+          const base = qty1 > 0 && qty2 > 0 ? qty1 * 0.6 + qty2 * 0.4 : (qty1 || qty2);
+          recommendedStock = Math.ceil(base * growth * 1.1);
+          stockBasis = `${monthName} history (${[qty2 > 0 ? `'${String(y - 2).slice(2)}: ${r1(qty2)}` : '', qty1 > 0 ? `'${String(y - 1).slice(2)}: ${r1(qty1)}` : ''].filter(Boolean).join(', ')}) × ${growth.toFixed(2)} growth + 10% buffer`;
+        } else {
+          const f = fcByPid.get(r.id);
+          const m = f?.months.find((x) => x.ym === ym);
+          if (m && m.qty > 0) { recommendedStock = Math.ceil(m.qty * 1.1); stockBasis = 'model forecast (no same-month history)'; }
+        }
+
+        // Recommended price: your recent realized price nudged toward the market
+        // median, capped at ±10% per step so pricing moves are gradual.
+        const own = Number(r.recent_price) > 0 ? Number(r.recent_price) : Number(r.list_price) || 0;
+        const market = Number(r.market_median) > 0 ? Number(r.market_median) : null;
+        let recommendedPrice = own > 0 ? r1(own) : null;
+        let priceBasis = own > 0 ? 'your recent selling price' : 'no price data';
+        if (own > 0 && market) {
+          if (own < market * 0.95) { recommendedPrice = r1(Math.min(market, own * 1.1)); priceBasis = `below market (₹${r1(market)}) — raise gradually`; }
+          else if (own > market * 1.05) { recommendedPrice = r1(Math.max(market, own * 0.95)); priceBasis = `above market (₹${r1(market)}) — consider easing`; }
+          else { priceBasis = `in line with market (₹${r1(market)})`; }
+        }
+        if (cost > 0 && recommendedPrice !== null && recommendedPrice < cost * 1.02) {
+          recommendedPrice = r1(cost * 1.05); priceBasis += ' · floored above cost';
+        }
+
+        return {
+          productId: r.id, name: r.name, uom: r.uom,
+          history: [
+            { year: y - 2, ym: ym2, qtySold: r1(qty2), revenue: r0(rev2), estProfit: profit2 },
+            { year: y - 1, ym: ym1, qtySold: r1(qty1), revenue: r0(rev1), estProfit: profit1 },
+          ],
+          currentStock: r0(Number(r.stock) || 0),
+          recommendedStock, stockBasis,
+          shortfall: Math.max(0, recommendedStock - r0(Number(r.stock) || 0)),
+          yourPrice: own > 0 ? r1(own) : null,
+          marketMedian: market ? r1(market) : null,
+          marketSource: r.market_source || null,
+          recommendedPrice, priceBasis,
+          estProfitPotential: recommendedStock > 0 && recommendedPrice && cost > 0 ? r0(recommendedStock * (recommendedPrice - cost)) : null,
+        };
+      })
+        .filter((p: any) => p.recommendedStock > 0 || p.history.some((h: any) => h.qtySold > 0))
+        .sort((a: any, b: any) => (b.history[1].revenue + b.history[0].revenue) - (a.history[1].revenue + a.history[0].revenue));
+
+      return {
+        month: ym, monthName, asOf, growthFactor: r1(growth),
+        profitNote: 'Profit is estimated at the current purchase cost.',
+        products: products.slice(0, 200),
+      };
+    });
+  }
+
   // ─── Series loading ──────────────────────────────────────────────────────────
   private async loadSeries(schema: string) {
     return this.cm.executeInTenantContext(schema, async (qr) => {

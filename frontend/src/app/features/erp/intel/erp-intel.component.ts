@@ -1,13 +1,16 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
 import { FeatureService } from '../../../core/services/feature.service';
 
-type TabId = 'overview' | 'performance' | 'pricing' | 'forecast';
+type TabId = 'overview' | 'monthplan' | 'performance' | 'pricing' | 'forecast';
 type SortDir = 'asc' | 'desc';
 type FcView = 'forecast' | 'plan';
+type PerfFilter = 'all' | 'A' | 'B' | 'C' | 'rising' | 'declining' | 'stockout-risk' | 'overstock' | 'dead-stock';
+type MpFilter = 'all' | 'needs-stock' | 'sold-before' | 'has-market';
+type BulkStatus = 'pending' | 'running' | 'ok' | 'no-data' | 'error';
 
 interface OverviewData {
   asOf?: string;
@@ -57,17 +60,42 @@ interface MarketRow {
   sourceNote?: string | null; position?: 'under' | 'competitive' | 'over' | null;
   monthlyVolumeValue?: number; points?: number | null;
 }
-interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
+interface MarketData { searchAvailable?: boolean; llmEnabled?: boolean; products?: MarketRow[]; }
+
+/** Server-side bulk market-price refresh progress (refresh-all / refresh-status). */
+interface BulkRefreshState {
+  running?: boolean; total?: number; done?: number; ok?: number; noData?: number;
+  statuses?: Record<string, BulkStatus>;
+}
+
+interface MpHistory { year?: number; ym?: string; qtySold?: number; revenue?: number; estProfit?: number | null; }
+interface MpProduct {
+  productId: string; name: string; uom?: string;
+  /** [0] = same month two years ago, [1] = same month last year. */
+  history?: MpHistory[];
+  currentStock?: number; recommendedStock?: number; stockBasis?: string;
+  shortfall?: number; yourPrice?: number | null; marketMedian?: number | null;
+  marketSource?: string | null; recommendedPrice?: number | null; priceBasis?: string;
+  estProfitPotential?: number | null;
+}
+interface MonthPlanData {
+  month?: string; monthName?: string; asOf?: string; growthFactor?: number; profitNote?: string;
+  products?: MpProduct[];
+}
 
 /**
  * AI Insights Pro — the premium business-intelligence cockpit for the ERP.
- * Four tabs backed by /erp/intel/*:
+ * Five tabs backed by /erp/intel/*:
  *   • Overview — headline winners (top performer / rising star / forecast winner)
  *     plus clickable risk counters that jump to the relevant tab.
+ *   • Month Planner — "what should I stock next month": per-product history for
+ *     the same calendar month in the last two years, growth-adjusted recommended
+ *     stock/price, shortfall vs current stock, CSV export.
  *   • Product Performance — sortable 0-100 scored table (ABC class, momentum,
- *     margin, days of cover, health flags).
+ *     margin, days of cover, health flags) with quick filter chips.
  *   • Market Pricing — your price vs public-web market low/median/high, with
- *     manual entry and per-product web refresh.
+ *     manual entry, per-product web refresh and a bulk "Sync all prices" run
+ *     (server-side queue polled every 2.5s with per-row progress).
  *   • Forecast & Stock Planner — 4-month demand forecast with mini bar charts,
  *     and a reorder planner (safety stock + recommended order qty, CSV export).
  * Feature-gated by `premiumInsights`; shows an upgrade lock screen (and calls
@@ -240,6 +268,123 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
             }
           }
 
+          <!-- ══ MONTH PLANNER ════════════════════════════════════════ -->
+          @if (tab() === 'monthplan') {
+            @if (mpError()) {
+              <div class="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 flex items-center justify-between gap-3">
+                <span>{{ mpError() }}</span>
+                <button (click)="loadMonthPlan()" class="font-semibold underline shrink-0">Retry</button>
+              </div>
+            }
+            <!-- month selector + summary strip -->
+            <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-wrap items-center gap-3">
+              <select [ngModel]="mpMonth()" (ngModelChange)="onMpMonth($event)"
+                class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold bg-white">
+                @for (m of mpMonths; track m.value) { <option [value]="m.value">{{ m.label }}</option> }
+              </select>
+              <div class="min-w-0 flex-1">
+                <p class="text-[13px] font-semibold text-gray-700">
+                  Planning for {{ mpMonthName() }} · based on {{ mpMonthName() }} {{ mpYear() - 2 }} + {{ mpYear() - 1 }} sales
+                  @if (monthPlan()?.growthFactor) { <span>· growth ×{{ inrQty(monthPlan()!.growthFactor) }}</span> }
+                </p>
+                @if (monthPlan()?.profitNote) { <p class="text-[11px] text-gray-400">{{ monthPlan()!.profitNote }}</p> }
+              </div>
+              <button (click)="mpExportCsv()" [disabled]="!mpFiltered().length"
+                class="ml-auto rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold px-4 py-2 hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-40 transition-colors">
+                <i class="pi pi-download mr-1.5" style="font-size:.75rem"></i>Export CSV
+              </button>
+            </div>
+            <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <!-- filter chips + search -->
+              <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-1.5">
+                @for (c of mpChips; track c.id) {
+                  <button (click)="mpFilter.set(c.id)"
+                    class="px-2.5 py-1 rounded-full text-[12px] font-semibold transition-colors whitespace-nowrap"
+                    [class.bg-indigo-600]="mpFilter() === c.id" [class.text-white]="mpFilter() === c.id"
+                    [class.bg-gray-100]="mpFilter() !== c.id" [class.text-gray-500]="mpFilter() !== c.id">{{ c.label }}</button>
+                }
+                <input [ngModel]="mpQ()" (ngModelChange)="mpQ.set($event)" placeholder="Search products…"
+                  class="ml-auto rounded-xl border border-gray-200 px-3 py-1.5 text-sm w-full sm:w-56" />
+                @if (mpLoading()) { <span class="text-[12px] text-gray-400">Loading…</span> }
+              </div>
+              @if (mpLoading() && !monthPlan()) {
+                <div class="animate-pulse p-4 space-y-3">
+                  <div class="h-10 bg-gray-100 rounded-xl"></div>
+                  <div class="h-10 bg-gray-100 rounded-xl"></div>
+                  <div class="h-10 bg-gray-100 rounded-xl"></div>
+                  <div class="h-10 bg-gray-100 rounded-xl"></div>
+                </div>
+              } @else if (!mpShown().length) {
+                <p class="text-sm text-gray-400 px-4 py-10 text-center">
+                  {{ mpQ() || mpFilter() !== 'all' ? 'No products match your filters.' : 'Nothing to plan for this month yet — the planner needs some sales history.' }}
+                </p>
+              } @else {
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="text-left text-[11px] font-semibold text-gray-400 uppercase border-b border-gray-100">
+                        @for (c of mpCols(); track c.key) {
+                          <th class="px-4 py-2.5 cursor-pointer select-none whitespace-nowrap hover:text-indigo-600 align-top"
+                            [class.text-right]="c.right" (click)="mpSortBy(c.key)">
+                            {{ c.label }}
+                            <i class="pi" style="font-size:.55rem"
+                              [class.pi-sort-alt]="mpSortKey() !== c.key"
+                              [class.pi-sort-amount-down]="mpSortKey() === c.key && mpSortDir() === 'desc'"
+                              [class.pi-sort-amount-up-alt]="mpSortKey() === c.key && mpSortDir() === 'asc'"
+                              [class.text-indigo-600]="mpSortKey() === c.key"></i>
+                            @if (c.sub) { <span class="block text-[9px] font-normal normal-case text-gray-300">{{ c.sub }}</span> }
+                          </th>
+                        }
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (p of mpShown(); track p.productId) {
+                        <tr class="border-b border-gray-50 hover:bg-gray-50/60 align-top">
+                          <td class="px-4 py-2.5 font-semibold max-w-[13rem]">
+                            <div class="truncate" [title]="p.name">{{ p.name }}</div>
+                            @if (p.uom) { <div class="text-[10px] text-gray-400 font-normal">{{ p.uom }}</div> }
+                          </td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">
+                            @if (hist(p, 0); as h) {
+                              <div class="font-bold">{{ inrQty(h.qtySold) }}</div>
+                              <div class="text-[11px] text-gray-400">{{ h.estProfit != null ? '₹' + inr(h.estProfit) + ' profit' : '—' }}</div>
+                            } @else { <span class="text-gray-300">—</span> }
+                          </td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">
+                            @if (hist(p, 1); as h) {
+                              <div class="font-bold">{{ inrQty(h.qtySold) }}</div>
+                              <div class="text-[11px] text-gray-400">{{ h.estProfit != null ? '₹' + inr(h.estProfit) + ' profit' : '—' }}</div>
+                            } @else { <span class="text-gray-300">—</span> }
+                          </td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">{{ inrQty(p.currentStock) }}</td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">
+                            <div class="font-bold text-indigo-700">{{ inrQty(p.recommendedStock) }}</div>
+                            @if (p.stockBasis) { <div class="text-[10px] text-gray-400 whitespace-normal max-w-[9rem] ml-auto">{{ p.stockBasis }}</div> }
+                          </td>
+                          <td class="px-4 py-2.5 text-right">
+                            @if ((p.shortfall ?? 0) > 0) {
+                              <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 tabular-nums whitespace-nowrap">{{ inrQty(p.shortfall) }} short</span>
+                            } @else { <span class="text-[11px] text-gray-400">OK</span> }
+                          </td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">{{ p.yourPrice != null ? '₹' + inr(p.yourPrice) : '—' }}</td>
+                          <td class="px-4 py-2.5 text-right tabular-nums" [title]="p.marketSource || ''">{{ p.marketMedian != null ? '₹' + inr(p.marketMedian) : '—' }}</td>
+                          <td class="px-4 py-2.5 text-right tabular-nums">
+                            @if (p.recommendedPrice != null) {
+                              <div class="font-bold">₹{{ inr(p.recommendedPrice) }}</div>
+                              @if (p.priceBasis) { <div class="text-[10px] text-gray-400 whitespace-normal max-w-[9rem] ml-auto">{{ p.priceBasis }}</div> }
+                            } @else { <span class="text-gray-300">—</span> }
+                          </td>
+                          <td class="px-4 py-2.5 text-right tabular-nums font-semibold">{{ p.estProfitPotential != null ? '₹' + inr(p.estProfitPotential) : '—' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <p class="px-4 py-2.5 text-[11px] text-gray-400 border-t border-gray-50">Showing {{ mpShown().length }} of {{ mpFiltered().length }} products</p>
+              }
+            </div>
+          }
+
           <!-- ══ PRODUCT PERFORMANCE ══════════════════════════════════ -->
           @if (tab() === 'performance') {
             @if (perfError()) {
@@ -255,6 +400,16 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
                   class="ml-auto rounded-xl border border-gray-200 px-3 py-1.5 text-sm w-full sm:w-64" />
                 @if (perfLoading()) { <span class="text-[12px] text-gray-400">Loading…</span> }
               </div>
+              <!-- quick filter chips -->
+              <div class="px-4 py-2.5 border-b border-gray-100 flex flex-wrap gap-1.5">
+                @for (c of perfChips(); track c.id) {
+                  <button (click)="perfFilter.set(c.id)"
+                    class="px-2.5 py-1 rounded-full text-[12px] font-semibold transition-colors whitespace-nowrap"
+                    [class.bg-indigo-600]="perfFilter() === c.id" [class.text-white]="perfFilter() === c.id"
+                    [class.bg-gray-100]="perfFilter() !== c.id" [class.text-gray-500]="perfFilter() !== c.id">
+                    {{ c.label }} ({{ c.count }})</button>
+                }
+              </div>
               @if (perfLoading() && !perf()) {
                 <div class="animate-pulse p-4 space-y-3">
                   <div class="h-8 bg-gray-100 rounded-xl"></div>
@@ -263,7 +418,7 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
                   <div class="h-8 bg-gray-100 rounded-xl"></div>
                 </div>
               } @else if (!perfShown().length) {
-                <p class="text-sm text-gray-400 px-4 py-10 text-center">{{ perfQ() ? 'No products match your search.' : 'No products with sales history yet.' }}</p>
+                <p class="text-sm text-gray-400 px-4 py-10 text-center">{{ perfQ() || perfFilter() !== 'all' ? 'No products match your filters.' : 'No products with sales history yet.' }}</p>
               } @else {
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
@@ -350,11 +505,41 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
                 Web price search isn't configured — enter market prices manually.
               </div>
             }
-            <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-              <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h2 class="text-sm font-bold text-gray-700">Your prices vs the market</h2>
-                @if (marketLoading()) { <span class="text-[12px] text-gray-400">Loading…</span> }
+            @if (bulkBanner()) {
+              <div class="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-2.5 flex items-center justify-between gap-3">
+                <span><i class="pi pi-check-circle mr-1.5" style="font-size:.85rem"></i>{{ bulkBanner() }}</span>
+                <button (click)="bulkBanner.set('')" class="text-emerald-700 hover:text-emerald-900 shrink-0" title="Dismiss">
+                  <i class="pi pi-times" style="font-size:.75rem"></i>
+                </button>
               </div>
+            }
+            <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
+                <h2 class="text-sm font-bold text-gray-700">Your prices vs the market</h2>
+                @if (market()?.llmEnabled) {
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap"
+                    title="An AI model reads the web results to extract prices">LLM extraction on</span>
+                }
+                @if (marketLoading()) { <span class="text-[12px] text-gray-400">Loading…</span> }
+                @if (market()?.searchAvailable) {
+                  <div class="ml-auto flex items-center gap-2">
+                    <span class="text-[11px] text-gray-400 hidden sm:inline">skips manually-priced items</span>
+                    <button (click)="startBulkRefresh()" [disabled]="bulkRunning() || bulkStarting()"
+                      class="rounded-xl bg-indigo-600 text-white text-[12.5px] font-semibold px-3.5 py-1.5 hover:bg-indigo-700 disabled:opacity-50 transition-colors whitespace-nowrap">
+                      @if (bulkRunning() || bulkStarting()) {
+                        <i class="pi pi-spin pi-spinner mr-1" style="font-size:.7rem"></i>Syncing… {{ bulk()?.done || 0 }}/{{ bulk()?.total || 0 }}
+                      } @else {
+                        <i class="pi pi-sync mr-1" style="font-size:.7rem"></i>Sync all prices
+                      }
+                    </button>
+                  </div>
+                }
+              </div>
+              @if (bulkRunning()) {
+                <div class="h-1 w-full bg-indigo-100 overflow-hidden">
+                  <div class="h-full bg-indigo-600 transition-all duration-500" [style.width.%]="bulkPct()"></div>
+                </div>
+              }
               @if (marketLoading() && !market()) {
                 <div class="animate-pulse p-4 space-y-3">
                   <div class="h-8 bg-gray-100 rounded-xl"></div>
@@ -368,19 +553,26 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
                   <table class="w-full text-sm">
                     <thead>
                       <tr class="text-left text-[11px] font-semibold text-gray-400 uppercase border-b border-gray-100">
-                        <th class="px-4 py-2.5">Product</th>
-                        <th class="px-4 py-2.5 text-right">Your price</th>
-                        <th class="px-4 py-2.5 text-right">Market low</th>
-                        <th class="px-4 py-2.5 text-right">Median</th>
-                        <th class="px-4 py-2.5 text-right">High</th>
-                        <th class="px-4 py-2.5">Position</th>
-                        <th class="px-4 py-2.5">Source</th>
-                        <th class="px-4 py-2.5 text-right">Actions</th>
+                        @for (c of mkCols; track c.label) {
+                          <th class="px-4 py-2.5 whitespace-nowrap" [class.text-right]="c.right"
+                            [ngClass]="c.key ? 'cursor-pointer select-none hover:text-indigo-600' : ''"
+                            (click)="mkSortBy(c.key)">
+                            {{ c.label }}
+                            @if (c.key) {
+                              <i class="pi" style="font-size:.55rem"
+                                [class.pi-sort-alt]="mkSortKey() !== c.key"
+                                [class.pi-sort-amount-down]="mkSortKey() === c.key && mkSortDir() === 'desc'"
+                                [class.pi-sort-amount-up-alt]="mkSortKey() === c.key && mkSortDir() === 'asc'"
+                                [class.text-indigo-600]="mkSortKey() === c.key"></i>
+                            }
+                          </th>
+                        }
                       </tr>
                     </thead>
                     <tbody>
                       @for (p of marketRows(); track p.productId) {
-                        <tr class="border-b border-gray-50 hover:bg-gray-50/60 align-top">
+                        <tr class="border-b border-gray-50 hover:bg-gray-50/60 align-top"
+                          [ngClass]="rowBulk(p.productId) === 'running' ? 'bg-indigo-50/40' : ''">
                           <td class="px-4 py-2.5 max-w-[14rem]">
                             <div class="font-semibold truncate" [title]="p.name">{{ p.name }}</div>
                             @if (p.monthlyVolumeValue) { <div class="text-[11px] text-gray-400 tabular-nums">₹{{ inr(p.monthlyVolumeValue) }}/mo volume</div> }
@@ -414,8 +606,10 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
                             } @else { <span class="text-gray-300">—</span> }
                           </td>
                           <td class="px-4 py-2.5 text-right whitespace-nowrap">
-                            @if (market()?.searchAvailable) {
-                              <button (click)="refreshRow(p)" [disabled]="refreshingId() !== null"
+                            @if (rowBulkBusy(p.productId)) {
+                              <i class="pi pi-spin pi-spinner text-indigo-500 mr-3" style="font-size:.8rem" title="Queued for price sync"></i>
+                            } @else if (market()?.searchAvailable) {
+                              <button (click)="refreshRow(p)" [disabled]="refreshingId() !== null || bulkRunning()"
                                 class="text-[12px] font-semibold text-indigo-600 hover:underline disabled:opacity-40 mr-3">
                                 <i class="pi" style="font-size:.6rem"
                                   [class.pi-refresh]="refreshingId() !== p.productId"
@@ -650,7 +844,7 @@ interface MarketData { searchAvailable?: boolean; products?: MarketRow[]; }
     }
   `,
 })
-export class ErpIntelComponent implements OnInit {
+export class ErpIntelComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly features = inject(FeatureService);
   private readonly router = inject(Router);
@@ -666,6 +860,7 @@ export class ErpIntelComponent implements OnInit {
 
   readonly tabList: { id: TabId; label: string; icon: string }[] = [
     { id: 'overview', label: 'Overview', icon: 'pi-th-large' },
+    { id: 'monthplan', label: 'Month Planner', icon: 'pi-calendar' },
     { id: 'performance', label: 'Product Performance', icon: 'pi-chart-bar' },
     { id: 'pricing', label: 'Market Pricing', icon: 'pi-tag' },
     { id: 'forecast', label: 'Forecast & Stock', icon: 'pi-chart-line' },
@@ -684,8 +879,31 @@ export class ErpIntelComponent implements OnInit {
   readonly perfLoading = signal(false);
   readonly perfError = signal('');
   readonly perfQ = signal('');
+  readonly perfFilter = signal<PerfFilter>('all');
   readonly perfSortKey = signal<string>('score');
   readonly perfSortDir = signal<SortDir>('desc');
+
+  private readonly perfChipDefs: { id: PerfFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'A', label: 'A-class' },
+    { id: 'B', label: 'B' },
+    { id: 'C', label: 'C' },
+    { id: 'rising', label: 'Rising' },
+    { id: 'declining', label: 'Declining' },
+    { id: 'stockout-risk', label: 'Stockout risk' },
+    { id: 'overstock', label: 'Overstock' },
+    { id: 'dead-stock', label: 'Dead stock' },
+  ];
+  readonly perfChips = computed<{ id: PerfFilter; label: string; count: number }[]>(() => {
+    const rows = this.perf()?.products || [];
+    return this.perfChipDefs.map((c) => ({ ...c, count: rows.filter((p) => this.perfMatch(p, c.id)).length }));
+  });
+
+  private perfMatch(p: PerfProduct, f: PerfFilter): boolean {
+    if (f === 'all') return true;
+    if (f === 'A' || f === 'B' || f === 'C') return p?.abcClass === f;
+    return (p?.flags || []).includes(f);
+  }
 
   readonly perfCols: { key: string; label: string; right?: boolean }[] = [
     { key: 'name', label: 'Product' },
@@ -702,25 +920,31 @@ export class ErpIntelComponent implements OnInit {
 
   readonly perfFiltered = computed<PerfProduct[]>(() => {
     const q = this.perfQ().trim().toLowerCase();
+    const f = this.perfFilter();
     const rows = this.perf()?.products || [];
-    const filtered = q ? rows.filter((p) => (p?.name || '').toLowerCase().includes(q)) : [...rows];
+    const filtered = rows.filter((p) => this.perfMatch(p, f) && (!q || (p?.name || '').toLowerCase().includes(q)));
     const key = this.perfSortKey();
     const dir = this.perfSortDir();
-    return filtered.sort((a, b) => {
-      const av = (a as unknown as Record<string, unknown>)[key];
-      const bv = (b as unknown as Record<string, unknown>)[key];
-      const an = av === null || av === undefined;
-      const bn = bv === null || bv === undefined;
-      if (an && bn) return 0;
-      if (an) return 1; // nulls always last
-      if (bn) return -1;
-      const c = typeof av === 'string' || typeof bv === 'string'
-        ? String(av).localeCompare(String(bv))
-        : (Number(av) || 0) - (Number(bv) || 0);
-      return dir === 'asc' ? c : -c;
-    });
+    return filtered.sort((a, b) => this.cmp(
+      (a as unknown as Record<string, unknown>)[key],
+      (b as unknown as Record<string, unknown>)[key],
+      dir,
+    ));
   });
   readonly perfShown = computed(() => this.perfFiltered().slice(0, 100));
+
+  /** Generic table comparator — strings locale-compared, numbers numeric, nulls always last. */
+  private cmp(av: unknown, bv: unknown, dir: SortDir): number {
+    const an = av === null || av === undefined;
+    const bn = bv === null || bv === undefined;
+    if (an && bn) return 0;
+    if (an) return 1; // nulls always last
+    if (bn) return -1;
+    const c = typeof av === 'string' || typeof bv === 'string'
+      ? String(av).localeCompare(String(bv))
+      : (Number(av) || 0) - (Number(bv) || 0);
+    return dir === 'asc' ? c : -c;
+  }
 
   // ── Market pricing ──────────────────────────────────────────────────────────
   readonly market = signal<MarketData | null>(null);
@@ -734,11 +958,136 @@ export class ErpIntelComponent implements OnInit {
   priceForm: { priceLow: number | null; priceMedian: number | null; priceHigh: number | null; note: string } =
     { priceLow: null, priceMedian: null, priceHigh: null, note: '' };
 
-  readonly marketRows = computed<MarketRow[]>(() =>
-    [...(this.market()?.products || [])].sort(
-      (a, b) => (Number(b?.monthlyVolumeValue) || 0) - (Number(a?.monthlyVolumeValue) || 0),
-    ),
-  );
+  /** Market table columns; rows sortable on the keyed ones (default: monthly volume desc). */
+  readonly mkCols: { key?: string; label: string; right?: boolean }[] = [
+    { key: 'name', label: 'Product' },
+    { key: 'yourPrice', label: 'Your price', right: true },
+    { label: 'Market low', right: true },
+    { key: 'marketMedian', label: 'Median', right: true },
+    { label: 'High', right: true },
+    { key: 'position', label: 'Position' },
+    { label: 'Source' },
+    { label: 'Actions', right: true },
+  ];
+  readonly mkSortKey = signal<string>(''); // '' → default order (monthly volume value desc)
+  readonly mkSortDir = signal<SortDir>('desc');
+
+  readonly marketRows = computed<MarketRow[]>(() => {
+    const rows = [...(this.market()?.products || [])];
+    const key = this.mkSortKey();
+    if (!key) {
+      return rows.sort((a, b) => (Number(b?.monthlyVolumeValue) || 0) - (Number(a?.monthlyVolumeValue) || 0));
+    }
+    const dir = this.mkSortDir();
+    return rows.sort((a, b) => this.cmp(this.mkVal(a, key), this.mkVal(b, key), dir));
+  });
+
+  private mkVal(p: MarketRow, key: string): unknown {
+    if (key === 'position') {
+      const order: Record<string, number> = { under: 0, competitive: 1, over: 2 };
+      return p?.position != null ? order[p.position] : null;
+    }
+    return (p as unknown as Record<string, unknown>)[key];
+  }
+
+  // ── Bulk market-price sync ──────────────────────────────────────────────────
+  readonly bulk = signal<BulkRefreshState | null>(null);
+  readonly bulkStarting = signal(false);
+  readonly bulkBanner = signal('');
+  readonly bulkRunning = computed(() => !!this.bulk()?.running);
+  readonly bulkPct = computed(() => {
+    const b = this.bulk();
+    const total = Number(b?.total) || 0;
+    return total > 0 ? Math.min(100, Math.round(((Number(b?.done) || 0) / total) * 100)) : 0;
+  });
+  private bulkTimer: ReturnType<typeof setInterval> | null = null;
+  private bulkPollBusy = false;
+  private bulkPollCount = 0;
+
+  // ── Month planner ───────────────────────────────────────────────────────────
+  /** The next 6 calendar months from today — the planning horizon. */
+  readonly mpMonths: { value: string; label: string }[] = (() => {
+    const out: { value: string; label: string }[] = [];
+    const now = new Date();
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      out.push({
+        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+      });
+    }
+    return out;
+  })();
+
+  readonly mpMonth = signal<string>(this.mpMonths[0].value);
+  readonly monthPlan = signal<MonthPlanData | null>(null);
+  readonly mpLoading = signal(false);
+  readonly mpError = signal('');
+  readonly mpQ = signal('');
+  readonly mpFilter = signal<MpFilter>('all');
+  readonly mpSortKey = signal<string>('recommendedStock');
+  readonly mpSortDir = signal<SortDir>('desc');
+
+  readonly mpChips: { id: MpFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'needs-stock', label: 'Needs stock' },
+    { id: 'sold-before', label: 'Sold this month before' },
+    { id: 'has-market', label: 'Has market price' },
+  ];
+
+  readonly mpYear = computed(() => {
+    const m = /^(\d{4})-/.exec(this.mpMonth());
+    return m ? Number(m[1]) : new Date().getFullYear();
+  });
+  readonly mpMonthName = computed(() =>
+    this.monthPlan()?.monthName
+    || (this.mpMonths.find((x) => x.value === this.mpMonth())?.label.split(' ')[0] ?? ''));
+
+  readonly mpCols = computed<{ key: string; label: string; sub?: string; right?: boolean }[]>(() => {
+    const mn = this.mpMonthName();
+    const y = this.mpYear();
+    const yy = (n: number) => "'" + String(n % 100).padStart(2, '0');
+    return [
+      { key: 'name', label: 'Product' },
+      { key: 'h0', label: `${mn} ${yy(y - 2)}`, sub: 'Qty · Est. profit', right: true },
+      { key: 'h1', label: `${mn} ${yy(y - 1)}`, sub: 'Qty · Est. profit', right: true },
+      { key: 'currentStock', label: 'Current stock', right: true },
+      { key: 'recommendedStock', label: 'Recommended stock', right: true },
+      { key: 'shortfall', label: 'Shortfall', right: true },
+      { key: 'yourPrice', label: 'Your price', right: true },
+      { key: 'marketMedian', label: 'Market ₹', right: true },
+      { key: 'recommendedPrice', label: 'Recommended price', right: true },
+      { key: 'estProfitPotential', label: 'Est. profit potential ₹', right: true },
+    ];
+  });
+
+  readonly mpFiltered = computed<MpProduct[]>(() => {
+    const q = this.mpQ().trim().toLowerCase();
+    const f = this.mpFilter();
+    const rows = this.monthPlan()?.products || [];
+    const filtered = rows.filter((p) => {
+      if (q && !(p?.name || '').toLowerCase().includes(q)) return false;
+      if (f === 'needs-stock') return (Number(p?.shortfall) || 0) > 0;
+      if (f === 'sold-before') return (p?.history || []).some((h) => (Number(h?.qtySold) || 0) > 0);
+      if (f === 'has-market') return p?.marketMedian != null;
+      return true;
+    });
+    const key = this.mpSortKey();
+    const dir = this.mpSortDir();
+    return filtered.sort((a, b) => this.cmp(this.mpVal(a, key), this.mpVal(b, key), dir));
+  });
+  readonly mpShown = computed(() => this.mpFiltered().slice(0, 100));
+
+  private mpVal(p: MpProduct, key: string): unknown {
+    if (key === 'h0') return this.hist(p, 0)?.qtySold ?? null;
+    if (key === 'h1') return this.hist(p, 1)?.qtySold ?? null;
+    return (p as unknown as Record<string, unknown>)[key];
+  }
+
+  /** Safe access to the two-years-ago (0) / last-year (1) history slot. */
+  hist(p: MpProduct, i: number): MpHistory | null {
+    return (p?.history && p.history[i]) || null;
+  }
 
   // ── Forecast ────────────────────────────────────────────────────────────────
   readonly forecast = signal<ForecastData | null>(null);
@@ -762,13 +1111,19 @@ export class ErpIntelComponent implements OnInit {
   private ltTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ── Header ──────────────────────────────────────────────────────────────────
-  readonly asOf = computed(() => this.overview()?.asOf || this.perf()?.asOf || this.forecast()?.asOf || '');
+  readonly asOf = computed(() => this.overview()?.asOf || this.monthPlan()?.asOf || this.perf()?.asOf || this.forecast()?.asOf || '');
   readonly anyLoading = computed(() =>
-    this.ovLoading() || this.perfLoading() || this.marketLoading() || this.fcLoading() || this.planLoading());
+    this.ovLoading() || this.mpLoading() || this.perfLoading() || this.marketLoading() || this.fcLoading() || this.planLoading());
 
   ngOnInit() {
     if (this.locked()) return; // premium off → lock screen only, no API calls
     this.loadOverview();
+    this.checkBulkStatus(); // resume the bulk-sync UI if a run is already going
+  }
+
+  ngOnDestroy() {
+    this.stopBulkPolling();
+    if (this.ltTimer) clearTimeout(this.ltTimer);
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -776,6 +1131,7 @@ export class ErpIntelComponent implements OnInit {
     if (this.locked()) return;
     this.tab.set(t);
     if (t === 'overview' && !this.overview() && !this.ovLoading()) this.loadOverview();
+    if (t === 'monthplan' && !this.monthPlan() && !this.mpLoading()) this.loadMonthPlan();
     if (t === 'performance' && !this.perf() && !this.perfLoading()) this.loadPerf();
     if (t === 'pricing' && !this.market() && !this.marketLoading()) this.loadMarket();
     if (t === 'forecast') this.lazyLoadFc();
@@ -795,6 +1151,7 @@ export class ErpIntelComponent implements OnInit {
     if (this.locked()) return;
     this.loadOverview();
     const t = this.tab();
+    if (t === 'monthplan') this.loadMonthPlan();
     if (t === 'performance') this.loadPerf();
     if (t === 'pricing') this.loadMarket();
     if (t === 'forecast') {
@@ -815,6 +1172,15 @@ export class ErpIntelComponent implements OnInit {
     this.api.get<OverviewData>('/erp/intel/overview').subscribe({
       next: (r) => { this.overview.set(r || {}); this.ovLoading.set(false); },
       error: (e) => { this.ovError.set(this.msg(e, 'Could not load the overview.')); this.ovLoading.set(false); },
+    });
+  }
+
+  loadMonthPlan() {
+    this.mpLoading.set(true);
+    this.mpError.set('');
+    this.api.get<MonthPlanData>('/erp/intel/month-plan', { month: this.mpMonth() }).subscribe({
+      next: (r) => { this.monthPlan.set(r || { products: [] }); this.mpLoading.set(false); },
+      error: (e) => { this.mpError.set(this.msg(e, 'Could not load the month plan.')); this.mpLoading.set(false); },
     });
   }
 
@@ -862,6 +1228,134 @@ export class ErpIntelComponent implements OnInit {
       this.perfSortKey.set(key);
       this.perfSortDir.set(key === 'name' || key === 'abcClass' ? 'asc' : 'desc');
     }
+  }
+
+  // ── Month planner actions ───────────────────────────────────────────────────
+  onMpMonth(v: string) {
+    if (!v || v === this.mpMonth()) return;
+    this.mpMonth.set(v);
+    this.loadMonthPlan();
+  }
+
+  mpSortBy(key: string) {
+    if (this.mpSortKey() === key) {
+      this.mpSortDir.set(this.mpSortDir() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.mpSortKey.set(key);
+      this.mpSortDir.set(key === 'name' ? 'asc' : 'desc');
+    }
+  }
+
+  mpExportCsv() {
+    const rows = this.mpFiltered();
+    if (!rows.length) return;
+    const lines = [
+      'name,recommendedStock,currentStock,shortfall,recommendedPrice',
+      ...rows.map((p) => [
+        this.csvEsc(p.name),
+        Number(p.recommendedStock) || 0,
+        Number(p.currentStock) || 0,
+        Number(p.shortfall) || 0,
+        p.recommendedPrice != null ? Number(p.recommendedPrice) : '',
+      ].join(',')),
+    ];
+    this.saveCsv(`month-plan-${this.mpMonth()}.csv`, lines);
+  }
+
+  // ── Market table sorting ────────────────────────────────────────────────────
+  mkSortBy(key?: string) {
+    if (!key) return;
+    if (this.mkSortKey() === key) {
+      this.mkSortDir.set(this.mkSortDir() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.mkSortKey.set(key);
+      this.mkSortDir.set(key === 'name' ? 'asc' : 'desc');
+    }
+  }
+
+  // ── Bulk market-price sync ──────────────────────────────────────────────────
+  rowBulk(id: string): BulkStatus | null {
+    const s = this.bulk()?.statuses;
+    return (s && s[id]) || null;
+  }
+
+  /** True while this product is queued/being fetched in the bulk run. */
+  rowBulkBusy(id: string): boolean {
+    const s = this.rowBulk(id);
+    return s === 'pending' || s === 'running';
+  }
+
+  startBulkRefresh() {
+    if (this.locked() || this.bulkRunning() || this.bulkStarting()) return;
+    this.bulkStarting.set(true);
+    this.bulkBanner.set('');
+    this.marketError.set('');
+    this.api.post<BulkRefreshState>('/erp/intel/market-prices/refresh-all', {}).subscribe({
+      next: (r) => {
+        this.bulkStarting.set(false);
+        this.bulk.set(r || {});
+        if (r?.running) this.startBulkPolling();
+        else this.finishBulk(r || {}); // tiny catalogue — finished before we could poll
+      },
+      error: (e) => {
+        this.bulkStarting.set(false);
+        this.marketError.set(this.msg(e, 'Could not start the price sync.'));
+      },
+    });
+  }
+
+  /** One-shot probe on page load: resume the polling UI if a run is in progress. */
+  private checkBulkStatus() {
+    this.api.get<BulkRefreshState>('/erp/intel/market-prices/refresh-status').subscribe({
+      next: (r) => {
+        if (r?.running) {
+          this.bulk.set(r);
+          this.startBulkPolling();
+        }
+      },
+      error: () => { /* best-effort probe — stay silent */ },
+    });
+  }
+
+  private startBulkPolling() {
+    if (this.bulkTimer) return;
+    this.bulkPollCount = 0;
+    this.bulkTimer = setInterval(() => this.pollBulk(), 2500);
+  }
+
+  private stopBulkPolling() {
+    if (this.bulkTimer) {
+      clearInterval(this.bulkTimer);
+      this.bulkTimer = null;
+    }
+    this.bulkPollBusy = false;
+  }
+
+  private pollBulk() {
+    if (this.bulkPollBusy) return; // don't stack requests if one is slow
+    this.bulkPollBusy = true;
+    this.api.get<BulkRefreshState>('/erp/intel/market-prices/refresh-status').subscribe({
+      next: (r) => {
+        this.bulkPollBusy = false;
+        this.bulk.set(r || {});
+        if (r?.running) {
+          this.bulkPollCount++;
+          // Reload the list every ~3rd poll so freshly fetched figures show up progressively.
+          if (this.bulkPollCount % 3 === 0 && !this.marketLoading()) this.loadMarket();
+        } else {
+          this.stopBulkPolling();
+          this.finishBulk(r || {});
+        }
+      },
+      error: () => { this.bulkPollBusy = false; /* transient — keep polling */ },
+    });
+  }
+
+  private finishBulk(r: BulkRefreshState) {
+    const ok = Number(r?.ok) || 0;
+    const noData = Number(r?.noData) || 0;
+    this.bulkBanner.set(`Done — ${ok} priced, ${noData} without web data`);
+    if (!this.marketLoading()) this.loadMarket();
   }
 
   // ── Market pricing actions ──────────────────────────────────────────────────
@@ -949,19 +1443,25 @@ export class ErpIntelComponent implements OnInit {
   exportCsv() {
     const rows = this.stockPlan()?.products || [];
     if (!rows.length) return;
-    const esc = (v: unknown): string => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
     const lines = [
       'name,stock,forecastQty,safetyStock,recommendedOrderQty',
-      ...rows.map((p) => [esc(p.name), Number(p.stock) || 0, Number(p.forecastQty) || 0, Number(p.safetyStock) || 0, Number(p.recommendedOrderQty) || 0].join(',')),
+      ...rows.map((p) => [this.csvEsc(p.name), Number(p.stock) || 0, Number(p.forecastQty) || 0, Number(p.safetyStock) || 0, Number(p.recommendedOrderQty) || 0].join(',')),
     ];
+    this.saveCsv('stock-plan.csv', lines);
+  }
+
+  // ── CSV helpers ─────────────────────────────────────────────────────────────
+  private csvEsc(v: unknown): string {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  private saveCsv(filename: string, lines: string[]) {
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'stock-plan.csv';
+    a.download = filename;
     a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();

@@ -19,18 +19,44 @@ export interface MarketPriceRow {
   monthlyVolumeValue: number;
 }
 
+export interface BulkState {
+  running: boolean;
+  total: number;
+  done: number;
+  ok: number;
+  noData: number;
+  startedAt: string;
+  finishedAt?: string;
+  statuses: Record<string, 'pending' | 'running' | 'ok' | 'no-data' | 'error'>;
+}
+
+/** Words that carry no product identity — ignored when matching search results. */
+const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'ltr', 'litre', 'liter', 'mm', 'mtr', 'inch', 'pcs', 'nos', 'type', 'set', 'pack', 'of', 'a']);
+
 /**
- * Market pricing intelligence (AI Insights Pro) — free/open-source only:
- *   'manual'  — user-entered competitor prices (always win over scraped figures)
- *   'search'  — self-hosted SearXNG metasearch (SEARX_URL env, e.g. http://searxng:8080):
- *               query "<product> price india", extract ₹/Rs price candidates from result
- *               titles+snippets with plain regex, IQR-filter outliers → low/median/high.
- * No paid APIs. Every figure carries its source + fetch date + confidence so users can
- * judge it; manual entries are treated as authoritative.
+ * Market pricing intelligence (AI Insights Pro) — free/open-source only.
+ *
+ * Accuracy model (v2 — the v1 regex grabbed ANY ₹ figure from snippets and could
+ * return junk like ₹45 for a water tank):
+ *   1. RELEVANCE: a search result contributes prices only if its title/snippet
+ *      actually matches the product (≥55% of the name's significant tokens, and
+ *      every NUMBER in the name — sizes like "1000", "3/4" — must appear).
+ *   2. SANITY BAND: candidates outside 0.3×–3× of YOUR OWN recent selling price
+ *      are discarded (your realized price is the best free prior there is).
+ *   3. TARGETED QUERIES: a plain web query plus an India B2B marketplace query
+ *      (indiamart/moglix/industrybuying) merged together.
+ *   4. DISPERSION-AWARE CONFIDENCE: many tight points → high; few/scattered → low.
+ *   5. OPTIONAL FREE LLM: when LLM_API_URL is set (OpenAI-compatible — self-hosted
+ *      Ollama, or free tiers like Groq/OpenRouter), the matching snippets are given
+ *      to the model to extract the exact product's unit price range; deterministic
+ *      extraction remains the fallback. No paid dependency is ever required.
+ * 'manual' entries always outrank scraped figures.
  */
 @Injectable()
 export class MarketPriceService {
   private readonly logger = new Logger(MarketPriceService.name);
+  /** One bulk refresh queue per tenant schema. */
+  private readonly bulk = new Map<string, BulkState>();
 
   constructor(
     private readonly cm: TenantConnectionManager,
@@ -41,8 +67,8 @@ export class MarketPriceService {
     return !!this.config.get<string>('SEARX_URL');
   }
 
-  /** Comparison table: your recent selling price vs the best market figure per product. */
-  async list(schema: string): Promise<{ searchAvailable: boolean; products: MarketPriceRow[] }> {
+  // ─── Listing ─────────────────────────────────────────────────────────────────
+  async list(schema: string): Promise<{ searchAvailable: boolean; llmEnabled: boolean; products: MarketPriceRow[] }> {
     const rows = await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
         `WITH recent AS (
@@ -94,10 +120,10 @@ export class MarketPriceService {
       };
     });
 
-    return { searchAvailable: this.searchAvailable(), products };
+    return { searchAvailable: this.searchAvailable(), llmEnabled: !!this.config.get<string>('LLM_API_URL'), products };
   }
 
-  /** Manual competitor price — authoritative; overwrites the previous manual row. */
+  // ─── Manual entry (authoritative) ────────────────────────────────────────────
   async saveManual(schema: string, body: { productId: string; priceLow?: number; priceMedian: number; priceHigh?: number; note?: string }) {
     const median = Number(body.priceMedian);
     if (!body.productId || !(median > 0)) throw new BadRequestException('Product and a market price are required');
@@ -116,31 +142,42 @@ export class MarketPriceService {
     return { saved: true };
   }
 
-  /** Refresh one product from the self-hosted search engine. */
+  // ─── Single refresh ──────────────────────────────────────────────────────────
   async refresh(schema: string, productId: string) {
     const searx = this.config.get<string>('SEARX_URL');
     if (!searx) return { status: 'unavailable', message: 'Search engine not configured (set SEARX_URL).' };
 
     const [product] = await this.cm.executeInTenantContext(schema, (qr) =>
-      qr.query(`SELECT id, name FROM "${schema}".products WHERE id = $1`, [productId]),
+      qr.query(
+        `SELECT p.id, p.name,
+                COALESCE((
+                  SELECT SUM(COALESCE(NULLIF(it->>'lineTotal','')::numeric,0)) / NULLIF(SUM(COALESCE(NULLIF(it->>'quantity','')::numeric,0)),0)
+                  FROM "${schema}".invoices iv
+                  CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(iv.items)='array' THEN iv.items ELSE '[]'::jsonb END) it
+                  WHERE (it->>'productId') = p.id::text AND iv.doc_type <> 'credit_note'
+                    AND iv.issued_at >= NOW() - interval '2 years'
+                ), COALESCE(p.sale_price, p.base_price, 0))::float AS ref_price
+         FROM "${schema}".products p WHERE p.id = $1`,
+        [productId],
+      ),
     );
     if (!product) throw new BadRequestException('Product not found');
+    const name = String(product.name);
+    const refPrice = Number(product.ref_price) || 0;
 
-    const points = await this.searchPrices(searx.replace(/\/$/, ''), String(product.name));
-    if (points.length < 2) {
-      return { status: 'no-data', message: `Found only ${points.length} price point(s) on the web for this item — add a manual price instead.` };
+    const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
+    const relevant = this.relevantSnippets(name, snippets);
+
+    // LLM extraction first (when a free endpoint is configured), else deterministic.
+    let result = await this.llmExtract(name, refPrice, relevant);
+    let via = 'llm';
+    if (!result) {
+      result = this.deterministicExtract(refPrice, relevant);
+      via = 'web';
     }
-
-    // IQR-filter outliers, then low/median/high.
-    const sorted = [...points].sort((a, b) => a - b);
-    const q1 = sorted[Math.floor(sorted.length * 0.25)];
-    const q3 = sorted[Math.floor(sorted.length * 0.75)];
-    const iqr = q3 - q1;
-    const kept = sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
-    const low = kept[0];
-    const high = kept[kept.length - 1];
-    const median = kept[Math.floor(kept.length / 2)];
-    const confidence = Math.min(1, kept.length / 8);
+    if (!result) {
+      return { status: 'no-data', message: `No trustworthy web price found for this item (checked ${snippets.length} results, ${relevant.length} matched) — add a manual price.` };
+    }
 
     await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
@@ -149,42 +186,178 @@ export class MarketPriceService {
          ON CONFLICT (product_id, source) DO UPDATE SET
            price_low = EXCLUDED.price_low, price_median = EXCLUDED.price_median, price_high = EXCLUDED.price_high,
            confidence = EXCLUDED.confidence, source_note = EXCLUDED.source_note, fetched_at = NOW()`,
-        [productId, r2(low), r2(median), r2(high), confidence, `Web search · ${kept.length} price points`],
+        [productId, r2(result.low), r2(result.median), r2(result.high), result.confidence, `${via === 'llm' ? 'LLM' : 'Web'} · ${result.points} matched price point(s)`],
       ),
     );
-    return { status: 'ok', low: r2(low), median: r2(median), high: r2(high), points: kept.length };
+    return { status: 'ok', low: r2(result.low), median: r2(result.median), high: r2(result.high), points: result.points, via };
   }
 
-  /** Query SearXNG and pull ₹/Rs price candidates out of result titles + snippets. */
-  private async searchPrices(searxBase: string, productName: string): Promise<number[]> {
-    const q = encodeURIComponent(`${productName} price india`);
-    const url = `${searxBase}/search?q=${q}&format=json&language=en-IN&safesearch=1`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
-    try {
-      const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
-      if (!res.ok) {
-        this.logger.warn(`searx ${res.status} for "${productName}"`);
-        return [];
-      }
-      const json: any = await res.json();
-      const texts: string[] = [];
-      for (const r of json?.results || []) {
-        if (r?.title) texts.push(String(r.title));
-        if (r?.content) texts.push(String(r.content));
-      }
-      const points: number[] = [];
-      const re = /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/gi;
-      for (const t of texts.slice(0, 60)) {
-        for (const m of t.matchAll(re)) {
-          const v = parseFloat(m[1].replace(/,/g, ''));
-          if (v >= 10 && v <= 10_000_000) points.push(v);
+  // ─── Bulk refresh queue ──────────────────────────────────────────────────────
+  async refreshAll(schema: string): Promise<BulkState> {
+    const existing = this.bulk.get(schema);
+    if (existing?.running) return existing;
+    if (!this.searchAvailable()) throw new BadRequestException('Search engine not configured (set SEARX_URL).');
+
+    const { products } = await this.list(schema);
+    // Skip products already priced manually (manual is authoritative).
+    const targets = products.filter((p) => p.source !== 'manual');
+    const state: BulkState = {
+      running: true,
+      total: targets.length,
+      done: 0, ok: 0, noData: 0,
+      startedAt: new Date().toISOString(),
+      statuses: Object.fromEntries(targets.map((p) => [p.productId, 'pending' as const])),
+    };
+    this.bulk.set(schema, state);
+
+    // Fire-and-forget worker: 2 at a time (kind to the search engine), sequential batches.
+    void (async () => {
+      const queue = [...targets];
+      const worker = async () => {
+        for (;;) {
+          const item = queue.shift();
+          if (!item) return;
+          state.statuses[item.productId] = 'running';
+          try {
+            const res: any = await this.refresh(schema, item.productId);
+            state.statuses[item.productId] = res.status === 'ok' ? 'ok' : 'no-data';
+            if (res.status === 'ok') state.ok++; else state.noData++;
+          } catch (e: any) {
+            state.statuses[item.productId] = 'error';
+            this.logger.warn(`bulk refresh ${item.name}: ${e?.message}`);
+          }
+          state.done++;
+          await new Promise((r) => setTimeout(r, 400)); // politeness gap
         }
+      };
+      await Promise.all([worker(), worker()]);
+      state.running = false;
+      state.finishedAt = new Date().toISOString();
+    })();
+
+    return state;
+  }
+
+  refreshStatus(schema: string): BulkState | { running: false; total: 0; done: 0 } {
+    return this.bulk.get(schema) || { running: false, total: 0, done: 0 };
+  }
+
+  // ─── Search + extraction ─────────────────────────────────────────────────────
+  /** Two targeted queries (plain + India B2B marketplaces), merged & deduped. */
+  private async searchSnippets(searxBase: string, productName: string): Promise<Array<{ title: string; content: string; url: string }>> {
+    const queries = [
+      `"${productName}" price`,
+      `${productName} price site:indiamart.com OR site:moglix.com OR site:industrybuying.com OR site:amazon.in`,
+    ];
+    const out: Array<{ title: string; content: string; url: string }> = [];
+    const seen = new Set<string>();
+    for (const q of queries) {
+      const url = `${searxBase}/search?q=${encodeURIComponent(q)}&format=json&language=en-IN&safesearch=1`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      try {
+        const res = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
+        if (!res.ok) continue;
+        const json: any = await res.json();
+        for (const r of (json?.results || []).slice(0, 25)) {
+          const key = String(r?.url || r?.title || '');
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          out.push({ title: String(r?.title || ''), content: String(r?.content || ''), url: key });
+        }
+      } catch { /* engine hiccup — the other query may still work */ }
+      finally { clearTimeout(timer); }
+    }
+    return out;
+  }
+
+  /** Keep only results that genuinely describe THIS product (token + size match). */
+  private relevantSnippets(productName: string, snippets: Array<{ title: string; content: string; url: string }>) {
+    const tokens = productName.toLowerCase().split(/[^a-z0-9/.]+/).filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+    const words = tokens.filter((t) => !/\d/.test(t));
+    const numbers = tokens.filter((t) => /\d/.test(t));
+    return snippets.filter((s) => {
+      const hay = `${s.title} ${s.content}`.toLowerCase();
+      const wordHits = words.filter((w) => hay.includes(w)).length;
+      const wordScore = words.length ? wordHits / words.length : 1;
+      // Sizes/measures in the name (1000, 3/4, sch-40 …) MUST appear — a "500 LTR"
+      // page must not price the "1000 LTR" tank.
+      const numbersOk = numbers.every((n) => hay.includes(n));
+      return wordScore >= 0.55 && numbersOk;
+    });
+  }
+
+  /** Regex price candidates from RELEVANT snippets, sanity-banded around your own price. */
+  private deterministicExtract(refPrice: number, relevant: Array<{ title: string; content: string }>) {
+    const points: number[] = [];
+    const re = /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/gi;
+    for (const s of relevant) {
+      for (const m of `${s.title} ${s.content}`.matchAll(re)) {
+        const v = parseFloat(m[1].replace(/,/g, ''));
+        if (!(v >= 10 && v <= 10_000_000)) continue;
+        // Your own realized price is the best free prior: discard absurd outliers.
+        if (refPrice > 0 && (v < refPrice * 0.3 || v > refPrice * 3)) continue;
+        points.push(v);
       }
-      return points;
-    } catch (e: any) {
-      this.logger.warn(`searx fetch failed for "${productName}": ${e?.message}`);
-      return [];
+    }
+    if (points.length < 2) return null;
+    const sorted = [...points].sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)];
+    const q3 = sorted[Math.floor(sorted.length * 0.75)];
+    const iqr = q3 - q1;
+    const kept = sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
+    if (kept.length < 2) return null;
+    const median = kept[Math.floor(kept.length / 2)];
+    // Confidence: point count AND tightness (wide scatter = low trust).
+    const spread = median > 0 ? (kept[kept.length - 1] - kept[0]) / median : 1;
+    const confidence = r2(Math.max(0.1, Math.min(1, (kept.length / 8) * (spread > 1 ? 0.5 : 1))));
+    return { low: kept[0], median, high: kept[kept.length - 1], points: kept.length, confidence };
+  }
+
+  /**
+   * Optional free-LLM extraction. Works with ANY OpenAI-compatible endpoint:
+   * self-hosted Ollama (`LLM_API_URL=http://ollama:11434/v1`, `LLM_MODEL=qwen2.5:3b`)
+   * or free-tier hosts (Groq/OpenRouter) via LLM_API_URL + LLM_API_KEY + LLM_MODEL.
+   * Returns null when unconfigured or on any failure → deterministic fallback runs.
+   */
+  private async llmExtract(productName: string, refPrice: number, relevant: Array<{ title: string; content: string; url: string }>) {
+    const base = this.config.get<string>('LLM_API_URL');
+    if (!base || relevant.length === 0) return null;
+    const model = this.config.get<string>('LLM_MODEL', 'llama-3.1-8b-instant');
+    const key = this.config.get<string>('LLM_API_KEY', '');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25_000);
+    try {
+      const snippetText = relevant.slice(0, 12).map((s, i) => `[${i + 1}] ${s.title} — ${s.content}`).join('\n');
+      const res = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: 'You extract Indian market prices from search snippets. Reply ONLY with JSON: {"low":number,"median":number,"high":number,"points":number} for the EXACT product named — same brand, model AND size. Ignore prices of different sizes/variants, accessories, or unrelated items. Prices are in INR (₹/Rs). If fewer than 2 trustworthy price points exist, reply {"points":0}.' },
+            { role: 'user', content: `Product: "${productName}"${refPrice > 0 ? ` (the seller currently sells it around ₹${Math.round(refPrice)})` : ''}\n\nSearch snippets:\n${snippetText}` },
+          ],
+        }),
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json();
+      const parsed = JSON.parse(json?.choices?.[0]?.message?.content || '{}');
+      const { low, median, high, points } = parsed || {};
+      if (!(Number(points) >= 2) || !(Number(median) > 0)) return null;
+      if (refPrice > 0 && (median < refPrice * 0.25 || median > refPrice * 4)) return null; // LLM sanity band
+      return {
+        low: Math.min(Number(low) || median, median),
+        median: Number(median),
+        high: Math.max(Number(high) || median, median),
+        points: Number(points),
+        confidence: r2(Math.max(0.2, Math.min(1, Number(points) / 6))),
+      };
+    } catch {
+      return null;
     } finally {
       clearTimeout(timer);
     }
