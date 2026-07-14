@@ -78,6 +78,7 @@ import { EntryService, CategoryGroup, CategoryProduct } from '../../core/service
                       <input type="checkbox" [checked]="checkedIds().has(p.id)" (change)="toggle(p.id)" />
                       <span class="flex-1 truncate">{{ p.name }}</span>
                       @if (isInBill(p.id)) { <span class="text-[10px] text-indigo-600 font-semibold shrink-0">in bill</span> }
+                      @if (p.saleDiscountPct) { <span class="text-[10px] text-amber-600 font-semibold shrink-0" title="Current item-master discount">{{ p.saleDiscountPct }}%</span> }
                       <span class="text-[11px] text-slate-400 tabular-nums shrink-0">₹{{ fmt(p.salePrice) }}</span>
                     </label>
                   }
@@ -86,19 +87,39 @@ import { EntryService, CategoryGroup, CategoryProduct } from '../../core/service
             </div>
 
             <!-- footer -->
-            <div class="flex items-center gap-3 px-4 py-3 border-t bg-slate-50">
-              <label class="text-sm font-medium text-slate-600 flex items-center gap-1">
-                Discount
-                <input #discInput type="number" min="0" max="100" step="0.5" [(ngModel)]="discountPct"
-                       class="w-20 border rounded px-2 py-1 text-right" (keydown.enter)="apply()" />
-                %
-              </label>
-              <span class="text-[11px] text-slate-400 flex-1">Applies D1 discount to the selected products (existing lines updated; new ones added).</span>
-              <button (click)="close()" class="text-sm px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-100">Cancel</button>
-              <button (click)="apply()" [disabled]="!canApply()"
-                class="text-sm px-4 py-1.5 rounded bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-40">
-                Apply to {{ checkedIds().size }} item{{ checkedIds().size === 1 ? '' : 's' }}
-              </button>
+            <div class="px-4 py-3 border-t bg-slate-50 space-y-2">
+              <div class="flex items-center gap-4">
+                <label class="text-sm font-medium text-slate-600 flex items-center gap-1">
+                  Discount
+                  <input #discInput type="number" min="0" max="99.99" step="0.5" [(ngModel)]="discountPct"
+                         class="w-20 border rounded px-2 py-1 text-right" (keydown.enter)="apply()" />
+                  %
+                </label>
+                @if (currentDisc() !== null) {
+                  <span class="text-[11px] text-slate-500">current main discount: <b class="text-amber-600">{{ currentDisc() }}%</b></span>
+                }
+                <span class="text-[11px] text-slate-400 flex-1">sale price = purchase rate − discount %</span>
+              </div>
+              <!-- mode: this voucher only vs write to item master -->
+              <div class="flex items-center gap-4 text-[12px]">
+                <label class="flex items-center gap-1.5 cursor-pointer" [class.font-semibold]="!permanent">
+                  <input type="radio" name="cd-mode" [value]="false" [(ngModel)]="permanent" />
+                  <span>This {{ docLabel }} only <span class="text-slate-400">(temporary — item master unchanged)</span></span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer" [class.font-semibold]="permanent">
+                  <input type="radio" name="cd-mode" [value]="true" [(ngModel)]="permanent" />
+                  <span class="text-rose-700">Update Item Master <span class="text-slate-400">(permanent — new sale prices everywhere)</span></span>
+                </label>
+              </div>
+              <div class="flex items-center gap-2 justify-end">
+                <button (click)="close()" class="text-sm px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-100">Cancel</button>
+                <button (click)="apply()" [disabled]="!canApply() || busy()"
+                  class="text-sm px-4 py-1.5 rounded text-white font-semibold disabled:opacity-40"
+                  [class.bg-indigo-600]="!permanent" [class.hover:bg-indigo-700]="!permanent"
+                  [class.bg-rose-600]="permanent" [class.hover:bg-rose-700]="permanent">
+                  {{ busy() ? 'Applying…' : (permanent ? 'Update master + apply' : 'Apply to this ' + docLabel) }} ({{ checkedIds().size }})
+                </button>
+              </div>
             </div>
           }
         </div>
@@ -118,8 +139,10 @@ export class CategoryDiscountDialogComponent {
 
   /** Product ids already on the grid — pre-checked and badged "in bill". */
   @Input() set existingProductIds(ids: string[]) { this._existing.set(new Set(ids || [])); }
+  /** What the host voucher is called in the mode labels (invoice / order / quotation). */
+  @Input() docLabel = 'invoice';
 
-  @Output() applied = new EventEmitter<{ products: CategoryProduct[]; discountPct: number }>();
+  @Output() applied = new EventEmitter<{ products: CategoryProduct[]; discountPct: number; permanent: boolean }>();
   @Output() closed = new EventEmitter<void>();
 
   readonly groups = signal<CategoryGroup[]>([]);
@@ -128,6 +151,23 @@ export class CategoryDiscountDialogComponent {
   readonly checkedIds = signal<Set<string>>(new Set());
   private readonly _existing = signal<Set<string>>(new Set());
   discountPct: number | null = null;
+
+  /** Temporary (this voucher only) vs permanent (write to the item master). */
+  permanent = false;
+  readonly busy = signal(false);
+
+  /** The selected category's prevailing item-master discount ("main discount"). */
+  readonly currentDisc = computed<number | null>(() => {
+    const g = this.sel();
+    if (!g) return null;
+    const counts = new Map<number, number>();
+    for (const p of g.products) {
+      const d = Number(p.saleDiscountPct) || 0;
+      counts.set(d, (counts.get(d) || 0) + 1);
+    }
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : null;
+  });
 
   /** By default the list shows ONLY the categories of products already on the bill;
    *  "Show all" expands to the full catalog (to add products from a new category). */
@@ -154,6 +194,9 @@ export class CategoryDiscountDialogComponent {
     // case: "apply this discount to all UPVC lines"). None in bill → pre-check all.
     const inBill = g.products.filter((p) => this._existing().has(p.id)).map((p) => p.id);
     this.checkedIds.set(new Set(inBill.length ? inBill : g.products.map((p) => p.id)));
+    // Pre-fill with the category's prevailing item-master discount so the user
+    // sees the "main discount" and edits from there.
+    if (this.discountPct === null) this.discountPct = this.currentDisc();
   }
 
   toggle(id: string): void {
@@ -174,11 +217,35 @@ export class CategoryDiscountDialogComponent {
   canApply(): boolean { return !!this.sel() && this.checkedIds().size > 0 && Number(this.discountPct) >= 0 && this.discountPct != null; }
 
   apply(): void {
-    if (!this.canApply()) return;
+    if (!this.canApply() || this.busy()) return;
     const g = this.sel()!;
+    const d = Number(this.discountPct);
     const products = g.products.filter((p) => this.checkedIds().has(p.id));
-    this.applied.emit({ products, discountPct: Number(this.discountPct) });
-    this.close();
+
+    if (!this.permanent) {
+      // Temporary: the host adjusts its OWN lines only; the item master is untouched.
+      this.applied.emit({ products, discountPct: d, permanent: false });
+      this.close();
+      return;
+    }
+    // Permanent: write the discount + recalculated sale prices to the item master
+    // FIRST, then let the host update its lines from the fresh prices.
+    this.busy.set(true);
+    this.entry.applyCategoryDiscount(products.map((p) => p.id), d).subscribe({
+      next: (updated) => {
+        const priceBy = new Map((updated || []).map((u) => [u.id, u]));
+        const merged = products.map((p) => ({ ...p, ...(priceBy.get(p.id) || {}), saleDiscountPct: d }));
+        // Refresh the cached catalog so reopening the dialog shows the new prices.
+        for (const gp of g.products) {
+          const u = priceBy.get(gp.id);
+          if (u) { gp.salePrice = u.salePrice; gp.saleDiscountPct = d; }
+        }
+        this.busy.set(false);
+        this.applied.emit({ products: merged, discountPct: d, permanent: true });
+        this.close();
+      },
+      error: () => this.busy.set(false),
+    });
   }
 
   close(): void {
@@ -186,6 +253,8 @@ export class CategoryDiscountDialogComponent {
     this.sel.set(null);
     this.checkedIds.set(new Set());
     this.discountPct = null;
+    this.permanent = false;
+    this.busy.set(false);
     this.showAll.set(false);
     this.closed.emit();
   }

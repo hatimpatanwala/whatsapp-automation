@@ -297,7 +297,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
       <wa-entry-lookup [kind]="'supplier'" [party]="supplier()" [rows]="rows" (applyRate)="onApplyRate($event)" />
 
-      <wa-category-discount-dialog [open]="showCatDisc()" [existingProductIds]="existingProductIds()"
+      <wa-category-discount-dialog [open]="showCatDisc()" [existingProductIds]="existingProductIds()" docLabel="purchase"
                                    (applied)="applyCategoryDiscount($event)" (closed)="showCatDisc.set(false)" />
 
       @if (qc(); as q) {
@@ -642,7 +642,7 @@ export class PurchaseEntryComponent implements OnInit, OnDestroy {
    * Fill the chosen discount % (D1) across the picked category's products: existing
    * lines get their D1 set; products not yet on the bill are added as fresh lines.
    */
-  applyCategoryDiscount(ev: { products: CategoryProduct[]; discountPct: number }): void {
+  applyCategoryDiscount(ev: { products: CategoryProduct[]; discountPct: number; permanent?: boolean }): void {
     const disc = Number(ev.discountPct) || 0;
     for (const cp of ev.products) {
       const existing = this.rows.filter((r) => r.productId === cp.id);

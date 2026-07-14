@@ -13,7 +13,8 @@ export interface ProductHit {
 export interface LastSale { price: number; at: string; qty?: number | null; d1?: number | null; d2?: number | null; discount?: number | null; }
 export interface CategoryProduct {
   id: string; name: string; hsnCode?: string; uom?: string; gstRate?: number;
-  salePrice?: number; basePrice?: number; priceIncludesTax?: boolean; saleDiscountPct?: number;
+  salePrice?: number; basePrice?: number; purchasePrice?: number;
+  priceIncludesTax?: boolean; saleDiscountPct?: number;
 }
 export interface CategoryGroup { id: string; name: string; products: CategoryProduct[]; }
 export interface ItemContext extends ProductHit {
@@ -82,6 +83,10 @@ export class EntryService {
   customers(q: string): Observable<CustomerHit[]> { return this.api.get<CustomerHit[]>('/entry/customers', { q }); }
   products(q: string): Observable<ProductHit[]> { return this.api.get<ProductHit[]>('/entry/products', { q }); }
   categoryProducts(): Observable<CategoryGroup[]> { return this.api.get<CategoryGroup[]>('/entry/category-products'); }
+  /** PERMANENT: write the category discount to the item master (sale = purchase − d%). */
+  applyCategoryDiscount(productIds: string[], discountPct: number): Observable<CategoryProduct[]> {
+    return this.api.post<CategoryProduct[]>('/entry/category-discount', { productIds, discountPct });
+  }
   customerContext(id: string): Observable<CustomerContext> { return this.api.get<CustomerContext>(`/entry/customer/${id}/context`); }
   itemContext(productId: string, customerId?: string): Observable<ItemContext> {
     return this.api.get<ItemContext>(`/entry/product/${productId}/context`, customerId ? { customerId } : undefined);

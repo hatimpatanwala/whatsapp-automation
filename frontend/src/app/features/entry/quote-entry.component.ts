@@ -186,7 +186,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
       <wa-entry-lookup [kind]="'customer'" [party]="customer()" [rows]="rows" (applyRate)="onApplyRate($event)" />
 
-      <wa-category-discount-dialog [open]="showCatDisc()" [existingProductIds]="existingProductIds()"
+      <wa-category-discount-dialog [open]="showCatDisc()" [existingProductIds]="existingProductIds()" docLabel="quotation"
                                    (applied)="applyCategoryDiscount($event)" (closed)="showCatDisc.set(false)" />
 
       @if (qc(); as q) {
@@ -490,14 +490,22 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
    * Fill the chosen discount % (D1) across the picked category's products: existing
    * lines get their D1 set; products not yet quoted are added as fresh lines.
    */
-  applyCategoryDiscount(ev: { products: CategoryProduct[]; discountPct: number }): void {
+  applyCategoryDiscount(ev: { products: CategoryProduct[]; discountPct: number; permanent?: boolean }): void {
     const disc = Number(ev.discountPct) || 0;
     for (const cp of ev.products) {
+      // The discount now DEFINES the sale price (rate = purchase − d%), so the new
+      // rate lands directly on the line and D1/D2 are cleared (no double-discount).
+      // Permanent mode already wrote the same price to the item master; temporary
+      // mode computes it here only, leaving the master untouched.
+      const newRate = this.categoryRate(cp, disc);
       const existing = this.rows.filter((r) => r.productId === cp.id);
       if (existing.length) {
-        for (const r of existing) r.d1 = disc;
+        for (const r of existing) {
+          if (newRate != null) { r.rate = newRate; r.d1 = null; r.d2 = null; }
+          else r.d1 = disc; // no purchase price known — fall back to a line discount
+        }
       } else {
-        this.rows.push(this.rowFromProduct(cp, disc));
+        this.rows.push(this.rowFromProduct(cp, newRate != null ? 0 : disc, newRate));
         this.loadItemContext(this.rows.length - 1);
       }
     }
@@ -506,14 +514,23 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
     this.tick.update((t) => t + 1);
   }
 
-  private rowFromProduct(cp: CategoryProduct, d1: number): Row {
+  /** Sale rate from the trade convention: purchase rate − discount %. */
+  private categoryRate(cp: CategoryProduct, disc: number): number | null {
+    const purchase = Number(cp.purchasePrice) || 0;
+    if (purchase > 0 && disc >= 0 && disc < 100) return money(purchase * (1 - disc / 100));
+    // Permanent responses carry the freshly recalculated salePrice — use it.
+    const sale = Number(cp.salePrice) || 0;
+    return sale > 0 ? money(sale) : null;
+  }
+
+  private rowFromProduct(cp: CategoryProduct, d1: number, forcedRate?: number | null): Row {
     const gstRate = Number(cp.gstRate) || 0;
-    let rate = Number(cp.salePrice ?? cp.basePrice) || null;
-    if (cp.priceIncludesTax && rate && gstRate) rate = money(rate / (1 + gstRate / 100));
+    let rate = forcedRate ?? (Number(cp.salePrice ?? cp.basePrice) || null);
+    if (forcedRate == null && cp.priceIncludesTax && rate && gstRate) rate = money(rate / (1 + gstRate / 100));
     return {
       ...this.blankRow(),
       productId: cp.id, name: cp.name,
-      gstRate, rate: rate != null ? money(rate) : null, qty: 1, d1,
+      gstRate, rate: rate != null ? money(rate) : null, qty: 1, d1: d1 || null,
     };
   }
 

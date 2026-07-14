@@ -77,6 +77,7 @@ export class EntryContextService {
                 COALESCE(c.name, NULLIF(trim(p.metadata->>'category'), ''), 'Uncategorised') AS category_name,
                 p.id, p.name, p.hsn_code, p.uom, COALESCE(p.gst_rate, 0) AS gst_rate,
                 COALESCE(p.sale_price, p.base_price) AS sale_price, p.base_price,
+                COALESCE(p.purchase_price, 0) AS purchase_price,
                 p.price_includes_tax, COALESCE(p.sale_discount_pct, 0) AS sale_discount_pct
          FROM "${schema}".products p
          LEFT JOIN "${schema}".categories c ON c.id = p.category_id
@@ -90,11 +91,42 @@ export class EntryContextService {
         map.get(r.category_id).products.push({
           id: r.id, name: r.name, hsnCode: r.hsn_code, uom: r.uom,
           gstRate: num(r.gst_rate), salePrice: num(r.sale_price), basePrice: num(r.base_price),
+          purchasePrice: num(r.purchase_price),
           priceIncludesTax: !!r.price_includes_tax, saleDiscountPct: num(r.sale_discount_pct),
         });
       }
       return Array.from(map.values());
     });
+  }
+
+  /**
+   * PERMANENTLY apply a category discount to the item master: for each product,
+   * sale_discount_pct = d and sale_price = purchase_price − d% (the trade convention
+   * the Item Master uses). Products without a purchase price keep their sale price
+   * and only record the discount. Returns the new prices so open vouchers can update.
+   */
+  applyCategoryDiscount(schema: string, productIds: string[], discountPct: number) {
+    const ids = (productIds || []).filter((x) => /^[0-9a-fA-F-]{36}$/.test(x));
+    const d = Math.min(99.99, Math.max(0, Number(discountPct) || 0));
+    if (!ids.length) return Promise.resolve([]);
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `UPDATE "${schema}".products SET
+           sale_discount_pct = $2,
+           sale_price = CASE WHEN COALESCE(purchase_price,0) > 0
+                             THEN ROUND(purchase_price * (1 - $2/100.0), 2)
+                             ELSE sale_price END,
+           updated_at = NOW()
+         WHERE id = ANY($1::uuid[])
+         RETURNING id, name, sale_price, base_price, purchase_price, sale_discount_pct`,
+        [ids, d],
+      ).then((rows: any[]) => rows.map((r) => ({
+        id: r.id, name: r.name,
+        salePrice: num(r.sale_price) || num(r.base_price),
+        purchasePrice: num(r.purchase_price),
+        saleDiscountPct: num(r.sale_discount_pct),
+      }))),
+    );
   }
 
   /** Party panel: who is this customer and where do we stand with them. */

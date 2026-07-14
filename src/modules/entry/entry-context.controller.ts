@@ -33,6 +33,12 @@ export class EntryContextController {
     return this.ctx.categoryProducts(this.schema(req));
   }
 
+  /** Permanently write a category discount to the item master (sale = purchase − d%). */
+  @Post('category-discount')
+  applyCategoryDiscount(@Req() req: Request, @Body() body: { productIds: string[]; discountPct: number }) {
+    return this.ctx.applyCategoryDiscount(this.schema(req), body?.productIds || [], Number(body?.discountPct));
+  }
+
   @Get('customer/:id/context')
   customerContext(@Req() req: Request, @Param('id') id: string) {
     return this.ctx.customerContext(this.schema(req), id);

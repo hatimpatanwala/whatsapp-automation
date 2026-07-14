@@ -143,11 +143,11 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
             <label class="text-sm">Purchase rate ₹
-              <input data-cell="pRate" type="number" [(ngModel)]="pRate" (keydown)="onFieldKey($event, 'pRate')"
+              <input data-cell="pRate" type="number" [(ngModel)]="pRate" (ngModelChange)="recalcSaleFromDisc()" (keydown)="onFieldKey($event, 'pRate')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
             <label class="text-sm">Sale rate ₹ *
-              <input data-cell="sRate" type="number" [(ngModel)]="sRate" (keydown)="onFieldKey($event, 'sRate')"
+              <input data-cell="sRate" type="number" [(ngModel)]="sRate" (ngModelChange)="recalcDiscFromSale()" (keydown)="onFieldKey($event, 'sRate')"
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
               <label class="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
                 <input type="checkbox" [(ngModel)]="priceIncludesTax" /> incl. tax
@@ -158,8 +158,11 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
                      class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
             </label>
             <label class="text-sm">Sale discount %
-              <input data-cell="saleDisc" type="number" [(ngModel)]="saleDisc" (keydown)="onFieldKey($event, 'saleDisc')"
-                     class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" title="Default D1 on the sales grid" />
+              <input data-cell="saleDisc" type="number" [(ngModel)]="saleDisc" (ngModelChange)="recalcSaleFromDisc()" (keydown)="onFieldKey($event, 'saleDisc')"
+                     class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" title="Discount off the purchase rate — the sale rate auto-calculates" />
+              @if (pRate && saleDisc != null) {
+                <span class="block text-[11px] text-emerald-700 mt-0.5">sale = ₹{{ fmt(pRate) }} − {{ saleDisc }}% = ₹{{ fmt(pRate * (1 - saleDisc / 100)) }}</span>
+              }
             </label>
             <label class="text-sm">Wholesale ₹
               <input type="number" [(ngModel)]="wholesalePrice"
@@ -364,6 +367,32 @@ export class ItemMasterComponent {
   mrp: number | null = null;
   saleDisc: number | null = null;
   wholesalePrice: number | null = null;
+  /** Guards the purchase↔discount↔sale auto-calc from ping-ponging. */
+  private recalcing = false;
+
+  /** Purchase rate + discount % → sale rate (the trade convention: sale = purchase − d%). */
+  recalcSaleFromDisc(): void {
+    if (this.recalcing) return;
+    const p = Number(this.pRate) || 0;
+    const d = this.saleDisc != null ? Number(this.saleDisc) : null;
+    if (p > 0 && d != null && d >= 0 && d < 100) {
+      this.recalcing = true;
+      this.sRate = Math.round(p * (1 - d / 100) * 100) / 100;
+      this.recalcing = false;
+    }
+  }
+
+  /** Manually edited sale rate → back-calculate the discount % off the purchase rate. */
+  recalcDiscFromSale(): void {
+    if (this.recalcing) return;
+    const p = Number(this.pRate) || 0;
+    const s = Number(this.sRate) || 0;
+    if (p > 0 && s > 0) {
+      this.recalcing = true;
+      this.saleDisc = Math.round((1 - s / p) * 10000) / 100;
+      this.recalcing = false;
+    }
+  }
   wholesaleMinQty: number | null = null;
   oRate: number | null = null;
   openingDate = '';
