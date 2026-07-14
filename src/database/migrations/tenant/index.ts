@@ -3226,6 +3226,49 @@ const migration084SalesmanPhoneOptional: TenantMigration = {
   },
 };
 
+/**
+ * 085 — Backfill real categories from the group name the importer preserved in
+ * products.metadata.category (Miracle groups). Creates a categories row per distinct
+ * group and links products via category_id, so categories work in the master,
+ * reports and the category-discount dialog. Idempotent + additive (never overwrites
+ * an already-assigned category_id).
+ */
+const migration085BackfillCategories: TenantMigration = {
+  name: '085_backfill_categories_from_metadata',
+  async up(qr, schema) {
+    const groups: Array<{ name: string }> = await qr.query(
+      `SELECT DISTINCT trim(metadata->>'category') AS name
+       FROM "${schema}".products
+       WHERE NULLIF(trim(metadata->>'category'), '') IS NOT NULL AND category_id IS NULL
+       ORDER BY 1`,
+    );
+    for (const g of groups) {
+      const name = String(g.name || '').trim();
+      if (!name) continue;
+      let cat = (await qr.query(`SELECT id FROM "${schema}".categories WHERE lower(name) = lower($1) LIMIT 1`, [name]))[0];
+      if (!cat) {
+        const base = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) || 'category';
+        let slug = base;
+        let n = 1;
+        // Ensure the slug is unique (two group names can normalise to the same slug).
+        while ((await qr.query(`SELECT 1 FROM "${schema}".categories WHERE slug = $1`, [slug])).length) {
+          slug = `${base}-${++n}`;
+        }
+        cat = (await qr.query(
+          `INSERT INTO "${schema}".categories (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+          [name, slug],
+        ))[0];
+      }
+      await qr.query(
+        `UPDATE "${schema}".products SET category_id = $1
+         WHERE category_id IS NULL AND lower(trim(metadata->>'category')) = lower($2)`,
+        [cat.id, name],
+      );
+    }
+  },
+  async down() { /* additive backfill — no rollback */ },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3311,4 +3354,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration082RbacErp,
   migration083SfaModule,
   migration084SalesmanPhoneOptional,
+  migration085BackfillCategories,
 ];

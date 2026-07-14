@@ -39,7 +39,13 @@ import { EntryService, CategoryGroup, CategoryProduct } from '../../core/service
             <div class="flex flex-1 min-h-0">
               <!-- categories -->
               <div class="w-1/2 border-r overflow-y-auto">
-                @for (g of groups(); track g.id) {
+                <div class="sticky top-0 z-10 bg-white px-3 py-1.5 border-b flex items-center justify-between text-[11px]">
+                  <span class="text-slate-400 font-medium">{{ showAll() ? 'All categories' : 'Categories in this bill' }}</span>
+                  <button (click)="showAll.set(!showAll())" class="text-indigo-600 hover:underline font-semibold">
+                    {{ showAll() ? 'Only in bill' : 'Show all' }}
+                  </button>
+                </div>
+                @for (g of visibleGroups(); track g.id) {
                   <button (click)="selectCat(g)"
                     class="w-full text-left px-4 py-2 text-sm border-b border-slate-50 flex items-center justify-between hover:bg-amber-50"
                     [class.bg-amber-100]="sel()?.id === g.id" [class.font-semibold]="sel()?.id === g.id">
@@ -49,6 +55,11 @@ import { EntryService, CategoryGroup, CategoryProduct } from '../../core/service
                       @if (inBillCount(g); as n) { · <b class="text-indigo-600">{{ n }} in bill</b> }
                     </span>
                   </button>
+                } @empty {
+                  <p class="p-6 text-center text-slate-400 text-sm">
+                    No products from the bill are categorised yet.
+                    <button (click)="showAll.set(true)" class="text-indigo-600 hover:underline font-semibold block mx-auto mt-2">Show all categories</button>
+                  </p>
                 }
               </div>
               <!-- products of selected category -->
@@ -101,7 +112,7 @@ export class CategoryDiscountDialogComponent {
   private _open = false;
   @Input() set open(v: boolean) {
     this._open = v;
-    if (v) { this.load(); setTimeout(() => (document.querySelector('[data-lookup-box]') as HTMLElement | null)?.focus()); }
+    if (v) { this.showAll.set(false); this.load(); setTimeout(() => (document.querySelector('[data-lookup-box]') as HTMLElement | null)?.focus()); }
   }
   get open(): boolean { return this._open; }
 
@@ -117,6 +128,12 @@ export class CategoryDiscountDialogComponent {
   readonly checkedIds = signal<Set<string>>(new Set());
   private readonly _existing = signal<Set<string>>(new Set());
   discountPct: number | null = null;
+
+  /** By default the list shows ONLY the categories of products already on the bill;
+   *  "Show all" expands to the full catalog (to add products from a new category). */
+  readonly showAll = signal(false);
+  readonly inBillGroups = computed(() => this.groups().filter((g) => g.products.some((p) => this._existing().has(p.id))));
+  readonly visibleGroups = computed(() => (this.showAll() ? this.groups() : this.inBillGroups()));
 
   private loaded = false;
   private load(): void {
@@ -169,6 +186,7 @@ export class CategoryDiscountDialogComponent {
     this.sel.set(null);
     this.checkedIds.set(new Set());
     this.discountPct = null;
+    this.showAll.set(false);
     this.closed.emit();
   }
 
