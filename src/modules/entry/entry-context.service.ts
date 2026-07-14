@@ -120,12 +120,16 @@ export class EntryContextService {
          WHERE id = ANY($1::uuid[])
          RETURNING id, name, sale_price, base_price, purchase_price, sale_discount_pct`,
         [ids, d],
-      ).then((rows: any[]) => rows.map((r) => ({
-        id: r.id, name: r.name,
-        salePrice: num(r.sale_price) || num(r.base_price),
-        purchasePrice: num(r.purchase_price),
-        saleDiscountPct: num(r.sale_discount_pct),
-      }))),
+      ).then((res: any) => {
+        // TypeORM returns UPDATE…RETURNING as [rows, affectedCount].
+        const rows: any[] = Array.isArray(res) && Array.isArray(res[0]) ? res[0] : res;
+        return rows.map((r) => ({
+          id: r.id, name: r.name,
+          salePrice: num(r.sale_price) || num(r.base_price),
+          purchasePrice: num(r.purchase_price),
+          saleDiscountPct: num(r.sale_discount_pct),
+        }));
+      }),
     );
   }
 
