@@ -57,6 +57,13 @@ export class MarketPriceService {
   private readonly logger = new Logger(MarketPriceService.name);
   /** One bulk refresh queue per tenant schema. */
   private readonly bulk = new Map<string, BulkState>();
+  /** Category listing-page cache (slug → stripped text). One page prices MANY products. */
+  private readonly catPageCache = new Map<string, { at: number; text: string | null }>();
+  private readonly CAT_TTL = 12 * 60 * 60 * 1000; // 12h
+  /** Per-host politeness: serialized fetches with a minimum gap (free single-IP rule #1). */
+  private readonly hostNextAt = new Map<string, number>();
+  private hostChain: Promise<void> = Promise.resolve();
+  private static readonly HOST_GAP_MS = 8_000;
 
   constructor(
     private readonly cm: TenantConnectionManager,
@@ -177,21 +184,34 @@ export class MarketPriceService {
     const name = String(product.name);
     const refPrice = Number(product.ref_price) || 0;
 
-    const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
-    const relevant = this.relevantSnippets(name, snippets);
+    // PRIMARY: the marketplace CATEGORY page (server-rendered, many priced listings;
+    // cached 12h so one polite fetch prices every product of the category). This
+    // avoids general search engines entirely — they block datacenter IPs quickly.
+    let contexts: string[] = [];
+    const catText = await this.categoryPageText(name);
+    if (catText) contexts = this.windowsFromText(name, catText);
 
-    // Snippets alone rarely carry SKU prices (search returns corporate/genric pages),
-    // so ALSO fetch the top listing pages (IndiaMART/Moglix/Amazon…) and extract
-    // prices from text windows that actually mention this product's brand + size.
-    const pageContexts = await this.fetchListingContexts(name, snippets);
-    const snippetPoints = this.pricePoints(refPrice, relevant.map((s) => `${s.title} ${s.content}`));
-    const pagePoints = this.pricePoints(refPrice, pageContexts);
-    const allPoints = [...snippetPoints, ...pagePoints];
+    // FALLBACK: metasearch → listing URLs → window extraction (works when the
+    // engines aren't rate-limiting; skipped when the category page already matched).
+    let searched = 0;
+    let relevant: Array<{ title: string; content: string; url: string }> = [];
+    if (contexts.length < 2) {
+      const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
+      searched = snippets.length;
+      relevant = this.relevantSnippets(name, snippets);
+      const pageContexts = await this.fetchListingContexts(name, snippets);
+      contexts = [...contexts, ...pageContexts];
+    }
+
+    const allPoints = [
+      ...this.pricePoints(refPrice, contexts),
+      ...this.pricePoints(refPrice, relevant.map((s) => `${s.title} ${s.content}`)),
+    ];
 
     // LLM extraction first (when a free endpoint is configured), else deterministic.
     let result = await this.llmExtract(name, refPrice, [
       ...relevant.map((s) => ({ title: s.title, content: s.content, url: s.url })),
-      ...pageContexts.slice(0, 8).map((c, i) => ({ title: `listing context ${i + 1}`, content: c, url: '' })),
+      ...contexts.slice(0, 10).map((c, i) => ({ title: `listing context ${i + 1}`, content: c, url: '' })),
     ]);
     let via = 'llm';
     if (!result) {
@@ -199,7 +219,7 @@ export class MarketPriceService {
       via = 'web';
     }
     if (!result) {
-      return { status: 'no-data', message: `No trustworthy web price found for this item (checked ${snippets.length} results, ${relevant.length + pageContexts.length} matched contexts) — add a manual price.` };
+      return { status: 'no-data', message: `No trustworthy web price found (category page ${catText ? 'checked' : 'not found'}, ${searched} search results, ${contexts.length} matched contexts) — add a manual price.` };
     }
 
     await this.cm.executeInTenantContext(schema, (qr) =>
@@ -234,27 +254,26 @@ export class MarketPriceService {
     };
     this.bulk.set(schema, state);
 
-    // Fire-and-forget worker: 2 at a time (kind to the search engine), sequential batches.
+    // Fire-and-forget worker. SINGLE worker: outbound fetches are globally
+    // serialized + per-host rate-limited anyway (that's how a one-IP scraper
+    // survives), and the 12h category-page cache means most products resolve
+    // WITHOUT any network call at all once their category page is in.
     void (async () => {
       const queue = [...targets];
-      const worker = async () => {
-        for (;;) {
-          const item = queue.shift();
-          if (!item) return;
-          state.statuses[item.productId] = 'running';
-          try {
-            const res: any = await this.refresh(schema, item.productId);
-            state.statuses[item.productId] = res.status === 'ok' ? 'ok' : 'no-data';
-            if (res.status === 'ok') state.ok++; else state.noData++;
-          } catch (e: any) {
-            state.statuses[item.productId] = 'error';
-            this.logger.warn(`bulk refresh ${item.name}: ${e?.message}`);
-          }
-          state.done++;
-          await new Promise((r) => setTimeout(r, 400)); // politeness gap
+      for (;;) {
+        const item = queue.shift();
+        if (!item) break;
+        state.statuses[item.productId] = 'running';
+        try {
+          const res: any = await this.refresh(schema, item.productId);
+          state.statuses[item.productId] = res.status === 'ok' ? 'ok' : 'no-data';
+          if (res.status === 'ok') state.ok++; else state.noData++;
+        } catch (e: any) {
+          state.statuses[item.productId] = 'error';
+          this.logger.warn(`bulk refresh ${item.name}: ${e?.message}`);
         }
-      };
-      await Promise.all([worker(), worker()]);
+        state.done++;
+      }
       state.running = false;
       state.finishedAt = new Date().toISOString();
     })();
@@ -314,6 +333,113 @@ export class MarketPriceService {
   /** Listing-page domains worth fetching (public price-listing sites). */
   private static readonly LISTING_HOSTS = /indiamart\.com|moglix\.com|industrybuying\.com|amazon\.in|flipkart\.com|tradeindia\.com|justdial\.com/i;
 
+  // ─── Polite fetching (single-IP scraping survival kit) ──────────────────────
+  /**
+   * Serialized, per-host rate-limited fetch: at most one request per HOST_GAP_MS to
+   * a given host, with one 60s backoff-and-retry on HTTP 429. Without this the
+   * marketplaces 429 the server IP within minutes (observed live).
+   */
+  private fetchPolite(url: string): Promise<string | null> {
+    const run = async (): Promise<string | null> => {
+      const host = new URL(url).host;
+      const waitUntil = this.hostNextAt.get(host) || 0;
+      const delay = Math.max(0, waitUntil - Date.now());
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      this.hostNextAt.set(host, Date.now() + MarketPriceService.HOST_GAP_MS);
+
+      const attempt = async (): Promise<{ status: number; text: string | null }> => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15_000);
+        try {
+          const res = await fetch(url, {
+            signal: controller.signal,
+            headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', accept: 'text/html' },
+          });
+          return { status: res.status, text: res.ok ? await res.text() : null };
+        } catch {
+          return { status: 0, text: null };
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
+      let r = await attempt();
+      if (r.status === 429) {
+        this.logger.warn(`429 from ${host} — backing off 60s`);
+        await new Promise((res) => setTimeout(res, 60_000));
+        this.hostNextAt.set(host, Date.now() + MarketPriceService.HOST_GAP_MS);
+        r = await attempt();
+      }
+      return r.text;
+    };
+    // Chain so all polite fetches are strictly serialized process-wide.
+    const p = this.hostChain.then(run, run);
+    this.hostChain = p.then(() => undefined, () => undefined);
+    return p;
+  }
+
+  /** Strip HTML to text (for price-window extraction). */
+  private static toText(html: string): string {
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ');
+  }
+
+  // ─── Category listing pages (primary source — one page prices many products) ─
+  /** Slug candidates for an IndiaMART category page, from the product's name. */
+  private slugCandidates(productName: string): string[] {
+    const words = productName.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+    if (!words.length) return [];
+    const brand = words[0];
+    // The "category phrase" = the trailing generic nouns (tank/pipe/elbow/valve…),
+    // e.g. "sintex swr pipe type a" → "swr pipe".
+    const NOUNS = ['tank', 'tanks', 'pipe', 'pipes', 'elbow', 'tape', 'valve', 'socket', 'clamp', 'solvent', 'adhesive', 'fitting', 'fittings', 'sheet', 'door', 'cock', 'trap', 'coupler', 'tee', 'union', 'reducer'];
+    const nounIdx = words.findIndex((w) => NOUNS.includes(w));
+    const out: string[] = [];
+    const plural = (s: string) => (s.endsWith('s') ? s : `${s}s`);
+    if (nounIdx > 0) {
+      const phrase = words.slice(Math.max(1, nounIdx - 1), nounIdx + 1).join('-'); // e.g. swr-pipe
+      out.push(`${brand}-${plural(phrase)}`, plural(phrase), `${brand}-${phrase}`);
+    }
+    out.push(`${brand}-${plural(words.slice(1, 3).join('-'))}`);
+    return [...new Set(out)].filter(Boolean).slice(0, 4);
+  }
+
+  /** Fetch (or reuse) the first category page that resolves; null when none do. */
+  private async categoryPageText(productName: string): Promise<string | null> {
+    for (const slug of this.slugCandidates(productName)) {
+      const hit = this.catPageCache.get(slug);
+      if (hit && Date.now() - hit.at < this.CAT_TTL) {
+        if (hit.text) return hit.text;
+        continue; // negative-cached miss
+      }
+      const html = await this.fetchPolite(`https://dir.indiamart.com/impcat/${slug}.html`);
+      const text = html && html.length > 20_000 ? MarketPriceService.toText(html) : null;
+      this.catPageCache.set(slug, { at: Date.now(), text });
+      if (text) return text;
+    }
+    return null;
+  }
+
+  /** Price-windows from a category page that mention this product's brand + sizes. */
+  private windowsFromText(productName: string, text: string): string[] {
+    const tokens = productName.toLowerCase().split(/[^a-z0-9/.]+/).filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+    const brand = tokens[0] || '';
+    const numbers = tokens.filter((t) => /\d/.test(t));
+    const contexts: string[] = [];
+    const re = /(?:₹|Rs\.?|INR)\s*[\d,]+(?:\.\d{1,2})?/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) && contexts.length < 12) {
+      const win = text.slice(Math.max(0, m.index - 260), m.index + 120).toLowerCase();
+      if (brand && !win.includes(brand)) continue;
+      if (numbers.length && !numbers.every((n) => win.includes(n))) continue;
+      contexts.push(text.slice(Math.max(0, m.index - 260), m.index + 120));
+    }
+    return contexts;
+  }
+
   /**
    * Fetch up to 4 listing pages from the search results and return the text WINDOWS
    * (±260 chars around each ₹-price) that also mention this product's brand and every
@@ -327,34 +453,21 @@ export class MarketPriceService {
     const urls = snippets.map((s) => s.url).filter((u) => MarketPriceService.LISTING_HOSTS.test(u)).slice(0, 4);
     const contexts: string[] = [];
 
-    await Promise.all(urls.map(async (url) => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12_000);
-      try {
-        const res = await fetch(url, {
-          signal: controller.signal,
-          headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', accept: 'text/html' },
-        });
-        if (!res.ok) return;
-        const html = await res.text();
-        const text = html
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ');
-        const re = /(?:₹|Rs\.?|INR)\s*[\d,]+(?:\.\d{1,2})?/gi;
-        let m: RegExpExecArray | null;
-        let found = 0;
-        while ((m = re.exec(text)) && found < 12) {
-          const win = text.slice(Math.max(0, m.index - 260), m.index + 120).toLowerCase();
-          if (brand && !win.includes(brand)) continue;
-          if (numbers.length && !numbers.every((n) => win.includes(n))) continue;
-          contexts.push(text.slice(Math.max(0, m.index - 260), m.index + 120));
-          found++;
-        }
-      } catch { /* blocked/slow page — others may work */ }
-      finally { clearTimeout(timer); }
-    }));
+    for (const url of urls.slice(0, 2)) { // polite: serialized, few pages
+      const html = await this.fetchPolite(url);
+      if (!html) continue;
+      const text = MarketPriceService.toText(html);
+      const re = /(?:₹|Rs\.?|INR)\s*[\d,]+(?:\.\d{1,2})?/gi;
+      let m: RegExpExecArray | null;
+      let found = 0;
+      while ((m = re.exec(text)) && found < 12) {
+        const win = text.slice(Math.max(0, m.index - 260), m.index + 120).toLowerCase();
+        if (brand && !win.includes(brand)) continue;
+        if (numbers.length && !numbers.every((n) => win.includes(n))) continue;
+        contexts.push(text.slice(Math.max(0, m.index - 260), m.index + 120));
+        found++;
+      }
+    }
     return contexts;
   }
 
