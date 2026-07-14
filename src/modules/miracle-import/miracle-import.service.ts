@@ -38,6 +38,17 @@ export interface RunState {
   message: string;
   tenant?: { schema: string; created: boolean; email: string };
   counts: Record<string, number>;
+  /** Post-load reconciliation report (the migration kit's validation gate). */
+  validation?: {
+    trialBalanceDr: number;
+    trialBalanceCr: number;
+    balanced: boolean;
+    glVouchers: number;
+    receivables: number;
+    payables: number;
+    stockValue: number;
+    warnings: string[];
+  };
   startedAt: string;
   finishedAt?: string;
   error?: string;
@@ -117,6 +128,9 @@ export class MiracleImportService {
           this.set(state, 'transactions', 'Importing invoices, purchases, payments');
           await this.importTransactions(qr, schema, parser, company, map, state, opts.postAccounting !== false);
         }
+
+        this.set(state, 'transactions', 'Validating & reconciling');
+        state.validation = await this.validate(qr, schema);
       });
 
       state.status = 'success';
@@ -365,11 +379,14 @@ export class MiracleImportService {
         await this.putMap(qr, schema, type, p.code, row[0].id, map);
         c(type);
       }
-      // Party ledger (Sundry Debtors/Creditors) with opening balance.
-      await qr.query(
+      // Party ledger (Sundry Debtors/Creditors) with opening balance. Capture its id
+      // and map the Miracle account code → ledger so journal/contra legs (RKACCT01)
+      // that reference this party post to the right ledger.
+      const plRow = await qr.query(
         `INSERT INTO "${schema}".ledger_accounts (name, group_id, opening_balance, opening_type, gstin, source_type, source_id)
          SELECT $1, g.id, $2, $3, $4, $5, $6 FROM "${schema}".ledger_groups g WHERE g.name = $7
-         ON CONFLICT (name) DO UPDATE SET opening_balance = EXCLUDED.opening_balance, gstin = EXCLUDED.gstin`,
+         ON CONFLICT (name) DO UPDATE SET opening_balance = EXCLUDED.opening_balance, gstin = EXCLUDED.gstin
+         RETURNING id`,
         [
           p.name.slice(0, 160),
           p.openingBalance || 0,
@@ -380,6 +397,7 @@ export class MiracleImportService {
           p.group === 'customer' ? 'Sundry Debtors' : 'Sundry Creditors',
         ],
       );
+      if (plRow[0]?.id) await this.putMap(qr, schema, 'ledger', p.code, plRow[0].id, map);
     }
 
     // Products (+ inventory opening stock).
@@ -446,6 +464,27 @@ export class MiracleImportService {
       haveTax.add(name.toLowerCase());
       c('tax_rate');
     }
+
+    // ── Defensive masters (present only in exports that use these modules; this
+    // export has none, so these are no-ops here but migrate automatically when a
+    // future client's data contains them) ──────────────────────────────────────
+    for (const sm of parser.salesmen()) {
+      if (map.get(`salesman:${sm.code}`)) continue;
+      const row = await qr.query(
+        `INSERT INTO "${schema}".salesmen (name, phone, area, access_token, is_active)
+         VALUES ($1, NULL, $2, encode(gen_random_bytes(24),'hex'), true) RETURNING id`,
+        [sm.name.slice(0, 120), sm.area || null],
+      ).catch(() => [] as any[]);
+      if (row[0]?.id) { await this.putMap(qr, schema, 'salesman', sm.code, row[0].id, map); c('salesmen'); }
+    }
+    for (const gd of parser.godowns()) {
+      if (map.get(`godown:${gd.code}`)) continue;
+      const row = await qr.query(
+        `INSERT INTO "${schema}".erp_warehouses (name, is_default, removed) VALUES ($1, false, false) RETURNING id`,
+        [gd.name.slice(0, 120)],
+      ).catch(() => [] as any[]);
+      if (row[0]?.id) { await this.putMap(qr, schema, 'godown', gd.code, row[0].id, map); c('godowns'); }
+    }
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
@@ -488,6 +527,14 @@ export class MiracleImportService {
         }
       }
       state.message = `Transactions: ${y} done (${state.counts['invoices'] || 0} invoices, ${state.counts['purchases'] || 0} purchases)`;
+    }
+
+    // Journal (N7) + Contra (BC) vouchers — the double-entry legs (RKACCT01) the
+    // invoice/receipt path can't reconstruct. These complete the trial balance,
+    // ledger statements, day book, P&L and balance sheet.
+    if (postAccounting) {
+      this.set(state, 'transactions', 'Importing journal & contra vouchers');
+      await this.importJournals(qr, schema, parser, map, names, led, state);
     }
 
     // Reconcile on-hand stock from the full imported history:
@@ -653,6 +700,37 @@ export class MiracleImportService {
   }
 
   // ─── Accounting voucher posting (balanced by construction) ────────────────
+  /**
+   * Post-load validation gate: does the migrated GL tie out (ΣDr = ΣCr), and what
+   * are the control totals (receivables, payables, stock value)? Surfaced on the run
+   * so a migration can be signed off before the client transacts on it.
+   */
+  private async validate(qr: any, schema: string): Promise<RunState['validation']> {
+    const warnings: string[] = [];
+    const [tb] = await qr.query(
+      `SELECT COALESCE(SUM(debit),0)::float AS dr, COALESCE(SUM(credit),0)::float AS cr,
+              COUNT(DISTINCT voucher_id)::int AS vouchers FROM "${schema}".voucher_entries`,
+    );
+    const dr = Math.round((tb?.dr || 0) * 100) / 100;
+    const cr = Math.round((tb?.cr || 0) * 100) / 100;
+    const balanced = Math.abs(dr - cr) < 5;
+    if (!balanced) warnings.push(`Trial balance is off by ₹${Math.round(Math.abs(dr - cr))} (Dr ${Math.round(dr)} vs Cr ${Math.round(cr)}).`);
+    const [ar] = await qr.query(`SELECT COALESCE(SUM(balance_due),0)::float AS v FROM "${schema}".invoices WHERE balance_due > 0`);
+    const [ap] = await qr.query(`SELECT COALESCE(SUM(total - COALESCE(amount_paid,0)),0)::float AS v FROM "${schema}".supplier_orders`).catch(() => [{ v: 0 }]);
+    const [stk] = await qr.query(
+      `SELECT COALESCE(SUM(GREATEST(inv.stock_quantity,0) * COALESCE(p.purchase_price, p.base_price, 0)),0)::float AS v
+       FROM "${schema}".inventory inv JOIN "${schema}".products p ON p.id = inv.product_id`,
+    );
+    return {
+      trialBalanceDr: dr, trialBalanceCr: cr, balanced,
+      glVouchers: tb?.vouchers || 0,
+      receivables: Math.round((ar?.v || 0) * 100) / 100,
+      payables: Math.round((ap?.v || 0) * 100) / 100,
+      stockValue: Math.round((stk?.v || 0) * 100) / 100,
+      warnings,
+    };
+  }
+
   private async ledgerIds(qr: any, schema: string): Promise<Record<string, string>> {
     const rows = await qr.query(`SELECT id, name FROM "${schema}".ledger_accounts`);
     const by: Record<string, string> = {};
@@ -721,6 +799,46 @@ export class MiracleImportService {
     if (v.roundOff) entries.push({ ledgerId: led['round off'], debit: v.roundOff > 0 ? v.roundOff : 0, credit: v.roundOff < 0 ? -v.roundOff : 0 });
     await this.writeVoucher(qr, schema, 'purchase', number, v.date, null, v.total, number, 'purchase', purchaseId, entries);
   }
+  /**
+   * Post Miracle journal (N7) & contra (BC) vouchers from their double-entry legs.
+   * Each leg's account code resolves to a ledger via the import map (party ledgers +
+   * non-party ledgers were both mapped under 'ledger:<code>'); unknown codes land in
+   * Suspense so the voucher still balances. Idempotent via miracle_import_map.
+   */
+  private async importJournals(
+    qr: any, schema: string, parser: MiracleParser, map: Map<string, string>,
+    names: Map<string, string>, led: Record<string, string>, state: RunState,
+  ) {
+    const c = (k: string, n = 1) => (state.counts[k] = (state.counts[k] || 0) + n);
+    const resolveLedger = async (code: string): Promise<string> => {
+      const mapped = map.get(`ledger:${code}`);
+      if (mapped) return mapped;
+      return this.ledgerByName(qr, schema, names.get(code) || code, 'Suspense Account', led);
+    };
+    for (const y of parser.years()) {
+      for (const j of parser.journals(y)) {
+        if (map.get(`journal:${j.miracleId}`)) continue;
+        try {
+          const entries: { ledgerId: string; debit: number; credit: number }[] = [];
+          for (const leg of j.legs) {
+            const ledgerId = await resolveLedger(leg.accountCode);
+            entries.push({ ledgerId, debit: leg.drCr === 'dr' ? leg.amount : 0, credit: leg.drCr === 'cr' ? leg.amount : 0 });
+          }
+          const amount = entries.reduce((s2, e) => s2 + e.debit, 0);
+          const prefix = j.kind === 'contra' ? 'CON' : 'JV';
+          const vid = await this.writeVoucher(
+            qr, schema, j.kind, `${prefix}/${j.narration || j.miracleId}`, j.date, null, amount,
+            j.narration || '', j.kind === 'contra' ? 'miracle_contra' : 'miracle_journal', null, entries,
+          );
+          if (vid) { await this.putMap(qr, schema, 'journal', j.miracleId, vid, map); c(j.kind === 'contra' ? 'contras' : 'journals'); }
+        } catch (e: any) {
+          c('journal_errors');
+          if ((state.counts['journal_errors'] || 0) <= 5) this.logger.warn(`journal ${j.miracleId} failed: ${e?.message}`);
+        }
+      }
+    }
+  }
+
   private async importReceiptPayment(qr: any, schema: string, v: MiracleVoucher, map: Map<string, string>, names: Map<string, string>, led: Record<string, string>) {
     if (map.get(`${v.kind}:${v.miracleId}`)) return; // already imported (dedup — source_id is null)
     const partyName = names.get(v.partyCode) || v.partyCode;

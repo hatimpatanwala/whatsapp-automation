@@ -18,11 +18,13 @@ import { readDbf, readDbfSafe, s, num, DbfRecord } from './dbf.reader';
 export interface MiracleCompany {
   name: string;
   gstin: string;
+  pan: string;
   address: string;
   city: string;
   state: string;
   stateCode: string;
   pincode: string;
+  phone: string;
 }
 export interface MiracleGroup {
   code: string;
@@ -84,6 +86,29 @@ export interface MiracleLine {
   hsn: string;
   gstRate: number;
 }
+/** A journal/contra voucher's balanced ledger legs (Miracle RKACCT01). */
+export interface MiracleJournalLeg {
+  accountCode: string;
+  drCr: 'dr' | 'cr';
+  amount: number;
+  mode: string;
+}
+export interface MiracleJournal {
+  miracleId: string;
+  kind: 'journal' | 'contra';
+  rawType: string; // N7 / BC
+  date: string | null;
+  narration: string;
+  legs: MiracleJournalLeg[];
+}
+/** Opening balance carried from the earliest books year (RKACAMB1). */
+export interface MiracleOpening { accountCode: string; balance: number; drCr: 'dr' | 'cr'; asOn: string | null; }
+/** Defensive masters — present only in exports that use these Miracle modules. */
+export interface MiracleSalesman { code: string; name: string; area: string; }
+export interface MiracleGodown { code: string; name: string; }
+export interface MiracleBatch { itemCode: string; batchNo: string; mrp: number; mfgDate: string | null; expDate: string | null; qty: number; }
+export interface MiraclePriceLevel { code: string; name: string; rates: Array<{ itemCode: string; rate: number }>; }
+
 export type VoucherKind = 'sale' | 'purchase' | 'sales_return' | 'receipt' | 'payment';
 export interface MiracleVoucher {
   miracleId: string;
@@ -127,23 +152,37 @@ export class MiracleParser {
   }
 
   // ─── Masters ────────────────────────────────────────────────────────────
+  /**
+   * Company profile — the authoritative row is RKACCM17 (name, GSTIN, address,
+   * pincode). RKACCM00.FIELD02 is only an internal folder alias, so we do NOT use
+   * it as the legal name. Falls back to a GSTIN scan only if RKACCM17 is absent.
+   */
   company(): MiracleCompany {
-    // The company's own GSTIN appears in its GST-return XML/config files. Grab
-    // the most-frequent GSTIN whose state matches the bulk of the parties (the
-    // seller's home state) and which isn't itself a party GSTIN.
+    const m17 = readDbfSafe(this.p('RKACCM17.DBF')).records[0];
+    if (m17 && s(m17.M17F02)) {
+      const gstin = s(m17.M17F02).toUpperCase().replace(/\s/g, '');
+      const valid = /^\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]{3}$/.test(gstin);
+      return {
+        name: s(m17.M17F05) || s(m17.M17F06) || 'Company',
+        gstin: valid ? gstin : '',
+        pan: valid ? gstin.slice(2, 12) : '',
+        address: (s(m17.M17F22) || s(m17.M17F17)).replace(/\s+/g, ' ').trim(),
+        city: s(m17.M17F06) || s(m17.M17F20),
+        state: '',
+        stateCode: valid ? gstin.slice(0, 2) : '',
+        pincode: s(m17.M17F24),
+        phone: cleanPhone(s(m17.M17F23)),
+      };
+    }
+    // Fallback: no company profile row — scan GST XML/config for the home GSTIN.
     const parties = this.parties();
     const stateCounts = new Map<string, number>();
     for (const p of parties) if (p.stateCode) stateCounts.set(p.stateCode, (stateCounts.get(p.stateCode) || 0) + 1);
     const homeState = [...stateCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '27';
     const gstin = this.findCompanyGstin(homeState, parties);
     return {
-      name: 'FIT AND FLOW TRADING',
-      gstin,
-      address: '',
-      city: '',
-      state: '',
-      stateCode: gstin ? gstin.slice(0, 2) : homeState,
-      pincode: '',
+      name: 'Company', gstin, pan: gstin ? gstin.slice(2, 12) : '',
+      address: '', city: '', state: '', stateCode: gstin ? gstin.slice(0, 2) : homeState, pincode: '', phone: '',
     };
   }
 
@@ -197,6 +236,7 @@ export class MiracleParser {
     const y = this.latestYear();
     const groups = this.groups();
     const details = this.partyDetails(y);
+    const openings = this.openingBalances();
     const out: MiracleParty[] = [];
     for (const r of readDbfSafe(this.p(y, 'RKACCM01.DBF')).records) {
       const g = groups.get(s(r.FIELD05));
@@ -206,7 +246,9 @@ export class MiracleParser {
       else if (gname.includes('creditor')) group = 'supplier';
       if (!group) continue;
       const d = details.get(s(r.FIELD01)) || {};
-      const ob = num(r.FIELD10);
+      // Opening balance: prefer the authoritative RKACAMB1 figure, else M01.FIELD10.
+      const op = openings.get(s(r.FIELD01));
+      const ob = op ? (op.drCr === 'cr' ? -op.balance : op.balance) : num(r.FIELD10);
       out.push({
         code: s(r.FIELD01),
         name: s(r.FIELD02) || s(d.FIELD61) || s(r.FIELD01),
@@ -232,12 +274,14 @@ export class MiracleParser {
   ledgers(): MiracleLedger[] {
     const y = this.latestYear();
     const groups = this.groups();
+    const openings = this.openingBalances();
     const out: MiracleLedger[] = [];
     for (const r of readDbfSafe(this.p(y, 'RKACCM01.DBF')).records) {
       const g = groups.get(s(r.FIELD05));
       const gname = (g?.name || '').toLowerCase();
       if (gname.includes('debtor') || gname.includes('creditor')) continue; // parties handled separately
-      const ob = num(r.FIELD10);
+      const op = openings.get(s(r.FIELD01));
+      const ob = op ? (op.drCr === 'cr' ? -op.balance : op.balance) : num(r.FIELD10);
       out.push({
         code: s(r.FIELD01),
         name: s(r.FIELD02),
@@ -453,6 +497,112 @@ export class MiracleParser {
     }
     return out;
   }
+
+  /**
+   * Journal (N7) and Contra (BC) vouchers, from the double-entry GL ledger table
+   * RKACCT01 — the legs the invoice/receipt path can't reconstruct. Each row is one
+   * Dr/Cr posting; grouped by voucher id they balance (ΣDr = ΣCr). These complete the
+   * trial balance, ledger statements and day book (previously skipped entirely).
+   */
+  journals(year: string): MiracleJournal[] {
+    const dir = this.p(year);
+    if (!existsSync(join(dir, 'RKACCT01.DBF'))) return [];
+    const byV = new Map<string, MiracleJournal>();
+    const KIND: Record<string, 'journal' | 'contra'> = { N7: 'journal', BC: 'contra' };
+    for (const r of readDbfSafe(join(dir, 'RKACCT01.DBF')).records) {
+      const kind = KIND[s(r.FIELD98)];
+      if (!kind) continue;
+      const vid = s(r.FIELD01);
+      const amount = num(r.FIELD05);
+      if (!vid || amount === 0) continue;
+      const v = byV.get(vid) || {
+        miracleId: vid, kind, rawType: s(r.FIELD98), date: numDate(r, 'FIELD02'),
+        narration: s(r.FIELD12) || s(r.T41FVNO), legs: [],
+      };
+      v.legs.push({
+        accountCode: s(r.FIELD03),
+        drCr: s(r.FIELD06) === 'D' ? 'dr' : 'cr',
+        amount: round2(Math.abs(amount)),
+        mode: s(r.FIELD15),
+      });
+      byV.set(vid, v);
+    }
+    // Keep only vouchers whose legs balance (guards against partial/edited rows).
+    return [...byV.values()].filter((v) => {
+      const dr = v.legs.filter((l) => l.drCr === 'dr').reduce((s2, l) => s2 + l.amount, 0);
+      const cr = v.legs.filter((l) => l.drCr === 'cr').reduce((s2, l) => s2 + l.amount, 0);
+      return v.legs.length >= 2 && Math.abs(dr - cr) < 1;
+    });
+  }
+
+  /**
+   * Opening balances per account from the earliest books year (RKACAMB1.MB1F90,
+   * signed — negative = credit). Authoritative source; the party/ledger master's
+   * own opening field (M01.FIELD10) is frequently 0.
+   */
+  private _openings?: Map<string, MiracleOpening>;
+  openingBalances(): Map<string, MiracleOpening> {
+    if (this._openings) return this._openings;
+    const first = this.years()[0] || this.latestYear();
+    const out = new Map<string, MiracleOpening>();
+    for (const r of readDbfSafe(this.p(first, 'RKACAMB1.DBF')).records) {
+      const code = s(r.MB1F01);
+      const bal = num(r.MB1F90);
+      if (!code || bal === 0) continue;
+      out.set(code, { accountCode: code, balance: round2(Math.abs(bal)), drCr: bal < 0 ? 'cr' : 'dr', asOn: numDate(r, 'MB1F02') });
+    }
+    this._openings = out;
+    return out;
+  }
+
+  // ─── Defensive masters (empty unless the export uses these modules) ─────────
+  /** Salesmen/agents — only if a dedicated master with names exists. */
+  salesmen(): MiracleSalesman[] {
+    const out: MiracleSalesman[] = [];
+    for (const file of ['RKACCM12.DBF', 'RKACCM46.DBF', 'RKACCM48.DBF']) {
+      const path = this.p(this.latestYear(), file);
+      if (!existsSync(path)) continue;
+      for (const r of readDbfSafe(path).records) {
+        const code = s(r.FIELD01) || s(r[Object.keys(r)[0]]);
+        const name = s(r.FIELD02) || s(r[Object.keys(r)[1]]);
+        if (code && name && name.length > 1 && !/^\d+$/.test(name)) out.push({ code, name, area: s(r.FIELD03) });
+      }
+      if (out.length) break;
+    }
+    return out;
+  }
+  /** Godowns/warehouses — only if a dedicated master with names exists. */
+  godowns(): MiracleGodown[] {
+    const out: MiracleGodown[] = [];
+    for (const file of ['RKACCM33.DBF', 'RKACCM14.DBF']) {
+      const path = this.p(this.latestYear(), file);
+      if (!existsSync(path)) continue;
+      const rows = readDbfSafe(path).records;
+      // Heuristic: a godown master is a small list of code+name where names look
+      // like locations (not HSN codes or business types). Skip if it looks wrong.
+      const cand = rows.map((r) => ({ code: s(r.FIELD01) || s(r.M33F01), name: s(r.FIELD02) || s(r.M33F02) }))
+        .filter((x) => x.code && x.name && /warehouse|godown|store|branch|main|shop/i.test(x.name));
+      if (cand.length) { out.push(...cand); break; }
+    }
+    return out;
+  }
+  /** Item batches (MRP/mfg/expiry) — only if the batch module is used. */
+  batches(): MiracleBatch[] {
+    const path = this.p(this.latestYear(), 'RKACPMB2.DBF');
+    if (!existsSync(path)) return [];
+    const t = readDbfSafe(path);
+    const hasBatchFields = t.fields.some((f) => /batch|mrp|exp|mfg/i.test(f.name));
+    if (!hasBatchFields) return []; // this export stores only stock valuation, not batches
+    const out: MiracleBatch[] = [];
+    for (const r of t.records) {
+      const batchNo = s((r as any).BATCHNO) || s((r as any).MB2F03);
+      if (!batchNo) continue;
+      out.push({ itemCode: s(r.MB2F01), batchNo, mrp: num((r as any).MRP), mfgDate: null, expDate: null, qty: num((r as any).MB2F94) });
+    }
+    return out;
+  }
+  /** Multi-tier price lists — only if per-level rates exist. */
+  priceLevels(): MiraclePriceLevel[] { return []; }
 }
 
 function round2(n: number): number {
@@ -463,10 +613,17 @@ function cleanPhone(p: string): string {
   return d.length >= 10 ? d.slice(-10) : '';
 }
 function natureOf(name: string, flag: string): 'asset' | 'liability' | 'income' | 'expense' {
+  // RKACCM11.FIELD09 is the authoritative nature flag: A=asset, L=liability,
+  // I=income, C=credit-trading (income), D=direct-expense, E=expense. Prefer it.
+  const f = (flag || '').toUpperCase();
+  if (f === 'A') return 'asset';
+  if (f === 'L') return 'liability';
+  if (f === 'I' || f === 'C') return 'income';
+  if (f === 'D' || f === 'E') return 'expense';
   const n = name.toLowerCase();
   if (/(sales|income|revenue|jobwork income)/.test(n)) return 'income';
   if (/(purchase|expense|remuneration|interest|jobwork expense)/.test(n)) return 'expense';
   if (/(debtor|asset|cash|bank|deposit|loans & advances|investment|stock|closing)/.test(n)) return 'asset';
   if (/(creditor|liabilit|capital|loan|duties|taxes|provision|reserve|surplus|suspense)/.test(n)) return 'liability';
-  return flag === 'L' ? 'liability' : 'asset';
+  return 'asset';
 }
