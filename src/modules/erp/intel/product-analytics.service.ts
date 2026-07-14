@@ -23,6 +23,10 @@ export interface ProductPerformance {
   /** Blueprint product-health class: fast-moving / slow-moving / dead-stock / inactive. */
   healthClass: 'fast-moving' | 'slow-moving' | 'dead-stock' | 'inactive';
   marginClass: 'high' | 'low' | null;
+  /** What you actually billed per unit over 90d (invoice lines) — margin basis. */
+  avgSellPrice90: number | null;
+  /** Real cost basis (last actual purchase price, backfilled from purchase history). */
+  purchaseCost: number | null;
 }
 
 /**
@@ -97,8 +101,13 @@ export class ProductAnalyticsService {
         const momentum = r.revenue_prior90 > 0
           ? r2(((r.revenue90 - r.revenue_prior90) / r.revenue_prior90) * 100)
           : (r.revenue90 > 0 ? null : null);
-        const margin = r.purchase_price > 0 && r.sale_price > 0
-          ? r2(((r.sale_price - r.purchase_price) / r.sale_price) * 100)
+        // REALIZED margin: what you actually billed (invoice lines, 90d) vs the real
+        // purchase cost — not the master's list price. Master prices only as fallback
+        // for items with no recent sales.
+        const realizedSell = r.qty90 > 0 ? r.revenue90 / r.qty90 : 0;
+        const sellBasis = realizedSell > 0 ? realizedSell : r.sale_price;
+        const margin = r.purchase_price > 0 && sellBasis > 0
+          ? r2(((sellBasis - r.purchase_price) / sellBasis) * 100)
           : null;
         const daysOfCover = velocity > 0 ? r0(r.stock / (velocity / 7)) : null;
 
@@ -137,6 +146,8 @@ export class ProductAnalyticsService {
           flags,
           healthClass,
           marginClass: margin === null ? null : margin >= 25 ? 'high' : margin < 10 ? 'low' : null,
+          avgSellPrice90: realizedSell > 0 ? r2(realizedSell) : null,
+          purchaseCost: r.purchase_price > 0 ? r2(r.purchase_price) : null,
         };
       }).sort((a, b) => b.score - a.score);
 

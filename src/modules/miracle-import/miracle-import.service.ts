@@ -586,6 +586,24 @@ export class MiracleImportService {
     }
     state.counts['stock_from_miracle'] = fromMiracle;
 
+    // Real purchase cost: the item master's rate (M29F03) is often a stale opening
+    // figure — the LAST ACTUAL PURCHASE price from the migrated purchase vouchers is
+    // the true cost basis, and margins/profit flow from it everywhere.
+    const costed = await qr.query(`
+      UPDATE "${schema}".products p
+      SET purchase_price = sub.last_price, updated_at = NOW()
+      FROM (
+        SELECT DISTINCT ON (soi.product_id) soi.product_id, soi.unit_price AS last_price
+        FROM "${schema}".supplier_order_items soi
+        JOIN "${schema}".supplier_orders so ON so.id = soi.supplier_order_id AND so.removed = false
+        WHERE soi.product_id IS NOT NULL AND soi.unit_price > 0 AND soi.quantity > 0
+        ORDER BY soi.product_id, so.created_at DESC
+      ) sub
+      WHERE p.id = sub.product_id
+      RETURNING p.id
+    `);
+    state.counts['purchase_price_from_history'] = costed.length;
+
     // Reconcile invoice payment status:
     //   cash memos (QS) settle immediately → paid
     //   credit sales (SS) settle FIFO from the customer's receipts (BR/CR),
