@@ -402,11 +402,17 @@ export class MarketPriceService {
     const out: string[] = [];
     const plural = (s: string) => (s.endsWith('s') ? s : `${s}s`);
     if (nounIdx > 0) {
-      const phrase = words.slice(Math.max(1, nounIdx - 1), nounIdx + 1).join('-'); // e.g. swr-pipe
-      out.push(`${brand}-${plural(phrase)}`, plural(phrase), `${brand}-${phrase}`);
+      const noun = plural(words[nounIdx]);
+      // Widest → narrowest: brand + full noun phrase, brand + qualifier + noun,
+      // brand + noun (the proven "sintex-water-tanks" shape), then generic.
+      const upTo3 = words.slice(Math.max(1, nounIdx - 2), nounIdx).filter((w) => !NOUNS.includes(w));
+      if (upTo3.length >= 2) out.push(`${brand}-${upTo3.join('-')}-${noun}`);
+      if (upTo3.length >= 1) out.push(`${brand}-${upTo3[upTo3.length - 1]}-${noun}`);
+      out.push(`${brand}-${noun}`);
+      if (upTo3.length >= 1) out.push(`${upTo3[upTo3.length - 1]}-${noun}`);
     }
     out.push(`${brand}-${plural(words.slice(1, 3).join('-'))}`);
-    return [...new Set(out)].filter(Boolean).slice(0, 4);
+    return [...new Set(out)].filter(Boolean).slice(0, 5);
   }
 
   /** Fetch (or reuse) the first category page that resolves; null when none do. */
