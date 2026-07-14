@@ -1,6 +1,7 @@
-import { Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
+import { BadRequestException, Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { validateGstin, validatePan } from '../../../common/utils/gst-validation';
 import { BaseTenantCrudService } from './base-tenant-crud.service';
 
 /** Convert object keys from camelCase to snake_case (one level deep). */
@@ -10,6 +11,20 @@ function toSnakeKeys(obj: Record<string, any>): Record<string, any> {
     out[k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] = v;
   }
   return out;
+}
+
+/** GSTIN/PAN sanity on any CRUD body that carries them (same rules as Party Master). */
+function checkGstFields(body: Record<string, any>): void {
+  if (typeof body.gstin === 'string' && body.gstin.trim()) {
+    body.gstin = body.gstin.trim().toUpperCase();
+    const err = validateGstin(body.gstin);
+    if (err) throw new BadRequestException(err);
+  }
+  if (typeof body.pan === 'string' && body.pan.trim()) {
+    body.pan = body.pan.trim().toUpperCase();
+    const err = validatePan(body.pan, body.gstin);
+    if (err) throw new BadRequestException(err);
+  }
 }
 
 /**
@@ -48,12 +63,14 @@ export abstract class BaseErpCrudController {
   @Post()
   @Roles('owner', 'seller')
   create(@Req() req: Request, @Body() body: Record<string, any>) {
+    checkGstFields(body);
     return this.service.create(req.tenantContext.schemaName, toSnakeKeys(body));
   }
 
   @Put(':id')
   @Roles('owner', 'seller')
   update(@Req() req: Request, @Param('id') id: string, @Body() body: Record<string, any>) {
+    checkGstFields(body);
     return this.service.update(req.tenantContext.schemaName, id, toSnakeKeys(body));
   }
 

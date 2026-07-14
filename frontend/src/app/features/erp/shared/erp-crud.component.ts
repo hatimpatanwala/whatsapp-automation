@@ -1,5 +1,6 @@
 import { Component, Input, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { validateGstin, validatePan } from '../../../core/utils/gst-validation';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
@@ -240,6 +241,18 @@ export class ErpCrudComponent implements OnInit {
       if (f.required && (this.model[f.key] === undefined || this.model[f.key] === null || this.model[f.key] === '')) {
         this.toast.add({ severity: 'warn', summary: `${f.label} is required` });
         return;
+      }
+      // GSTIN/PAN fields get real validation (format + checksum + cross-check)
+      // on every CRUD screen — same rules as the Party Master.
+      if (f.key === 'gstin' && this.model['gstin']) {
+        this.model['gstin'] = String(this.model['gstin']).trim().toUpperCase();
+        const err = validateGstin(this.model['gstin']);
+        if (err) { this.toast.add({ severity: 'warn', summary: 'Invalid GSTIN', detail: err }); return; }
+      }
+      if (f.key === 'pan' && this.model['pan']) {
+        this.model['pan'] = String(this.model['pan']).trim().toUpperCase();
+        const err = validatePan(this.model['pan'], this.model['gstin']);
+        if (err) { this.toast.add({ severity: 'warn', summary: 'Invalid PAN', detail: err }); return; }
       }
     }
     this.saving.set(true);

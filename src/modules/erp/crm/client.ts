@@ -2,6 +2,7 @@ import { Injectable, Controller, UseGuards, Get, Post, Put, Delete, Param, Body,
 import { Request } from 'express';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
 import { firstRow } from '../common/sql-result.util';
+import { validateGstin } from '../../../common/utils/gst-validation';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { ErpFeatureGuard } from '../../../common/guards/erp-feature.guard';
 import { RequiresFeature } from '../../../common/decorators/requires-feature.decorator';
@@ -61,6 +62,7 @@ export class ClientService {
   /** Create a client (or promote an existing customer with the same phone). */
   async create(schema: string, b: ClientBody) {
     if (!b.name) throw new BadRequestException('Name is required');
+    this.checkGstin(b);
     const phone = b.phone || `client-${Date.now()}`;
     return this.cm.executeInTenantContext(schema, async (qr) =>
       firstRow(await qr.query(
@@ -77,6 +79,7 @@ export class ClientService {
   }
 
   async update(schema: string, id: string, b: ClientBody) {
+    this.checkGstin(b);
     return this.cm.executeInTenantContext(schema, async (qr) => {
       const row = firstRow(await qr.query(
         `UPDATE "${schema}".customers SET
@@ -89,6 +92,15 @@ export class ClientService {
       if (!row) throw new NotFoundException('Client not found');
       return row;
     });
+  }
+
+  /** Same GSTIN rules as the Party Master (format + check digit). */
+  private checkGstin(b: ClientBody): void {
+    if (typeof b.gstin === 'string' && b.gstin.trim()) {
+      b.gstin = b.gstin.trim().toUpperCase();
+      const err = validateGstin(b.gstin);
+      if (err) throw new BadRequestException(err);
+    }
   }
 
   /** Un-flag as a client (keep the underlying customer). */

@@ -79,19 +79,34 @@ export class InsightsService {
       ))[0];
       const asOf: string = anchorRow?.d ? new Date(anchorRow.d).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
 
+      // Sales are NETTED: credit notes subtract (a return isn't revenue).
+      const NET = `CASE WHEN iv.doc_type = 'credit_note' THEN -COALESCE(iv.base_total, iv.total) ELSE COALESCE(iv.base_total, iv.total) END`;
       const monthly = await qr.query(
         `WITH months AS (
            SELECT (date_trunc('month', $1::date) - (i || ' month')::interval) AS m
            FROM generate_series(0,5) i
          )
          SELECT to_char(m,'Mon ''YY') AS label, to_char(m,'YYYY-MM') AS ym,
-           COALESCE((SELECT SUM(COALESCE(base_total,total)) FROM "${schema}".invoices iv WHERE date_trunc('month',iv.issued_at)=months.m),0)::float AS sales,
-           COALESCE((SELECT COUNT(*) FROM "${schema}".invoices iv WHERE date_trunc('month',iv.issued_at)=months.m),0)::int AS count
+           COALESCE((SELECT SUM(${NET}) FROM "${schema}".invoices iv WHERE date_trunc('month',iv.issued_at)=months.m),0)::float AS sales,
+           COALESCE((SELECT COUNT(*) FROM "${schema}".invoices iv WHERE date_trunc('month',iv.issued_at)=months.m AND iv.doc_type <> 'credit_note'),0)::int AS count
          FROM months ORDER BY m`,
         [asOf],
       );
       const thisMonth = monthly[monthly.length - 1] || { sales: 0, count: 0 };
       const lastMonth = monthly[monthly.length - 2] || { sales: 0, count: 0 };
+
+      // Growth compares LIKE-FOR-LIKE periods: the latest month is usually partial
+      // (asOf mid-month), so measure the prior month only up to the same day —
+      // otherwise every mid-month look reads as a phantom "sales down".
+      const [samePeriod] = await qr.query(
+        `SELECT COALESCE(SUM(${NET}),0)::float AS sales
+         FROM "${schema}".invoices iv
+         WHERE iv.issued_at >= date_trunc('month', $1::date) - interval '1 month'
+           AND iv.issued_at < date_trunc('month', $1::date) - interval '1 month'
+                              + (($1::date - date_trunc('month', $1::date)::date + 1) || ' days')::interval`,
+        [asOf],
+      );
+      const lastMonthSamePeriod = Number(samePeriod?.sales) || 0;
 
       const recv = (await qr.query(
         `SELECT COALESCE(SUM(balance_due*COALESCE(exchange_rate,1)),0)::float AS total,
@@ -119,8 +134,8 @@ export class InsightsService {
           `WITH lines AS (
              SELECT COALESCE(p.name, NULLIF(trim(it->>'description'),'')) AS name,
                     date_trunc('month', iv.issued_at) AS m,
-                    COALESCE(NULLIF(it->>'lineTotal','')::numeric, 0) AS val,
-                    COALESCE(NULLIF(it->>'quantity','')::numeric, 0) AS qty
+                    (CASE WHEN iv.doc_type = 'credit_note' THEN -1 ELSE 1 END) * COALESCE(NULLIF(it->>'lineTotal','')::numeric, 0) AS val,
+                    (CASE WHEN iv.doc_type = 'credit_note' THEN -1 ELSE 1 END) * COALESCE(NULLIF(it->>'quantity','')::numeric, 0) AS qty
              FROM "${schema}".invoices iv
              CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(iv.items)='array' THEN iv.items ELSE '[]'::jsonb END) it
              LEFT JOIN "${schema}".products p
@@ -151,7 +166,7 @@ export class InsightsService {
         .sort((a, b) => (b.this_val - b.last_val) - (a.this_val - a.last_val))[0] || null;
 
       const concentration = (await qr.query(
-        `SELECT COALESCE(c.name,'A customer') AS name, SUM(COALESCE(iv.base_total,iv.total))::float AS val
+        `SELECT COALESCE(c.name,'A customer') AS name, SUM(${NET})::float AS val
          FROM "${schema}".invoices iv LEFT JOIN "${schema}".customers c ON c.id = iv.customer_id
          WHERE date_trunc('month',iv.issued_at) = date_trunc('month',$1::date)
          GROUP BY c.name ORDER BY val DESC NULLS LAST LIMIT 1`,
@@ -159,9 +174,9 @@ export class InsightsService {
       ))[0] || { name: null, val: 0 };
 
       const bestDay = (await qr.query(
-        `SELECT trim(to_char(issued_at,'Day')) AS day, SUM(COALESCE(base_total,total))::float AS val
-         FROM "${schema}".invoices
-         WHERE issued_at >= $1::date - interval '90 days' AND issued_at <= $1::date + interval '1 day'
+        `SELECT trim(to_char(iv.issued_at,'Day')) AS day, SUM(${NET})::float AS val
+         FROM "${schema}".invoices iv
+         WHERE iv.issued_at >= $1::date - interval '90 days' AND iv.issued_at <= $1::date + interval '1 day'
          GROUP BY day ORDER BY val DESC NULLS LAST LIMIT 1`,
         [asOf],
       ))[0] || null;
@@ -204,12 +219,13 @@ export class InsightsService {
         expenses,
         thisMonth: { sales: r0(thisMonth.sales), count: thisMonth.count },
         lastMonth: { sales: r0(lastMonth.sales), count: lastMonth.count },
-        growthPct: pct(Number(thisMonth.sales) || 0, Number(lastMonth.sales) || 0),
+        lastMonthSamePeriod: r0(lastMonthSamePeriod),
+        growthPct: pct(Number(thisMonth.sales) || 0, lastMonthSamePeriod),
         receivables: recv,
         kpis: {
           salesThisMonth: r0(thisMonth.sales),
           salesLastMonth: r0(lastMonth.sales),
-          growthPct: pct(Number(thisMonth.sales) || 0, Number(lastMonth.sales) || 0),
+          growthPct: pct(Number(thisMonth.sales) || 0, lastMonthSamePeriod),
           netProfit, marginPct, profitKnown: hasExpenses,
           receivables: r0(recv?.total),
           overdue90: r0(recv?.overdue90),
@@ -224,14 +240,15 @@ export class InsightsService {
     const out: Insight[] = [];
     const g = m.growthPct;
 
-    if (m.lastMonth.sales > 0 && m.thisMonth.sales > 0) {
+    if ((m.lastMonthSamePeriod ?? m.lastMonth.sales) > 0 && m.thisMonth.sales > 0) {
+      const ref = m.lastMonthSamePeriod ?? m.lastMonth.sales;
       if (g >= 5) out.push({ id: 'sales-up', kind: 'positive', icon: 'pi-arrow-up-right',
         title: `Sales up ${g}% this month`,
-        detail: `₹${inr(m.thisMonth.sales)} vs ₹${inr(m.lastMonth.sales)} last month.`,
+        detail: `₹${inr(m.thisMonth.sales)} vs ₹${inr(ref)} in the same period last month.`,
         recommendation: 'Momentum is with you — double down on what’s working and keep fast-movers in stock.' });
       else if (g <= -5) out.push({ id: 'sales-down', kind: 'warning', icon: 'pi-arrow-down-right',
         title: `Sales down ${Math.abs(g)}% this month`,
-        detail: `₹${inr(m.thisMonth.sales)} vs ₹${inr(m.lastMonth.sales)} last month.`,
+        detail: `₹${inr(m.thisMonth.sales)} vs ₹${inr(ref)} in the same period last month.`,
         recommendation: 'Reach out to customers who bought last month but not this month, and push a scheme to revive demand.' });
       else out.push({ id: 'sales-flat', kind: 'info', icon: 'pi-minus',
         title: `Sales steady this month`,
@@ -312,7 +329,7 @@ export class InsightsService {
     const bits: string[] = [];
     if (m.thisMonth.sales > 0) {
       const dir = m.growthPct > 0 ? `up ${m.growthPct}%` : m.growthPct < 0 ? `down ${Math.abs(m.growthPct)}%` : 'steady';
-      bits.push(`Sales stand at ₹${inr(m.thisMonth.sales)} for the latest month, ${dir} versus the month before.`);
+      bits.push(`Sales stand at ₹${inr(m.thisMonth.sales)} for the latest month, ${dir} versus the same period last month.`);
     }
     if (m.expenses?.this_month > 0) bits.push(`Net profit is ₹${inr(m.kpis.netProfit)} at a ${m.kpis.marginPct}% margin.`);
     if (m.receivables?.total > 0) bits.push(`₹${inr(m.receivables.total)} is still to be collected${m.receivables.overdue90 > 0 ? `, of which ₹${inr(m.receivables.overdue90)} is 90+ days overdue` : ''}.`);

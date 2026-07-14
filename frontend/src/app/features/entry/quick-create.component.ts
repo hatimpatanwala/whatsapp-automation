@@ -1,6 +1,7 @@
 import { Component, ElementRef, EventEmitter, Input, OnInit, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { EntryService } from '../../core/services/entry.service';
+import { validateGstin } from '../../core/utils/gst-validation';
 
 export type QuickKind = 'customer' | 'product' | 'supplier';
 export interface QuickCreated {
@@ -149,6 +150,12 @@ export class QuickCreateComponent implements OnInit {
 
   save(): void {
     if (!this.valid() || this.saving()) return;
+    // Same GSTIN rules as the Party Master (format + check digit).
+    if (this.gstin.trim()) {
+      this.gstin = this.gstin.trim().toUpperCase();
+      const gstErr = validateGstin(this.gstin);
+      if (gstErr) { this.error.set(gstErr); return; }
+    }
     this.saving.set(true);
     this.error.set(null);
     const done = (payload: QuickCreated) => { this.saving.set(false); this.created.emit(payload); };
