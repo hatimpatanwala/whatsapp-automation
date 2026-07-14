@@ -10,7 +10,7 @@ import * as ExcelJS from 'exceljs';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
-import { MiracleParser, MiracleVoucher } from './miracle-parser';
+import { MiracleParser, MiracleVoucher, MiracleCompany } from './miracle-parser';
 
 export interface ImportOptions {
   email: string;
@@ -223,10 +223,10 @@ export class MiracleImportService {
   }
 
   // ─── Seller profile (invoice_* settings, used on printed GST invoices) ─────
-  private async writeSellerProfile(qr: any, schema: string, parser: MiracleParser, company: { gstin: string; stateCode: string; name: string }, opts: ImportOptions) {
+  private async writeSellerProfile(qr: any, schema: string, parser: MiracleParser, company: MiracleCompany, opts: ImportOptions) {
     const cityCounts = new Map<string, number>();
     for (const p of parser.parties()) if (p.city) cityCounts.set(p.city, (cityCounts.get(p.city) || 0) + 1);
-    const city = [...cityCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+    const city = company.city || [...cityCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
     const gstin = (opts.sellerGstin || company.gstin || '').toUpperCase().replace(/\s/g, '');
     const stateCode = gstin.length === 15 ? gstin.slice(0, 2) : company.stateCode;
     const name = opts.businessName || company.name || '';
@@ -238,7 +238,11 @@ export class MiracleImportService {
       invoice_city: city,
     };
     if (gstin) kv['invoice_gstin'] = gstin;
-    if (opts.sellerAddress) kv['invoice_address'] = opts.sellerAddress;
+    if (company.pan) kv['invoice_pan'] = company.pan;
+    if (company.pincode) kv['invoice_pincode'] = company.pincode;
+    if (company.phone) kv['invoice_phone'] = company.phone;
+    const address = opts.sellerAddress || company.address;
+    if (address) kv['invoice_address'] = address;
     for (const [k, v] of Object.entries(kv)) {
       if (!v) continue;
       await qr.query(
