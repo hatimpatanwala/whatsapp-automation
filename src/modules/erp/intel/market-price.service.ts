@@ -168,15 +168,26 @@ export class MarketPriceService {
     const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
     const relevant = this.relevantSnippets(name, snippets);
 
+    // Snippets alone rarely carry SKU prices (search returns corporate/genric pages),
+    // so ALSO fetch the top listing pages (IndiaMART/Moglix/Amazon…) and extract
+    // prices from text windows that actually mention this product's brand + size.
+    const pageContexts = await this.fetchListingContexts(name, snippets);
+    const snippetPoints = this.pricePoints(refPrice, relevant.map((s) => `${s.title} ${s.content}`));
+    const pagePoints = this.pricePoints(refPrice, pageContexts);
+    const allPoints = [...snippetPoints, ...pagePoints];
+
     // LLM extraction first (when a free endpoint is configured), else deterministic.
-    let result = await this.llmExtract(name, refPrice, relevant);
+    let result = await this.llmExtract(name, refPrice, [
+      ...relevant.map((s) => ({ title: s.title, content: s.content, url: s.url })),
+      ...pageContexts.slice(0, 8).map((c, i) => ({ title: `listing context ${i + 1}`, content: c, url: '' })),
+    ]);
     let via = 'llm';
     if (!result) {
-      result = this.deterministicExtract(refPrice, relevant);
+      result = this.statsFromPoints(allPoints);
       via = 'web';
     }
     if (!result) {
-      return { status: 'no-data', message: `No trustworthy web price found for this item (checked ${snippets.length} results, ${relevant.length} matched) — add a manual price.` };
+      return { status: 'no-data', message: `No trustworthy web price found for this item (checked ${snippets.length} results, ${relevant.length + pageContexts.length} matched contexts) — add a manual price.` };
     }
 
     await this.cm.executeInTenantContext(schema, (qr) =>
@@ -287,12 +298,59 @@ export class MarketPriceService {
     });
   }
 
-  /** Regex price candidates from RELEVANT snippets, sanity-banded around your own price. */
-  private deterministicExtract(refPrice: number, relevant: Array<{ title: string; content: string }>) {
+  /** Listing-page domains worth fetching (public price-listing sites). */
+  private static readonly LISTING_HOSTS = /indiamart\.com|moglix\.com|industrybuying\.com|amazon\.in|flipkart\.com|tradeindia\.com|justdial\.com/i;
+
+  /**
+   * Fetch up to 4 listing pages from the search results and return the text WINDOWS
+   * (±260 chars around each ₹-price) that also mention this product's brand and every
+   * size number from its name — i.e. the price is proven to sit next to THIS product,
+   * not just anywhere on the page.
+   */
+  private async fetchListingContexts(productName: string, snippets: Array<{ title: string; content: string; url: string }>): Promise<string[]> {
+    const tokens = productName.toLowerCase().split(/[^a-z0-9/.]+/).filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+    const brand = tokens[0] || '';
+    const numbers = tokens.filter((t) => /\d/.test(t));
+    const urls = snippets.map((s) => s.url).filter((u) => MarketPriceService.LISTING_HOSTS.test(u)).slice(0, 4);
+    const contexts: string[] = [];
+
+    await Promise.all(urls.map(async (url) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12_000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', accept: 'text/html' },
+        });
+        if (!res.ok) return;
+        const html = await res.text();
+        const text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ');
+        const re = /(?:₹|Rs\.?|INR)\s*[\d,]+(?:\.\d{1,2})?/gi;
+        let m: RegExpExecArray | null;
+        let found = 0;
+        while ((m = re.exec(text)) && found < 12) {
+          const win = text.slice(Math.max(0, m.index - 260), m.index + 120).toLowerCase();
+          if (brand && !win.includes(brand)) continue;
+          if (numbers.length && !numbers.every((n) => win.includes(n))) continue;
+          contexts.push(text.slice(Math.max(0, m.index - 260), m.index + 120));
+          found++;
+        }
+      } catch { /* blocked/slow page — others may work */ }
+      finally { clearTimeout(timer); }
+    }));
+    return contexts;
+  }
+
+  /** ₹-price candidates from matched texts, sanity-banded around your own price. */
+  private pricePoints(refPrice: number, texts: string[]): number[] {
     const points: number[] = [];
     const re = /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/gi;
-    for (const s of relevant) {
-      for (const m of `${s.title} ${s.content}`.matchAll(re)) {
+    for (const t of texts) {
+      for (const m of t.matchAll(re)) {
         const v = parseFloat(m[1].replace(/,/g, ''));
         if (!(v >= 10 && v <= 10_000_000)) continue;
         // Your own realized price is the best free prior: discard absurd outliers.
@@ -300,6 +358,11 @@ export class MarketPriceService {
         points.push(v);
       }
     }
+    return points;
+  }
+
+  /** IQR-filtered low/median/high + dispersion-aware confidence from raw points. */
+  private statsFromPoints(points: number[]) {
     if (points.length < 2) return null;
     const sorted = [...points].sort((a, b) => a - b);
     const q1 = sorted[Math.floor(sorted.length * 0.25)];
