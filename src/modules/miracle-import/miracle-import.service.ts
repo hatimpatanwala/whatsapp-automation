@@ -567,6 +567,25 @@ export class MiracleImportService {
     `);
     state.counts['stock_reconciled'] = 1;
 
+    // Miracle's OWN closing stock (RKACPMB2) is authoritative — override the
+    // voucher-derived figure with it wherever available. The voucher derivation
+    // undercounts because item codes are year-scoped (they don't bridge financial
+    // years), so early-year purchases don't map to the current product and stock
+    // wrongly clamps to 0. Miracle's stock-summary table has the real closing qty.
+    const closing = parser.closingStock();
+    let fromMiracle = 0;
+    for (const [code, qty] of closing) {
+      const pid = map.get(`product:${code}`);
+      if (!pid) continue;
+      await qr.query(
+        `UPDATE "${schema}".inventory SET stock_quantity = GREATEST(0, ROUND($2))::int, updated_at = NOW()
+         WHERE product_id = $1`,
+        [pid, qty],
+      );
+      fromMiracle++;
+    }
+    state.counts['stock_from_miracle'] = fromMiracle;
+
     // Reconcile invoice payment status:
     //   cash memos (QS) settle immediately → paid
     //   credit sales (SS) settle FIFO from the customer's receipts (BR/CR),

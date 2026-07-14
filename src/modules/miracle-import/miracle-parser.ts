@@ -390,6 +390,25 @@ export class MiracleParser {
     return out;
   }
 
+  /**
+   * Authoritative closing stock per item, from Miracle's own stock-summary table
+   * RKACPMB2 (latest year): MB2F96 = closing qty (verified: opening MB2F80 + inward
+   * MB2F94 − outward MB2F98 = closing MB2F96). This is far more reliable than deriving
+   * stock from vouchers, because Miracle item codes are year-scoped and don't bridge
+   * across financial years — so a voucher-only Σpurchases−Σsales badly undercounts.
+   */
+  closingStock(): Map<string, number> {
+    const out = new Map<string, number>();
+    const path = this.p(this.latestYear(), 'RKACPMB2.DBF');
+    if (!existsSync(path)) return out;
+    for (const r of readDbfSafe(path).records) {
+      const code = s(r.MB2F01);
+      if (!code) continue;
+      out.set(code, num(r.MB2F96));
+    }
+    return out;
+  }
+
   // ─── Vouchers (per year) ─────────────────────────────────────────────────
   vouchers(year: string, sellerStateCode: string): MiracleVoucher[] {
     const dir = this.p(year);
