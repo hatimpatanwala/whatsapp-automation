@@ -407,6 +407,7 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns', wa: true },
         { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations', wa: true },
         { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog', wa: true },
+        { label: 'WhatsApp Connect', icon: 'pi-qrcode', route: '/whatsapp-connect', featureKey: 'whatsappSuite', wa: true },
         { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder', wa: true },
       ],
     },

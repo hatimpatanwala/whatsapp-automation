@@ -16,6 +16,7 @@ import { MessageService } from 'primeng/api';
 import { ErpService, ErpInvoice, PaymentMode } from '../../../core/services/erp.service';
 import { ApiService } from '../../../core/services/api.service';
 import { ErpAccessService } from '../../../core/services/erp-access.service';
+import { waMeLink } from '../../../core/utils/wa-me';
 
 interface LineForm { description: string; quantity: number; unitPrice: number; }
 
@@ -109,6 +110,10 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
                     <button pButton icon="pi pi-wallet" class="p-button-text p-button-sm p-button-success" pTooltip="Record Payment" (click)="openPayment(inv)"></button>
                     <button pButton icon="pi pi-bell" class="p-button-text p-button-sm p-button-warning" pTooltip="WhatsApp Reminder" (click)="remind(inv)"></button>
                   }
+                  <button pButton icon="pi pi-whatsapp" class="p-button-text p-button-sm p-button-success"
+                    [pTooltip]="inv.customerPhone ? 'Send via WhatsApp' : 'No WhatsApp number'"
+                    [disabled]="!inv.customerPhone || sendingWaId() === inv.id" [loading]="sendingWaId() === inv.id"
+                    (click)="sendViaWhatsapp(inv)"></button>
                   <button pButton icon="pi pi-eye" class="p-button-text p-button-sm" pTooltip="View" (click)="openDetail(inv)"></button>
                 </div>
               </td>
@@ -307,6 +312,10 @@ export class ErpInvoiceListComponent implements OnInit {
   saving = signal(false);
   invoices = signal<ErpInvoice[]>([]);
   paymentModes = signal<PaymentMode[]>([]);
+  /** Whether WhatsApp Smart Connect is linked — probed once on load; decides
+   *  send-via-WhatsApp (server send vs wa.me click-to-chat fallback). */
+  waLinked = signal(false);
+  sendingWaId = signal<string | null>(null);
   searchTerm = '';
   selectedPaymentStatus: string | null = null;
 
@@ -377,6 +386,12 @@ export class ErpInvoiceListComponent implements OnInit {
     this.erp.listPaymentModes().subscribe({ next: (r) => this.paymentModes.set(r.data || []) });
     this.erp.listCurrencies().subscribe({ next: (r) => this.currencies.set(r.data || []) });
     this.api.get<any>('/erp/branches', { limit: 200 }).subscribe({ next: (r) => this.branches.set(r?.data || []) });
+    // Cache Smart Connect status once — decides whether "Send via WhatsApp" posts
+    // through the linked number or falls back to a wa.me click-to-chat link.
+    this.api.get<{ linked?: boolean }>('/whatsapp/smart-connect/status').subscribe({
+      next: (r) => this.waLinked.set(!!r?.linked),
+      error: () => this.waLinked.set(false),
+    });
   }
 
   load() {
@@ -489,6 +504,42 @@ export class ErpInvoiceListComponent implements OnInit {
   downloadReceipt(p: any) {
     this.api.downloadFile(`/erp/invoices/payments/${p.id}/receipt`, `receipt-${p.id}.pdf`,
       () => this.toast.add({ severity: 'error', summary: 'Download failed', detail: 'Could not fetch the receipt' }));
+  }
+
+  /**
+   * Send this invoice over WhatsApp. If Smart Connect is linked, POST it so the
+   * server delivers the PDF from the tenant's own number; otherwise fall back to
+   * a wa.me click-to-chat link pre-filled with the invoice details.
+   */
+  sendViaWhatsapp(inv: ErpInvoice) {
+    const phone = (inv.customerPhone || '').trim();
+    if (!phone) { this.toast.add({ severity: 'warn', summary: 'No WhatsApp number', detail: 'This invoice has no customer phone' }); return; }
+
+    if (this.waLinked()) {
+      this.sendingWaId.set(inv.id);
+      this.api.post<{ sent: boolean; phone?: string }>('/whatsapp/smart-connect/send-invoice', { invoiceId: inv.id }).subscribe({
+        next: (r) => {
+          this.sendingWaId.set(null);
+          r?.sent
+            ? this.toast.add({ severity: 'success', summary: 'Sent via WhatsApp', detail: `${inv.invoiceNumber} → ${r.phone || phone}` })
+            : this.toast.add({ severity: 'warn', summary: 'Not sent', detail: 'WhatsApp could not deliver the invoice' });
+        },
+        error: (e) => {
+          this.sendingWaId.set(null);
+          this.toast.add({ severity: 'error', summary: 'Send failed', detail: e?.error?.error?.message || 'Please try again' });
+        },
+      });
+      return;
+    }
+
+    // Fallback: open a wa.me chat pre-filled with the invoice summary.
+    const text = `Hi, please find your invoice ${inv.invoiceNumber}. Total ${this.sym(inv.currency)}${this.fmt(inv.total)}.`;
+    window.open(this.waMeLink(phone, text), '_blank');
+  }
+
+  /** Thin wrapper over the shared wa.me helper (kept for template/local use). */
+  waMeLink(phone: string, text: string): string {
+    return waMeLink(phone, text);
   }
 
   remind(inv: ErpInvoice) {

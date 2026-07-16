@@ -255,6 +255,11 @@ export const routes: Routes = [
         loadChildren: () => import('./features/erp/erp.routes').then(m => m.ERP_ROUTES),
       },
       {
+        path: 'whatsapp-connect',
+        canActivate: [featureGuard('whatsappSuite')],
+        loadComponent: () => import('./features/whatsapp-connect/whatsapp-connect.component').then(m => m.WhatsappConnectComponent),
+      },
+      {
         path: 'workflow-builder',
         canActivate: [featureGuard('workflowBuilder')],
         loadComponent: () => import('./features/workflow-builder/workflow-builder.component').then(m => m.WorkflowBuilderComponent),
