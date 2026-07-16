@@ -35,6 +35,7 @@ interface Recommendation {
   confidence: 'high' | 'medium' | 'low';
   impact: number | null; impactLabel?: string | null;
   action?: Record<string, unknown>;
+  risks?: string[];
 }
 interface RecoData { generatedAt?: string; recommendations?: Recommendation[]; }
 
@@ -63,7 +64,7 @@ interface PlanProduct {
   stock?: number; forecastQty?: number; safetyStock?: number; recommendedOrderQty?: number;
   overstock?: boolean | number; confidence?: string;
   avgDailySales?: number; reorderPoint?: number; eoq?: number | null;
-  demand7?: number; demand30?: number; demand90?: number;
+  demand7?: number; demand30?: number; demand90?: number; demand365?: number;
   runsOutInDays?: number | null;
 }
 interface PlanData {
@@ -76,7 +77,7 @@ interface PlanData {
 
 interface MarketRow {
   productId: string; name: string; yourPrice?: number;
-  marketLow?: number | null; marketMedian?: number | null; marketHigh?: number | null;
+  marketLow?: number | null; marketMedian?: number | null; marketAvg?: number | null; marketHigh?: number | null;
   source?: string | null; confidence?: string | null; fetchedAt?: string | null;
   sourceNote?: string | null; position?: 'under' | 'competitive' | 'over' | null;
   monthlyVolumeValue?: number; points?: number | null;
@@ -245,6 +246,12 @@ interface MonthPlanData {
                         <div class="min-w-0 flex-1">
                           <p class="text-[13.5px] font-bold text-gray-900">{{ r.title }}</p>
                           <p class="text-[13px] text-slate-500">{{ r.reason }}</p>
+                          @if (r.risks?.length) {
+                            <p class="text-[11px] text-slate-400 mt-0.5 flex items-start gap-1">
+                              <i class="pi pi-exclamation-triangle text-amber-500 mt-px" style="font-size:.65rem"></i>
+                              <span>{{ r.risks!.join(' · ') }}</span>
+                            </p>
+                          }
                         </div>
                         <div class="text-right shrink-0">
                           @if (r.impact != null) {
@@ -688,6 +695,7 @@ interface MonthPlanData {
                               <button (click)="openPrice(p)" class="ml-1.5 text-[12px] font-semibold text-indigo-600 hover:underline">Add</button>
                             }
                           </td>
+                          <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ p.marketAvg != null ? '₹' + inr(p.marketAvg) : '—' }}</td>
                           <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ p.marketHigh != null ? '₹' + inr(p.marketHigh) : '—' }}</td>
                           <td class="px-4 py-2.5">
                             @if (p.position === 'under') {
@@ -705,6 +713,9 @@ interface MonthPlanData {
                               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap" [title]="p.sourceNote || ''">web{{ p.points ? ' · ' + p.points + ' pts' : '' }}</span>
                               @if (p.fetchedAt) { <span class="block text-[10px] text-gray-400 mt-0.5">{{ fmtDate(p.fetchedAt) }}</span> }
                             } @else { <span class="text-gray-300">—</span> }
+                            @if (matchTier(p.sourceNote); as tier) {
+                              <span class="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" [class]="tierCls(tier)" [title]="p.sourceNote || ''">{{ tierLabel(tier) }}</span>
+                            }
                           </td>
                           <td class="px-4 py-2.5 text-right whitespace-nowrap">
                             @if (rowBulkBusy(p.productId)) {
@@ -853,6 +864,7 @@ interface MonthPlanData {
                       <span>7d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d7) }}</span></span>
                       <span>30d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d30) }}</span></span>
                       <span>90d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d90) }}</span></span>
+                      <span>365d <span class="font-bold text-gray-700">{{ inrQty(planDemand().d365) }}</span></span>
                     </div>
                   }
                 </div>
@@ -874,6 +886,7 @@ interface MonthPlanData {
                           <th class="px-4 py-2.5 text-right">Runs out</th>
                           <th class="px-4 py-2.5 text-right">ADS/day</th>
                           <th class="px-4 py-2.5 text-right">Forecast demand (4 mo)</th>
+                          <th class="px-4 py-2.5 text-right">Demand 365d</th>
                           <th class="px-4 py-2.5 text-right">Safety stock</th>
                           <th class="px-4 py-2.5 text-right">Reorder at</th>
                           <th class="px-4 py-2.5 text-right">EOQ</th>
@@ -894,6 +907,7 @@ interface MonthPlanData {
                             </td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.avgDailySales) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ inrQty(p.forecastQty) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.demand365) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.safetyStock) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ inrQty(p.reorderPoint) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ p.eoq != null ? inrQty(p.eoq) : '—' }}</td>
@@ -1158,6 +1172,7 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     { key: 'yourPrice', label: 'Your price', right: true },
     { label: 'Market low', right: true },
     { key: 'marketMedian', label: 'Median', right: true },
+    { key: 'marketAvg', label: 'Avg', right: true },
     { label: 'High', right: true },
     { key: 'position', label: 'Position' },
     { label: 'Source' },
@@ -1181,7 +1196,24 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
       const order: Record<string, number> = { under: 0, competitive: 1, over: 2 };
       return p?.position != null ? order[p.position] : null;
     }
+    if (key === 'marketAvg') return p?.marketAvg ?? null;
     return (p as unknown as Record<string, unknown>)[key];
+  }
+
+  /** Parse the match-quality tier out of a sourceNote like "…best indiamart (exact)". */
+  matchTier(note: string | null | undefined): 'exact' | 'high' | 'likely' | null {
+    const m = /\((exact|high|likely)\)/.exec(String(note ?? ''));
+    return m ? (m[1] as 'exact' | 'high' | 'likely') : null;
+  }
+  tierLabel(t: 'exact' | 'high' | 'likely'): string {
+    return { exact: 'Exact', high: 'High', likely: 'Likely' }[t];
+  }
+  tierCls(t: 'exact' | 'high' | 'likely'): string {
+    return {
+      exact: 'bg-emerald-100 text-emerald-700',
+      high: 'bg-teal-100 text-teal-700',
+      likely: 'bg-amber-100 text-amber-700',
+    }[t];
   }
 
   // ── Bulk market-price sync ──────────────────────────────────────────────────
@@ -1312,12 +1344,12 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
   readonly leadTime = signal(14);
   private ltTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Demand-horizon totals (7/30/90 days) summed across the plan rows. */
+  /** Demand-horizon totals (7/30/90/365 days) summed across the plan rows. */
   readonly planDemand = computed(() => {
     const rows = this.stockPlan()?.products || [];
-    const sum = (k: 'demand7' | 'demand30' | 'demand90') =>
+    const sum = (k: 'demand7' | 'demand30' | 'demand90' | 'demand365') =>
       rows.reduce((s, p) => s + (Number(p?.[k]) || 0), 0);
-    return { d7: sum('demand7'), d30: sum('demand30'), d90: sum('demand90') };
+    return { d7: sum('demand7'), d30: sum('demand30'), d90: sum('demand90'), d365: sum('demand365') };
   });
 
   // ── Header ──────────────────────────────────────────────────────────────────
@@ -1674,7 +1706,7 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     const rows = this.stockPlan()?.products || [];
     if (!rows.length) return;
     const lines = [
-      'name,stock,forecastQty,safetyStock,recommendedOrderQty,avgDailySales,reorderPoint,eoq,demand7,demand30,demand90,runsOutInDays',
+      'name,stock,forecastQty,safetyStock,recommendedOrderQty,avgDailySales,reorderPoint,eoq,demand7,demand30,demand90,demand365,runsOutInDays',
       ...rows.map((p) => [
         this.csvEsc(p.name),
         Number(p.stock) || 0,
@@ -1687,6 +1719,7 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
         Number(p.demand7) || 0,
         Number(p.demand30) || 0,
         Number(p.demand90) || 0,
+        Number(p.demand365) || 0,
         p.runsOutInDays != null ? Number(p.runsOutInDays) : '',
       ].join(',')),
     ];
