@@ -10,6 +10,7 @@ import * as adminWhatsapp006 from './migrations/public/006_admin_whatsapp';
 import { ErpFeatureFlag1700000000007 } from './migrations/public/007_erp_feature_flag';
 import { SyncTokens1700000000008 } from './migrations/public/008_sync_tokens';
 import { SchemaParity1700000000009 } from './migrations/public/009_schema_parity';
+import { WhatsappSuite1700000000010 } from './migrations/public/010_whatsapp_suite';
 
 export interface PublicMigration {
   name: string;
@@ -32,6 +33,7 @@ export const publicMigrations: PublicMigration[] = [
   { name: '007_erp_feature_flag', up: (qr) => new ErpFeatureFlag1700000000007().up(qr) },
   { name: '008_sync_tokens', up: (qr) => new SyncTokens1700000000008().up(qr) },
   { name: '009_schema_parity', up: (qr) => new SchemaParity1700000000009().up(qr) },
+  { name: '010_whatsapp_suite', up: (qr) => new WhatsappSuite1700000000010().up(qr) },
 ];
 
 /** Run every public migration on a connected DataSource, isolating failures. */

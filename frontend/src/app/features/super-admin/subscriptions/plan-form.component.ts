@@ -214,6 +214,7 @@ export class PlanFormComponent implements OnInit {
   ];
 
   featureFlags = [
+    { key: 'whatsappSuite', label: 'WhatsApp Suite', desc: 'Master gate for all WhatsApp: Campaigns, Conversations, Catalog, Workflow Builder + Smart Connect (QR link)' },
     { key: 'deliveries', label: 'Deliveries', desc: 'Delivery tracking and courier management' },
     { key: 'customers', label: 'Customers', desc: 'Customer management, segments and tagging' },
     { key: 'campaigns', label: 'Campaigns', desc: 'Broadcast, drip and triggered campaigns' },
@@ -245,6 +246,7 @@ export class PlanFormComponent implements OnInit {
     campaignLimit: [null as number | null],
     userLimit: [null as number | null],
     // Feature flags
+    whatsappSuite: [false],
     deliveries: [true],
     customers: [true],
     campaigns: [false],
@@ -290,6 +292,7 @@ export class PlanFormComponent implements OnInit {
           campaignLimit: plan.limits?.campaignLimit ?? null,
           userLimit: plan.limits?.userLimit ?? null,
           // Feature flags from JSONB
+          whatsappSuite: plan.features?.whatsappSuite ?? false,
           deliveries: plan.features?.deliveries ?? false,
           customers: plan.features?.customers ?? false,
           campaigns: plan.features?.campaigns ?? false,
@@ -353,6 +356,7 @@ export class PlanFormComponent implements OnInit {
         userLimit: v.userLimit ?? null,
       },
       features: {
+        whatsappSuite: v.whatsappSuite ?? false,
         deliveries: v.deliveries ?? false,
         customers: v.customers ?? false,
         campaigns: v.campaigns ?? false,

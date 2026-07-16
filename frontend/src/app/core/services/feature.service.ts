@@ -13,6 +13,9 @@ export const FEATURE_KEYS = {
   quotes: 'quotes',
   whatsappCatalog: 'whatsappCatalog',
   workflowBuilder: 'workflowBuilder',
+  /** Master gate for the whole WhatsApp suite (campaigns, conversations,
+   *  catalog, workflow builder + Smart Connect). */
+  whatsappSuite: 'whatsappSuite',
   aiFeatures: 'aiFeatures',
   advancedAnalytics: 'advancedAnalytics',
   multiCatalog: 'multiCatalog',

@@ -45,7 +45,7 @@ export class SubscriptionPlans1700000000005 implements MigrationInterface {
         'Free trial with limited features for 30 days',
         0, 0, 0,
         '{"conversationLimit": 100, "messageLimit": 500, "productLimit": 20, "campaignLimit": 2, "userLimit": 1}',
-        '{"deliveries": false, "customers": true, "campaigns": false, "conversations": true, "whatsappCatalog": false, "workflowBuilder": false, "aiFeatures": false, "advancedAnalytics": false, "multiCatalog": false}',
+        '{"deliveries": false, "customers": true, "campaigns": false, "conversations": true, "whatsappCatalog": false, "workflowBuilder": false, "aiFeatures": false, "advancedAnalytics": false, "multiCatalog": false, "whatsappSuite": true}',
         true, 0
       ),
       (
@@ -54,7 +54,7 @@ export class SubscriptionPlans1700000000005 implements MigrationInterface {
         'Perfect for small businesses getting started with WhatsApp commerce',
         4900, 49900, 5,
         '{"conversationLimit": 500, "messageLimit": 2000, "productLimit": 100, "campaignLimit": 5, "userLimit": 3}',
-        '{"deliveries": true, "customers": true, "campaigns": false, "conversations": true, "whatsappCatalog": false, "workflowBuilder": false, "aiFeatures": false, "advancedAnalytics": false, "multiCatalog": false}',
+        '{"deliveries": true, "customers": true, "campaigns": false, "conversations": true, "whatsappCatalog": false, "workflowBuilder": false, "aiFeatures": false, "advancedAnalytics": false, "multiCatalog": false, "whatsappSuite": true}',
         true, 1
       ),
       (
@@ -63,7 +63,7 @@ export class SubscriptionPlans1700000000005 implements MigrationInterface {
         'For growing businesses that need more power and automation',
         19000, 190000, 3,
         '{"conversationLimit": 2000, "messageLimit": 10000, "productLimit": 500, "campaignLimit": 20, "userLimit": 10}',
-        '{"deliveries": true, "customers": true, "campaigns": true, "conversations": true, "whatsappCatalog": true, "workflowBuilder": true, "aiFeatures": false, "advancedAnalytics": true, "multiCatalog": false}',
+        '{"deliveries": true, "customers": true, "campaigns": true, "conversations": true, "whatsappCatalog": true, "workflowBuilder": true, "aiFeatures": false, "advancedAnalytics": true, "multiCatalog": false, "whatsappSuite": true}',
         true, 2
       ),
       (
@@ -72,7 +72,7 @@ export class SubscriptionPlans1700000000005 implements MigrationInterface {
         'Advanced features for scaling your business operations',
         39000, 390000, 2,
         '{"conversationLimit": 5000, "messageLimit": 30000, "productLimit": 2000, "campaignLimit": null, "userLimit": 25}',
-        '{"deliveries": true, "customers": true, "campaigns": true, "conversations": true, "whatsappCatalog": true, "workflowBuilder": true, "aiFeatures": true, "advancedAnalytics": true, "multiCatalog": true}',
+        '{"deliveries": true, "customers": true, "campaigns": true, "conversations": true, "whatsappCatalog": true, "workflowBuilder": true, "aiFeatures": true, "advancedAnalytics": true, "multiCatalog": true, "whatsappSuite": true}',
         true, 3
       ),
       (
@@ -81,7 +81,7 @@ export class SubscriptionPlans1700000000005 implements MigrationInterface {
         'Unlimited access for large-scale operations with dedicated support',
         79000, 790000, 1,
         '{"conversationLimit": null, "messageLimit": null, "productLimit": null, "campaignLimit": null, "userLimit": null}',
-        '{"deliveries": true, "customers": true, "campaigns": true, "conversations": true, "whatsappCatalog": true, "workflowBuilder": true, "aiFeatures": true, "advancedAnalytics": true, "multiCatalog": true}',
+        '{"deliveries": true, "customers": true, "campaigns": true, "conversations": true, "whatsappCatalog": true, "workflowBuilder": true, "aiFeatures": true, "advancedAnalytics": true, "multiCatalog": true, "whatsappSuite": true}',
         true, 4
       )
       ON CONFLICT DO NOTHING

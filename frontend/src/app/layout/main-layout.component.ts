@@ -453,10 +453,18 @@ export class MainLayoutComponent implements OnInit {
     // resolve to avoid a flash for the common owner case.)
     const roleErp = !this.permissions.ready() || this.permissions.can('erp', 'read');
     const erpFull = planErp && roleErp;
+    // Master gate for the WhatsApp suite: the entire 'Marketing & WhatsApp'
+    // section is dropped when the tenant lacks `whatsappSuite`. (Per-item
+    // featureKey gating still applies when the suite IS enabled.)
+    const hasWaSuite = this.featureService.hasFeature('whatsappSuite');
     return this.navSections
       .map((s) => ({
         title: s.title,
         items: s.items.filter((it) => {
+          // WhatsApp suite master gate: drop the whole 'Marketing & WhatsApp'
+          // section when the tenant is not entitled (empty section is then
+          // filtered out below, so no orphan header renders).
+          if (s.title === 'Marketing & WhatsApp' && !hasWaSuite) return false;
           // "Without WhatsApp" app variant (ERP build): hide WhatsApp-only items.
           if (it.wa && !environment.whatsapp) return false;
           // Single "ERP Data (read-only)" entry, only when downgraded.
