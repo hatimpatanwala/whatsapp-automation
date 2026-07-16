@@ -50,6 +50,9 @@ export class BaileysSessionService implements OnModuleDestroy {
   private readonly sessions = new Map<string, Session>();
   private baileys: any;
   private baileysTried = false;
+  /** Current WA Web protocol version — REQUIRED or WhatsApp rejects with "Connection Failure". */
+  private waVersion: number[] | undefined;
+  private waVersionAt = 0;
   /** Concurrent-open socket cap (memory guard). Low default for the 512MB container. */
   private readonly maxOpen: number;
   private static readonly IDLE_MS = 5 * 60 * 1000;
@@ -218,6 +221,7 @@ export class BaileysSessionService implements OnModuleDestroy {
     if (!lib) throw new Error('WhatsApp engine unavailable');
     const makeWASocket = lib.default || lib.makeWASocket;
     const { DisconnectReason, Browsers } = lib;
+    const version = await this.currentWaVersion(lib);
 
     await this.evictIfNeeded();
 
@@ -226,6 +230,7 @@ export class BaileysSessionService implements OnModuleDestroy {
 
     const silent: any = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return silent; } };
     const sock = makeWASocket({
+      version,
       auth: state,
       printQRInTerminal: false,
       browser: Browsers?.appropriate ? Browsers.appropriate('Chrome') : ['WA Commerce', 'Chrome', '1.0'],
@@ -291,6 +296,19 @@ export class BaileysSessionService implements OnModuleDestroy {
         }
       }
     });
+  }
+
+  /** Fetch (and cache 6h) the current WA Web version; falls back to Baileys' default. */
+  private async currentWaVersion(lib: any): Promise<number[] | undefined> {
+    if (this.waVersion && Date.now() - this.waVersionAt < 6 * 60 * 60 * 1000) return this.waVersion;
+    try {
+      const { version } = await lib.fetchLatestBaileysVersion();
+      this.waVersion = version;
+      this.waVersionAt = Date.now();
+    } catch (e: any) {
+      this.logger.warn(`fetchLatestBaileysVersion failed, using bundled default: ${e?.message}`);
+    }
+    return this.waVersion;
   }
 
   private rejectWaiters(session: Session, err: Error) {
