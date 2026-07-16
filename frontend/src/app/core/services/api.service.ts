@@ -25,6 +25,11 @@ export class ApiService {
     return `${this.baseUrl}${cleanPath}`;
   }
 
+  /** Authenticated GET returning the raw response as a Blob (e.g. a PDF to share). */
+  getBlob(path: string): Observable<Blob> {
+    return this.http.get(this.url(path), { withCredentials: true, responseType: 'blob' });
+  }
+
   /** Convert a plain object to Angular HttpParams, dropping null/undefined values. */
   buildParams(params?: QueryParams): HttpParams {
     let httpParams = new HttpParams();

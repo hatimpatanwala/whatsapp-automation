@@ -15,6 +15,7 @@ import { DialogModule } from 'primeng/dialog';
 import { MessageService } from 'primeng/api';
 import { ErpService, ErpInvoice, PaymentMode } from '../../../core/services/erp.service';
 import { ApiService } from '../../../core/services/api.service';
+import { WhatsappShareService } from '../../../core/services/whatsapp-share.service';
 import { ErpAccessService } from '../../../core/services/erp-access.service';
 
 interface LineForm { description: string; quantity: number; unitPrice: number; }
@@ -110,8 +111,8 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
                     <button pButton icon="pi pi-bell" class="p-button-text p-button-sm p-button-warning" pTooltip="WhatsApp Reminder" (click)="remind(inv)"></button>
                   }
                   <button pButton icon="pi pi-whatsapp" class="p-button-text p-button-sm p-button-success"
-                    [pTooltip]="inv.customerPhone ? 'Send via WhatsApp' : 'No WhatsApp number'"
-                    [disabled]="!inv.customerPhone || sendingWaId() === inv.id" [loading]="sendingWaId() === inv.id"
+                    [pTooltip]="(inv.customerPhone || waIsNative) ? 'Send via WhatsApp' : 'No WhatsApp number'"
+                    [disabled]="(!inv.customerPhone && !waIsNative) || sendingWaId() === inv.id" [loading]="sendingWaId() === inv.id"
                     (click)="sendViaWhatsapp(inv)"></button>
                   <button pButton icon="pi pi-eye" class="p-button-text p-button-sm" pTooltip="View" (click)="openDetail(inv)"></button>
                 </div>
@@ -305,6 +306,9 @@ export class ErpInvoiceListComponent implements OnInit {
   private readonly erp = inject(ErpService);
   private readonly api = inject(ApiService);
   private readonly toast = inject(MessageService);
+  private readonly waShare = inject(WhatsappShareService);
+  /** On the mobile app the WhatsApp button works without a saved number (user picks the chat). */
+  readonly waIsNative = this.waShare.isNative();
   readonly access = inject(ErpAccessService);
 
   loading = signal(true);
@@ -502,11 +506,22 @@ export class ErpInvoiceListComponent implements OnInit {
    * connected (delivered server-side), otherwise a wa.me click-to-chat link the
    * user taps to send. We just POST and act on the returned `channel`.
    */
-  sendViaWhatsapp(inv: ErpInvoice) {
-    const phone = (inv.customerPhone || '').trim();
-    if (!phone) { this.toast.add({ severity: 'warn', summary: 'No WhatsApp number', detail: 'This invoice has no customer phone' }); return; }
-
+  async sendViaWhatsapp(inv: ErpInvoice) {
     this.sendingWaId.set(inv.id);
+
+    // Vyapar-style: on the mobile app, share the PDF through the phone's OWN WhatsApp
+    // (the user taps send — zero ban risk, no number needed since they pick the chat).
+    if (this.waShare.isNative()) {
+      const text = `Invoice ${inv.invoiceNumber || ''}${inv.total != null ? ` — ${this.sym()}${this.fmt(inv.total)}` : ''}`.trim();
+      const shared = await this.waShare.shareDocument(`/erp/invoices/${inv.id}/pdf`, `invoice-${inv.invoiceNumber || inv.id}.pdf`, text);
+      if (shared) { this.sendingWaId.set(null); return; }
+      // Fell through (old APK / cancelled) → safe server path below.
+    }
+
+    // Web/desktop (or share unavailable): official WhatsApp API if connected, else wa.me.
+    const phone = (inv.customerPhone || '').trim();
+    if (!phone) { this.sendingWaId.set(null); this.toast.add({ severity: 'warn', summary: 'No WhatsApp number', detail: 'This invoice has no customer phone' }); return; }
+
     this.api.post<{ sent: boolean; channel: 'official' | 'wa.me'; phone?: string; waLink?: string }>(
       '/whatsapp/smart-connect/send-invoice', { invoiceId: inv.id },
     ).subscribe({
