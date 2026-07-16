@@ -49,16 +49,37 @@ export class WhatsappConnectController {
     return this.baileys.disconnect(this.tenantId(req));
   }
 
-  /** Send an ERP invoice PDF to the customer's (or an overridden) WhatsApp number. */
-  @Post('send-invoice')
-  sendInvoice(@Req() req: Request, @Body() body: { invoiceId: string; phone?: string }) {
-    return this.connect.sendInvoice(this.schema(req), this.tenantId(req), body.invoiceId, body.phone);
+  /** Which WhatsApp channels this tenant can use (official / wa.me / smart-connect). */
+  @Get('channels')
+  channels(@Req() req: Request) {
+    return this.connect.channels(this.tenantId(req));
   }
 
-  /** Send a payment-receipt PDF. */
+  /**
+   * SAFE-FIRST invoice send. Sends via the official WhatsApp Business API when the
+   * tenant has it connected (zero ban risk); otherwise returns a wa.me link the UI
+   * opens. Never uses the unofficial channel here.
+   */
+  @Post('send-invoice')
+  sendInvoice(@Req() req: Request, @Body() body: { invoiceId: string; phone?: string }) {
+    return this.connect.sendInvoiceSafe(this.schema(req), this.tenantId(req), body.invoiceId, body.phone);
+  }
+
+  /** SAFE-FIRST receipt send (official → wa.me). */
   @Post('send-receipt')
   sendReceipt(@Req() req: Request, @Body() body: { paymentId: string; phone?: string }) {
-    return this.connect.sendReceipt(this.schema(req), this.tenantId(req), body.paymentId, body.phone);
+    return this.connect.sendReceiptSafe(this.schema(req), this.tenantId(req), body.paymentId, body.phone);
+  }
+
+  /** Explicit UNOFFICIAL send through the linked personal number (ban risk, opt-in). */
+  @Post('send-invoice/smart-connect')
+  sendInvoiceUnofficial(@Req() req: Request, @Body() body: { invoiceId: string; phone?: string }) {
+    return this.connect.sendInvoiceViaSmartConnect(this.schema(req), this.tenantId(req), body.invoiceId, body.phone);
+  }
+
+  @Post('send-receipt/smart-connect')
+  sendReceiptUnofficial(@Req() req: Request, @Body() body: { paymentId: string; phone?: string }) {
+    return this.connect.sendReceiptViaSmartConnect(this.schema(req), this.tenantId(req), body.paymentId, body.phone);
   }
 
   /** Send a free-text WhatsApp message (also handy for a "test connection" ping). */

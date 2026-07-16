@@ -27,6 +27,8 @@ export interface StatusView {
   phone?: string;
   error?: string;
   linked: boolean;
+  /** Whether the (unofficial) Smart Connect channel is enabled on this deployment. */
+  enabled: boolean;
 }
 
 /**
@@ -70,8 +72,37 @@ export class BaileysSessionService implements OnModuleDestroy {
     return this.config.get<string>('WA_CONNECT_SECRET') || this.config.get<string>('SESSION_SECRET') || 'dev-secret';
   }
 
+  /**
+   * OFF by default — Baileys is an UNOFFICIAL client with a real ban risk, so linking
+   * a personal number is strictly opt-in. Ops enables it per deployment with
+   * WA_SMART_CONNECT_ENABLED=true. The safe path (official WABA / wa.me) is preferred.
+   */
   enabled(): boolean {
-    return this.config.get<string>('WA_SMART_CONNECT_ENABLED') !== 'false';
+    return this.config.get<string>('WA_SMART_CONNECT_ENABLED') === 'true';
+  }
+
+  /**
+   * Ban-risk throttle for the unofficial channel: a minimum gap between sends and a
+   * conservative daily cap (lower during the first 24h "warm-up"). Bulk/rapid sends
+   * from a linked number are the main trigger for WhatsApp bans — this paces them.
+   */
+  private async throttleGuard(tenantId: string) {
+    const gapMs = Math.max(0, Number(this.config.get<string>('WA_SEND_GAP_MS')) || 8_000);
+    const gapKey = `wa:send:gap:${tenantId}`;
+    if (gapMs > 0 && !(await this.redis.set(gapKey, '1', 'PX', gapMs, 'NX'))) {
+      throw new Error(`Please wait a few seconds between WhatsApp sends (ban-safety throttle).`);
+    }
+    // Daily cap — tighter for the first day after linking (warm-up).
+    const linkedRecent = await this.ds
+      .query(`SELECT last_connected_at > NOW() - interval '24 hours' AS warm FROM public.whatsapp_personal_sessions WHERE tenant_id = $1`, [tenantId])
+      .then((r) => r?.[0]?.warm).catch(() => false);
+    const cap = linkedRecent
+      ? Math.max(1, Number(this.config.get<string>('WA_DAILY_CAP_WARMUP')) || 15)
+      : Math.max(1, Number(this.config.get<string>('WA_DAILY_CAP')) || 50);
+    const dayKey = `wa:send:day:${tenantId}`;
+    const count = await this.redis.incr(dayKey);
+    if (count === 1) await this.redis.expire(dayKey, 24 * 3600);
+    if (count > cap) throw new Error(`Daily WhatsApp send limit reached (${cap}) — protects your number from bans. Use the official WhatsApp or try again tomorrow.`);
   }
 
   // ── Baileys dynamic load ─────────────────────────────────────────────────────
@@ -145,15 +176,15 @@ export class BaileysSessionService implements OnModuleDestroy {
   // ── Public API ───────────────────────────────────────────────────────────────
   /** Begin linking (or reconnecting). Returns immediately; poll status for the QR. */
   async start(tenantId: string): Promise<StatusView> {
-    if (!this.enabled()) return { state: 'closed', linked: false, error: 'Smart Connect is disabled' };
+    if (!this.enabled()) return { state: 'closed', linked: false, enabled: false, error: 'Smart Connect (unofficial) is disabled. Use the official WhatsApp send instead.' };
     const lib = await this.lib();
-    if (!lib) return { state: 'closed', linked: false, error: 'WhatsApp engine unavailable on this server' };
+    if (!lib) return { state: 'closed', linked: false, enabled: true, error: 'WhatsApp engine unavailable on this server' };
     const existing = this.sessions.get(tenantId);
     if (existing && (existing.state === 'open' || existing.state === 'qr' || existing.state === 'connecting')) {
       return this.viewFor(tenantId, existing);
     }
     void this.connect(tenantId).catch((e) => this.logger.warn(`connect ${tenantId}: ${e?.message}`));
-    return { state: 'connecting', linked: await this.isLinked(tenantId) };
+    return { state: 'connecting', linked: await this.isLinked(tenantId), enabled: true };
   }
 
   async status(tenantId: string): Promise<StatusView> {
@@ -169,11 +200,12 @@ export class BaileysSessionService implements OnModuleDestroy {
       qrDataUrl: qr || undefined,
       phone: rows?.[0]?.phone || undefined,
       linked,
+      enabled: this.enabled(),
     };
   }
 
   private viewFor(tenantId: string, s: Session): StatusView {
-    return { state: s.state, qrDataUrl: s.qrDataUrl, phone: s.phone, error: s.error, linked: s.state === 'open' || !!s.phone };
+    return { state: s.state, qrDataUrl: s.qrDataUrl, phone: s.phone, error: s.error, linked: s.state === 'open' || !!s.phone, enabled: this.enabled() };
   }
 
   /** Ensure an OPEN socket (silent re-link from stored creds) for sending. */
@@ -191,11 +223,13 @@ export class BaileysSessionService implements OnModuleDestroy {
   }
 
   async sendText(tenantId: string, phone: string, text: string) {
+    await this.throttleGuard(tenantId);
     const sock = await this.ensureOpen(tenantId);
     return sock.sendMessage(this.jid(phone), { text });
   }
 
   async sendDocument(tenantId: string, phone: string, buffer: Buffer, fileName: string, caption?: string) {
+    await this.throttleGuard(tenantId);
     const sock = await this.ensureOpen(tenantId);
     return sock.sendMessage(this.jid(phone), {
       document: buffer,

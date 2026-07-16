@@ -12,14 +12,22 @@ interface ConnectStatus {
   phone?: string;
   error?: string;
   linked: boolean;
+  /** Whether the unofficial Smart Connect channel is turned on server-side.
+   *  When false, the Connect/QR flow is hidden and only an advisory is shown. */
+  enabled?: boolean;
 }
 
 /**
- * WhatsApp Smart Connect — Vyapar-style QR link of the tenant's *personal*
- * WhatsApp (via an unofficial Baileys web session) so invoices & receipts can
- * be sent straight from their own number.
+ * WhatsApp Smart Connect — ADVANCED, opt-in, *unofficial* channel. A Vyapar-style
+ * QR link of the tenant's personal WhatsApp (via a Baileys web session) so
+ * invoices & receipts can be sent from their own number.
  *
- * Flow (all under /whatsapp/smart-connect, gated server-side by `whatsappSuite`):
+ * This channel is OFF by default server-side (`enabled === false`) because
+ * unofficial connections carry a real ban risk. When disabled we show only an
+ * advisory pointing users to the safe channels (official WhatsApp Business API,
+ * or the wa.me-backed "Send via WhatsApp" link on invoices) and never call /start.
+ *
+ * Flow when enabled (all under /whatsapp/smart-connect, gated server-side):
  *   • GET  /status        — poll for state + rotating QR (every 2.5s while linking).
  *   • POST /start         — begin a link; then poll until `open`.
  *   • POST /disconnect    — unlink and return to the not-linked hero.
@@ -41,10 +49,12 @@ interface ConnectStatus {
             <i class="pi pi-whatsapp" style="font-size:1.2rem"></i>
           </div>
           <div class="min-w-0 flex-1">
-            <h1 class="text-lg font-bold leading-tight">WhatsApp Smart Connect</h1>
-            <p class="text-[12px] text-gray-400 leading-tight">Send invoices &amp; receipts from your own WhatsApp number</p>
+            <h1 class="text-lg font-bold leading-tight">WhatsApp Smart Connect <span class="text-gray-400 font-semibold">(Advanced)</span></h1>
+            <p class="text-[12px] text-gray-400 leading-tight">
+              Recommended instead: official WhatsApp (Settings → WhatsApp) or the safe "Send via WhatsApp" link on invoices.
+            </p>
           </div>
-          @if (status()) {
+          @if (status() && enabled()) {
             <span class="text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
               [class]="linked() ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'">
               <i class="pi mr-1" style="font-size:.6rem" [class.pi-circle-fill]="linked()" [class.pi-circle]="!linked()"></i>
@@ -60,10 +70,10 @@ interface ConnectStatus {
         <div class="mb-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3.5 flex items-start gap-3">
           <i class="pi pi-exclamation-triangle text-amber-500 mt-0.5" style="font-size:1rem"></i>
           <p class="text-[12.5px] leading-relaxed">
-            <b>Smart Connect links your personal WhatsApp using an unofficial connection.</b>
-            WhatsApp may restrict or ban numbers that send automated messages. Use it for genuine
-            customer invoices/receipts only, avoid bulk sending, and consider the official
-            WhatsApp Business API for high volume. <b>Connect at your own risk.</b>
+            <b>⚠ Advanced / unofficial. This is NOT the official WhatsApp API.</b>
+            WhatsApp may restrict or permanently ban the linked number, especially for bulk or
+            rapid sending. Sends are rate-limited for safety. Prefer the official WhatsApp Business
+            API for reliable delivery. <b>Use at your own risk.</b>
           </p>
         </div>
 
@@ -77,6 +87,24 @@ interface ConnectStatus {
         @if (loading() && !status()) {
           <!-- initial status probe -->
           <div class="animate-pulse bg-white rounded-2xl border border-gray-100 h-56"></div>
+        } @else if (!enabled()) {
+
+          <!-- ══ DISABLED (server has this advanced channel OFF) ══ -->
+          <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div class="px-6 py-8 text-center">
+              <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-sm mb-5">
+                <i class="pi pi-shield" style="font-size:1.8rem"></i>
+              </div>
+              <h2 class="text-xl font-bold text-gray-900 mb-3">WhatsApp Smart Connect (Advanced)</h2>
+              <p class="text-[13.5px] text-gray-600 max-w-lg mx-auto leading-relaxed">
+                This links your personal WhatsApp using an unofficial connection and can get your
+                number banned. It is turned <b>OFF by default</b>. For safe, reliable delivery use the
+                official WhatsApp Business API (<b>Settings → WhatsApp</b>) or the
+                <b>"Send via WhatsApp"</b> button on invoices, which uses a safe link.
+                To enable this advanced channel, contact your administrator.
+              </p>
+            </div>
+          </div>
         } @else {
 
           <!-- ══ CONNECTED ═══════════════════════════════════════ -->
@@ -202,6 +230,9 @@ export class WhatsappConnectComponent implements OnInit, OnDestroy {
 
   readonly state = computed<ConnectState>(() => this.status()?.state ?? 'idle');
   readonly linked = computed(() => !!this.status()?.linked || this.state() === 'open');
+  /** Whether the unofficial channel is turned on server-side. Only `enabled === false`
+   *  hides the Connect/QR flow; a missing flag is treated as enabled (back-compat). */
+  readonly enabled = computed(() => this.status()?.enabled !== false);
 
   readonly qrSteps = [
     'Open <b>WhatsApp</b> on your phone',
@@ -242,7 +273,8 @@ export class WhatsappConnectComponent implements OnInit, OnDestroy {
 
   /** Begin a link: POST start, then poll status until it goes `open`. */
   connect() {
-    if (this.busy()) return;
+    // Never start an unofficial link when the channel is disabled server-side.
+    if (this.busy() || !this.enabled()) return;
     this.busy.set(true);
     this.error.set('');
     this.api.post<{ state: ConnectState; linked: boolean }>('/whatsapp/smart-connect/start', {}).subscribe({

@@ -37,6 +37,14 @@ export class DocDeliveryService {
     return { sent: true, filename };
   }
 
+  /** Send a payment-receipt PDF via the official WhatsApp API. */
+  async sendReceipt(tenantId: string, schema: string, phone: string, paymentId: string): Promise<{ sent: true; filename: string }> {
+    const { buffer, filename, payment } = await this.documents.getPaymentReceiptPdf(schema, paymentId);
+    const amt = payment?.amount != null ? `₹${Number(payment.amount).toLocaleString('en-IN')}` : '';
+    await this.deliver(tenantId, phone, buffer, filename, `Payment receipt${amt ? ` ${amt}` : ''}`.trim());
+    return { sent: true, filename };
+  }
+
   /** Resolve the tenant's sender creds, upload the buffer, and send it as a document. */
   private async deliver(tenantId: string, phone: string, buffer: Buffer, filename: string, caption: string): Promise<void> {
     const to = String(phone || '').replace(/[^0-9]/g, '');
