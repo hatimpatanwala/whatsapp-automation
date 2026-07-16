@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
-import { MARKET_SITES, searchMarketplace, MarketSite, PriceCard } from './marketplace-search';
+import { MARKET_SITES, searchMarketplace, extractIndiamartCategory, MarketSite, PriceCard } from './marketplace-search';
 import { tokenizeProduct, scoreCard, ProductIds } from './product-match';
 import { BrowserFetcher } from './browser-fetch';
 
@@ -70,8 +70,8 @@ export class MarketPriceService implements OnModuleDestroy {
   private readonly logger = new Logger(MarketPriceService.name);
   /** One bulk refresh queue per tenant schema. */
   private readonly bulk = new Map<string, BulkState>();
-  /** Category listing-page cache (slug → stripped text). One page prices MANY products. */
-  private readonly catPageCache = new Map<string, { at: number; text: string | null }>();
+  /** Category listing-page cache (slug → raw HTML). One page prices MANY products. */
+  private readonly catPageCache = new Map<string, { at: number; html: string | null }>();
   private readonly CAT_TTL = 12 * 60 * 60 * 1000; // 12h
   /** Marketplace search-results cache (site|query → cards). Bulk runs reuse it. */
   private readonly msCache = new Map<string, { at: number; cards: PriceCard[] }>();
@@ -289,37 +289,47 @@ export class MarketPriceService implements OnModuleDestroy {
     return { status: 'ok', low: r2(result.low), median: r2(result.median), high: r2(result.high), avg: r2(result.avg), points: result.points, via };
   }
 
-  // ─── Tier 1: on-site marketplace search + confidence matching ─────────────────
-  /** Search each marketplace's own search box, score every card, keep matches. */
+  // ─── Tier 1: confidence-matched marketplace cards ─────────────────────────────
+  /**
+   * Score price cards from (a) the IndiaMART CATEGORY page tiles — the reliable
+   * server-rendered source on a datacenter IP — and (b) each marketplace's on-site
+   * search (SPA sites only when the opt-in browser is on). Every card runs through the
+   * brand+model+size-gated matcher; only accepted cards contribute a price point.
+   */
   private async marketplaceMatch(name: string, refPrice: number, ids: ProductIds, deadline: number): Promise<MatchAgg & { avgScore: () => number }> {
     const product = tokenizeProduct(name);
-    const points: number[] = [];
-    const scores: number[] = [];
-    let best: MatchAgg['best'] = null;
-    let matched = 0;
-    let sitesTried = 0;
+    const agg: MatchAgg = { points: [], scores: [], best: null, matched: 0, sitesTried: 0 };
 
-    for (const site of MARKET_SITES) {
-      if (Date.now() > deadline - 12_000) break;
-      // Browser-only marketplaces (SPAs) are skipped unless the opt-in browser is on.
-      if (site.needsBrowser && !this.browser.isEnabled()) continue;
-      sitesTried++;
-      const cards = await this.siteCards(site, name, deadline);
+    const consume = (site: string, downWeight: number, cards: PriceCard[]) => {
       for (const c of cards) {
         const r = scoreCard(product, c.title, ids);
         if (!r.accept) continue;
         // Sanity band: your own realized price is the best free prior.
         if (refPrice > 0 && (c.price < refPrice * 0.3 || c.price > refPrice * 3)) continue;
-        const weighted = r.score * (site.downWeight || 1);
-        points.push(c.price);
-        scores.push(weighted);
-        matched++;
-        if (!best || weighted > best.weighted) {
-          best = { site: site.name, title: c.title, url: c.url, price: c.price, tier: r.tier, weighted };
+        const weighted = r.score * downWeight;
+        agg.points.push(c.price);
+        agg.scores.push(weighted);
+        agg.matched++;
+        if (!agg.best || weighted > agg.best.weighted) {
+          agg.best = { site, title: c.title, url: c.url, price: c.price, tier: r.tier, weighted };
         }
       }
+    };
+
+    // (a) IndiaMART category page tiles — matched, not window-scraped.
+    agg.sitesTried++;
+    consume('indiamart', 1, await this.categoryPageCards(name, deadline));
+
+    // (b) On-site marketplace search (SPA sites gated behind the opt-in browser).
+    for (const site of MARKET_SITES) {
+      if (Date.now() > deadline - 12_000) break;
+      if (site.name === 'indiamart') continue; // covered by the category page above
+      if (site.needsBrowser && !this.browser.isEnabled()) continue;
+      agg.sitesTried++;
+      consume(site.name, site.downWeight || 1, await this.siteCards(site, name, deadline));
     }
-    return { points, scores, best, matched, sitesTried, avgScore: () => (scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0) };
+
+    return { ...agg, avgScore: () => (agg.scores.length ? agg.scores.reduce((a, b) => a + b, 0) / agg.scores.length : 0) };
   }
 
   /** Cards for one site (12h cache). Injects raw polite fetch or the browser fetch. */
@@ -524,25 +534,37 @@ export class MarketPriceService implements OnModuleDestroy {
     return [...new Set(out)].filter(Boolean).slice(0, 5);
   }
 
-  /** Fetch (or reuse) the first category page that resolves; null when none do. */
-  private async categoryPageText(productName: string, deadline?: number): Promise<string | null> {
+  /** Fetch (or reuse) the raw HTML of the first category page that resolves; null if none. */
+  private async categoryPageHtml(productName: string, deadline?: number): Promise<string | null> {
     for (const slug of this.slugCandidates(productName)) {
       const hit = this.catPageCache.get(slug);
       if (hit) {
         // Positive entries live CAT_TTL; misses retry after 2 min (host cool-downs pass).
-        const ttl = hit.text ? this.CAT_TTL : 2 * 60 * 1000;
+        const ttl = hit.html ? this.CAT_TTL : 2 * 60 * 1000;
         if (Date.now() - hit.at < ttl) {
-          if (hit.text) return hit.text;
+          if (hit.html) return hit.html;
           continue;
         }
       }
       const html = await this.fetchPolite(`https://dir.indiamart.com/impcat/${slug}.html`, deadline);
-      const text = html && html.length > 20_000 ? MarketPriceService.toText(html) : null;
-      this.catPageCache.set(slug, { at: Date.now(), text });
-      if (text) return text;
+      const good = html && html.length > 20_000 ? html : null;
+      this.catPageCache.set(slug, { at: Date.now(), html: good });
+      if (good) return good;
       if (deadline && Date.now() > deadline - 16_000) break;
     }
     return null;
+  }
+
+  /** Stripped text of the category page (for the window-based fallback). */
+  private async categoryPageText(productName: string, deadline?: number): Promise<string | null> {
+    const html = await this.categoryPageHtml(productName, deadline);
+    return html ? MarketPriceService.toText(html) : null;
+  }
+
+  /** Structured price CARDS from the category page tiles (for the confidence matcher). */
+  private async categoryPageCards(productName: string, deadline?: number): Promise<PriceCard[]> {
+    const html = await this.categoryPageHtml(productName, deadline);
+    return html ? extractIndiamartCategory(html) : [];
   }
 
   /** Price-windows from a category page that mention this product's brand + sizes. */

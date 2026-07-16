@@ -448,6 +448,35 @@ function extractAmazon(html: string, seen: Set<string>): PriceCard[] {
   return out;
 }
 
+/**
+ * IndiaMART CATEGORY (impcat) page tiles. Unlike the on-site search (which returns a
+ * bot-gated shell to datacenter IPs), the category page renders full listing tiles
+ * server-side. Each tile: <a class="prdtitle …" href="…proddetail…">Title</a> … then
+ * <span class="prc …">₹ N</span> /<span class="prcut …">Unit</span>. We pair each
+ * title with the first price within the same tile so the caller's matcher can score it.
+ */
+export function extractIndiamartCategory(html: string): PriceCard[] {
+  const out: PriceCard[] = [];
+  const seen = new Set<string>();
+  // Capture the price number AND an optional Indian magnitude word (Lakh/Thousand/Crore),
+  // so "₹ 8.5 Lakh" → 850000, not 8.5.
+  const tileRe = /<a[^>]*class="[^"]*\bprdtitle\b[^"]*"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]{0,600}?<span[^>]*class="[^"]*\bprc\b[^"]*"[^>]*>\s*(?:₹|Rs\.?|INR|&#8377;)\s*([\d,]+(?:\.\d{1,2})?)\s*(lakh|lac|thousand|crore|k)?/gi;
+  const MULT: Record<string, number> = { thousand: 1000, k: 1000, lakh: 100000, lac: 100000, crore: 10000000 };
+  let m: RegExpExecArray | null;
+  while ((m = tileRe.exec(html)) && out.length < MAX_CARDS) {
+    const url = m[1];
+    const title = m[2].includes('<') ? stripTags(m[2]) : decodeEntities(m[2]).trim();
+    let price = toPrice(m[3]);
+    const mult = (m[4] || '').toLowerCase();
+    if (mult && MULT[mult]) price *= MULT[mult];
+    // A real listed product price is ≥ ₹20; smaller values are ratings/specs bleeding in.
+    if (price < 20) continue;
+    const unitM = /<span[^>]*class="[^"]*\bprcut\b[^"]*"[^>]*>\s*\/?\s*([a-z ]{2,})/i.exec(html.slice(m.index, m.index + 700));
+    pushCard(out, 'indiamart', title, price, unitM ? normUnit(unitM[1]) : null, url, seen);
+  }
+  return out;
+}
+
 // ─── Public entry point ──────────────────────────────────────────────────────────
 
 /**
