@@ -31,10 +31,11 @@ export interface StockPlanRow {
   avgDailySales: number;
   reorderPoint: number;
   eoq: number | null;
-  /** Expected demand over the next 7 / 30 / 90 days. */
+  /** Expected demand over the next 7 / 30 / 90 / 365 days. */
   demand7: number;
   demand30: number;
   demand90: number;
+  demand365: number;
   /** Days until the current stock runs out at the forecast rate (null = no demand). */
   runsOutInDays: number | null;
 }
@@ -156,6 +157,7 @@ export class ForecastService {
         demand7: r1(ads * 7),
         demand30: r1(avgMonthly),
         demand90: r1(avgMonthly * 3),
+        demand365: r1(avgMonthly * 12),
         runsOutInDays: ads > 0 ? r0(stock / ads) : null,
       };
     });

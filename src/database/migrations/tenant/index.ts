@@ -3323,6 +3323,40 @@ const migration087MarketPriceHistory: TenantMigration = {
   },
 };
 
+/**
+ * 088 — Market average column + the Product-Matching LEARNING store.
+ * price_avg completes the blueprint's low/high/median/AVERAGE set.
+ * market_price_matches remembers which marketplace listing was confidently matched
+ * to each product (Exact/High tier), so repeat refreshes trust known-good mappings
+ * and matching accuracy improves over time (blueprint "Learning" engine).
+ */
+const migration088MarketAvgAndMatches: TenantMigration = {
+  name: '088_market_avg_and_matches',
+  async up(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".market_prices ADD COLUMN IF NOT EXISTS price_avg NUMERIC(14,2)`);
+    await qr.query(`ALTER TABLE "${schema}".market_price_history ADD COLUMN IF NOT EXISTS price_avg NUMERIC(14,2)`);
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".market_price_matches (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      product_id UUID NOT NULL,
+      site VARCHAR(24) NOT NULL,
+      matched_title TEXT NOT NULL,
+      matched_url TEXT,
+      price NUMERIC(14,2),
+      tier VARCHAR(8) NOT NULL,
+      confidence NUMERIC(4,3),
+      approved BOOLEAN NOT NULL DEFAULT false,
+      learned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (product_id, site)
+    )`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_mpm_product ON "${schema}".market_price_matches (product_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".market_price_matches`);
+    await qr.query(`ALTER TABLE "${schema}".market_prices DROP COLUMN IF EXISTS price_avg`);
+    await qr.query(`ALTER TABLE "${schema}".market_price_history DROP COLUMN IF EXISTS price_avg`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3411,4 +3445,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration085BackfillCategories,
   migration086MarketPrices,
   migration087MarketPriceHistory,
+  migration088MarketAvgAndMatches,
 ];

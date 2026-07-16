@@ -125,6 +125,12 @@ services:
 
       # Self-hosted metasearch (AI Insights Pro market pricing) — internal only
       SEARX_URL: http://searxng:8080
+      # Market pricing coverage: all products by default (0/unset = no cap).
+      MARKET_LIST_LIMIT: ${MARKET_LIST_LIMIT:-0}
+      # Opt-in headless-browser tier for SPA marketplaces (Moglix/IndustryBuying/Amazon).
+      # OFF here — the 2GB box can't run Chromium safely alongside prod. To enable:
+      # build backend with --build-arg WITH_BROWSER=1 on a ≥4GB box, then set this true.
+      MARKET_BROWSER_ENABLED: ${MARKET_BROWSER_ENABLED:-false}
 
       # Session
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}

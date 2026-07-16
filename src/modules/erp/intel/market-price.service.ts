@@ -1,8 +1,20 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TenantConnectionManager } from '../../../database/tenant-connection.manager';
+import { MARKET_SITES, searchMarketplace, MarketSite, PriceCard } from './marketplace-search';
+import { tokenizeProduct, scoreCard, ProductIds } from './product-match';
+import { BrowserFetcher } from './browser-fetch';
 
 const r2 = (n: number) => Math.round((n || 0) * 100) / 100;
+
+/** One confidently-matched marketplace listing for a product. */
+interface MatchAgg {
+  points: number[];
+  scores: number[];
+  best: { site: string; title: string; url: string; price: number; tier: string; weighted: number } | null;
+  matched: number;
+  sitesTried: number;
+}
 
 export interface MarketPriceRow {
   productId: string;
@@ -11,6 +23,7 @@ export interface MarketPriceRow {
   marketLow: number | null;
   marketMedian: number | null;
   marketHigh: number | null;
+  marketAvg: number | null;
   source: string | null;
   confidence: number | null;
   fetchedAt: string | null;
@@ -53,22 +66,32 @@ const STOPWORDS = new Set(['the', 'and', 'for', 'with', 'ltr', 'litre', 'liter',
  * 'manual' entries always outrank scraped figures.
  */
 @Injectable()
-export class MarketPriceService {
+export class MarketPriceService implements OnModuleDestroy {
   private readonly logger = new Logger(MarketPriceService.name);
   /** One bulk refresh queue per tenant schema. */
   private readonly bulk = new Map<string, BulkState>();
   /** Category listing-page cache (slug → stripped text). One page prices MANY products. */
   private readonly catPageCache = new Map<string, { at: number; text: string | null }>();
   private readonly CAT_TTL = 12 * 60 * 60 * 1000; // 12h
+  /** Marketplace search-results cache (site|query → cards). Bulk runs reuse it. */
+  private readonly msCache = new Map<string, { at: number; cards: PriceCard[] }>();
   /** Per-host politeness: serialized fetches with a minimum gap (free single-IP rule #1). */
   private readonly hostNextAt = new Map<string, number>();
   private hostChain: Promise<void> = Promise.resolve();
   private static readonly HOST_GAP_MS = 8_000;
+  /** Opt-in headless browser for SPA marketplaces — OFF by default (2GB box). */
+  private readonly browser: BrowserFetcher;
 
   constructor(
     private readonly cm: TenantConnectionManager,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.browser = new BrowserFetcher(this.config.get<string>('MARKET_BROWSER_ENABLED') === 'true');
+  }
+
+  async onModuleDestroy() {
+    await this.browser.close().catch(() => undefined);
+  }
 
   searchAvailable(): boolean {
     return !!this.config.get<string>('SEARX_URL');
@@ -76,6 +99,9 @@ export class MarketPriceService {
 
   // ─── Listing ─────────────────────────────────────────────────────────────────
   async list(schema: string): Promise<{ searchAvailable: boolean; llmEnabled: boolean; products: MarketPriceRow[] }> {
+    // All active goods by default (volume-ordered so money-makers price first). Set
+    // MARKET_LIST_LIMIT to cap for a smaller/faster set; 0 or unset = no cap.
+    const limit = Math.max(0, Number(this.config.get<string>('MARKET_LIST_LIMIT')) || 0);
     const rows = await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
         `WITH recent AS (
@@ -91,7 +117,7 @@ export class MarketPriceService {
          SELECT p.id, p.name,
                 CASE WHEN COALESCE(rec.qty,0) > 0 THEN rec.val / rec.qty ELSE COALESCE(p.sale_price, p.base_price, 0) END::float AS your_price,
                 COALESCE(rec.val, 0)::float / 3 AS monthly_volume_value,
-                mp.source, mp.price_low, mp.price_median, mp.price_high, mp.confidence, mp.source_note, mp.fetched_at
+                mp.source, mp.price_low, mp.price_median, mp.price_high, mp.price_avg, mp.confidence, mp.source_note, mp.fetched_at
          FROM "${schema}".products p
          LEFT JOIN recent rec ON rec.pid = p.id
          LEFT JOIN LATERAL (
@@ -100,7 +126,7 @@ export class MarketPriceService {
          ) mp ON true
          WHERE p.is_active = true AND p.deleted_at IS NULL AND COALESCE(p.item_type,'product') <> 'service'
          ORDER BY monthly_volume_value DESC NULLS LAST
-         LIMIT 300`,
+         ${limit > 0 ? `LIMIT ${limit}` : ''}`,
       ),
     );
 
@@ -118,6 +144,7 @@ export class MarketPriceService {
         marketLow: r.price_low != null ? r2(Number(r.price_low)) : null,
         marketMedian: median,
         marketHigh: r.price_high != null ? r2(Number(r.price_high)) : null,
+        marketAvg: r.price_avg != null ? r2(Number(r.price_avg)) : null,
         source: r.source || null,
         confidence: r.confidence != null ? Number(r.confidence) : null,
         fetchedAt: r.fetched_at || null,
@@ -138,25 +165,25 @@ export class MarketPriceService {
     const high = Number(body.priceHigh) > 0 ? Number(body.priceHigh) : median;
     await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
-        `INSERT INTO "${schema}".market_prices (product_id, source, price_low, price_median, price_high, confidence, source_note, fetched_at)
-         VALUES ($1,'manual',$2,$3,$4,1.0,$5,NOW())
+        `INSERT INTO "${schema}".market_prices (product_id, source, price_low, price_median, price_high, price_avg, confidence, source_note, fetched_at)
+         VALUES ($1,'manual',$2,$3,$4,$5,1.0,$6,NOW())
          ON CONFLICT (product_id, source) DO UPDATE SET
            price_low = EXCLUDED.price_low, price_median = EXCLUDED.price_median, price_high = EXCLUDED.price_high,
-           source_note = EXCLUDED.source_note, fetched_at = NOW()`,
-        [body.productId, r2(Math.min(low, median)), r2(median), r2(Math.max(high, median)), body.note?.trim() || 'Entered manually'],
+           price_avg = EXCLUDED.price_avg, source_note = EXCLUDED.source_note, fetched_at = NOW()`,
+        [body.productId, r2(Math.min(low, median)), r2(median), r2(Math.max(high, median)), r2(median), body.note?.trim() || 'Entered manually'],
       ),
     );
-    await this.appendHistory(schema, body.productId, 'manual', Math.min(low, median), median, Math.max(high, median), 1.0);
+    await this.appendHistory(schema, body.productId, 'manual', Math.min(low, median), median, Math.max(high, median), 1.0, median);
     return { saved: true };
   }
 
   /** Append-only price history (blueprint: price trend over time). Best-effort. */
-  private async appendHistory(schema: string, productId: string, source: string, low: number, median: number, high: number, confidence: number) {
+  private async appendHistory(schema: string, productId: string, source: string, low: number, median: number, high: number, confidence: number, avg?: number) {
     await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
-        `INSERT INTO "${schema}".market_price_history (product_id, source, price_low, price_median, price_high, confidence)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [productId, source, r2(low), r2(median), r2(high), confidence],
+        `INSERT INTO "${schema}".market_price_history (product_id, source, price_low, price_median, price_high, price_avg, confidence)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [productId, source, r2(low), r2(median), r2(high), avg != null ? r2(avg) : null, confidence],
       ),
     ).catch(() => undefined);
   }
@@ -168,7 +195,7 @@ export class MarketPriceService {
 
     const [product] = await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
-        `SELECT p.id, p.name,
+        `SELECT p.id, p.name, p.barcode, p.sku,
                 COALESCE((
                   SELECT SUM(COALESCE(NULLIF(it->>'lineTotal','')::numeric,0)) / NULLIF(SUM(COALESCE(NULLIF(it->>'quantity','')::numeric,0)),0)
                   FROM "${schema}".invoices iv
@@ -183,23 +210,29 @@ export class MarketPriceService {
     if (!product) throw new BadRequestException('Product not found');
     const name = String(product.name);
     const refPrice = Number(product.ref_price) || 0;
+    const ids: ProductIds = { barcode: product.barcode, sku: product.sku };
 
     // Time budget: an interactive refresh must answer fast; bulk gets longer.
     const deadline = Date.now() + (this.bulk.get(schema)?.running ? 120_000 : 45_000);
 
-    // PRIMARY: the marketplace CATEGORY page (server-rendered, many priced listings;
-    // cached 12h so one polite fetch prices every product of the category). This
-    // avoids general search engines entirely — they block datacenter IPs quickly.
-    let contexts: string[] = [];
-    const catText = await this.categoryPageText(name, deadline);
-    if (catText) contexts = this.windowsFromText(name, catText);
+    // TIER 1 (best): on-site marketplace SEARCH + confidence-scored matching — reads
+    // the price attached to a SPECIFIC matched result card (brand+model+size gated),
+    // not "any ₹ near the brand". This is the accuracy upgrade.
+    const agg = await this.marketplaceMatch(name, refPrice, ids, deadline);
 
-    // FALLBACK: metasearch → listing URLs → window extraction (works when the
-    // engines aren't rate-limiting; skipped when the category page already matched
-    // or the time budget is spent).
+    // TIER 2: the marketplace CATEGORY page (server-rendered, cached 12h — one fetch
+    // prices many products of the category). Used to supplement / when Tier 1 is thin.
+    let contexts: string[] = [];
+    let catText: string | null = null;
+    if (agg.matched < 2 && Date.now() < deadline - 15_000) {
+      catText = await this.categoryPageText(name, deadline);
+      if (catText) contexts = this.windowsFromText(name, catText);
+    }
+
+    // TIER 3: metasearch → listing URLs → window extraction (SearXNG; last resort).
     let searched = 0;
     let relevant: Array<{ title: string; content: string; url: string }> = [];
-    if (contexts.length < 2 && Date.now() < deadline - 20_000) {
+    if (agg.matched < 2 && contexts.length < 2 && Date.now() < deadline - 20_000) {
       const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
       searched = snippets.length;
       relevant = this.relevantSnippets(name, snippets);
@@ -207,37 +240,113 @@ export class MarketPriceService {
       contexts = [...contexts, ...pageContexts];
     }
 
-    const allPoints = [
-      ...this.pricePoints(refPrice, contexts),
-      ...this.pricePoints(refPrice, relevant.map((s) => `${s.title} ${s.content}`)),
-    ];
-
-    // LLM extraction first (when a free endpoint is configured), else deterministic.
-    let result = await this.llmExtract(name, refPrice, [
-      ...relevant.map((s) => ({ title: s.title, content: s.content, url: s.url })),
-      ...contexts.slice(0, 10).map((c, i) => ({ title: `listing context ${i + 1}`, content: c, url: '' })),
-    ]);
-    let via = 'llm';
-    if (!result) {
-      result = this.statsFromPoints(allPoints);
-      via = 'web';
+    // Aggregate. Matched marketplace CARDS are the highest-quality points; category /
+    // search windows fill in behind them.
+    let result: ReturnType<typeof this.statsFromPoints>;
+    let via: string;
+    if (agg.points.length >= 2) {
+      result = this.statsFromPoints(agg.points);
+      // Blend dispersion confidence with the average match score (card-score-weighted).
+      if (result) result.confidence = r2(Math.min(1, result.confidence * (0.6 + 0.4 * agg.avgScore())));
+      via = 'marketplace';
+    } else {
+      const allPoints = [
+        ...agg.points,
+        ...this.pricePoints(refPrice, contexts),
+        ...this.pricePoints(refPrice, relevant.map((s) => `${s.title} ${s.content}`)),
+      ];
+      // Free LLM extraction when configured, else deterministic stats.
+      result = await this.llmExtract(name, refPrice, [
+        ...relevant.map((s) => ({ title: s.title, content: s.content, url: s.url })),
+        ...contexts.slice(0, 10).map((c, i) => ({ title: `listing context ${i + 1}`, content: c, url: '' })),
+      ]);
+      via = 'llm';
+      if (!result) { result = this.statsFromPoints(allPoints); via = 'web'; }
     }
+
     if (!result) {
-      return { status: 'no-data', message: `No trustworthy web price found (category page ${catText ? 'checked' : 'not found'}, ${searched} search results, ${contexts.length} matched contexts) — add a manual price.` };
+      return { status: 'no-data', message: `No confident market price found (marketplaces tried ${agg.sitesTried}, ${agg.matched} matched listings, category ${catText ? 'checked' : 'skipped'}, ${searched} search results) — add a manual price.` };
     }
 
+    const note = via === 'marketplace'
+      ? `Matched ${agg.matched} listing(s)${agg.best ? ` · best ${agg.best.site} (${agg.best.tier})` : ''}`
+      : `${via === 'llm' ? 'LLM' : 'Web'} · ${result.points} price point(s)`;
     await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
-        `INSERT INTO "${schema}".market_prices (product_id, source, price_low, price_median, price_high, confidence, source_note, fetched_at)
-         VALUES ($1,'search',$2,$3,$4,$5,$6,NOW())
+        `INSERT INTO "${schema}".market_prices (product_id, source, price_low, price_median, price_high, price_avg, confidence, source_note, fetched_at)
+         VALUES ($1,'search',$2,$3,$4,$5,$6,$7,NOW())
          ON CONFLICT (product_id, source) DO UPDATE SET
            price_low = EXCLUDED.price_low, price_median = EXCLUDED.price_median, price_high = EXCLUDED.price_high,
-           confidence = EXCLUDED.confidence, source_note = EXCLUDED.source_note, fetched_at = NOW()`,
-        [productId, r2(result.low), r2(result.median), r2(result.high), result.confidence, `${via === 'llm' ? 'LLM' : 'Web'} · ${result.points} matched price point(s)`],
+           price_avg = EXCLUDED.price_avg, confidence = EXCLUDED.confidence, source_note = EXCLUDED.source_note, fetched_at = NOW()`,
+        [productId, r2(result.low), r2(result.median), r2(result.high), r2(result.avg), result.confidence, note],
       ),
     );
-    await this.appendHistory(schema, productId, 'search', result.low, result.median, result.high, result.confidence);
-    return { status: 'ok', low: r2(result.low), median: r2(result.median), high: r2(result.high), points: result.points, via };
+    await this.appendHistory(schema, productId, 'search', result.low, result.median, result.high, result.confidence, result.avg);
+    // LEARNING: remember a confidently-matched listing so future runs trust it.
+    if (agg.best && (agg.best.tier === 'exact' || agg.best.tier === 'high')) {
+      await this.learnMatch(schema, productId, agg.best, result.confidence);
+    }
+    return { status: 'ok', low: r2(result.low), median: r2(result.median), high: r2(result.high), avg: r2(result.avg), points: result.points, via };
+  }
+
+  // ─── Tier 1: on-site marketplace search + confidence matching ─────────────────
+  /** Search each marketplace's own search box, score every card, keep matches. */
+  private async marketplaceMatch(name: string, refPrice: number, ids: ProductIds, deadline: number): Promise<MatchAgg & { avgScore: () => number }> {
+    const product = tokenizeProduct(name);
+    const points: number[] = [];
+    const scores: number[] = [];
+    let best: MatchAgg['best'] = null;
+    let matched = 0;
+    let sitesTried = 0;
+
+    for (const site of MARKET_SITES) {
+      if (Date.now() > deadline - 12_000) break;
+      // Browser-only marketplaces (SPAs) are skipped unless the opt-in browser is on.
+      if (site.needsBrowser && !this.browser.isEnabled()) continue;
+      sitesTried++;
+      const cards = await this.siteCards(site, name, deadline);
+      for (const c of cards) {
+        const r = scoreCard(product, c.title, ids);
+        if (!r.accept) continue;
+        // Sanity band: your own realized price is the best free prior.
+        if (refPrice > 0 && (c.price < refPrice * 0.3 || c.price > refPrice * 3)) continue;
+        const weighted = r.score * (site.downWeight || 1);
+        points.push(c.price);
+        scores.push(weighted);
+        matched++;
+        if (!best || weighted > best.weighted) {
+          best = { site: site.name, title: c.title, url: c.url, price: c.price, tier: r.tier, weighted };
+        }
+      }
+    }
+    return { points, scores, best, matched, sitesTried, avgScore: () => (scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0) };
+  }
+
+  /** Cards for one site (12h cache). Injects raw polite fetch or the browser fetch. */
+  private async siteCards(site: MarketSite, name: string, deadline: number): Promise<PriceCard[]> {
+    const key = `${site.name}|${name.toLowerCase()}`;
+    const hit = this.msCache.get(key);
+    if (hit && Date.now() - hit.at < this.CAT_TTL) return hit.cards;
+    const fetchHtml = site.needsBrowser
+      ? (url: string) => this.browser.fetchHtml(url, { timeoutMs: 15_000 })
+      : (url: string) => this.fetchPolite(url, deadline);
+    const cards = await searchMarketplace(site, name, fetchHtml).catch(() => [] as PriceCard[]);
+    this.msCache.set(key, { at: Date.now(), cards });
+    return cards;
+  }
+
+  /** Persist a high-confidence product↔listing mapping (blueprint Learning engine). */
+  private async learnMatch(schema: string, productId: string, best: NonNullable<MatchAgg['best']>, confidence: number) {
+    await this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `INSERT INTO "${schema}".market_price_matches (product_id, site, matched_title, matched_url, price, tier, confidence)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (product_id, site) DO UPDATE SET
+           matched_title = EXCLUDED.matched_title, matched_url = EXCLUDED.matched_url, price = EXCLUDED.price,
+           tier = EXCLUDED.tier, confidence = EXCLUDED.confidence, learned_at = NOW()`,
+        [productId, best.site, best.title.slice(0, 500), best.url || null, r2(best.price), best.tier, confidence],
+      ),
+    ).catch(() => undefined);
   }
 
   // ─── Bulk refresh queue ──────────────────────────────────────────────────────
@@ -510,10 +619,11 @@ export class MarketPriceService {
     const kept = sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
     if (kept.length < 2) return null;
     const median = kept[Math.floor(kept.length / 2)];
+    const avg = kept.reduce((a, b) => a + b, 0) / kept.length;
     // Confidence: point count AND tightness (wide scatter = low trust).
     const spread = median > 0 ? (kept[kept.length - 1] - kept[0]) / median : 1;
     const confidence = r2(Math.max(0.1, Math.min(1, (kept.length / 8) * (spread > 1 ? 0.5 : 1))));
-    return { low: kept[0], median, high: kept[kept.length - 1], points: kept.length, confidence };
+    return { low: kept[0], median, high: kept[kept.length - 1], avg, points: kept.length, confidence };
   }
 
   /**
@@ -555,6 +665,7 @@ export class MarketPriceService {
         low: Math.min(Number(low) || median, median),
         median: Number(median),
         high: Math.max(Number(high) || median, median),
+        avg: Number(median),
         points: Number(points),
         confidence: r2(Math.max(0.2, Math.min(1, Number(points) / 6))),
       };

@@ -18,8 +18,20 @@ export interface Recommendation {
   /** Estimated financial impact in ₹ (positive = gain/unblocked capital). Null when honest estimation isn't possible. */
   impact: number | null;
   impactLabel: string;
+  /** Honest downside of following this recommendation (blueprint: every rec states its risks). */
+  risks: string[];
   action: Record<string, any>;
 }
+
+/** The standing risk of each recommendation type (surfaced so the user decides with eyes open). */
+const TYPE_RISKS: Record<RecommendationType, string[]> = {
+  buy: ['Ties up capital', 'Demand estimate assumes recent sales continue'],
+  'reorder-soon': ['Demand may soften before the reorder point'],
+  'price-up': ['Price-sensitive buyers may switch', 'Market price is a listing, not a negotiated deal'],
+  'price-down': ['Erodes margin', 'May start a price war on this line'],
+  'promote-dead': ['Discount cuts into recoverable value'],
+  'switch-supplier': ['New supplier lead time / quality unproven', 'Historical price may not hold on reorder'],
+};
 
 export interface SupplierOption {
   supplierId: string;
@@ -120,7 +132,7 @@ export class RecommendationService {
     ]);
     const perfBy = new Map(perf.products.map((p) => [p.productId, p]));
     const mktBy = new Map(mkt.products.map((p) => [p.productId, p]));
-    const out: Recommendation[] = [];
+    const out: Omit<Recommendation, 'risks'>[] = [];
 
     // 1) BUY / REORDER-SOON — stock won't cover forecast demand.
     for (const p of plan.products) {
@@ -229,7 +241,8 @@ export class RecommendationService {
     const typeRank: Record<RecommendationType, number> = { buy: 0, 'switch-supplier': 1, 'price-up': 1, 'promote-dead': 2, 'reorder-soon': 3, 'price-down': 3 };
     out.sort((a, b) => (typeRank[a.type] - typeRank[b.type]) || ((b.impact || 0) - (a.impact || 0)));
 
-    const data = { generatedAt: new Date().toISOString(), recommendations: out.slice(0, 40) };
+    const recommendations: Recommendation[] = out.slice(0, 40).map((r) => ({ ...r, risks: TYPE_RISKS[r.type] || [] }));
+    const data = { generatedAt: new Date().toISOString(), recommendations };
     this.cache.set(schema, { at: Date.now(), data });
     return data;
   }
