@@ -402,6 +402,35 @@ export class BuilderService implements OnModuleInit {
     return this.resolveSession(token, 'updates');
   }
 
+  /** Mint an ADMIN updates session — the business owner's "My Updates" webview,
+   *  bound to the tenant (not a customer). Reusable 30 days. */
+  async createAdminUpdatesSession(input: {
+    tenantId: string;
+    schemaName: string;
+    adminPhone?: string | null;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions
+         (token_hash, tenant_id, schema_name, type, customer_phone, customer_name, status, mode, expires_at)
+       VALUES ($1,$2,$3,'admin-updates',$4,'Admin','open','admin-updates',$5)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.adminPhone || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/updates?token=${token}` };
+  }
+
+  /** Resolve either a customer ('updates') or admin ('admin-updates') updates session. */
+  async resolveUpdatesSessionAny(token: string) {
+    if (!token) throw new UnauthorizedException('Missing link token.');
+    const s = (await this.ds.query(`SELECT * FROM public.builder_sessions WHERE token_hash = $1`, [this.hash(token)]))[0];
+    if (!s) throw new UnauthorizedException('Invalid link.');
+    if (s.mode !== 'updates' && s.mode !== 'admin-updates') throw new ForbiddenException('This link is not valid here.');
+    if (new Date(s.expires_at).getTime() < Date.now()) throw new ForbiddenException('This link has expired. Please request a new one.');
+    return s;
+  }
+
   /** Mint a SHOP session for the MERCHANT to preview their own storefront. Binds
    *  to the most recently active customer so the cart works during preview. */
   async createShopPreview(tenantId: string, schemaName: string): Promise<{ token: string; url: string }> {

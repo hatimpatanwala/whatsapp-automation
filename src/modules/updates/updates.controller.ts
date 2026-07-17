@@ -18,7 +18,7 @@ export class UpdatesController {
 
   @Get('list')
   list(@Req() req: Request, @Query('token') token?: string) {
-    return this.updates.listForCustomer(this.token(req, token));
+    return this.updates.listForToken(this.token(req, token));
   }
 
   @Post(':id/read')

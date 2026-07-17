@@ -44,26 +44,22 @@ export class UpdatesService {
     return `notif:ping:${schema}:${phone}`;
   }
 
-  /** Record one update into the recipient's inbox (customer or admin feed). */
+  /**
+   * Record one CUSTOMER update into their inbox. Admin updates are owned by
+   * AdminFeedService (the portal bell → admin_notifications), so we don't re-insert
+   * them here (that would double-write); admin pings just read that table.
+   */
   async record(u: RecordUpdate): Promise<void> {
+    if (u.audience === 'admin') return;
     const icon = u.icon || TYPE_ICON[u.type] || '🔔';
     try {
-      if (u.audience === 'admin') {
-        await this.cm.executeInTenantContext(u.schema, (qr) =>
-          qr.query(
-            `INSERT INTO "${u.schema}".admin_notifications (type, title, body, route) VALUES ($1,$2,$3,$4)`,
-            [u.type, u.title.slice(0, 200), u.body || null, u.link || null],
-          ),
-        );
-      } else {
-        await this.cm.executeInTenantContext(u.schema, (qr) =>
-          qr.query(
-            `INSERT INTO "${u.schema}".customer_updates (customer_id, recipient_phone, type, title, body, link, icon)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [u.customerId || null, u.recipientPhone, u.type, u.title.slice(0, 200), u.body || null, u.link || null, icon],
-          ),
-        );
-      }
+      await this.cm.executeInTenantContext(u.schema, (qr) =>
+        qr.query(
+          `INSERT INTO "${u.schema}".customer_updates (customer_id, recipient_phone, type, title, body, link, icon)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [u.customerId || null, u.recipientPhone, u.type, u.title.slice(0, 200), u.body || null, u.link || null, icon],
+        ),
+      );
     } catch (e: any) {
       this.logger.warn(`record update failed (${u.type}) for ${u.recipientPhone}: ${e?.message}`);
     }
@@ -82,7 +78,7 @@ export class UpdatesService {
     await this.redis.del(this.pingKey(schema, phone)).catch(() => undefined);
   }
 
-  /** Count unseen updates (for the ping text + webview badge). */
+  /** Count unseen CUSTOMER updates (for the ping text + webview badge). */
   async unseenCount(schema: string, phone: string, customerId?: string | null): Promise<number> {
     const rows = await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
@@ -90,6 +86,14 @@ export class UpdatesService {
          WHERE is_seen = false AND (recipient_phone = $1 OR ($2::uuid IS NOT NULL AND customer_id = $2))`,
         [phone, customerId || null],
       ),
+    ).catch(() => [{ n: 0 }]);
+    return rows?.[0]?.n || 0;
+  }
+
+  /** Count unseen ADMIN updates (admin_notifications is tenant-global — one admin). */
+  async unseenCountAdmin(schema: string): Promise<number> {
+    const rows = await this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(`SELECT COUNT(*)::int AS n FROM "${schema}".admin_notifications WHERE is_seen = false`),
     ).catch(() => [{ n: 0 }]);
     return rows?.[0]?.n || 0;
   }
@@ -102,17 +106,46 @@ export class UpdatesService {
     return url;
   }
 
-  // ── Webview API (token-authenticated) ────────────────────────────────────────
+  /** Mint the admin's My-Updates webview link. */
+  async adminWebviewLink(tenantId: string, schema: string, adminPhone?: string): Promise<string> {
+    const { url } = await this.builder.createAdminUpdatesSession({ tenantId, schemaName: schema, adminPhone: adminPhone || null });
+    return url;
+  }
+
+  // ── Webview API (token-authenticated; customer OR admin session) ──────────────
   private async resolve(token: string) {
-    const s = await this.builder.resolveUpdatesSession(token).catch(() => null);
+    const s = await this.builder.resolveUpdatesSessionAny(token).catch(() => null);
     if (!s) throw new UnauthorizedException('This link has expired. Please ask for a fresh one.');
     return s;
   }
 
-  /** List the customer's updates (opening the inbox marks them SEEN + resets the ping). */
-  async listForCustomer(token: string) {
+  /** List the recipient's updates (opening the inbox marks them SEEN + resets the ping). */
+  async listForToken(token: string) {
     const s = await this.resolve(token);
     const schema = s.schema_name;
+    const isAdmin = s.mode === 'admin-updates';
+
+    if (isAdmin) {
+      const rows = await this.cm.executeInTenantContext(schema, (qr) =>
+        qr.query(
+          `SELECT id, type, title, body, route AS link, is_read, is_seen, created_at
+           FROM "${schema}".admin_notifications ORDER BY created_at DESC LIMIT 300`,
+        ),
+      );
+      await this.cm.executeInTenantContext(schema, (qr) =>
+        qr.query(`UPDATE "${schema}".admin_notifications SET is_seen = true WHERE is_seen = false`),
+      ).catch(() => undefined);
+      await this.resetPing(schema, s.customer_phone || 'admin');
+      return {
+        audience: 'admin',
+        name: 'Admin',
+        updates: rows.map((r: any) => ({
+          id: r.id, type: r.type, title: r.title, body: r.body, link: r.link,
+          icon: TYPE_ICON[r.type] || '🔔', isRead: r.is_read, createdAt: r.created_at,
+        })),
+      };
+    }
+
     const phone = s.customer_phone;
     const customerId = s.customer_id;
     const rows = await this.cm.executeInTenantContext(schema, (qr) =>
@@ -124,7 +157,6 @@ export class UpdatesService {
         [phone, customerId || null],
       ),
     );
-    // Opening the inbox = seen; and stop the outstanding ping so the next episode pings again.
     await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
         `UPDATE "${schema}".customer_updates SET is_seen = true
@@ -134,6 +166,7 @@ export class UpdatesService {
     ).catch(() => undefined);
     await this.resetPing(schema, phone);
     return {
+      audience: 'customer',
       name: s.customer_name || null,
       updates: rows.map((r: any) => ({
         id: r.id, type: r.type, title: r.title, body: r.body, link: r.link,
@@ -145,6 +178,13 @@ export class UpdatesService {
   /** Mark one update read (clicked). */
   async markRead(token: string, id: string) {
     const s = await this.resolve(token);
+    if (s.mode === 'admin-updates') {
+      // admin_notifications has no read_at column.
+      await this.cm.executeInTenantContext(s.schema_name, (qr) =>
+        qr.query(`UPDATE "${s.schema_name}".admin_notifications SET is_read = true WHERE id = $1`, [id]),
+      );
+      return { ok: true };
+    }
     await this.cm.executeInTenantContext(s.schema_name, (qr) =>
       qr.query(
         `UPDATE "${s.schema_name}".customer_updates SET is_read = true, read_at = NOW()
@@ -158,6 +198,12 @@ export class UpdatesService {
   /** Mark all read. */
   async markAllRead(token: string) {
     const s = await this.resolve(token);
+    if (s.mode === 'admin-updates') {
+      await this.cm.executeInTenantContext(s.schema_name, (qr) =>
+        qr.query(`UPDATE "${s.schema_name}".admin_notifications SET is_read = true WHERE is_read = false`),
+      );
+      return { ok: true };
+    }
     await this.cm.executeInTenantContext(s.schema_name, (qr) =>
       qr.query(
         `UPDATE "${s.schema_name}".customer_updates SET is_read = true, read_at = NOW()

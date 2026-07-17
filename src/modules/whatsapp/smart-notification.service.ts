@@ -244,9 +244,13 @@ export class SmartNotificationService {
    * message); onInbound() then delivers the webview link when the recipient replies.
    */
   private async sendUpdatesPing(input: NotifyInput, phoneNumberId: string, accessToken: string): Promise<void> {
-    const count = await this.updates.unseenCount(input.schema, input.recipientPhone, input.customerId);
-    const link = await this.updates.webviewLink(
-      input.tenantId, input.schema, input.recipientPhone, input.customerId, input.recipientName,
+    const isAdmin = input.audience === 'admin';
+    const count = isAdmin
+      ? await this.updates.unseenCountAdmin(input.schema)
+      : await this.updates.unseenCount(input.schema, input.recipientPhone, input.customerId);
+    const link = await (isAdmin
+      ? this.updates.adminWebviewLink(input.tenantId, input.schema, input.recipientPhone)
+      : this.updates.webviewLink(input.tenantId, input.schema, input.recipientPhone, input.customerId, input.recipientName)
     ).catch(() => '');
 
     const body = input.audience === 'admin'
@@ -264,7 +268,6 @@ export class SmartNotificationService {
 
     // Window closed → one utility teaser template (its tap opens the window; onInbound
     // then sends the webview link). This is the single charged message per episode.
-    const isAdmin = input.audience === 'admin';
     const name = isAdmin ? 'admin_updates_teaser' : 'customer_updates_teaser';
     const components = isAdmin
       ? [{ type: 'body', parameters: [{ type: 'text', text: String(count || 1) }] }]
@@ -299,13 +302,14 @@ export class SmartNotificationService {
   }
 
   /**
-   * Called from the webhook on every inbound message. If the recipient (customer or
+   * Called from the webhook on every inbound message. If the recipient (customer OR
    * admin) has unseen updates, reply with ONE link into their My-Updates webview —
    * "if the customer/admin messages, open the webview". Resets the ping either way.
    */
-  async onInbound(tenantId: string, schema: string, phone: string): Promise<void> {
+  async onInbound(tenantId: string, schema: string, phone: string, audience: NotifyAudience = 'customer'): Promise<void> {
     try {
-      const count = await this.updates.unseenCount(schema, phone);
+      const isAdmin = audience === 'admin';
+      const count = isAdmin ? await this.updates.unseenCountAdmin(schema) : await this.updates.unseenCount(schema, phone);
       await this.updates.resetPing(schema, phone);
       if (count <= 0) return;
       // Only once per inbound episode (avoid re-sending the link on every message).
@@ -314,9 +318,13 @@ export class SmartNotificationService {
 
       const creds = await this.resolveCreds(tenantId);
       if (!creds) return;
-      const link = await this.updates.webviewLink(tenantId, schema, phone).catch(() => '');
+      const link = await (isAdmin
+        ? this.updates.adminWebviewLink(tenantId, schema, phone)
+        : this.updates.webviewLink(tenantId, schema, phone)
+      ).catch(() => '');
       if (!link) return;
-      const body = `🔔 You have ${count > 1 ? `${count} updates` : 'an update'}. Tap to view.`;
+      const who = isAdmin ? 'store updates' : 'updates';
+      const body = `🔔 You have ${count > 1 ? `${count} ${who}` : `a new ${isAdmin ? 'store update' : 'update'}`}. Tap to view.`;
       await this.orchestrator.sendCtaUrl(
         tenantId, creds.phoneNumberId, creds.accessToken, phone,
         body, 'View updates', link, undefined, undefined, 'service',

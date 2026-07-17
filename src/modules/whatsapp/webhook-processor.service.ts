@@ -249,10 +249,10 @@ export class WebhookProcessorService {
       }
     }
 
-    // The recipient just messaged us — if they have unseen updates, reply with a
-    // single link into their My-Updates webview (and reset the ping for next time).
-    if (this.smartNotification && tenant.id) {
-      this.smartNotification.onInbound(tenant.id, schema, from).catch(() => undefined);
+    // The recipient (customer OR admin) just messaged us — if they have unseen
+    // updates, reply with a single link into their My-Updates webview.
+    if (this.smartNotification && tenant.id && !isSalesman) {
+      this.smartNotification.onInbound(tenant.id, schema, from, audience).catch(() => undefined);
     }
 
     // ─── WORKFLOW ENGINE: Check for active execution first ─────────────
