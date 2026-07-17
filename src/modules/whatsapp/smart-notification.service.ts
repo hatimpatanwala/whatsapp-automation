@@ -228,6 +228,22 @@ export class SmartNotificationService {
       // windowOnly nudges (legacy abandoned-cart) never ping — they just sit in the inbox.
       if (input.windowOnly) return;
 
+      // Marketing "full template" mode (tenant opted in via marketing_template_mode):
+      // send the REAL marketing creative per campaign, window-aware — NOT collapsed
+      // into the generic updates teaser. This preserves full-reach marketing sends.
+      if (input.channel === 'marketing' && input.marketingTemplate) {
+        if ((await this.getMarketingMode(input.schema)) === 'template') {
+          const comps = input.marketingTemplate.params?.length
+            ? [{ type: 'body', parameters: input.marketingTemplate.params.map((p) => ({ type: 'text', text: String(p ?? '') })) }]
+            : undefined;
+          await this.orchestrator.sendTemplate(
+            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
+            input.marketingTemplate.name, input.marketingTemplate.language || 'en', comps, 'marketing', true,
+          );
+          return;
+        }
+      }
+
       // 2) Send at most ONE ping per unviewed episode. A burst of events → one ping.
       if (!(await this.updates.shouldPing(input.schema, input.recipientPhone))) return;
 
