@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { Request } from 'express';
+import { Public } from '../../common/decorators/public.decorator';
 import { UpdatesService } from './updates.service';
 
 /**
@@ -7,6 +8,7 @@ import { UpdatesService } from './updates.service';
  * /m/updates?token=... calls these. Served under the global /api prefix.
  */
 @Controller('m/updates')
+@Public()
 export class UpdatesController {
   constructor(private readonly updates: UpdatesService) {}
 
