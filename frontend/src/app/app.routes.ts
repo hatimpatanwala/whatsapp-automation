@@ -345,5 +345,11 @@ export const routes: Routes = [
     path: 'm/sales',
     loadComponent: () => import('./features/builder/sales-webview.component').then(m => m.SalesWebviewComponent),
   },
+  {
+    // Token-secured customer "My Updates" inbox (opened from WhatsApp) — the
+    // customer's feed of order/invoice/payment/quote notifications.
+    path: 'm/updates',
+    loadComponent: () => import('./features/builder/updates-webview.component').then(m => m.UpdatesWebviewComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
