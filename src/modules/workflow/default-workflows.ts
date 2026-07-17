@@ -34,16 +34,16 @@ export function buildWelcomeHub(storeName: string): DefaultWorkflowDef {
     name: 'Welcome',
     description: 'Greets customers and shows a menu of whatever is active (browse, search, cart, orders, quotes, support).',
     trigger: { type: 'trigger_message', keywords: 'hi,hello,hey,menu,start,shop,hii,helo', matchType: 'contains' },
+    // ONE message on "hi": a welcome + a single "Open Shop" button that drops the
+    // customer straight into the storefront webview (browse, cart, orders — all in
+    // one place). Collapsing welcome-text + menu-list into a single interactive
+    // message saves a paid message and gets the customer to the webview in one tap.
     nodes: [
       { id: 'n1', type: 'trigger_message', label: 'Customer Says Hi', x: 340, y: 40, config: { keywords: 'hi,hello,hey,menu,start,shop,hii,helo', matchType: 'contains' }, outputs: ['n2'] },
-      { id: 'n2', type: 'send_text', label: 'Welcome Message', x: 340, y: 190, config: { message: `👋 Welcome to *${store}*!\nHi {{customer_name}}, great to see you. How can we help you today?` }, outputs: ['n3'] },
-      { id: 'n3', type: 'send_list', label: 'Main Menu', x: 340, y: 340, config: { message: 'Pick an option to get started:', buttonText: 'Open Menu', source: 'menu_workflows' }, outputs: ['n4'] },
-      { id: 'n4', type: 'start_workflow', label: 'Open Selected', x: 340, y: 520, config: { useReply: true, passVariables: true }, outputs: [] },
+      { id: 'n2', type: 'open_shop', label: 'Welcome + Open Shop', x: 340, y: 200, config: { message: `👋 Welcome to *${store}*!\nHi {{customer_name}}, tap below to browse products, view your cart and track your orders — all in one place.`, buttonLabel: '🛒 Open Shop' }, outputs: [] },
     ],
     edges: [
       { id: 'e1', from: 'n1', to: 'n2' },
-      { id: 'e2', from: 'n2', to: 'n3' },
-      { id: 'e3', from: 'n3', to: 'n4' },
     ],
   };
 }
