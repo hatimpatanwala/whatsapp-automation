@@ -376,6 +376,32 @@ export class BuilderService implements OnModuleInit {
     return { token, url: `${base}/m/shop?token=${token}` };
   }
 
+  /** Mint an UPDATES session — the customer's "My Updates" inbox webview. Reusable
+   *  30-day link so a single "you have updates" ping keeps working. */
+  async createUpdatesSession(input: {
+    tenantId: string;
+    schemaName: string;
+    customerId?: string | null;
+    customerPhone?: string | null;
+    customerName?: string | null;
+  }): Promise<{ token: string; url: string }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await this.ds.query(
+      `INSERT INTO public.builder_sessions
+         (token_hash, tenant_id, schema_name, type, customer_id, customer_phone, customer_name, status, mode, expires_at)
+       VALUES ($1,$2,$3,'updates',$4,$5,$6,'open','updates',$7)`,
+      [this.hash(token), input.tenantId, input.schemaName, input.customerId || null, input.customerPhone || null, input.customerName || null, expiresAt],
+    );
+    const base = (this.config.get<string>('FRONTEND_URL', '') || '').replace(/\/$/, '');
+    return { token, url: `${base}/m/updates?token=${token}` };
+  }
+
+  /** Resolve an updates-session token to its customer context (for the webview API). */
+  async resolveUpdatesSession(token: string) {
+    return this.resolveSession(token, 'updates');
+  }
+
   /** Mint a SHOP session for the MERCHANT to preview their own storefront. Binds
    *  to the most recently active customer so the cart works during preview. */
   async createShopPreview(tenantId: string, schemaName: string): Promise<{ token: string; url: string }> {
@@ -542,7 +568,7 @@ export class BuilderService implements OnModuleInit {
   }
 
   /** Resolve + validate a token to its (open, unexpired) session row. */
-  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' | 'erp' | 'portal' = 'build'): Promise<any> {
+  private async resolveSession(token: string, expectedMode: 'build' | 'view' | 'bulk' | 'promo' | 'shop' | 'customers' | 'invoice' | 'onboarding' | 'erp' | 'portal' | 'updates' = 'build'): Promise<any> {
     if (!token) throw new UnauthorizedException('Missing builder token.');
     const rows = await this.ds.query(
       `SELECT * FROM public.builder_sessions WHERE token_hash = $1`,

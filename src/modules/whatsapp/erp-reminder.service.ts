@@ -45,7 +45,7 @@ export class ErpReminderService {
     if (!inv) return { sent: 0, reason: 'Invoice not found' };
     if (inv.payment_status === 'paid') return { sent: 0, reason: 'Already paid' };
     if (!inv.customer_phone) return { sent: 0, reason: 'No customer phone on invoice' };
-    await this.whatsappApi.sendTextMessage(c.phoneNumberId, c.accessToken, inv.customer_phone, this.message(inv));
+    await this.deliver(tenantId, schema, c, inv);
     await this.cm.executeInTenantContext(schema, (qr) => qr.query(`UPDATE "${schema}".invoices SET last_reminder_at = NOW() WHERE id = $1`, [invoiceId]));
     return { sent: 1, invoiceNumber: inv.invoice_number };
   }
@@ -70,7 +70,7 @@ export class ErpReminderService {
     let sent = 0;
     for (const inv of invoices) {
       try {
-        await this.whatsappApi.sendTextMessage(c.phoneNumberId, c.accessToken, inv.customer_phone, this.message(inv));
+        await this.deliver(tenantId, schema, c, inv);
         await this.cm.executeInTenantContext(schema, (qr) => qr.query(`UPDATE "${schema}".invoices SET last_reminder_at = NOW() WHERE id = $1`, [inv.id]));
         sent++;
       } catch (e: any) {
@@ -78,5 +78,25 @@ export class ErpReminderService {
       }
     }
     return { sent, total: invoices.length };
+  }
+
+  /**
+   * Deliver a reminder through the smart inbox so it's recorded in the customer's
+   * My-Updates and only pings once per episode (a customer with several overdue
+   * invoices gets ONE "you have updates" message, not one per invoice). Falls back
+   * to a direct text if the notification layer isn't available.
+   */
+  private async deliver(tenantId: string, schema: string, c: { phoneNumberId: string; accessToken: string }, inv: any): Promise<void> {
+    if (this.notifications) {
+      await this.notifications.notify({
+        tenantId, schema, phoneNumberId: c.phoneNumberId, accessToken: c.accessToken,
+        recipientPhone: inv.customer_phone, audience: 'customer', channel: 'utility',
+        updateType: 'reminder', recipientName: inv.customer_name,
+        summary: `Payment reminder — invoice ${inv.invoice_number}`,
+        detail: this.message(inv),
+      });
+      return;
+    }
+    await this.whatsappApi.sendTextMessage(c.phoneNumberId, c.accessToken, inv.customer_phone, this.message(inv));
   }
 }

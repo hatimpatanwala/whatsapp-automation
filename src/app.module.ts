@@ -48,6 +48,7 @@ import { SfaModule } from './modules/sfa/sfa.module';
 import { InsightsModule } from './modules/erp/insights/insights.module';
 import { IntelModule } from './modules/erp/intel/intel.module';
 import { WhatsappConnectModule } from './modules/whatsapp-connect/whatsapp-connect.module';
+import { UpdatesModule } from './modules/updates/updates.module';
 import { AccessModule } from './modules/access/access.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { TenantResolutionMiddleware } from './common/middleware/tenant-resolution.middleware';
@@ -104,6 +105,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
     InsightsModule,
     IntelModule,
     WhatsappConnectModule,
+    UpdatesModule,
     AccessModule,
   ],
   providers: [

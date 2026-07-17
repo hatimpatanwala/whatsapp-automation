@@ -3330,6 +3330,41 @@ const migration087MarketPriceHistory: TenantMigration = {
  * to each product (Exact/High tier), so repeat refreshes trust known-good mappings
  * and matching accuracy improves over time (blueprint "Learning" engine).
  */
+/**
+ * 089 — Customer "My Updates" inbox. Every customer-facing notification (order,
+ * invoice, payment, quote, reminder, marketing…) is recorded here so the WhatsApp
+ * message can be a SINGLE "you have updates — tap to view" ping into the /m/updates
+ * webview, instead of one paid message per event. Read/seen flags + type power the
+ * webview's tabs, unread badges and history.
+ */
+const migration089CustomerUpdates: TenantMigration = {
+  name: '089_customer_updates',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".customer_updates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      customer_id UUID,
+      recipient_phone VARCHAR(32) NOT NULL,
+      type VARCHAR(24) NOT NULL DEFAULT 'update',
+      title VARCHAR(200) NOT NULL,
+      body TEXT,
+      link TEXT,
+      icon VARCHAR(8),
+      is_read BOOLEAN NOT NULL DEFAULT false,
+      is_seen BOOLEAN NOT NULL DEFAULT false,
+      read_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_cust_updates_phone ON "${schema}".customer_updates (recipient_phone, created_at DESC)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_cust_updates_customer ON "${schema}".customer_updates (customer_id, created_at DESC)`);
+    // Admin feed: add a 'seen' flag alongside is_read for the same list/badge UX.
+    await qr.query(`ALTER TABLE "${schema}".admin_notifications ADD COLUMN IF NOT EXISTS is_seen BOOLEAN NOT NULL DEFAULT false`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".customer_updates`);
+    await qr.query(`ALTER TABLE "${schema}".admin_notifications DROP COLUMN IF EXISTS is_seen`);
+  },
+};
+
 const migration088MarketAvgAndMatches: TenantMigration = {
   name: '088_market_avg_and_matches',
   async up(qr, schema) {
@@ -3446,4 +3481,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration086MarketPrices,
   migration087MarketPriceHistory,
   migration088MarketAvgAndMatches,
+  migration089CustomerUpdates,
 ];

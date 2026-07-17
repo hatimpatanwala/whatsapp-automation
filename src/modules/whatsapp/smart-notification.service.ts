@@ -8,6 +8,7 @@ import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../../config/redis.module';
 import { QUEUE_NOTIFICATION_FLUSH } from '../../queue/queue.module';
 import { MessageOrchestratorService } from './message-orchestrator.service';
+import { UpdatesService } from '../updates/updates.service';
 import { MetaTokenService } from '../waba/meta-token.service';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { Tenant } from '../../database/entities/public/tenant.entity';
@@ -30,6 +31,10 @@ export interface NotifyInput {
   summary: string;
   /** Full message sent free-form when the service window is open. Defaults to summary. */
   detail?: string;
+  /** Update category for the My-Updates inbox tabs (order|invoice|payment|quote|reminder|marketing|delivery). */
+  updateType?: string;
+  /** Customer id, if known — lets the inbox link updates to a specific customer. */
+  customerId?: string | null;
   recipientName?: string;
   /** Bypass batching — send immediately (uses urgentTemplate when window closed). */
   urgent?: boolean;
@@ -105,6 +110,7 @@ export class SmartNotificationService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly orchestrator: MessageOrchestratorService,
     private readonly config: ConfigService,
+    private readonly updates: UpdatesService,
     @InjectQueue(QUEUE_NOTIFICATION_FLUSH) private readonly flushQueue: Queue,
     @Optional() private readonly metaTokenService: MetaTokenService,
     @Optional() @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
@@ -191,7 +197,14 @@ export class SmartNotificationService {
     return `notif:door:${schema}:${phone}`;
   }
 
-  /** Entry point: route a notification through the smart pipeline. */
+  /**
+   * Entry point (single-ping / My-Updates model). Every notification is RECORDED in
+   * the recipient's inbox; the WhatsApp message is at most ONE "you have updates —
+   * tap to view" ping per unviewed episode, linking to the /m/updates webview. All
+   * the detail lives (free) in the webview, so we never send multiple paid messages
+   * for a burst of events. Since a free service window can no longer be assumed, the
+   * ping is charged either way — so we send exactly one and let the rest accumulate.
+   */
   async notify(input: NotifyInput): Promise<void> {
     const detail = input.detail || input.summary;
 
@@ -204,78 +217,61 @@ export class SmartNotificationService {
       accessToken = creds.accessToken;
     }
 
-    const item: PendingItem = {
-      tenantId: input.tenantId, schema: input.schema, phoneNumberId,
-      accessToken, audience: input.audience, channel: input.channel,
-      summary: input.summary, detail, recipientName: input.recipientName,
-      buttons: input.buttons, ctaUrl: input.ctaUrl, createdAt: Date.now(),
-    };
-
     try {
-      const windowOpen = await this.orchestrator.hasActiveServiceWindow(input.tenantId, input.recipientPhone);
-      if (windowOpen) {
-        // Inside the window: CTA-URL link button, quick-reply buttons, or text.
-        if (input.ctaUrl) {
-          await this.orchestrator.sendCtaUrl(
-            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
-            detail, input.ctaUrl.label.slice(0, 20), input.ctaUrl.url, undefined, undefined, 'service',
-          );
-        } else if (input.buttons && input.buttons.length) {
-          await this.orchestrator.sendButtons(
-            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
-            detail, input.buttons.slice(0, 3).map((b) => ({ ...b, title: b.title.slice(0, 20) })), undefined, undefined, 'service',
-          );
-        } else {
-          await this.orchestrator.sendText(input.tenantId, phoneNumberId, accessToken, input.recipientPhone, detail, 'service');
-        }
-        return;
-      }
+      // 1) Always record the update in the inbox (this is the source of truth).
+      await this.updates.record({
+        schema: input.schema, audience: input.audience, recipientPhone: input.recipientPhone,
+        customerId: input.customerId, type: input.updateType || 'update',
+        title: input.summary, body: detail, link: input.ctaUrl?.url,
+      });
 
-      // ── Window CLOSED ──
-      // Marketing in "full template" mode (tenant opted in): send the real
-      // marketing template (full reach, marketing rate). Default is the
-      // cost-efficient door-opener below. Abandoned-cart (windowOnly) is never
-      // forced to a template.
-      if (input.channel === 'marketing' && !input.windowOnly && input.marketingTemplate) {
-        const mode = await this.getMarketingMode(input.schema);
-        if (mode === 'template') {
-          const comps = input.marketingTemplate.params && input.marketingTemplate.params.length
-            ? [{ type: 'body', parameters: input.marketingTemplate.params.map((p) => ({ type: 'text', text: String(p ?? '') })) }]
-            : undefined;
-          await this.orchestrator.sendTemplate(
-            input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
-            input.marketingTemplate.name, input.marketingTemplate.language || 'en', comps, 'marketing', true,
-          );
-          return;
-        }
-      }
-
-      // Buffer the real content; it is delivered free-form only once the recipient
-      // opens the window (taps the door-opener or messages).
-      const awaitK = this.awaitKey(input.schema, input.recipientPhone);
-      await this.redis.rpush(awaitK, JSON.stringify(item));
-      await this.redis.expire(awaitK, AWAIT_TTL_SEC);
-
-      // windowOnly (abandoned cart): never send any template — just wait for the
-      // recipient to message, then deliver it free-form.
+      // windowOnly nudges (legacy abandoned-cart) never ping — they just sit in the inbox.
       if (input.windowOnly) return;
 
-      // Otherwise ensure exactly ONE utility "door-opener" template is sent (after
-      // a short debounce so multiple events collapse into one). A single tap on it
-      // opens the 24h window, and onInbound() then flushes the whole buffer
-      // free-form — so at most ONE utility template is ever charged per episode.
-      const doorK = this.doorKey(input.schema, input.recipientPhone);
-      if (!(await this.redis.exists(doorK))) {
-        const delay = await this.getBatchMs(input.schema);
-        await this.flushQueue.add(
-          'flush',
-          { schema: input.schema, phone: input.recipientPhone },
-          { jobId: `nflush:${input.schema}:${input.recipientPhone}`, delay, removeOnComplete: true, removeOnFail: true },
-        );
-      }
+      // 2) Send at most ONE ping per unviewed episode. A burst of events → one ping.
+      if (!(await this.updates.shouldPing(input.schema, input.recipientPhone))) return;
+
+      await this.sendUpdatesPing(input, phoneNumberId, accessToken);
     } catch (err: any) {
       this.logger.warn(`notify failed for ${input.recipientPhone}: ${err.message}`);
     }
+  }
+
+  /**
+   * Send the single "you have updates — tap to view" ping into the My-Updates webview.
+   * Inside an open window it's a free-form CTA-URL (one tap → webview). If the window
+   * is closed we fall back to the approved utility teaser template (one charged
+   * message); onInbound() then delivers the webview link when the recipient replies.
+   */
+  private async sendUpdatesPing(input: NotifyInput, phoneNumberId: string, accessToken: string): Promise<void> {
+    const count = await this.updates.unseenCount(input.schema, input.recipientPhone, input.customerId);
+    const link = await this.updates.webviewLink(
+      input.tenantId, input.schema, input.recipientPhone, input.customerId, input.recipientName,
+    ).catch(() => '');
+
+    const body = input.audience === 'admin'
+      ? `🔔 You have ${count > 1 ? `${count} new store updates` : 'a new store update'}. Tap to view.`
+      : `🔔 Hi ${input.recipientName || 'there'}, you have ${count > 1 ? `${count} new updates` : 'a new update'}. Tap to view.`;
+
+    const windowOpen = await this.orchestrator.hasActiveServiceWindow(input.tenantId, input.recipientPhone);
+    if (windowOpen && link) {
+      await this.orchestrator.sendCtaUrl(
+        input.tenantId, phoneNumberId, accessToken, input.recipientPhone,
+        body, 'View updates', link, undefined, undefined, 'service',
+      );
+      return;
+    }
+
+    // Window closed → one utility teaser template (its tap opens the window; onInbound
+    // then sends the webview link). This is the single charged message per episode.
+    const isAdmin = input.audience === 'admin';
+    const name = isAdmin ? 'admin_updates_teaser' : 'customer_updates_teaser';
+    const components = isAdmin
+      ? [{ type: 'body', parameters: [{ type: 'text', text: String(count || 1) }] }]
+      : [{ type: 'body', parameters: [{ type: 'text', text: input.recipientName || 'there' }, { type: 'text', text: String(count || 1) }] }];
+    await this.orchestrator.sendTemplate(
+      input.tenantId, phoneNumberId, accessToken, input.recipientPhone, name, 'en', components, 'utility', true,
+    );
   }
 
   /** Door-opener decision (called by the debounced queue worker). */
@@ -302,15 +298,31 @@ export class SmartNotificationService {
     await this.sendDoorOpener(first, phone, items.length);
   }
 
-  /** Called from the webhook on every inbound message (the service window just opened). */
-  async onInbound(schema: string, phone: string): Promise<void> {
+  /**
+   * Called from the webhook on every inbound message. If the recipient (customer or
+   * admin) has unseen updates, reply with ONE link into their My-Updates webview —
+   * "if the customer/admin messages, open the webview". Resets the ping either way.
+   */
+  async onInbound(tenantId: string, schema: string, phone: string): Promise<void> {
     try {
-      const items = await this.drain(this.awaitKey(schema, phone));
-      await this.redis.del(this.doorKey(schema, phone)); // reset for the next episode
-      if (!items.length) return;
-      await this.sendConsolidated(items, phone);
+      const count = await this.updates.unseenCount(schema, phone);
+      await this.updates.resetPing(schema, phone);
+      if (count <= 0) return;
+      // Only once per inbound episode (avoid re-sending the link on every message).
+      const shownKey = `notif:shown:${schema}:${phone}`;
+      if ((await this.redis.set(shownKey, '1', 'EX', 6 * 3600, 'NX')) !== 'OK') return;
+
+      const creds = await this.resolveCreds(tenantId);
+      if (!creds) return;
+      const link = await this.updates.webviewLink(tenantId, schema, phone).catch(() => '');
+      if (!link) return;
+      const body = `🔔 You have ${count > 1 ? `${count} updates` : 'an update'}. Tap to view.`;
+      await this.orchestrator.sendCtaUrl(
+        tenantId, creds.phoneNumberId, creds.accessToken, phone,
+        body, 'View updates', link, undefined, undefined, 'service',
+      );
     } catch (err: any) {
-      this.logger.warn(`onInbound flush failed for ${phone}: ${err.message}`);
+      this.logger.warn(`onInbound failed for ${phone}: ${err.message}`);
     }
   }
 

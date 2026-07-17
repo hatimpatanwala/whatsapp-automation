@@ -31,6 +31,10 @@ export class AbandonedCartService {
   // Every 30 minutes — frequent enough to catch a service window before it closes.
   @Cron('0 */30 * * * *')
   async scanAll(): Promise<void> {
+    // DISABLED (per product decision): with no reliable free 24h window, cart reminders
+    // are being reworked. Kept intact below for when we decide how to handle them.
+    // Re-enable by removing this guard (or gate behind an ABANDONED_CART_ENABLED flag).
+    if (this.config.get<string>('ABANDONED_CART_ENABLED') !== 'true') return;
     if (!this.smartNotification) return;
     let tenants: any[] = [];
     try {

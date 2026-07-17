@@ -249,10 +249,10 @@ export class WebhookProcessorService {
       }
     }
 
-    // The inbound message opened (or refreshed) the service window — flush any
-    // notifications that were waiting for it, delivered free-form (no template cost).
+    // The recipient just messaged us — if they have unseen updates, reply with a
+    // single link into their My-Updates webview (and reset the ping for next time).
     if (this.smartNotification && tenant.id) {
-      this.smartNotification.onInbound(schema, from).catch(() => undefined);
+      this.smartNotification.onInbound(tenant.id, schema, from).catch(() => undefined);
     }
 
     // ─── WORKFLOW ENGINE: Check for active execution first ─────────────

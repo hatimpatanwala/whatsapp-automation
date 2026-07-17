@@ -189,9 +189,11 @@ export class WorkflowEventListener {
                 this.logger.warn(`Could not mint quote view link for ${schema}: ${e?.message}`);
               }
             }
+            const updateType = triggerType.replace(/^trigger_/, '') || 'update'; // order|payment|quote|invoice
             await this.smartNotification.notify({
               tenantId: t.id, schema, recipientPhone: customer.phone,
               audience: 'customer', channel: 'utility', recipientName: customer.name,
+              updateType, customerId: customer.id,
               summary: msg.summary, detail: msg.detail, buttons: ctaUrl ? undefined : msg.buttons, ctaUrl, template,
             }).catch(() => undefined);
           }
