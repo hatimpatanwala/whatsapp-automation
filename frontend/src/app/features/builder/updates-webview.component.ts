@@ -4,7 +4,12 @@ import { HttpBackend, HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../environments/environment';
 
-type UpdateType = 'order' | 'invoice' | 'payment' | 'reminder' | 'quote' | 'marketing' | 'delivery' | 'update';
+// Customer feed types (existing) + admin feed types (admin_notifications).
+type UpdateType =
+  | 'order' | 'invoice' | 'payment' | 'reminder' | 'quote' | 'marketing' | 'delivery' | 'update'
+  | 'customer' | 'low_stock' | 'purchase';
+
+type Audience = 'customer' | 'admin';
 
 interface UpdateItem {
   id: string;
@@ -17,7 +22,9 @@ interface UpdateItem {
   createdAt: string;
 }
 
-type TabKey = 'all' | 'orders' | 'invoices' | 'quotations' | 'payments';
+type TabKey =
+  | 'all' | 'orders' | 'invoices' | 'quotations' | 'payments'
+  | 'admin_payments' | 'customers' | 'quotes' | 'stock' | 'bills';
 
 /**
  * Customer-facing "My Updates" inbox opened from WhatsApp (/m/updates). A
@@ -41,7 +48,8 @@ type TabKey = 'all' | 'orders' | 'invoices' | 'quotations' | 'payments';
           <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0 text-lg leading-none">🔔</div>
           <div class="min-w-0 flex-1">
             <h1 class="text-[15px] font-bold leading-tight truncate">
-              {{ name() ? 'Hi ' + name() + ', your updates' : 'Your updates' }}
+              @if (audience() === 'admin') { 🔔 Store updates }
+              @else { {{ name() ? 'Hi ' + name() + ', your updates' : 'Your updates' }} }
             </h1>
             @if (!loading() && !error()) {
               <p class="text-[11px] text-green-50/90 leading-tight">
@@ -61,7 +69,7 @@ type TabKey = 'all' | 'orders' | 'invoices' | 'quotations' | 'payments';
         <!-- ─── TABS ──────────────────────────────────────────────── -->
         @if (!loading() && !error()) {
           <div class="max-w-xl mx-auto flex gap-1 overflow-x-auto px-2 pb-1 no-scrollbar">
-            @for (t of tabs; track t.key) {
+            @for (t of tabs(); track t.key) {
               <button
                 class="shrink-0 relative flex items-center gap-1.5 text-[13px] font-semibold px-3 py-2 rounded-t-lg transition"
                 [class]="tab() === t.key ? 'bg-gray-50 text-green-700' : 'text-white/80 hover:text-white'"
@@ -169,18 +177,37 @@ export class UpdatesWebviewComponent implements OnInit {
   markingAll = signal(false);
 
   name = signal<string | null>(null);
+  audience = signal<Audience>('customer');
   updates = signal<UpdateItem[]>([]);
 
   tab = signal<TabKey>('all');
   unreadOnly = signal(false);
 
-  readonly tabs: { key: TabKey; label: string }[] = [
+  /** Customer tab set — kept literally identical to the original behaviour. */
+  private readonly customerTabs: { key: TabKey; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'orders', label: 'Orders' },
     { key: 'invoices', label: 'Invoices' },
     { key: 'quotations', label: 'Quotations' },
     { key: 'payments', label: 'Payments' },
   ];
+
+  /** Admin tab set — only tabs with at least one matching update are shown (+ always "All"). */
+  private readonly adminTabs: { key: TabKey; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'orders', label: 'Orders' },
+    { key: 'admin_payments', label: 'Payments' },
+    { key: 'customers', label: 'Customers' },
+    { key: 'quotes', label: 'Quotes' },
+    { key: 'stock', label: 'Stock' },
+    { key: 'bills', label: 'Bills' },
+  ];
+
+  /** Tab set switches on audience; admin hides empty tabs (keeps "All"). */
+  tabs = computed<{ key: TabKey; label: string }[]>(() => {
+    if (this.audience() !== 'admin') return this.customerTabs;
+    return this.adminTabs.filter((t) => t.key === 'all' || this.tabCount(t.key) > 0);
+  });
 
   constructor() {
     this.http = new HttpClient(inject(HttpBackend));
@@ -199,10 +226,17 @@ export class UpdatesWebviewComponent implements OnInit {
   /** Which update types belong to a given tab. */
   private matchesTab(u: UpdateItem, key: TabKey): boolean {
     switch (key) {
+      // Customer tabs (unchanged).
       case 'orders': return u.type === 'order';
       case 'invoices': return u.type === 'invoice';
       case 'quotations': return u.type === 'quote';
       case 'payments': return u.type === 'payment' || u.type === 'reminder';
+      // Admin tabs.
+      case 'admin_payments': return u.type === 'payment';
+      case 'customers': return u.type === 'customer';
+      case 'quotes': return u.type === 'quote';
+      case 'stock': return u.type === 'low_stock';
+      case 'bills': return u.type === 'invoice';
       case 'all':
       default: return true;
     }
@@ -230,7 +264,9 @@ export class UpdatesWebviewComponent implements OnInit {
     }
     this.http.get<any>(`${this.base}/m/updates/list`, this.params()).subscribe({
       next: (r) => {
-        const d = this.unwrap<{ name: string | null; updates: UpdateItem[] }>(r) || { name: null, updates: [] };
+        const d = this.unwrap<{ audience?: Audience; name: string | null; updates: UpdateItem[] }>(r)
+          || { audience: 'customer', name: null, updates: [] };
+        this.audience.set(d.audience === 'admin' ? 'admin' : 'customer');
         this.name.set(d.name || null);
         this.updates.set(d.updates || []);
         this.loading.set(false);
@@ -275,6 +311,10 @@ export class UpdatesWebviewComponent implements OnInit {
       case 'quote': return '📝';
       case 'marketing': return '📣';
       case 'delivery': return '🚚';
+      // Admin types.
+      case 'customer': return '👤';
+      case 'low_stock': return '📉';
+      case 'purchase': return '🛒';
       default: return '🔔';
     }
   }
@@ -289,6 +329,10 @@ export class UpdatesWebviewComponent implements OnInit {
       case 'quote': return 'bg-purple-50';
       case 'marketing': return 'bg-rose-50';
       case 'delivery': return 'bg-teal-50';
+      // Admin types.
+      case 'customer': return 'bg-sky-50';
+      case 'low_stock': return 'bg-orange-50';
+      case 'purchase': return 'bg-cyan-50';
       default: return 'bg-gray-100';
     }
   }
@@ -303,6 +347,10 @@ export class UpdatesWebviewComponent implements OnInit {
       case 'quote': return 'border-l-purple-500';
       case 'marketing': return 'border-l-rose-500';
       case 'delivery': return 'border-l-teal-500';
+      // Admin types.
+      case 'customer': return 'border-l-sky-500';
+      case 'low_stock': return 'border-l-orange-500';
+      case 'purchase': return 'border-l-cyan-500';
       default: return 'border-l-green-500';
     }
   }
