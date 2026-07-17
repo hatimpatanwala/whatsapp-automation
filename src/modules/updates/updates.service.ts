@@ -22,6 +22,7 @@ export interface RecordUpdate {
 const TYPE_ICON: Record<string, string> = {
   order: '📦', invoice: '🧾', payment: '💰', reminder: '⏰', quote: '📝',
   marketing: '🎁', delivery: '🚚', update: '🔔',
+  customer: '👤', low_stock: '📉', purchase: '🛒', // admin feed types
 };
 
 /**
