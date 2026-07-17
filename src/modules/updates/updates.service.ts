@@ -123,7 +123,7 @@ export class UpdatesService {
   async listForToken(token: string) {
     const s = await this.resolve(token);
     const schema = s.schema_name;
-    const isAdmin = s.mode === 'admin-updates';
+    const isAdmin = s.mode === 'admin-upd';
 
     if (isAdmin) {
       const rows = await this.cm.executeInTenantContext(schema, (qr) =>
@@ -178,7 +178,7 @@ export class UpdatesService {
   /** Mark one update read (clicked). */
   async markRead(token: string, id: string) {
     const s = await this.resolve(token);
-    if (s.mode === 'admin-updates') {
+    if (s.mode === 'admin-upd') {
       // admin_notifications has no read_at column.
       await this.cm.executeInTenantContext(s.schema_name, (qr) =>
         qr.query(`UPDATE "${s.schema_name}".admin_notifications SET is_read = true WHERE id = $1`, [id]),
@@ -198,7 +198,7 @@ export class UpdatesService {
   /** Mark all read. */
   async markAllRead(token: string) {
     const s = await this.resolve(token);
-    if (s.mode === 'admin-updates') {
+    if (s.mode === 'admin-upd') {
       await this.cm.executeInTenantContext(s.schema_name, (qr) =>
         qr.query(`UPDATE "${s.schema_name}".admin_notifications SET is_read = true WHERE is_read = false`),
       );
