@@ -103,7 +103,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
         <table class="w-full text-sm border border-slate-300" style="border-collapse: collapse">
           <thead>
             <tr class="bg-slate-100 text-slate-600">
-              <th (click)="sortBy('date')" class="border border-slate-300 px-2 py-1 w-24 text-left cursor-pointer select-none">Date {{ arrow('date') }}</th>
+              <th (click)="sortBy('date')" class="border border-slate-300 px-2 py-1 w-32 text-left cursor-pointer select-none">Date {{ arrow('date') }}</th>
               <th (click)="sortBy('number')" class="border border-slate-300 px-2 py-1 w-36 text-left cursor-pointer select-none">No. {{ arrow('number') }}</th>
               <th (click)="sortBy('party')" class="border border-slate-300 px-2 py-1 text-left cursor-pointer select-none">Party {{ arrow('party') }}</th>
               <th (click)="sortBy('status')" class="border border-slate-300 px-2 py-1 w-28 text-left cursor-pointer select-none">Status {{ arrow('status') }}</th>
@@ -115,7 +115,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
             @for (r of visible(); track r.id; let i = $index) {
               <tr (click)="sel.set(i); open(r)" class="cursor-pointer"
                   [class.bg-amber-100]="i === sel()">
-                <td class="border border-slate-300 px-2 py-1">{{ r.date | date: 'dd-MM-yy' }}</td>
+                <td class="border border-slate-300 px-2 py-1 whitespace-nowrap">{{ r.date | date: 'dd-MM-yy HH:mm' }}</td>
                 <td class="border border-slate-300 px-2 py-1 font-mono text-xs">{{ r.number }}</td>
                 <td class="border border-slate-300 px-2 py-1">{{ r.party }}</td>
                 <td class="border border-slate-300 px-2 py-1">
@@ -150,7 +150,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
           <div class="rg-box" tabindex="-1" data-detail-box
                (mousedown)="$event.stopPropagation()" (keydown)="onDetailKey($event)">
             <div class="rg-title">
-              {{ d.no }} <span class="rg-sub">{{ d.party }} · {{ d.date | date: 'dd-MM-yyyy' }} · {{ d.status }}</span>
+              {{ d.no }} <span class="rg-sub">{{ d.party }} · {{ d.date | date: 'dd-MM-yyyy HH:mm' }} · {{ d.status }}</span>
             </div>
             @if (detailLoading()) {
               <p class="rg-none">Loading…</p>
@@ -230,7 +230,7 @@ export class RegistersComponent {
     if (!rows.length) return;
     const M = (v: any) => this.pdf.money(v);
     const cols: any[] = [
-      { header: 'Date', key: 'date', fmt: (v: any) => v ? new Date(v).toLocaleDateString('en-IN') : '' },
+      { header: 'Date', key: 'date', fmt: (v: any) => v ? new Date(v).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '' },
       { header: 'No.', key: 'number' },
       { header: 'Party', key: 'party' },
       { header: 'Status', key: 'status' },

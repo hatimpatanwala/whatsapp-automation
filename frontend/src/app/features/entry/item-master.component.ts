@@ -46,36 +46,39 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
             </label>
             @if (writable()) { <button (click)="startNew()" class="px-3 py-1.5 rounded bg-slate-800 text-white text-sm whitespace-nowrap">＋ New (Ins)</button> }
           </div>
-          <table class="w-full text-sm" style="border-collapse: collapse">
-            <thead>
-              <tr class="bg-slate-100 text-slate-600 text-xs">
-                <th class="px-2 py-1 text-left">Item</th>
-                <th class="px-2 py-1 text-right w-16">Stock</th>
-                <th class="px-2 py-1 text-right w-20">Rate</th>
-                <th class="px-2 py-1 text-right w-14">GST%</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (it of visibleItems(); track it.id; let i = $index) {
-                <tr (click)="pick(it)" class="cursor-pointer border-t border-slate-100"
-                    [class.bg-amber-100]="i === idx()" [class.bg-white]="i !== idx()">
-                  <td class="px-2 py-1">{{ it.name }}
-                    @if (it.itemType === 'service') { <span class="text-xs text-indigo-500">(service)</span> }
-                    @if (it.trackingMode === 'batch') { <span class="text-xs text-amber-600">[batch]</span> }
-                    @if (it.altUom) { <span class="text-xs text-slate-400">({{ it.altUom }} = {{ it.uomFactor }} {{ it.uom }})</span> }
-                  </td>
-                  <td class="px-2 py-1 text-right"
-                      [class.text-red-600]="it.itemType !== 'service' && (it.stock ?? 0) <= (it.minStock ?? 0)">
-                    {{ it.itemType === 'service' ? '—' : (it.stock ?? 0) }}
-                  </td>
-                  <td class="px-2 py-1 text-right">{{ fmt(it.salePrice ?? it.basePrice) }}</td>
-                  <td class="px-2 py-1 text-right text-slate-500">{{ it.gstRate ?? 0 }}</td>
+          <!-- Only THIS list scrolls; the editable form on the right stays put. -->
+          <div class="overflow-y-auto max-h-[calc(100vh-12rem)]">
+            <table class="w-full text-sm" style="border-collapse: collapse">
+              <thead>
+                <tr class="bg-slate-100 text-slate-600 text-xs sticky top-0 z-10">
+                  <th class="px-2 py-1 text-left">Item</th>
+                  <th class="px-2 py-1 text-right w-16">Stock</th>
+                  <th class="px-2 py-1 text-right w-20">Rate</th>
+                  <th class="px-2 py-1 text-right w-14">GST%</th>
                 </tr>
-              } @empty {
-                <tr><td colspan="4" class="px-2 py-4 text-center text-slate-400 text-sm">No items — press Ins to add your first item.</td></tr>
-              }
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                @for (it of visibleItems(); track it.id; let i = $index) {
+                  <tr (click)="pick(it)" class="cursor-pointer border-t border-slate-100"
+                      [class.bg-amber-100]="i === idx()" [class.bg-white]="i !== idx()"
+                      [class.text-red-600]="isLow(it)" [class.font-medium]="isLow(it)">
+                    <td class="px-2 py-1">{{ it.name }}
+                      @if (it.itemType === 'service') { <span class="text-xs text-indigo-500">(service)</span> }
+                      @if (it.trackingMode === 'batch') { <span class="text-xs text-amber-600">[batch]</span> }
+                      @if (it.altUom) { <span class="text-xs text-slate-400">({{ it.altUom }} = {{ it.uomFactor }} {{ it.uom }})</span> }
+                    </td>
+                    <td class="px-2 py-1 text-right">
+                      {{ it.itemType === 'service' ? '—' : (it.stock ?? 0) }}
+                    </td>
+                    <td class="px-2 py-1 text-right">{{ fmt(it.salePrice ?? it.basePrice) }}</td>
+                    <td class="px-2 py-1 text-right" [class.text-slate-500]="!isLow(it)">{{ it.gstRate ?? 0 }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="px-2 py-4 text-center text-slate-400 text-sm">No items — press Ins to add your first item.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Master form — disabled entirely for roles without products:write -->
@@ -139,8 +142,21 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
           <!-- Tax + pricing -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
             <label class="text-sm">GST %
-              <input data-cell="gst" type="number" [(ngModel)]="gst" (keydown)="onFieldKey($event, 'gst')"
-                     class="mt-1 w-full border rounded px-2 py-1.5 text-right focus:bg-amber-50 focus:outline-none" />
+              <select data-cell="gst" [ngModel]="gstSelValue()" (ngModelChange)="onGstSelect($event)" (keydown)="onFieldKey($event, 'gst')"
+                      class="mt-1 w-full border rounded px-2 py-1.5 focus:bg-amber-50 focus:outline-none">
+                <option value="0">— 0% (none / exempt)</option>
+                @for (t of taxRates(); track t.id) { <option [value]="t.rate">{{ t.name }} ({{ t.rate }}%)</option> }
+                @if (gstIsOrphan()) { <option [value]="gst">GST {{ gst }}%</option> }
+                <option value="custom">＋ Custom rate…</option>
+              </select>
+              @if (showCustomTax()) {
+                <div class="mt-1 flex items-center gap-1">
+                  <input [(ngModel)]="customTaxName" placeholder="Name e.g. GST 12%" class="flex-1 min-w-0 border rounded px-1.5 py-1 text-xs" autocomplete="off" />
+                  <input type="number" [(ngModel)]="customTaxRate" placeholder="%" class="w-14 border rounded px-1.5 py-1 text-xs text-right" />
+                  <button type="button" (click)="addCustomTax()" class="px-2 py-1 rounded bg-slate-800 text-white text-xs whitespace-nowrap">Save + use</button>
+                </div>
+                @if (customTaxErr()) { <span class="block text-[11px] text-red-600 mt-0.5">{{ customTaxErr() }}</span> }
+              }
             </label>
             <label class="text-sm">Purchase rate ₹
               <input data-cell="pRate" type="number" [(ngModel)]="pRate" (ngModelChange)="recalcSaleFromDisc()" (keydown)="onFieldKey($event, 'pRate')"
@@ -361,6 +377,12 @@ export class ItemMasterComponent {
   hsn = '';
   barcode = '';
   gst: number | null = null;
+  /** Tax-rate dropdown state (shared with the ERP tax-rate master). */
+  readonly taxRates = signal<Array<{ id: string; name: string; rate: number }>>([]);
+  readonly showCustomTax = signal(false);
+  customTaxName = '';
+  customTaxRate: number | null = null;
+  readonly customTaxErr = signal('');
   pRate: number | null = null;
   sRate: number | null = null;
   priceIncludesTax = false;
@@ -425,6 +447,48 @@ export class ItemMasterComponent {
     this.entry.categories().subscribe({
       next: (c: any) => this.cats.set(c?.data ?? c ?? []),
       error: () => { /* categories are optional */ },
+    });
+    this.loadTaxRates();
+  }
+
+  private loadTaxRates(): void {
+    this.entry.taxRates().subscribe({
+      next: (r: any) => this.taxRates.set((r?.data ?? r ?? []).map((t: any) => ({ id: t.id, name: t.name, rate: Number(t.rate) || 0 }))),
+      error: () => { /* tax-rate list is optional — custom entry still works */ },
+    });
+  }
+
+  // ─── GST tax-rate dropdown ────────────────────────────────────────────────────
+  /** The <select>'s current value: 'custom' while adding one, else the numeric rate. */
+  gstSelValue(): string {
+    return this.showCustomTax() ? 'custom' : String(this.gst ?? 0);
+  }
+  /** The item's rate isn't one of the saved tax rates → keep it visible as an option. */
+  gstIsOrphan(): boolean {
+    const g = this.gst ?? 0;
+    return g > 0 && !this.taxRates().some((t) => t.rate === g);
+  }
+  onGstSelect(v: string): void {
+    if (v === 'custom') { this.showCustomTax.set(true); this.customTaxErr.set(''); return; }
+    this.showCustomTax.set(false);
+    this.gst = Number(v) || 0;
+  }
+  /** Save a new tax rate to the shared master, then select it here. */
+  addCustomTax(): void {
+    const name = this.customTaxName.trim();
+    const rate = Number(this.customTaxRate);
+    if (!name) { this.customTaxErr.set('Enter a name (e.g. GST 12%)'); return; }
+    if (!(rate >= 0 && rate <= 100)) { this.customTaxErr.set('Enter a rate between 0 and 100'); return; }
+    this.customTaxErr.set('');
+    this.entry.createTaxRate({ name, rate }).subscribe({
+      next: (t: any) => {
+        const created = { id: t?.data?.id ?? t?.id ?? name, name: t?.data?.name ?? name, rate: Number(t?.data?.rate ?? rate) };
+        this.taxRates.update((list) => [...list.filter((x) => x.id !== created.id), created]);
+        this.gst = created.rate;
+        this.showCustomTax.set(false);
+        this.customTaxName = ''; this.customTaxRate = null;
+      },
+      error: (e: any) => this.customTaxErr.set(e?.error?.error?.message || 'Could not save the tax rate'),
     });
   }
 
@@ -545,6 +609,12 @@ export class ItemMasterComponent {
   canSave(): boolean { return !!this.name.trim() && Number(this.sRate) > 0; }
   batchTotal(): number { return money(this.batches().reduce((s, b) => s + (Number(b.qty) || 0), 0)); }
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }
+
+  /** Low stock: a real (non-service) product at or below its reorder level, or out of stock. */
+  isLow(it: ItemMasterRow): boolean {
+    if (it.itemType === 'service') return false;
+    return (it.stock ?? 0) <= (it.minStock ?? 0);
+  }
 
   save(): void {
     if (!this.writable() || !this.canSave() || this.saving()) return;

@@ -437,8 +437,8 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               <div class="text-sm bg-slate-50 border rounded px-3 py-2 mb-2">
                 <div class="flex items-center gap-3 mb-1">
                   <span class="font-medium text-slate-600" title="Cash Discount — bill-level, on top of line D1/D2">CD (Cash Disc):</span>
-                  <label>% <input type="number" [(ngModel)]="billDiscPct" class="w-16 border rounded px-1.5 py-0.5 text-right" /></label>
-                  <label>₹ <input type="number" [(ngModel)]="billDiscAmt" class="w-24 border rounded px-1.5 py-0.5 text-right" /></label>
+                  <label>% <input data-cell="cd_pct" type="number" [(ngModel)]="billDiscPct" (keydown)="onFooterKey($event, 'cd_pct')" class="w-16 border rounded px-1.5 py-0.5 text-right focus:bg-amber-50 focus:outline-none" /></label>
+                  <label>₹ <input data-cell="cd_amt" type="number" [(ngModel)]="billDiscAmt" (keydown)="onFooterKey($event, 'cd_amt')" class="w-24 border rounded px-1.5 py-0.5 text-right focus:bg-amber-50 focus:outline-none" /></label>
                   <span class="text-slate-400">= ₹{{ fmt(billDiscount()) }}</span>
                 </div>
                 <div class="font-medium text-slate-600 mb-1 mt-2">Add / Less charges:</div>
@@ -477,7 +477,7 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
                 <div class="flex justify-between"><span class="text-slate-500">SGST</span><span>{{ fmt(totalTax() / 2) }}</span></div>
               }
               <div class="flex justify-between items-center"><span class="text-slate-500">TCS %</span>
-                <input type="number" [(ngModel)]="tcsPct" class="w-16 border rounded px-2 py-0.5 text-right focus:bg-amber-50 focus:outline-none" title="TCS collected on invoice value (206C)" />
+                <input data-cell="tcs" type="number" [(ngModel)]="tcsPct" (keydown)="onFooterKey($event, 'tcs')" class="w-16 border rounded px-2 py-0.5 text-right focus:bg-amber-50 focus:outline-none" title="TCS collected on invoice value (206C)" />
               </div>
               @if (tcsAmt() > 0) {
                 <div class="flex justify-between"><span class="text-slate-500">TCS</span><span>+ {{ fmt(tcsAmt()) }}</span></div>
@@ -486,12 +486,12 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
               <div class="flex justify-between font-semibold text-base border-t pt-1"><span>Total</span><span>₹{{ fmt(grandTotal()) }}</span></div>
               <div class="flex justify-between items-center pt-1">
                 <span class="text-slate-500">Received now ₹</span>
-                <input data-cell="received" type="number" [(ngModel)]="receivedNow" [disabled]="memoType === 'cash'"
+                <input data-cell="received" type="number" [(ngModel)]="receivedNow" [disabled]="memoType === 'cash'" (keydown)="onFooterKey($event, 'received')"
                        class="w-28 border rounded px-2 py-0.5 text-right focus:bg-amber-50 focus:outline-none" />
               </div>
               @if (memoType === 'cash') { <p class="text-xs text-emerald-700">Cash memo — settled in full on save (Dr Cash).</p> }
               @if (error()) { <p class="text-red-600 text-xs">{{ error() }}</p> }
-              <button (click)="save()" [disabled]="saving() || !canSave()"
+              <button (click)="requestSave()" [disabled]="saving() || !canSave()"
                       class="w-full mt-1 px-3 py-2 rounded bg-emerald-600 text-white disabled:opacity-50">
                 {{ saving() ? 'Saving…' : 'Save Invoice (Ctrl+A)' }}
               </button>
@@ -538,6 +538,31 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
       @if (qc(); as q) {
         <wa-quick-create [kind]="q.kind" [prefillName]="q.name"
                          (created)="onQuickCreated($event)" (cancel)="qc.set(null)" />
+      }
+
+      <!-- Create-invoice confirmation (keyboard: Enter = create, Esc = keep editing, ←/→ switch) -->
+      @if (showConfirm()) {
+        <div class="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center" (keydown)="onConfirmKey($event)">
+          <div class="bg-white rounded-lg shadow-xl w-[26rem] max-w-[92vw] p-5" role="dialog" aria-modal="true">
+            <h3 class="text-base font-semibold text-slate-800">Create this invoice?</h3>
+            <div class="mt-3 text-sm text-slate-600 space-y-1">
+              <div class="flex justify-between"><span>Party</span><span class="font-medium text-slate-800">{{ customer()?.name || (memoType === 'cash' ? 'Cash sale' : '—') }}</span></div>
+              <div class="flex justify-between"><span>Items</span><span class="font-medium text-slate-800">{{ lineCount() }}</span></div>
+              <div class="flex justify-between text-base"><span class="text-slate-500">Total</span><span class="font-semibold text-emerald-700">₹{{ fmt(grandTotal()) }}</span></div>
+            </div>
+            @if (creditExceeded()) { <p class="mt-2 text-xs text-amber-600">⚠ This exceeds the party's credit limit.</p> }
+            <div class="mt-5 flex justify-end gap-2">
+              <button type="button" data-confirm="edit" (click)="cancelConfirm()"
+                      class="px-4 py-2 rounded border border-slate-300 text-slate-700 text-sm hover:bg-slate-100 focus:ring-2 focus:ring-slate-400 focus:outline-none">
+                Continue editing <span class="text-xs text-slate-400">(Esc)</span>
+              </button>
+              <button type="button" data-confirm="create" (click)="confirmCreate()"
+                      class="px-4 py-2 rounded bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-800 focus:outline-none">
+                Create invoice <span class="text-xs text-emerald-100">(Enter)</span>
+              </button>
+            </div>
+          </div>
+        </div>
       }
     </div>
   `,
@@ -1158,7 +1183,7 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
       if (last) { this.note = last; this.tick.update((t) => t + 1); }
       return;
     }
-    if (e.key === 'Enter') { e.preventDefault(); this.save(); }
+    if (e.key === 'Enter') { e.preventDefault(); this.requestSave(); }
   }
 
   // ─── Narration recall (Miracle Shift+F1 / Ctrl+R) ──────────────────────────
@@ -1245,7 +1270,61 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
 
 
   @HostListener('document:keydown.control.a', ['$event'])
-  onSaveKey(e: Event): void { e.preventDefault(); this.save(); }
+  onSaveKey(e: Event): void { e.preventDefault(); this.requestSave(); }
+
+  // ─── Footer field navigation (Enter walks CD → TCS → received → note → confirm) ──
+  private static readonly FOOTER_ORDER = ['cd_pct', 'cd_amt', 'tcs', 'received', 'note'];
+
+  onFooterKey(e: KeyboardEvent, field: string): void {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const order = SalesInvoiceEntryComponent.FOOTER_ORDER;
+    const i = order.indexOf(field);
+    // Received is skipped for cash memos (settled in full) — jump to the note.
+    let next = i + 1;
+    if (order[next] === 'received' && this.memoType === 'cash') next++;
+    if (next < order.length) this.focusByCell(order[next]);
+    else this.requestSave();
+  }
+
+  private focusByCell(name: string): void {
+    const el = this.host.nativeElement.querySelector(`[data-cell="${name}"]`) as HTMLInputElement | null;
+    el?.focus(); el?.select?.();
+  }
+
+  // ─── Create-invoice confirmation dialog (keyboard-controlled) ───────────────────
+  readonly showConfirm = signal(false);
+
+  /** Open the confirmation instead of saving directly. */
+  requestSave(): void {
+    if (this.saving() || !this.canSave() || this.showConfirm()) return;
+    this.showConfirm.set(true);
+    setTimeout(() => (this.host.nativeElement.querySelector('[data-confirm="create"]') as HTMLElement | null)?.focus());
+  }
+
+  confirmCreate(): void {
+    if (!this.showConfirm()) return;
+    this.showConfirm.set(false);
+    void this.save();
+  }
+
+  cancelConfirm(): void {
+    this.showConfirm.set(false);
+    this.focusByCell('note');
+  }
+
+  /** Enter = create, Esc/N = keep editing, ←/→ move between the two buttons. */
+  onConfirmKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this.confirmCreate(); return; }
+    if (e.key === 'Escape' || e.key === 'n' || e.key === 'N') { e.preventDefault(); e.stopPropagation(); this.cancelConfirm(); return; }
+    if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); e.stopPropagation(); this.confirmCreate(); return; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+      e.preventDefault();
+      const btns = Array.from(this.host.nativeElement.querySelectorAll('[data-confirm]')) as HTMLElement[];
+      const cur = btns.findIndex((b) => b === document.activeElement);
+      btns[(cur + 1) % btns.length]?.focus();
+    }
+  }
 
   printSaved(): void {
     const id = this.savedId();
@@ -1286,6 +1365,8 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
     return money((this.taxableLines() + this.chargesAmt() + this.totalTax()) * ((Number(this.tcsPct) || 0) / 100));
   }
   rawTotal(): number { return money(this.taxableLines() + this.chargesAmt() + this.totalTax() + this.tcsAmt()); }
+  /** Number of real (product) lines on the invoice — shown in the confirm dialog. */
+  lineCount(): number { return this.rows.filter((r) => r.productId).length; }
   grandTotal(): number { return Math.round(this.rawTotal()); }
   roundOff(): number { return money(this.grandTotal() - this.rawTotal()); }
 

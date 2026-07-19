@@ -233,6 +233,13 @@ export class EntryService {
     return this.api.get<Array<{ location: string; quantity: number }>>(`/entry/items/${productId}/locations`);
   }
   categories(): Observable<any[]> { return this.api.get<any[]>('/products/categories'); }
+  /** Reusable tax rates (shared with the ERP tax-rate master). */
+  taxRates(): Observable<Array<{ id: string; name: string; rate: number }>> {
+    return this.api.get<Array<{ id: string; name: string; rate: number }>>('/erp/tax-rates');
+  }
+  createTaxRate(body: { name: string; rate: number }): Observable<{ id: string; name: string; rate: number }> {
+    return this.api.post<{ id: string; name: string; rate: number }>('/erp/tax-rates', body);
+  }
   addStock(productId: string, qty: number): Observable<{ ok: boolean; stock?: number }> {
     return this.api.post<{ ok: boolean; stock?: number }>(`/entry/items/${productId}/add-stock`, { qty });
   }
