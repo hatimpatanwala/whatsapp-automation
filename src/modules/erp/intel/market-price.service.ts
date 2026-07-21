@@ -798,7 +798,9 @@ export class MarketPriceService implements OnModuleDestroy {
         }
       }
       const html = await this.fetchPolite(`https://dir.indiamart.com/${citySlug}/${slug}.html`, deadline);
-      const good = html && html.length > 20_000 ? html : null;
+      // City pages carry far fewer tiles than national impcat pages — a real one
+      // can be ~10-25KB (observed: nagpur/pvc-pipes = 26KB), a bot shell ~140B.
+      const good = html && html.length > 8_000 ? html : null;
       this.catPageCache.set(key, { at: Date.now(), html: good });
       if (good) return good;
       if (deadline && Date.now() > deadline - 16_000) break;
