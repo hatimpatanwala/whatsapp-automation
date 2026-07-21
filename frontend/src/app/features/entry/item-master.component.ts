@@ -292,8 +292,23 @@ const UQC_LIST = ['PCS', 'NOS', 'KGS', 'GMS', 'LTR', 'MLT', 'MTR', 'CMS', 'SQM',
                 <input [(ngModel)]="thumbnail" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
               </label>
               <label class="text-sm">Brand
-                <input [(ngModel)]="cfBrand" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
+                <select [ngModel]="brandSelValue()" (ngModelChange)="onBrandSelect($event)" class="mt-1 w-full border rounded px-2 py-1.5">
+                  <option value="">—</option>
+                  @for (b of brands(); track b.id) { <option [value]="b.id">{{ b.name }}</option> }
+                  <option value="new">+ New brand…</option>
+                </select>
               </label>
+              @if (showNewBrand()) {
+                <label class="text-sm">New brand name
+                  <div class="flex items-center gap-1 mt-1">
+                    <input [(ngModel)]="newBrandName" (keydown.enter)="$event.preventDefault(); addBrand()"
+                           class="w-full border rounded px-2 py-1.5" autocomplete="off" />
+                    <button type="button" (click)="addBrand()"
+                            class="px-2 py-1.5 border rounded text-xs font-semibold text-indigo-700 border-indigo-200 hover:bg-indigo-50">Add</button>
+                  </div>
+                  @if (brandErr()) { <span class="text-xs text-red-600">{{ brandErr() }}</span> }
+                </label>
+              }
               <label class="text-sm">Colour
                 <input [(ngModel)]="cfColour" class="mt-1 w-full border rounded px-2 py-1.5" autocomplete="off" />
               </label>
@@ -424,7 +439,13 @@ export class ItemMasterComponent {
   // advanced
   description = '';
   thumbnail = '';
-  cfBrand = '';
+  brandId = '';
+  /** The picked item carried a legacy free-text custom_fields.brand — clear it on save. */
+  private hadLegacyBrand = false;
+  readonly brands = signal<Array<{ id: string; name: string }>>([]);
+  readonly showNewBrand = signal(false);
+  newBrandName = '';
+  readonly brandErr = signal('');
   cfColour = '';
   cfSize = '';
   cfMaterial = '';
@@ -448,7 +469,40 @@ export class ItemMasterComponent {
       next: (c: any) => this.cats.set(c?.data ?? c ?? []),
       error: () => { /* categories are optional */ },
     });
+    this.entry.brands().subscribe({
+      next: (b: any) => this.brands.set(b?.data ?? b ?? []),
+      error: () => { /* brands are optional */ },
+    });
     this.loadTaxRates();
+  }
+
+  // ─── Brand dropdown (shared master with the portal's Categories & Brands) ────
+  /** The <select>'s current value: 'new' while adding one, else the brand id. */
+  brandSelValue(): string {
+    return this.showNewBrand() ? 'new' : this.brandId;
+  }
+  onBrandSelect(v: string): void {
+    if (v === 'new') { this.showNewBrand.set(true); this.brandErr.set(''); return; }
+    this.showNewBrand.set(false);
+    this.brandId = v;
+  }
+  /** Save a new brand to the shared master, then select it here. */
+  addBrand(): void {
+    const name = this.newBrandName.trim();
+    if (!name) { this.brandErr.set('Enter a brand name'); return; }
+    this.brandErr.set('');
+    this.entry.createBrand(name).subscribe({
+      next: (b: any) => {
+        const created = { id: b?.data?.id ?? b?.id, name: b?.data?.name ?? name };
+        if (created.id) {
+          this.brands.update((list) => [...list.filter((x) => x.id !== created.id), created].sort((a, z) => a.name.localeCompare(z.name)));
+          this.brandId = created.id;
+        }
+        this.showNewBrand.set(false);
+        this.newBrandName = '';
+      },
+      error: (e: any) => this.brandErr.set(e?.error?.error?.message || e?.error?.message || 'Could not save the brand'),
+    });
   }
 
   private loadTaxRates(): void {
@@ -541,7 +595,16 @@ export class ItemMasterComponent {
     this.description = it.description || '';
     this.thumbnail = it.thumbnail || '';
     const cf = it.customFields || {};
-    this.cfBrand = cf['brand'] || '';
+    this.showNewBrand.set(false);
+    this.newBrandName = '';
+    this.brandErr.set('');
+    this.brandId = it.brandId || '';
+    this.hadLegacyBrand = !!cf['brand'];
+    if (!this.brandId && cf['brand']) {
+      // Legacy free-text brand (pre-unification) — preselect its master row if one exists.
+      const m = this.brands().find((b) => (b.name || '').toLowerCase() === String(cf['brand']).trim().toLowerCase());
+      if (m) this.brandId = m.id;
+    }
     this.cfColour = cf['colour'] || '';
     this.cfSize = cf['size'] || '';
     this.cfMaterial = cf['material'] || '';
@@ -573,7 +636,8 @@ export class ItemMasterComponent {
     this.oRate = null; this.openingDate = ''; this.minStock = null; this.stockQty = null;
     this.trackingMode = 'none';
     this.description = ''; this.thumbnail = '';
-    this.cfBrand = ''; this.cfColour = ''; this.cfSize = ''; this.cfMaterial = ''; this.cfNotes = '';
+    this.brandId = ''; this.hadLegacyBrand = false; this.showNewBrand.set(false); this.newBrandName = ''; this.brandErr.set('');
+    this.cfColour = ''; this.cfSize = ''; this.cfMaterial = ''; this.cfNotes = '';
     this.minSalePrice = null; this.maxSalePrice = null; this.cessPct = null; this.taxExempt = false;
     this.maxStock = null; this.rackLocation = '';
     this.curStock.set(0);
@@ -618,10 +682,19 @@ export class ItemMasterComponent {
 
   save(): void {
     if (!this.writable() || !this.canSave() || this.saving()) return;
+    if (this.showNewBrand() && this.newBrandName.trim()) {
+      // A typed-but-unsaved brand would silently vanish (the old brandId would be saved).
+      this.brandErr.set('Click Add to save the new brand first, or clear the name.');
+      this.error.set('Unsaved new brand — click Add next to the brand name (or clear it), then save.');
+      return;
+    }
     this.saving.set(true);
     this.error.set(null);
     const customFields: Record<string, any> = {};
-    if (this.cfBrand.trim()) customFields['brand'] = this.cfBrand.trim();
+    // Brand is the brand_id FK now. Null out the legacy free-text key ONLY once a
+    // real FK replaces it — if no master row matched (backfill missed, list race),
+    // the text is the item's only brand record and must survive unrelated saves.
+    if (this.hadLegacyBrand && this.brandId) customFields['brand'] = null;
     if (this.cfColour.trim()) customFields['colour'] = this.cfColour.trim();
     if (this.cfSize.trim()) customFields['size'] = this.cfSize.trim();
     if (this.cfMaterial.trim()) customFields['material'] = this.cfMaterial.trim();
@@ -631,6 +704,7 @@ export class ItemMasterComponent {
       name: this.name.trim(),
       itemType: this.itemType,
       categoryId: this.categoryId || undefined,
+      brandId: this.brandId || null,
       basePrice: money(Number(this.sRate) || 0),
       priceIncludesTax: this.priceIncludesTax,
       gstRate: this.gst != null ? Number(this.gst) : undefined,

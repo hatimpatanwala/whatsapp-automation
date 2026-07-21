@@ -444,7 +444,7 @@ export class EntryContextService {
                 p.item_type, p.uqc, p.price_includes_tax, p.sale_discount_pct,
                 p.wholesale_price, p.wholesale_min_qty, p.min_sale_price, p.max_sale_price,
                 p.cess_pct, p.tax_exempt, p.opening_stock_date, p.max_stock, p.rack_location,
-                p.tracking_mode, p.category_id, p.description, p.thumbnail, p.custom_fields,
+                p.tracking_mode, p.category_id, p.brand_id, p.description, p.thumbnail, p.custom_fields,
                 COALESCE(i.low_stock_threshold, 5) AS min_stock,
                 COALESCE(inv.available, 0) + COALESCE(ws.qty, 0) AS stock
          FROM "${schema}".products p

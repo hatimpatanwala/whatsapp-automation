@@ -22,9 +22,12 @@ export class CategoryService {
   }
 
   async create(schema: string, data: { name: string; parentId?: string; sortOrder?: number; translations?: any }): Promise<any> {
-    const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const base = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'category';
 
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
+      // Slug is UNIQUE — reuse a soft-deleted/duplicate-named row's slot by suffixing.
+      const dup = await qr.query(`SELECT 1 FROM categories WHERE slug = $1 LIMIT 1`, [base]);
+      const slug = dup.length ? `${base}-${Date.now().toString(36)}` : base;
       const result = await qr.query(
         `INSERT INTO categories (name, slug, parent_id, sort_order, translations)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -44,6 +47,7 @@ export class CategoryService {
       if (data.sortOrder !== undefined) { fields.push(`sort_order = $${idx++}`); params.push(data.sortOrder); }
       if (data.isActive !== undefined) { fields.push(`is_active = $${idx++}`); params.push(data.isActive); }
       if (data.translations) { fields.push(`translations = $${idx++}`); params.push(JSON.stringify(data.translations)); }
+      if (!fields.length) return this.findById(schema, id); // nothing to change — avoid invalid `SET  WHERE` SQL
 
       params.push(id);
       const result = await qr.query(

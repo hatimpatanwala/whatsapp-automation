@@ -9,6 +9,7 @@ import AdmZip = require('adm-zip');
 import * as ExcelJS from 'exceljs';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
+import { backfillProductTaxonomy } from '../../database/taxonomy.util';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
 import { MiracleParser, MiracleVoucher, MiracleCompany } from './miracle-parser';
 
@@ -432,6 +433,11 @@ export class MiracleImportService {
         c('product');
       }
     }
+
+    // Taxonomy: turn the brand/group names kept in products.metadata into real
+    // brands/categories rows + FKs — the SAME store the portal, shop and ERP
+    // item master read. Without this the imported taxonomy is invisible there.
+    await backfillProductTaxonomy(qr, schema);
 
     // Non-party ledgers (cash/bank/sales/expense/…) into the chart of accounts.
     for (const l of parser.ledgers()) {

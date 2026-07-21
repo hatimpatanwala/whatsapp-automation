@@ -1,4 +1,5 @@
 import { QueryRunner } from 'typeorm';
+import { backfillProductTaxonomy } from '../../taxonomy.util';
 
 export interface TenantMigration {
   name: string;
@@ -3392,6 +3393,55 @@ const migration088MarketAvgAndMatches: TenantMigration = {
   },
 };
 
+/**
+ * 090 — City/state market-price comparator (AI Insights Pro). One row per
+ * product+state+city; the comparator UI reads the cached set and refreshes a
+ * city on demand (IndiaMART `cq` city search + optional Google Shopping with a
+ * city location via Serper.dev). 12h freshness window enforced by the service.
+ */
+const migration090MarketPriceLocations: TenantMigration = {
+  name: '090_market_price_locations',
+  async up(qr, schema) {
+    await qr.query(`CREATE TABLE IF NOT EXISTS "${schema}".market_price_locations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      product_id UUID NOT NULL,
+      state VARCHAR(60) NOT NULL,
+      city VARCHAR(60) NOT NULL,
+      price_low NUMERIC(14,2),
+      price_median NUMERIC(14,2),
+      price_high NUMERIC(14,2),
+      price_avg NUMERIC(14,2),
+      points INT,
+      confidence NUMERIC(3,2),
+      source_note TEXT,
+      fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (product_id, state, city)
+    )`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_mpl_product_time ON "${schema}".market_price_locations (product_id, fetched_at DESC)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".market_price_locations`);
+  },
+};
+
+/**
+ * 091 — Unify product taxonomy: link brand/category TEXT (metadata.category /
+ * metadata.brand from the Miracle import, custom_fields.brand from the old ERP
+ * item-master free-text field) to real categories/brands rows + FKs.
+ * Fixes tenants whose 085 ran during provisioning BEFORE the import inserted
+ * products (empty table → nothing backfilled, marked applied), and adds the
+ * brand backfill 085 never had. Idempotent + additive; shared implementation
+ * with the importer (src/database/taxonomy.util.ts), which now also runs it
+ * after every import so future migrations never need this again.
+ */
+const migration091BackfillTaxonomy: TenantMigration = {
+  name: '091_backfill_taxonomy',
+  async up(qr, schema) {
+    await backfillProductTaxonomy(qr, schema);
+  },
+  async down() { /* additive backfill — no rollback */ },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3482,4 +3532,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration087MarketPriceHistory,
   migration088MarketAvgAndMatches,
   migration089CustomerUpdates,
+  migration090MarketPriceLocations,
+  migration091BackfillTaxonomy,
 ];

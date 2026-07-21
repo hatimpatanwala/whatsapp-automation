@@ -66,6 +66,7 @@ export class TenantMigrationService implements OnModuleInit {
 
     this.logger.log(`Running ${pending.length} pending migrations on ${tenants.length} tenants`);
 
+    const failedTenants: string[] = [];
     for (let i = 0; i < tenants.length; i += batchSize) {
       const batch = tenants.slice(i, i + batchSize);
       await Promise.all(
@@ -77,6 +78,7 @@ export class TenantMigrationService implements OnModuleInit {
               await migration.up(queryRunner, tenant.schemaName);
             }
           } catch (error) {
+            failedTenants.push(tenant.slug);
             this.logger.error(
               `Migration failed for tenant ${tenant.slug}: ${(error as Error).message}`,
             );
@@ -87,7 +89,16 @@ export class TenantMigrationService implements OnModuleInit {
       );
     }
 
-    // Record applied migrations
+    // Record applied migrations — but ONLY when every tenant succeeded. Tenant
+    // migrations are idempotent by convention (IF NOT EXISTS / additive
+    // backfills), so retrying all of them next boot is safe; marking a data
+    // backfill (e.g. 091) applied while a tenant silently errored is not.
+    if (failedTenants.length) {
+      this.logger.warn(
+        `Not recording migrations as applied — failed for ${failedTenants.length} tenant(s): ${failedTenants.join(', ')}. They will retry on next startup.`,
+      );
+      return;
+    }
     for (const migration of pending) {
       await this.migrationHistoryRepository.save({
         migrationName: migration.name,

@@ -233,6 +233,9 @@ export class EntryService {
     return this.api.get<Array<{ location: string; quantity: number }>>(`/entry/items/${productId}/locations`);
   }
   categories(): Observable<any[]> { return this.api.get<any[]>('/products/categories'); }
+  /** Brand master — the same list the portal's Categories & Brands page manages. */
+  brands(): Observable<any[]> { return this.api.get<any[]>('/brands'); }
+  createBrand(name: string): Observable<any> { return this.api.post<any>('/brands', { name }); }
   /** Reusable tax rates (shared with the ERP tax-rate master). */
   taxRates(): Observable<Array<{ id: string; name: string; rate: number }>> {
     return this.api.get<Array<{ id: string; name: string; rate: number }>>('/erp/tax-rates');
@@ -282,7 +285,7 @@ export interface ItemMasterRow {
   saleDiscountPct?: number | null; wholesalePrice?: number | null; wholesaleMinQty?: number | null;
   minSalePrice?: number | null; maxSalePrice?: number | null; cessPct?: number | null;
   taxExempt?: boolean; openingStockDate?: string | null; maxStock?: number | null;
-  rackLocation?: string | null; trackingMode?: string; categoryId?: string | null;
+  rackLocation?: string | null; trackingMode?: string; categoryId?: string | null; brandId?: string | null;
   description?: string | null; thumbnail?: string | null; customFields?: Record<string, any> | null;
 }
 export interface ProductMasterBody {
@@ -293,7 +296,7 @@ export interface ProductMasterBody {
   itemType?: string; uqc?: string; priceIncludesTax?: boolean; saleDiscountPct?: number;
   wholesalePrice?: number; wholesaleMinQty?: number; minSalePrice?: number; maxSalePrice?: number;
   cessPct?: number; taxExempt?: boolean; openingStockDate?: string; maxStock?: number;
-  rackLocation?: string; trackingMode?: string; categoryId?: string;
+  rackLocation?: string; trackingMode?: string; categoryId?: string; brandId?: string | null;
   description?: string; thumbnail?: string; customFields?: Record<string, any>;
 }
 
