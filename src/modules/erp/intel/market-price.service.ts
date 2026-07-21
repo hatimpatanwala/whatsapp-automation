@@ -239,7 +239,10 @@ export class MarketPriceService implements OnModuleDestroy {
     let searched = 0;
     let relevant: Array<{ title: string; content: string; url: string }> = [];
     if (agg.matched < 2 && contexts.length < 2 && Date.now() < deadline - 20_000) {
-      const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), name);
+      const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), [
+        `"${name}" price`,
+        `${name} price site:indiamart.com OR site:moglix.com OR site:industrybuying.com OR site:amazon.in`,
+      ]);
       searched = snippets.length;
       relevant = this.relevantSnippets(name, snippets);
       const pageContexts = await this.fetchListingContexts(name, snippets, deadline);
@@ -465,30 +468,69 @@ export class MarketPriceService implements OnModuleDestroy {
       if (n) via.push(`${label} ×${n}`);
     };
 
-    const indiamart = MARKET_SITES.find((s) => s.name === 'indiamart');
-    if (indiamart) {
-      consume('indiamart', await searchMarketplace(indiamart, name, (url) => this.fetchPolite(url, deadline), ct).catch(() => [] as PriceCard[]));
+    // 1) IndiaMART CITY DIRECTORY page — dir.indiamart.com/<city>/<slug>.html is
+    //    server-rendered (like the national impcat pages) even for datacenter IPs,
+    //    unlike search.mp which bot-gates them. Cards first, brand+size-gated text
+    //    windows from the same fetched page as backup.
+    const cityHtml = await this.cityCategoryHtml(name, ct, deadline);
+    if (cityHtml) {
+      consume('indiamart-city', extractIndiamartCategory(cityHtml));
+      if (points.length < 2) {
+        const pts = this.pricePoints(refPrice, this.windowsFromText(name, MarketPriceService.toText(cityHtml)));
+        if (pts.length) {
+          points.push(...pts);
+          via.push(`indiamart-city-page ×${pts.length}`);
+        }
+      }
     }
+
+    // 2) Google Shopping with a city location (optional, SERPER_API_KEY) — cheap and fast.
     consume('google-shopping', await this.serperShopping(name, st, ct));
 
+    // 3) IndiaMART on-site search with its cq city filter — bot-gated on most
+    //    datacenter IPs but works elsewhere; only worth one polite fetch when thin.
+    const indiamart = MARKET_SITES.find((s) => s.name === 'indiamart');
+    if (indiamart && points.length < 2 && Date.now() < deadline - 20_000) {
+      consume('indiamart-search', await searchMarketplace(indiamart, name, (url) => this.fetchPolite(url, deadline), ct).catch(() => [] as PriceCard[]));
+    }
+
+    // 4) City-qualified metasearch + listing-page windows as the last resort.
     if (points.length < 2) {
       const searx = this.config.get<string>('SEARX_URL');
-      if (searx && Date.now() < deadline - 20_000) {
-        const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), `${name} ${ct}`);
+      if (searx && Date.now() < deadline - 18_000) {
+        // NOTE: the city must stay OUTSIDE the quoted product phrase — quoting
+        // "<product> <city>" as one phrase matches nothing.
+        const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), [
+          `"${name}" price ${ct}`,
+          `${name} ${ct} site:indiamart.com OR site:tradeindia.com OR site:justdial.com`,
+        ]);
         const rel = this.relevantSnippets(name, snippets);
         const pts = this.pricePoints(refPrice, rel.map((s) => `${s.title} ${s.content}`));
         if (pts.length) {
           points.push(...pts);
           via.push(`web ×${pts.length}`);
         }
+        if (points.length < 2 && Date.now() < deadline - 18_000) {
+          const pagePts = this.pricePoints(refPrice, await this.fetchListingContexts(name, snippets, deadline));
+          if (pagePts.length) {
+            points.push(...pagePts);
+            via.push(`listing-pages ×${pagePts.length}`);
+          }
+        }
       }
     }
 
-    const stats = this.statsFromPoints(points);
+    let stats = this.statsFromPoints(points);
+    // One brand+size-verified listing is still a real observation — publish it at
+    // low confidence instead of a blanket "no data" (city coverage is thin by nature).
+    if (!stats && points.length === 1) {
+      stats = { low: points[0], median: points[0], high: points[0], avg: points[0], points: 1, confidence: 0.2 };
+      via.push('single listing');
+    }
     if (!stats) {
       return {
         status: 'no-data', state: st, city: ct,
-        message: `No confident ${ct} price found — few sellers list this product there. The national figure still applies.`,
+        message: `No ${ct} listings matched this product confidently. Coverage is best in metro cities — try the nearest one, or set the city price manually. The national figure still applies.`,
       };
     }
 
@@ -594,12 +636,8 @@ export class MarketPriceService implements OnModuleDestroy {
   }
 
   // ─── Search + extraction ─────────────────────────────────────────────────────
-  /** Two targeted queries (plain + India B2B marketplaces), merged & deduped. */
-  private async searchSnippets(searxBase: string, productName: string): Promise<Array<{ title: string; content: string; url: string }>> {
-    const queries = [
-      `"${productName}" price`,
-      `${productName} price site:indiamart.com OR site:moglix.com OR site:industrybuying.com OR site:amazon.in`,
-    ];
+  /** Run the given SearXNG queries, merged & deduped by result URL. */
+  private async searchSnippets(searxBase: string, queries: string[]): Promise<Array<{ title: string; content: string; url: string }>> {
     const out: Array<{ title: string; content: string; url: string }> = [];
     const seen = new Set<string>();
     for (const q of queries) {
@@ -734,6 +772,34 @@ export class MarketPriceService implements OnModuleDestroy {
       const html = await this.fetchPolite(`https://dir.indiamart.com/impcat/${slug}.html`, deadline);
       const good = html && html.length > 20_000 ? html : null;
       this.catPageCache.set(slug, { at: Date.now(), html: good });
+      if (good) return good;
+      if (deadline && Date.now() > deadline - 16_000) break;
+    }
+    return null;
+  }
+
+  /**
+   * CITY directory page HTML: dir.indiamart.com/<city>/<slug>.html — IndiaMART's
+   * city-scoped category listings, server-rendered like the national impcat pages
+   * (the on-site search.mp is bot-gated for datacenter IPs, these are not).
+   * Same slug candidates and 12h cache as the national page, keyed per city.
+   */
+  private async cityCategoryHtml(productName: string, city: string, deadline?: number): Promise<string | null> {
+    const citySlug = city.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!citySlug) return null;
+    for (const slug of this.slugCandidates(productName)) {
+      const key = `${citySlug}/${slug}`;
+      const hit = this.catPageCache.get(key);
+      if (hit) {
+        const ttl = hit.html ? this.CAT_TTL : 2 * 60 * 1000;
+        if (Date.now() - hit.at < ttl) {
+          if (hit.html) return hit.html;
+          continue;
+        }
+      }
+      const html = await this.fetchPolite(`https://dir.indiamart.com/${citySlug}/${slug}.html`, deadline);
+      const good = html && html.length > 20_000 ? html : null;
+      this.catPageCache.set(key, { at: Date.now(), html: good });
       if (good) return good;
       if (deadline && Date.now() > deadline - 16_000) break;
     }
