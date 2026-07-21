@@ -23,6 +23,9 @@ interface NavItem {
   featureKey?: string;
   /** Base item that the ERP version supersedes — hidden when the `erp` feature is on. */
   hideWhenErp?: boolean;
+  /** Only hide (hideWhenErp) when the user can read this perm — i.e. the
+   *  superseding ERP item is actually visible to them. */
+  supersededPerm?: string;
   /** Upsell teaser shown only when the `erp` feature is OFF. */
   erpTeaser?: boolean;
   /** Single read-only-archive entry shown only when the tenant is downgraded. */
@@ -322,7 +325,9 @@ export class MainLayoutComponent implements OnInit {
     {
       title: 'Overview',
       items: [
-        { label: 'Dashboard', icon: 'pi-home', route: '/dashboard' },
+        // Superseded by Business Overview for ERP tenants — one overview tab, not
+        // two (kept for roles that can't read business_overview).
+        { label: 'Dashboard', icon: 'pi-home', route: '/dashboard', hideWhenErp: true, supersededPerm: 'business_overview' },
         // Back into the keyboard-first ERP chrome (Miracle view) — the reverse of
         // the ERP status bar's "Web Portal ⤴" link.
         { label: 'ERP (Keyboard view)', icon: 'pi-table', route: '/home', featureKey: 'erp' },
@@ -472,10 +477,16 @@ export class MainLayoutComponent implements OnInit {
           if (it.erpReadOnlyEntry) return erpReadOnly;
           // Upsell teaser only when status is known AND the tenant has no ERP at all.
           if (it.erpTeaser) return ready && !planErp && !erpReadOnly;
-          // Base item is superseded by its ERP version only when the USER sees ERP.
-          if (it.hideWhenErp && erpFull) return false;
-          // Individual ERP items show only when the user has ERP (plan + role).
-          if (it.featureKey === 'erp') return erpFull;
+          // Base item is superseded by its ERP version only when the USER sees ERP
+          // — and, when the superseding item is perm-gated, can actually read it.
+          if (it.hideWhenErp && erpFull
+            && (!it.supersededPerm || !this.permissions.ready() || this.permissions.can(it.supersededPerm, 'read'))) return false;
+          // Individual ERP items show only when the user has ERP (plan + role)
+          // AND passes the item's own RBAC perm (previously dead — this early
+          // return skipped the generic perm check below).
+          if (it.featureKey === 'erp') {
+            return erpFull && (!it.perm || !this.permissions.ready() || this.permissions.can(it.perm, 'read'));
+          }
           // Live-feature items (salesman app, offline desktop) — shown only when the
           // tenant is actually entitled, independent of the ERP master switch.
           if (it.featureLive) return ready && this.erpAccess.has(it.featureLive);

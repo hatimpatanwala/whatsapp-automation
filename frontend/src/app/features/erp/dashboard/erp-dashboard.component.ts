@@ -1,81 +1,126 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, effect, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TagModule } from 'primeng/tag';
 import { ButtonModule } from 'primeng/button';
+import { ChartModule } from 'primeng/chart';
+import { ApiService } from '../../../core/services/api.service';
 import { ErpService } from '../../../core/services/erp.service';
+import { FeatureService } from '../../../core/services/feature.service';
 import { AiInsightsCardComponent } from '../../insights/ai-insights-card.component';
 
+/**
+ * Business Overview — the admin's single chart-first cockpit. Every section is
+ * a chart or a KPI tile (minimum reading); sections render only when the plan
+ * feature behind them is enabled (premiumInsights strip) or the data exists
+ * (orders, expenses, aging), so the page adapts itself to the tenant.
+ */
 @Component({
   selector: 'wa-erp-dashboard', standalone: true,
-  imports: [CommonModule, RouterLink, TagModule, ButtonModule, AiInsightsCardComponent],
+  imports: [CommonModule, RouterLink, TagModule, ButtonModule, ChartModule, AiInsightsCardComponent],
   template: `
     <div class="p-4 max-w-7xl mx-auto">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <div>
-          <h2 class="text-2xl font-bold text-gray-900">ERP Dashboard</h2>
-          <p class="text-sm text-gray-500 mt-1">Your business at a glance — all amounts in {{ baseSymbol() }} (base currency)</p>
+          <h2 class="text-2xl font-bold text-gray-900">Business Overview</h2>
+          <p class="text-sm text-gray-500 mt-1">Everything at a glance — amounts in {{ baseSymbol() }}</p>
         </div>
-        <p-button label="New Invoice" icon="pi pi-plus" routerLink="/erp/invoices" />
+        <div class="flex items-center gap-2">
+          <a routerLink="/erp/reports" class="rounded-xl border border-gray-200 text-gray-600 text-[12.5px] font-semibold px-3 py-2 hover:border-indigo-300 hover:text-indigo-700 transition-colors"><i class="pi pi-chart-line mr-1.5" style="font-size:.75rem"></i>Reports</a>
+          <a routerLink="/erp/intel" class="rounded-xl border border-gray-200 text-gray-600 text-[12.5px] font-semibold px-3 py-2 hover:border-indigo-300 hover:text-indigo-700 transition-colors"><i class="pi pi-sparkles mr-1.5" style="font-size:.75rem"></i>AI Insights Pro</a>
+          <p-button label="New Invoice" icon="pi pi-plus" routerLink="/erp/invoices" />
+        </div>
       </div>
-
-      <div class="mb-6"><wa-ai-insights-card /></div>
 
       @if (loading()) {
         <div class="text-center py-20 text-gray-400"><i class="pi pi-spin pi-spinner text-3xl"></i></div>
       } @else {
-        <!-- KPI cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <!-- KPI tiles -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
           @for (k of kpiCards(); track k.label) {
-            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div class="flex items-center gap-3 mb-2">
-                <div [class]="'flex items-center justify-center w-10 h-10 rounded-xl ' + k.bg"><i [class]="'pi ' + k.icon"></i></div>
-                <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{{ k.label }}</p>
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div class="flex items-center gap-2.5 mb-1.5">
+                <div [class]="'flex items-center justify-center w-9 h-9 rounded-xl ' + k.bg"><i [class]="'pi ' + k.icon" style="font-size:.85rem"></i></div>
+                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">{{ k.label }}</p>
               </div>
-              <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ k.value }}</p>
-              @if (k.sub) { <p class="text-xs text-gray-400 mt-1">{{ k.sub }}</p> }
+              <p class="text-xl font-bold text-gray-900 tabular-nums">{{ k.value }}</p>
+              @if (k.sub) { <p class="text-[11px] text-gray-400 mt-0.5">{{ k.sub }}</p> }
             </div>
           }
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Monthly sales trend -->
-          <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h3 class="font-semibold text-gray-800 mb-4">Sales — last 6 months</h3>
-            <div class="flex items-end gap-3 h-48">
-              @for (m of monthly(); track m.month) {
-                <div class="flex-1 flex flex-col items-center justify-end h-full">
-                  <span class="text-[10px] text-gray-500 mb-1 tabular-nums">{{ baseSymbol() }}{{ short(m.amt) }}</span>
-                  <div class="w-full rounded-t-lg bg-gradient-to-t from-primary-500 to-primary-300 transition-all" [style.height.%]="barPct(m.amt)" style="min-height:4px"></div>
-                  <span class="text-xs text-gray-500 mt-2">{{ m.month }}</span>
-                </div>
-              }
-              @if (!monthly().length) { <p class="text-gray-400 text-sm m-auto">No sales data yet</p> }
-            </div>
-          </div>
+        <!-- AI health strip (premium — only when the plan has it) -->
+        @if (intel(); as iv) {
+          <a routerLink="/erp/intel" class="flex flex-wrap items-center gap-x-6 gap-y-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl px-5 py-3.5 mb-5 shadow-sm hover:opacity-95 transition-opacity">
+            <span class="flex items-center gap-2 font-bold text-sm"><i class="pi pi-sparkles"></i> AI Insights Pro</span>
+            <span class="text-[13px]"><b class="tabular-nums">{{ iv.stockoutRiskCount ?? 0 }}</b> stockout risks</span>
+            <span class="text-[13px]"><b class="tabular-nums">{{ iv.deadStockCount ?? 0 }}</b> dead stock</span>
+            <span class="text-[13px]"><b class="tabular-nums">{{ iv.underpricedCount ?? 0 }}</b> underpriced</span>
+            <span class="text-[13px]"><b class="tabular-nums">{{ iv.overpricedCount ?? 0 }}</b> overpriced</span>
+            <span class="ml-auto text-[12px] opacity-80">Open <i class="pi pi-arrow-right" style="font-size:.6rem"></i></span>
+          </a>
+        }
 
-          <!-- Top clients -->
+        <!-- Sales trend + receivables aging -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+          <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h3 class="text-sm font-bold text-gray-700 mb-3">Sales — last 6 months</h3>
+            @if (salesChart()) {
+              <p-chart type="bar" [data]="salesChart()" [options]="moneyBarOptions" height="230px" />
+            } @else { <p class="text-gray-400 text-sm py-16 text-center">No sales data yet</p> }
+          </div>
           <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h3 class="font-semibold text-gray-800 mb-4">Top Clients</h3>
-            @for (c of data()?.topClients || []; track c.name) {
-              <div class="flex items-center justify-between py-2 border-t border-gray-50 first:border-0">
-                <div><p class="text-sm font-medium text-gray-800">{{ c.company || c.name }}</p></div>
-                <span class="text-sm font-semibold tabular-nums">{{ baseSymbol() }}{{ fmt(c.totalSpent) }}</span>
-              </div>
-            } @empty { <p class="text-gray-400 text-sm">No clients yet</p> }
+            <h3 class="text-sm font-bold text-gray-700 mb-3">Who owes you — by age</h3>
+            @if (agingChart()) {
+              <p-chart type="doughnut" [data]="agingChart()" [options]="doughnutOptions" height="230px" />
+            } @else { <p class="text-gray-400 text-sm py-16 text-center">Nothing outstanding 🎉</p> }
           </div>
         </div>
 
-        <!-- Recent invoices -->
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-gray-800">Recent Invoices</h3>
-            <a routerLink="/erp/invoices" class="text-sm text-primary-600 font-medium">View all →</a>
+        <!-- Expenses + top clients -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+          @if (expensesChart()) {
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h3 class="text-sm font-bold text-gray-700 mb-3">Expenses — last 30 days</h3>
+              <p-chart type="doughnut" [data]="expensesChart()" [options]="doughnutOptions" height="230px" />
+            </div>
+          }
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5" [class.lg:col-span-2]="expensesChart()" [class.lg:col-span-3]="!expensesChart()">
+            <h3 class="text-sm font-bold text-gray-700 mb-3">Top clients</h3>
+            @if (clientsChart()) {
+              <p-chart type="bar" [data]="clientsChart()" [options]="clientsBarOptions" height="230px" />
+            } @else { <p class="text-gray-400 text-sm py-16 text-center">No clients yet</p> }
+          </div>
+        </div>
+
+        <!-- Online orders (only when the shop actually has orders) -->
+        @if (orders(); as o) {
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-bold text-gray-700">Online shop orders</h3>
+              <a routerLink="/orders" class="text-[12.5px] text-primary-600 font-semibold">View orders →</a>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><p class="text-[10px] font-semibold text-gray-400 uppercase">Revenue</p><p class="text-xl font-bold tabular-nums">{{ baseSymbol() }}{{ fmt(o.totalRevenue) }}</p></div>
+              <div><p class="text-[10px] font-semibold text-gray-400 uppercase">Today</p><p class="text-xl font-bold text-green-600 tabular-nums">{{ baseSymbol() }}{{ fmt(o.revenueToday) }}</p></div>
+              <div><p class="text-[10px] font-semibold text-gray-400 uppercase">Orders</p><p class="text-xl font-bold tabular-nums">{{ fmt(o.totalOrders) }}</p></div>
+              <div><p class="text-[10px] font-semibold text-gray-400 uppercase">Pending</p><p class="text-xl font-bold text-amber-600 tabular-nums">{{ fmt(o.pendingOrders) }}</p></div>
+            </div>
+          </div>
+        }
+
+        <div class="mb-5"><wa-ai-insights-card /></div>
+
+        <!-- Recent invoices (the one table — compact) -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-gray-700">Recent invoices</h3>
+            <a routerLink="/erp/invoices" class="text-[12.5px] text-primary-600 font-semibold">View all →</a>
           </div>
           <table class="w-full text-sm">
             <thead><tr class="text-gray-400 text-xs uppercase text-left"><th class="py-2">Invoice</th><th>Customer</th><th class="text-right">Total</th><th>Status</th><th class="text-right">Date</th></tr></thead>
             <tbody>
-              @for (inv of data()?.recentInvoices || []; track inv.invoiceNumber) {
+              @for (inv of (data()?.recentInvoices || []).slice(0, 6); track inv.invoiceNumber) {
                 <tr class="border-t border-gray-50">
                   <td class="py-2 font-mono font-semibold text-primary-600">{{ inv.invoiceNumber }}</td>
                   <td>{{ inv.customerName || '-' }}</td>
@@ -93,8 +138,14 @@ import { AiInsightsCardComponent } from '../../insights/ai-insights-card.compone
 })
 export class ErpDashboardComponent implements OnInit {
   private readonly erp = inject(ErpService);
+  private readonly api = inject(ApiService);
+  private readonly features = inject(FeatureService);
   loading = signal(true);
   data = signal<any>(null);
+  aging = signal<any[]>([]);
+  expenses = signal<any>(null);
+  intel = signal<any>(null);
+  orders = signal<any>(null);
 
   baseSymbol = computed(() => this.data()?.baseCurrency?.symbol || '₹');
   monthly = computed(() => this.data()?.monthlySales || []);
@@ -114,18 +165,119 @@ export class ErpDashboardComponent implements OnInit {
     ];
   });
 
+  // ── Charts ───────────────────────────────────────────────────────────────────
+  salesChart = computed(() => {
+    const rows = this.monthly();
+    if (!rows.length) return null;
+    return {
+      labels: rows.map((m: any) => m.month),
+      datasets: [{ label: 'Sales', data: rows.map((m: any) => Number(m.amt) || 0), backgroundColor: 'rgba(99,102,241,0.75)', hoverBackgroundColor: 'rgba(79,70,229,0.95)', borderRadius: 8, maxBarThickness: 44 }],
+    };
+  });
+
+  agingChart = computed(() => {
+    const rows = this.aging();
+    if (!rows.length) return null;
+    const order = ['0-30', '31-60', '61-90', '90+'];
+    const sorted = [...rows].sort((a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket));
+    return {
+      labels: sorted.map((r) => `${r.bucket} days`),
+      datasets: [{ data: sorted.map((r) => Number(r.amount) || 0), backgroundColor: ['#34d399', '#fbbf24', '#fb923c', '#ef4444'], borderWidth: 0, hoverOffset: 6 }],
+    };
+  });
+
+  expensesChart = computed(() => {
+    const rows: any[] = this.expenses()?.byCategory || [];
+    if (!rows.length) return null;
+    const top = rows.slice(0, 7);
+    const rest = rows.slice(7).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const labels = [...top.map((r) => r.category), ...(rest > 0 ? ['Other'] : [])];
+    const data = [...top.map((r) => Number(r.amount) || 0), ...(rest > 0 ? [rest] : [])];
+    return {
+      labels,
+      datasets: [{ data, backgroundColor: ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#64748b', '#cbd5e1'], borderWidth: 0, hoverOffset: 6 }],
+    };
+  });
+
+  clientsChart = computed(() => {
+    const rows: any[] = (this.data()?.topClients || []).slice(0, 6);
+    if (!rows.length) return null;
+    return {
+      labels: rows.map((c) => this.shortName(c.company || c.name)),
+      datasets: [{ label: 'Revenue', data: rows.map((c) => Number(c.totalSpent) || 0), backgroundColor: ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#ddd6fe', '#ede9fe'], borderRadius: 6, maxBarThickness: 22 }],
+    };
+  });
+
+  readonly moneyBarOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, callbacks: { label: (c: any) => ' ' + this.baseSymbol() + (Number(c.parsed?.y) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }) } },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#94a3b8' } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v: any) => this.compactInr(v) } },
+    },
+  };
+  readonly clientsBarOptions = {
+    indexAxis: 'y' as const, responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, callbacks: { label: (c: any) => ' ' + this.baseSymbol() + (Number(c.parsed?.x) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }) } },
+    },
+    scales: {
+      x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v: any) => this.compactInr(v) } },
+      y: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } },
+    },
+  };
+  readonly doughnutOptions = {
+    responsive: true, maintainAspectRatio: false, cutout: '62%',
+    plugins: {
+      legend: { position: 'right' as const, labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 11 }, color: '#64748b' } },
+      tooltip: { backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, callbacks: { label: (c: any) => ` ${c.label}: ${this.baseSymbol()}` + (Number(c.parsed) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }) } },
+    },
+  };
+
+  private intelRequested = false;
+
+  constructor() {
+    // Premium strip only when the plan actually has it (no 403 noise otherwise).
+    // Reactive, not a one-shot ngOnInit check: right after login the session may
+    // not have rehydrated yet, so hasFeature() can flip to true a moment later.
+    effect(() => {
+      if (!this.intelRequested && this.features.hasFeature('premiumInsights')) {
+        this.intelRequested = true;
+        this.api.get<any>('/erp/intel/overview').subscribe({ next: (r) => this.intel.set(r), error: () => {} });
+      }
+    });
+  }
+
   ngOnInit() {
     this.erp.dashboard().subscribe({
       next: (d) => { this.data.set(d); this.loading.set(false); },
       error: () => this.loading.set(false),
     });
+    this.api.get<any[]>('/erp/reports/receivables-aging').subscribe({ next: (r) => this.aging.set(r || []), error: () => {} });
+    this.api.get<any>('/erp/reports/expenses').subscribe({ next: (r) => this.expenses.set(r), error: () => {} });
+    // Online-shop orders: data-adaptive — the section appears only when orders exist.
+    this.api.get<any>('/orders/stats').subscribe({
+      next: (s) => { if ((Number(s?.totalOrders) || 0) > 0) this.orders.set(s); },
+      error: () => {},
+    });
   }
 
-  barPct(amt: number): number {
-    const max = Math.max(...this.monthly().map((m: any) => Number(m.amt) || 0), 1);
-    return Math.round((Number(amt) / max) * 100);
-  }
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
-  short(v: any): string { const n = Number(v) || 0; return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
   sev(s: string): 'success' | 'warn' | 'danger' { return s === 'paid' ? 'success' : s === 'partial' ? 'warn' : 'danger'; }
+  compactInr(v: unknown): string {
+    const s = this.baseSymbol();
+    const n = Number(v) || 0; const a = Math.abs(n);
+    if (a >= 1e7) return s + (n / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'Cr';
+    if (a >= 1e5) return s + (n / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'L';
+    if (a >= 1e3) return s + (n / 1e3).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'k';
+    return s + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  }
+  private shortName(name: unknown): string {
+    const s = String(name ?? '');
+    return s.length > 18 ? s.slice(0, 16) + '…' : s;
+  }
 }

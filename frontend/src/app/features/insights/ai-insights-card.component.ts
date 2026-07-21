@@ -47,8 +47,20 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
               <div class="h-16 bg-gray-100 rounded-xl"></div>
             </div>
           } @else if (data()) {
-            <!-- narrative -->
-            <div class="text-[13.5px] text-gray-700 leading-relaxed whitespace-pre-line mb-4">{{ data().narrative }}</div>
+            <!-- one-line takeaway; full narrative behind "More" -->
+            @if (data().headline || data().narrative) {
+              <div class="mb-4">
+                <p class="text-[13.5px] font-semibold text-gray-800 leading-snug">
+                  {{ data().headline || firstSentence(data().narrative) }}
+                  @if (data().narrative) {
+                    <button (click)="narrativeOpen.set(!narrativeOpen())" class="ml-1.5 text-[12px] font-semibold text-indigo-600 align-baseline">{{ narrativeOpen() ? 'Less' : 'More' }}</button>
+                  }
+                </p>
+                @if (narrativeOpen()) {
+                  <p class="text-[13px] text-gray-600 leading-relaxed whitespace-pre-line mt-1.5">{{ data().narrative }}</p>
+                }
+              </div>
+            }
 
             <!-- KPI strip -->
             @if (kpis()) {
@@ -101,56 +113,32 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
               </div>
             }
 
-            <!-- insights list -->
-            <div class="space-y-2">
-              @for (i of shown(); track i.id) {
-                <div class="flex gap-3 bg-white rounded-xl border p-3"
-                  [class.border-red-100]="i.kind === 'critical'"
-                  [class.border-amber-100]="i.kind === 'warning'"
-                  [class.border-emerald-100]="i.kind === 'positive'"
-                  [class.border-gray-100]="i.kind === 'info' || i.kind === 'tip'">
-                  <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                    [class.bg-red-50]="i.kind === 'critical'" [class.text-red-600]="i.kind === 'critical'"
-                    [class.bg-amber-50]="i.kind === 'warning'" [class.text-amber-600]="i.kind === 'warning'"
-                    [class.bg-emerald-50]="i.kind === 'positive'" [class.text-emerald-600]="i.kind === 'positive'"
-                    [class.bg-indigo-50]="i.kind === 'info' || i.kind === 'tip'" [class.text-indigo-600]="i.kind === 'info' || i.kind === 'tip'">
-                    <i class="pi {{ i.icon }}" style="font-size:.85rem"></i>
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <p class="text-[13px] font-semibold text-gray-900 leading-snug">{{ i.title }}</p>
-                    <p class="text-[12px] text-gray-500 leading-snug mt-0.5">{{ i.detail }}</p>
-                    @if (i.recommendation) {
-                      <p class="text-[12px] text-indigo-700 leading-snug mt-1 flex gap-1.5">
-                        <i class="pi pi-angle-right mt-0.5" style="font-size:.65rem"></i>
-                        <span>{{ i.recommendation }}</span>
-                      </p>
-                    }
-                  </div>
-                </div>
-              }
-            </div>
-
-            @if (data().insights?.length > shown().length) {
-              <button (click)="expanded.set(!expanded())" class="mt-3 text-[12px] font-semibold text-indigo-600 hover:text-indigo-800">
-                {{ expanded() ? 'Show less' : 'Show ' + (data().insights.length - shown().length) + ' more insight' + (data().insights.length - shown().length === 1 ? '' : 's') }}
-              </button>
-            }
-
-            <!-- top products mini list -->
-            @if (data().topProducts?.length) {
-              <div class="mt-4 pt-4 border-t border-indigo-100/70">
-                <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Top products this month</p>
-                <div class="space-y-1.5">
-                  @for (p of data().topProducts.slice(0, 5); track p.name; let idx = $index) {
-                    <div class="flex items-center gap-2 text-[12.5px]">
-                      <span class="w-5 h-5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center shrink-0">{{ idx + 1 }}</span>
-                      <span class="flex-1 truncate text-gray-700">{{ p.name }}</span>
-                      <span class="text-gray-400 tabular-nums">{{ inrQty(p.qty) }} qty</span>
-                      <span class="font-semibold text-gray-900 tabular-nums w-24 text-right">₹{{ inr(p.value) }}</span>
-                    </div>
+            <!-- insight chips: icon + title only; tap for the detail -->
+            @if (data().insights?.length) {
+              <div class="flex flex-wrap gap-1.5">
+                @for (i of data().insights; track i.id) {
+                  <button (click)="toggleInsight(i.id)"
+                    class="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] font-semibold transition-colors"
+                    [class.ring-2]="openInsightId() === i.id" [class.ring-indigo-300]="openInsightId() === i.id"
+                    [class.bg-red-50]="i.kind === 'critical'" [class.text-red-700]="i.kind === 'critical'" [class.border-red-100]="i.kind === 'critical'"
+                    [class.bg-amber-50]="i.kind === 'warning'" [class.text-amber-700]="i.kind === 'warning'" [class.border-amber-100]="i.kind === 'warning'"
+                    [class.bg-emerald-50]="i.kind === 'positive'" [class.text-emerald-700]="i.kind === 'positive'" [class.border-emerald-100]="i.kind === 'positive'"
+                    [class.bg-white]="i.kind === 'info' || i.kind === 'tip'" [class.text-indigo-700]="i.kind === 'info' || i.kind === 'tip'" [class.border-gray-200]="i.kind === 'info' || i.kind === 'tip'">
+                    <i class="pi {{ i.icon }}" style="font-size:.7rem"></i>{{ i.title }}
+                  </button>
+                }
+              </div>
+              @if (openInsight(); as oi) {
+                <div class="mt-2.5 bg-white rounded-xl border border-gray-100 p-3">
+                  <p class="text-[12.5px] text-gray-600 leading-snug">{{ oi.detail }}</p>
+                  @if (oi.recommendation) {
+                    <p class="text-[12.5px] text-indigo-700 leading-snug mt-1.5 flex gap-1.5">
+                      <i class="pi pi-angle-right mt-0.5" style="font-size:.65rem"></i>
+                      <span>{{ oi.recommendation }}</span>
+                    </p>
                   }
                 </div>
-              </div>
+              }
             }
           }
         </div>
@@ -164,13 +152,24 @@ export class AiInsightsCardComponent implements OnInit {
   readonly data = signal<any>(null);
   readonly loading = signal(false);
   readonly hidden = signal(false);
-  readonly expanded = signal(false);
+  readonly narrativeOpen = signal(false);
+  readonly openInsightId = signal<string | null>(null);
 
   readonly kpis = computed(() => this.data()?.kpis);
-  readonly shown = computed(() => {
-    const all = this.data()?.insights || [];
-    return this.expanded() ? all : all.slice(0, 4);
+  readonly openInsight = computed(() => {
+    const id = this.openInsightId();
+    return id ? (this.data()?.insights || []).find((i: any) => i.id === id) || null : null;
   });
+
+  toggleInsight(id: string) {
+    this.openInsightId.set(this.openInsightId() === id ? null : id);
+  }
+
+  firstSentence(text: unknown): string {
+    const s = String(text ?? '').trim();
+    const m = /^.*?[.!?](?=\s|$)/.exec(s);
+    return m ? m[0] : s.slice(0, 140);
+  }
 
   // ── Charts ───────────────────────────────────────────────────────────────────
   readonly salesChartData = computed(() => {

@@ -14,6 +14,8 @@ import { OrderService } from '../../core/services/order.service';
 import { AiInsightsCardComponent } from '../insights/ai-insights-card.component';
 import { exportToCsv } from '../../core/utils/csv-export';
 import { ApiService } from '../../core/services/api.service';
+import { FeatureService } from '../../core/services/feature.service';
+import { PermissionService } from '../../core/services/permission.service';
 import { Order, OrderStats, InventoryItem } from '../../core/models';
 
 interface StatCard {
@@ -70,6 +72,18 @@ interface LowStockItem {
           <button pButton label="New Order" icon="pi pi-plus" class="p-button-sm" severity="success" routerLink="/orders"></button>
         </div>
       </div>
+
+      <!-- ERP tenants get the richer chart-first cockpit — guide them there
+           (this page stays the shop-orders view and the non-ERP landing).
+           Role-gated like the sidebar: an erp:'none' role (e.g. Salesman) must
+           not get a UI path into the financial cockpit. -->
+      @if (features.hasFeature('erp') && perms.ready() && perms.can('erp', 'read') && perms.can('business_overview', 'read')) {
+        <a routerLink="/erp/dashboard" class="flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl px-5 py-3.5 shadow-sm hover:opacity-95 transition-opacity">
+          <i class="pi pi-chart-bar"></i>
+          <span class="text-sm font-semibold">Your full Business Overview — sales, receivables, expenses & AI insights in one place</span>
+          <i class="pi pi-arrow-right ml-auto" style="font-size:.7rem"></i>
+        </a>
+      }
 
       <!-- AI Insights -->
       <wa-ai-insights-card />
@@ -227,6 +241,8 @@ interface LowStockItem {
 export class DashboardComponent implements OnInit {
   private readonly orderService = inject(OrderService);
   private readonly apiService = inject(ApiService);
+  readonly features = inject(FeatureService);
+  readonly perms = inject(PermissionService);
 
   loading = signal(true);
   ordersLoading = signal(true);

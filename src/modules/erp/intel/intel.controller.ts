@@ -44,7 +44,10 @@ export class IntelController {
     return {
       asOf: perf.asOf,
       topPerformer: perf.products[0] || null,
-      topRiser: risers[0] || null,
+      // Clone: the global camelize interceptor dedups by object REFERENCE and
+      // drops repeats — when the top performer is also the top riser (same
+      // array element), an un-cloned topRiser vanishes from the response.
+      topRiser: risers[0] ? { ...risers[0] } : null,
       forecastWinner: fc.products[0] || null,
       stockoutRiskCount: stockoutRisks.length,
       deadStockCount: deadStock.length,

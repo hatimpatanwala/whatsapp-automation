@@ -503,6 +503,18 @@ interface MonthPlanData {
                 <button (click)="loadPerf()" class="font-semibold underline shrink-0">Retry</button>
               </div>
             }
+            @if (abcChartData()) {
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div class="bg-white rounded-2xl border border-gray-100 p-4">
+                  <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Where the revenue is (ABC)</p>
+                  <p-chart type="doughnut" [data]="abcChartData()" [options]="posChartOptions" height="170px" />
+                </div>
+                <div class="bg-white rounded-2xl border border-gray-100 p-4">
+                  <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Stock health</p>
+                  <p-chart type="doughnut" [data]="healthChartData()" [options]="posChartOptions" height="170px" />
+                </div>
+              </div>
+            }
             <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
               <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
                 <h2 class="text-sm font-bold text-gray-700">Product performance</h2>
@@ -1239,6 +1251,33 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
       : (Number(av) || 0) - (Number(bv) || 0);
     return dir === 'asc' ? c : -c;
   }
+
+  // ── Performance distribution doughnuts ──────────────────────────────────────
+  readonly abcChartData = computed(() => {
+    const rows = this.perf()?.products || [];
+    const a = rows.filter((p) => p.abcClass === 'A').length;
+    const b = rows.filter((p) => p.abcClass === 'B').length;
+    const c = rows.filter((p) => p.abcClass === 'C').length;
+    if (a + b + c === 0) return null;
+    return {
+      labels: ['A — money makers', 'B — steady', 'C — long tail'],
+      datasets: [{ data: [a, b, c], backgroundColor: ['#10b981', '#6366f1', '#cbd5e1'], borderWidth: 0, hoverOffset: 6 }],
+    };
+  });
+  readonly healthChartData = computed(() => {
+    const rows = this.perf()?.products || [];
+    const counts = [
+      rows.filter((p) => p.healthClass === 'fast-moving').length,
+      rows.filter((p) => p.healthClass === 'slow-moving').length,
+      rows.filter((p) => p.healthClass === 'dead-stock').length,
+      rows.filter((p) => p.healthClass === 'inactive').length,
+    ];
+    if (!counts.some(Boolean)) return null;
+    return {
+      labels: ['Fast moving', 'Slow moving', 'Dead stock', 'Inactive'],
+      datasets: [{ data: counts, backgroundColor: ['#10b981', '#f59e0b', '#f43f5e', '#cbd5e1'], borderWidth: 0, hoverOffset: 6 }],
+    };
+  });
 
   // ── Market pricing ──────────────────────────────────────────────────────────
   readonly market = signal<MarketData | null>(null);
