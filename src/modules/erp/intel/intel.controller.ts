@@ -125,4 +125,18 @@ export class IntelController {
   refreshPrice(@Req() req: Request, @Param('productId') productId: string) {
     return this.market.refresh(this.schema(req), productId);
   }
+
+  /** Cached city/state figures + the national row for one product (comparator chart). */
+  @Get('market-prices/locations/:productId')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  locationPrices(@Req() req: Request, @Param('productId') productId: string) {
+    return this.market.locationPrices(this.schema(req), productId);
+  }
+
+  /** Live city-level price check (IndiaMART city filter + optional Google Shopping). */
+  @Post('market-prices/compare/:productId')
+  @Roles('owner', 'seller') @UseGuards(ErpFeatureGuard) @RequiresFeature('premiumInsights')
+  compareLocation(@Req() req: Request, @Param('productId') productId: string, @Body() body: any) {
+    return this.market.compareLocation(this.schema(req), productId, body?.state, body?.city, body?.force === true);
+  }
 }

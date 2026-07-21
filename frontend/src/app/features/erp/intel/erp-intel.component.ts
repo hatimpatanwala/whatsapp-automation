@@ -2,8 +2,10 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { ChartModule } from 'primeng/chart';
 import { ApiService } from '../../../core/services/api.service';
 import { FeatureService } from '../../../core/services/feature.service';
+import { INDIA_LOCATIONS, INDIA_STATES } from './india-locations';
 
 type TabId = 'overview' | 'monthplan' | 'performance' | 'pricing' | 'forecast';
 type SortDir = 'asc' | 'desc';
@@ -84,6 +86,14 @@ interface MarketRow {
 }
 interface MarketData { searchAvailable?: boolean; llmEnabled?: boolean; products?: MarketRow[]; }
 
+/** One location's market figures (city row or the 'National' row) for the comparator. */
+interface LocRow {
+  state: string; city: string;
+  low: number | null; median: number | null; high: number | null; avg: number | null;
+  points?: number | null; confidence?: number | null; fetchedAt?: string | null; sourceNote?: string | null;
+}
+interface LocationData { productId: string; name: string; yourPrice: number; national: LocRow | null; locations: LocRow[]; }
+
 /** Server-side bulk market-price refresh progress (refresh-all / refresh-status). */
 interface BulkRefreshState {
   running?: boolean; total?: number; done?: number; ok?: number; noData?: number;
@@ -129,7 +139,7 @@ interface MonthPlanData {
 @Component({
   selector: 'wa-erp-intel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ChartModule],
   template: `
     @if (locked()) {
       <!-- ══ LOCKED — upgrade teaser ══════════════════════════════════ -->
@@ -621,6 +631,68 @@ interface MonthPlanData {
                 </button>
               </div>
             }
+
+            <!-- position summary + city price comparator -->
+            @if (market()) {
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                <div class="bg-white rounded-2xl border border-gray-100 p-4">
+                  <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Price position</p>
+                  @if (posChartData()) {
+                    <p-chart type="doughnut" [data]="posChartData()" [options]="posChartOptions" height="170px" />
+                    <p class="text-[11px] text-gray-400 mt-2 text-center">{{ posSummary() }}</p>
+                  } @else {
+                    <p class="text-[12px] text-gray-400 py-10 text-center">Sync or enter market prices to see where you stand.</p>
+                  }
+                </div>
+                <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-4">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                      <i class="pi pi-map-marker" style="font-size:.7rem"></i>
+                    </div>
+                    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">City price comparator</p>
+                  </div>
+                  <div class="flex flex-wrap gap-2 mb-3">
+                    <select [ngModel]="cmpProductId()" (ngModelChange)="onCmpProduct($event)"
+                      class="rounded-xl border border-gray-200 px-3 py-2 text-[13px] font-semibold bg-white max-w-[15rem] min-w-[10rem]">
+                      <option value="" disabled>Product…</option>
+                      @for (p of marketRows(); track p.productId) { <option [value]="p.productId">{{ p.name }}</option> }
+                    </select>
+                    <select [ngModel]="cmpState()" (ngModelChange)="onCmpState($event)"
+                      class="rounded-xl border border-gray-200 px-3 py-2 text-[13px] font-semibold bg-white">
+                      <option value="" disabled>State…</option>
+                      @for (s of states; track s) { <option [value]="s">{{ s }}</option> }
+                    </select>
+                    <select [ngModel]="cmpCity()" (ngModelChange)="cmpCity.set($event)" [disabled]="!cmpState()"
+                      class="rounded-xl border border-gray-200 px-3 py-2 text-[13px] font-semibold bg-white disabled:opacity-40">
+                      <option value="" disabled>City…</option>
+                      @for (c of cmpCities(); track c) { <option [value]="c">{{ c }}</option> }
+                    </select>
+                    <button (click)="runCompare()" [disabled]="cmpRunning() || !cmpProductId() || !cmpState() || !cmpCity()"
+                      class="rounded-xl bg-indigo-600 text-white text-[12.5px] font-semibold px-3.5 py-2 hover:bg-indigo-700 disabled:opacity-50 transition-colors whitespace-nowrap">
+                      @if (cmpRunning()) { <i class="pi pi-spin pi-spinner mr-1" style="font-size:.7rem"></i>Checking… }
+                      @else { <i class="pi pi-search mr-1" style="font-size:.7rem"></i>Compare }
+                    </button>
+                  </div>
+                  @if (cmpError()) {
+                    <div class="mb-2 rounded-xl bg-red-50 border border-red-100 text-red-700 text-[12px] px-3 py-2">{{ cmpError() }}</div>
+                  }
+                  @if (cmpMsg()) {
+                    <div class="mb-2 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 text-[12px] px-3 py-2">{{ cmpMsg() }}</div>
+                  }
+                  @if (cmpChartData()) {
+                    <p-chart type="bar" [data]="cmpChartData()" [options]="cmpChartOptions" height="210px" />
+                    <p class="text-[11px] text-gray-400 mt-2">
+                      Dashed line = your price. City figures come from city-filtered B2B listings@if (cmpHasShopping()) { <span> and Google Shopping</span> } — grocery/FMCG varies most by city; branded durables are near-uniform nationally.
+                    </p>
+                  } @else if (cmpLoading()) {
+                    <div class="animate-pulse h-[210px] bg-gray-50 rounded-xl"></div>
+                  } @else {
+                    <p class="text-[12px] text-gray-400 py-8 text-center">Pick a product, state and city, then hit Compare to see how that market prices it.</p>
+                  }
+                </div>
+              </div>
+            }
+
             <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
               <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
                 <h2 class="text-sm font-bold text-gray-700">Your prices vs the market</h2>
@@ -697,6 +769,20 @@ interface MonthPlanData {
                           </td>
                           <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ p.marketAvg != null ? '₹' + inr(p.marketAvg) : '—' }}</td>
                           <td class="px-4 py-2.5 text-right tabular-nums text-gray-500">{{ p.marketHigh != null ? '₹' + inr(p.marketHigh) : '—' }}</td>
+                          <td class="px-4 py-2.5 min-w-[8rem]">
+                            @if (p.marketLow != null && p.marketHigh != null) {
+                              <div class="relative h-1.5 rounded-full bg-gradient-to-r from-emerald-200 via-gray-200 to-amber-200 my-2.5"
+                                [title]="'Market ₹' + inr(p.marketLow) + ' – ₹' + inr(p.marketHigh)">
+                                @if (bandPct(p, p.marketMedian); as m) {
+                                  <div class="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-gray-500 rounded" [style.left.%]="m" title="Market median"></div>
+                                }
+                                @if (bandPct(p, p.yourPrice); as y) {
+                                  <div class="absolute top-1/2 -translate-y-1/2 -ml-1 w-2.5 h-2.5 rounded-full bg-indigo-600 ring-2 ring-white shadow"
+                                    [style.left.%]="y" [title]="'Your price ₹' + inr(p.yourPrice)"></div>
+                                }
+                              </div>
+                            } @else { <span class="text-gray-300">—</span> }
+                          </td>
                           <td class="px-4 py-2.5">
                             @if (p.position === 'under') {
                               <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap">Below market</span>
@@ -1174,6 +1260,7 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     { key: 'marketMedian', label: 'Median', right: true },
     { key: 'marketAvg', label: 'Avg', right: true },
     { label: 'High', right: true },
+    { label: 'Range' },
     { key: 'position', label: 'Position' },
     { label: 'Source' },
     { label: 'Actions', right: true },
@@ -1214,6 +1301,151 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
       high: 'bg-teal-100 text-teal-700',
       likely: 'bg-amber-100 text-amber-700',
     }[t];
+  }
+
+  // ── Price-position doughnut ─────────────────────────────────────────────────
+  readonly posChartData = computed(() => {
+    const rows = this.market()?.products || [];
+    const under = rows.filter((p) => p.position === 'under').length;
+    const comp = rows.filter((p) => p.position === 'competitive').length;
+    const over = rows.filter((p) => p.position === 'over').length;
+    if (under + comp + over === 0) return null;
+    return {
+      labels: ['Below market', 'Competitive', 'Above market'],
+      datasets: [{ data: [under, comp, over], backgroundColor: ['#10b981', '#94a3b8', '#f59e0b'], borderWidth: 0, hoverOffset: 6 }],
+    };
+  });
+  readonly posChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '68%',
+    plugins: { legend: { position: 'right' as const, labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 11 }, color: '#64748b' } } },
+  };
+  readonly posSummary = computed(() => {
+    const rows = this.market()?.products || [];
+    const priced = rows.filter((p) => p.position).length;
+    return priced ? `${priced} of ${rows.length} products have a market price` : '';
+  });
+
+  /**
+   * % position of a value across the row's market band. The span includes your
+   * own price so the dot never clips; clamped to 2–98 so markers stay visible.
+   */
+  bandPct(p: MarketRow, v: number | null | undefined): number | null {
+    if (v == null) return null;
+    const lo0 = Number(p?.marketLow);
+    const hi0 = Number(p?.marketHigh);
+    if (!(lo0 > 0) || !(hi0 > 0)) return null;
+    const yp = Number(p?.yourPrice) || 0;
+    const lo = yp > 0 ? Math.min(lo0, yp) : lo0;
+    const hi = Math.max(hi0, yp);
+    if (!(hi > lo)) return 50;
+    return Math.max(2, Math.min(98, ((Number(v) - lo) / (hi - lo)) * 100));
+  }
+
+  // ── City price comparator ───────────────────────────────────────────────────
+  readonly states = INDIA_STATES;
+  readonly cmpProductId = signal('');
+  readonly cmpState = signal('');
+  readonly cmpCity = signal('');
+  readonly cmpData = signal<LocationData | null>(null);
+  readonly cmpLoading = signal(false);
+  readonly cmpRunning = signal(false);
+  readonly cmpError = signal('');
+  readonly cmpMsg = signal('');
+
+  readonly cmpCities = computed<string[]>(() => INDIA_LOCATIONS[this.cmpState()] || []);
+  readonly cmpHasShopping = computed(() =>
+    (this.cmpData()?.locations || []).some((l) => (l?.sourceNote || '').includes('google-shopping')));
+
+  readonly cmpChartData = computed(() => {
+    const d = this.cmpData();
+    if (!d) return null;
+    const rows: LocRow[] = [...(d.national ? [d.national] : []), ...d.locations];
+    if (!rows.length) return null;
+    const labels = rows.map((r) => r.city);
+    const yp = Number(d.yourPrice) || 0;
+    return {
+      labels,
+      datasets: [
+        ...(yp > 0 ? [{
+          type: 'line' as const, label: 'Your price', data: labels.map(() => yp),
+          borderColor: '#0f172a', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, fill: false,
+        }] : []),
+        { type: 'bar' as const, label: 'Low', data: rows.map((r) => r.low), backgroundColor: '#a5b4fc', borderRadius: 4, maxBarThickness: 26 },
+        { type: 'bar' as const, label: 'Median', data: rows.map((r) => r.median), backgroundColor: '#6366f1', borderRadius: 4, maxBarThickness: 26 },
+        { type: 'bar' as const, label: 'High', data: rows.map((r) => r.high), backgroundColor: '#4338ca', borderRadius: 4, maxBarThickness: 26 },
+      ],
+    };
+  });
+  readonly cmpChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index' as const, intersect: false },
+    plugins: {
+      legend: { position: 'top' as const, align: 'end' as const, labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 12, font: { size: 11 }, color: '#64748b' } },
+      tooltip: {
+        backgroundColor: '#0f172a', padding: 10, cornerRadius: 8,
+        callbacks: { label: (ctx: any) => ` ${ctx.dataset?.label}: ₹` + (Number(ctx.parsed?.y) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }) },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v: any) => this.compactInr(v) } },
+    },
+  };
+
+  onCmpProduct(id: string) {
+    if (!id || id === this.cmpProductId()) return;
+    this.cmpProductId.set(id);
+    this.cmpMsg.set('');
+    this.loadLocations(id);
+  }
+
+  onCmpState(s: string) {
+    if (s === this.cmpState()) return;
+    this.cmpState.set(s);
+    this.cmpCity.set(''); // stale city from the previous state must not linger
+  }
+
+  private loadLocations(productId: string) {
+    this.cmpLoading.set(true);
+    this.cmpError.set('');
+    this.api.get<LocationData>(`/erp/intel/market-prices/locations/${productId}`).subscribe({
+      next: (r) => { this.cmpData.set(r || null); this.cmpLoading.set(false); },
+      error: (e) => { this.cmpError.set(this.msg(e, 'Could not load city prices.')); this.cmpLoading.set(false); },
+    });
+  }
+
+  runCompare() {
+    const productId = this.cmpProductId();
+    const state = this.cmpState();
+    const city = this.cmpCity();
+    if (!productId || !state || !city || this.cmpRunning()) return;
+    this.cmpRunning.set(true);
+    this.cmpError.set('');
+    this.cmpMsg.set('');
+    this.api.post<{ status?: string; message?: string }>(`/erp/intel/market-prices/compare/${productId}`, { state, city }).subscribe({
+      next: (r) => {
+        this.cmpRunning.set(false);
+        if (r?.status === 'ok') this.loadLocations(productId);
+        else this.cmpMsg.set(r?.message || `No confident ${city} price found for this product.`);
+      },
+      error: (e) => {
+        this.cmpRunning.set(false);
+        this.cmpError.set(this.msg(e, 'Could not run the city comparison.'));
+      },
+    });
+  }
+
+  /** ₹ axis labels the Indian way: 1.2Cr / 45L / 80k. */
+  compactInr(v: unknown): string {
+    const n = Number(v) || 0;
+    const a = Math.abs(n);
+    if (a >= 1e7) return '₹' + (n / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'Cr';
+    if (a >= 1e5) return '₹' + (n / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'L';
+    if (a >= 1e3) return '₹' + (n / 1e3).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'k';
+    return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
   }
 
   // ── Bulk market-price sync ──────────────────────────────────────────────────
@@ -1449,7 +1681,18 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     this.marketLoading.set(true);
     this.marketError.set('');
     this.api.get<MarketData>('/erp/intel/market-prices').subscribe({
-      next: (r) => { this.market.set(r || { products: [] }); this.marketLoading.set(false); },
+      next: (r) => {
+        this.market.set(r || { products: [] });
+        this.marketLoading.set(false);
+        // Seed the city comparator with the biggest seller so the panel isn't empty.
+        if (!this.cmpProductId()) {
+          const top = [...(r?.products || [])].sort((a, b) => (Number(b?.monthlyVolumeValue) || 0) - (Number(a?.monthlyVolumeValue) || 0))[0];
+          if (top?.productId) {
+            this.cmpProductId.set(top.productId);
+            this.loadLocations(top.productId);
+          }
+        }
+      },
       error: (e) => { this.marketError.set(this.msg(e, 'Could not load market prices.')); this.marketLoading.set(false); },
     });
   }

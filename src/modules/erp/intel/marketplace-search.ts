@@ -35,7 +35,8 @@ export interface PriceCard {
 
 export interface MarketSite {
   name: string;
-  searchUrl: (q: string) => string;
+  /** `city` scopes the search to a locality when the site supports it (IndiaMART's `cq`). */
+  searchUrl: (q: string, city?: string) => string;
   needsBrowser: boolean;
   /** Optional trust multiplier applied by the caller (e.g. generic marketplaces < B2B). */
   downWeight?: number;
@@ -47,7 +48,8 @@ const MAX_CARDS = 20;
 export const MARKET_SITES: MarketSite[] = [
   {
     name: 'indiamart',
-    searchUrl: (q) => `https://dir.indiamart.com/search.mp?ss=${encodeURIComponent(q)}`,
+    // `cq` is IndiaMART's own city filter — the one source with genuine B2B city pricing.
+    searchUrl: (q, city) => `https://dir.indiamart.com/search.mp?ss=${encodeURIComponent(q)}${city ? `&cq=${encodeURIComponent(city)}` : ''}`,
     needsBrowser: false,
   },
   {
@@ -488,11 +490,12 @@ export async function searchMarketplace(
   site: MarketSite,
   productName: string,
   fetchHtml: (url: string) => Promise<string | null>,
+  city?: string,
 ): Promise<PriceCard[]> {
   try {
     const q = String(productName || '').trim();
     if (!q) return [];
-    const html = await fetchHtml(site.searchUrl(q));
+    const html = await fetchHtml(site.searchUrl(q, city));
     if (!html) return [];
 
     const seen = new Set<string>();

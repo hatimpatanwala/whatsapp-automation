@@ -188,11 +188,8 @@ export class MarketPriceService implements OnModuleDestroy {
     ).catch(() => undefined);
   }
 
-  // ─── Single refresh ──────────────────────────────────────────────────────────
-  async refresh(schema: string, productId: string) {
-    const searx = this.config.get<string>('SEARX_URL');
-    if (!searx) return { status: 'unavailable', message: 'Search engine not configured (set SEARX_URL).' };
-
+  /** Product identity + reference price (2yr avg realized selling price, else list price). */
+  private async loadProduct(schema: string, productId: string): Promise<{ id: string; name: string; barcode: string | null; sku: string | null; ref_price: number } | undefined> {
     const [product] = await this.cm.executeInTenantContext(schema, (qr) =>
       qr.query(
         `SELECT p.id, p.name, p.barcode, p.sku,
@@ -207,6 +204,15 @@ export class MarketPriceService implements OnModuleDestroy {
         [productId],
       ),
     );
+    return product;
+  }
+
+  // ─── Single refresh ──────────────────────────────────────────────────────────
+  async refresh(schema: string, productId: string) {
+    const searx = this.config.get<string>('SEARX_URL');
+    if (!searx) return { status: 'unavailable', message: 'Search engine not configured (set SEARX_URL).' };
+
+    const product = await this.loadProduct(schema, productId);
     if (!product) throw new BadRequestException('Product not found');
     const name = String(product.name);
     const refPrice = Number(product.ref_price) || 0;
@@ -357,6 +363,185 @@ export class MarketPriceService implements OnModuleDestroy {
         [productId, best.site, best.title.slice(0, 500), best.url || null, r2(best.price), best.tier, confidence],
       ),
     ).catch(() => undefined);
+  }
+
+  // ─── City/state price comparator ─────────────────────────────────────────────
+  /** DB row → API shape shared by locationPrices and the compareLocation cache hit. */
+  private static locationRow(r: any) {
+    return {
+      state: String(r.state),
+      city: String(r.city),
+      low: r.price_low != null ? r2(Number(r.price_low)) : null,
+      median: r.price_median != null ? r2(Number(r.price_median)) : null,
+      high: r.price_high != null ? r2(Number(r.price_high)) : null,
+      avg: r.price_avg != null ? r2(Number(r.price_avg)) : null,
+      points: r.points != null ? Number(r.points) : null,
+      confidence: r.confidence != null ? Number(r.confidence) : null,
+      sourceNote: r.source_note || null,
+      fetchedAt: r.fetched_at || null,
+    };
+  }
+
+  /** All cached city figures for a product + the national row (for the comparator chart). */
+  async locationPrices(schema: string, productId: string) {
+    const product = await this.loadProduct(schema, productId);
+    if (!product) throw new BadRequestException('Product not found');
+    const [rows, [national]] = await Promise.all([
+      this.cm.executeInTenantContext(schema, (qr) =>
+        qr.query(
+          `SELECT state, city, price_low, price_median, price_high, price_avg, points, confidence, source_note, fetched_at
+           FROM "${schema}".market_price_locations WHERE product_id = $1 ORDER BY fetched_at DESC LIMIT 12`,
+          [productId],
+        ),
+      ),
+      this.cm.executeInTenantContext(schema, (qr) =>
+        qr.query(
+          `SELECT 'national' AS state, 'National' AS city, price_low, price_median, price_high, price_avg,
+                  NULL AS points, confidence, source_note, fetched_at
+           FROM "${schema}".market_prices WHERE product_id = $1
+           ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END, fetched_at DESC LIMIT 1`,
+          [productId],
+        ),
+      ),
+    ]);
+    return {
+      productId,
+      name: String(product.name),
+      yourPrice: r2(Number(product.ref_price) || 0),
+      national: national ? MarketPriceService.locationRow(national) : null,
+      locations: rows.map(MarketPriceService.locationRow),
+    };
+  }
+
+  /**
+   * Live city-level price check. Sources, most-trusted first:
+   *   1. IndiaMART search with its own `cq` city filter — genuine B2B locality
+   *      pricing, server-rendered, free.
+   *   2. Google Shopping via Serper.dev with a city `location` (opt-in,
+   *      SERPER_API_KEY) — the reliable way to city-bias retail results.
+   *   3. City-qualified SearXNG metasearch as the thin-data fallback.
+   * Every candidate passes the same brand+model+size matcher and the 0.3×–3×
+   * sanity band as the national engine, then the MAD-robust aggregation.
+   * Results cache 12h in market_price_locations (UNIQUE product+state+city).
+   */
+  async compareLocation(schema: string, productId: string, state: string, city: string, force = false) {
+    const st = String(state || '').trim().slice(0, 60);
+    const ct = String(city || '').trim().slice(0, 60);
+    if (!st || !ct || !/^[a-zA-Z][a-zA-Z .&()-]*$/.test(st) || !/^[a-zA-Z][a-zA-Z .&()-]*$/.test(ct)) {
+      throw new BadRequestException('A valid state and city are required');
+    }
+
+    if (!force) {
+      const [hit] = await this.cm.executeInTenantContext(schema, (qr) =>
+        qr.query(
+          `SELECT state, city, price_low, price_median, price_high, price_avg, points, confidence, source_note, fetched_at
+           FROM "${schema}".market_price_locations
+           WHERE product_id = $1 AND LOWER(state) = LOWER($2) AND LOWER(city) = LOWER($3)
+             AND fetched_at > NOW() - interval '12 hours'`,
+          [productId, st, ct],
+        ),
+      );
+      if (hit) return { status: 'ok', cached: true, ...MarketPriceService.locationRow(hit) };
+    }
+
+    const product = await this.loadProduct(schema, productId);
+    if (!product) throw new BadRequestException('Product not found');
+    const name = String(product.name);
+    const refPrice = Number(product.ref_price) || 0;
+    const ids: ProductIds = { barcode: product.barcode, sku: product.sku };
+    const tokens = tokenizeProduct(name);
+    const deadline = Date.now() + 40_000;
+
+    const points: number[] = [];
+    const via: string[] = [];
+    const consume = (label: string, cards: PriceCard[]) => {
+      let n = 0;
+      for (const c of cards) {
+        if (!scoreCard(tokens, c.title, ids).accept) continue;
+        if (refPrice > 0 && (c.price < refPrice * 0.3 || c.price > refPrice * 3)) continue;
+        points.push(c.price);
+        n++;
+      }
+      if (n) via.push(`${label} ×${n}`);
+    };
+
+    const indiamart = MARKET_SITES.find((s) => s.name === 'indiamart');
+    if (indiamart) {
+      consume('indiamart', await searchMarketplace(indiamart, name, (url) => this.fetchPolite(url, deadline), ct).catch(() => [] as PriceCard[]));
+    }
+    consume('google-shopping', await this.serperShopping(name, st, ct));
+
+    if (points.length < 2) {
+      const searx = this.config.get<string>('SEARX_URL');
+      if (searx && Date.now() < deadline - 20_000) {
+        const snippets = await this.searchSnippets(searx.replace(/\/$/, ''), `${name} ${ct}`);
+        const rel = this.relevantSnippets(name, snippets);
+        const pts = this.pricePoints(refPrice, rel.map((s) => `${s.title} ${s.content}`));
+        if (pts.length) {
+          points.push(...pts);
+          via.push(`web ×${pts.length}`);
+        }
+      }
+    }
+
+    const stats = this.statsFromPoints(points);
+    if (!stats) {
+      return {
+        status: 'no-data', state: st, city: ct,
+        message: `No confident ${ct} price found — few sellers list this product there. The national figure still applies.`,
+      };
+    }
+
+    const note = `${ct} · ${via.join(' · ')}`;
+    await this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `INSERT INTO "${schema}".market_price_locations (product_id, state, city, price_low, price_median, price_high, price_avg, points, confidence, source_note, fetched_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+         ON CONFLICT (product_id, state, city) DO UPDATE SET
+           price_low = EXCLUDED.price_low, price_median = EXCLUDED.price_median, price_high = EXCLUDED.price_high,
+           price_avg = EXCLUDED.price_avg, points = EXCLUDED.points, confidence = EXCLUDED.confidence,
+           source_note = EXCLUDED.source_note, fetched_at = NOW()`,
+        [productId, st, ct, r2(stats.low), r2(stats.median), r2(stats.high), r2(stats.avg), stats.points, stats.confidence, note],
+      ),
+    );
+    return {
+      status: 'ok', state: st, city: ct,
+      low: r2(stats.low), median: r2(stats.median), high: r2(stats.high), avg: r2(stats.avg),
+      points: stats.points, confidence: stats.confidence, sourceNote: note, fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Google Shopping results biased to a city, via Serper.dev (free tier 2,500
+   * queries, then ~$0.001/query). Optional: returns [] when SERPER_API_KEY is
+   * unset or on any failure — the free IndiaMART/SearXNG paths always remain.
+   */
+  private async serperShopping(name: string, state: string, city: string): Promise<PriceCard[]> {
+    const key = this.config.get<string>('SERPER_API_KEY');
+    if (!key) return [];
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const res = await fetch('https://google.serper.dev/shopping', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'content-type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ q: name, gl: 'in', location: `${city}, ${state}, India` }),
+      });
+      if (!res.ok) return [];
+      const json: any = await res.json();
+      const out: PriceCard[] = [];
+      for (const item of (json?.shopping || []).slice(0, 20)) {
+        const price = parseFloat(String(item?.price || '').replace(/[^0-9.]/g, ''));
+        if (!(price > 0)) continue;
+        out.push({ site: 'google-shopping', title: String(item?.title || ''), price, unit: null, url: String(item?.link || '') });
+      }
+      return out;
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // ─── Bulk refresh queue ──────────────────────────────────────────────────────
@@ -631,20 +816,43 @@ export class MarketPriceService implements OnModuleDestroy {
     return points;
   }
 
-  /** IQR-filtered low/median/high + dispersion-aware confidence from raw points. */
+  /** Proper median (even-length samples average the middle pair). */
+  private static median(sortedAsc: number[]): number {
+    const m = sortedAsc.length >> 1;
+    return sortedAsc.length % 2 ? sortedAsc[m] : (sortedAsc[m - 1] + sortedAsc[m]) / 2;
+  }
+
+  /**
+   * Robust low/median/high from raw points — the price-comparison-industry standard:
+   * Iglewicz–Hoaglin MODIFIED Z-SCORE outlier rejection (M = 0.6745·(x−median)/MAD,
+   * reject |M| > 3.5) when n ≥ 5. MAD has a 50% breakdown point, so it survives the
+   * heavy contamination scraping produces (accessories priced as the product,
+   * per-piece vs per-pack listings) where mean/SD z-scores get masked. MAD is
+   * unstable on tiny samples, so n < 5 falls back to the classic 1.5×IQR fence.
+   * The survivors' MIN is the "best market price" (published as `low`); confidence
+   * blends point count with relative dispersion (MAD/median).
+   */
   private statsFromPoints(points: number[]) {
     if (points.length < 2) return null;
     const sorted = [...points].sort((a, b) => a - b);
-    const q1 = sorted[Math.floor(sorted.length * 0.25)];
-    const q3 = sorted[Math.floor(sorted.length * 0.75)];
-    const iqr = q3 - q1;
-    const kept = sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
+    let kept: number[];
+    if (sorted.length >= 5) {
+      const m0 = MarketPriceService.median(sorted);
+      const mad = MarketPriceService.median(sorted.map((v) => Math.abs(v - m0)).sort((a, b) => a - b));
+      // MAD of 0 = the majority of points agree exactly — nothing to reject.
+      kept = mad > 0 ? sorted.filter((v) => Math.abs((0.6745 * (v - m0)) / mad) <= 3.5) : sorted;
+    } else {
+      const q1 = sorted[Math.floor(sorted.length * 0.25)];
+      const q3 = sorted[Math.floor(sorted.length * 0.75)];
+      const iqr = q3 - q1;
+      kept = sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
+    }
     if (kept.length < 2) return null;
-    const median = kept[Math.floor(kept.length / 2)];
+    const median = MarketPriceService.median(kept);
     const avg = kept.reduce((a, b) => a + b, 0) / kept.length;
-    // Confidence: point count AND tightness (wide scatter = low trust).
-    const spread = median > 0 ? (kept[kept.length - 1] - kept[0]) / median : 1;
-    const confidence = r2(Math.max(0.1, Math.min(1, (kept.length / 8) * (spread > 1 ? 0.5 : 1))));
+    const relMad = median > 0 ? MarketPriceService.median(kept.map((v) => Math.abs(v - median)).sort((a, b) => a - b)) / median : 1;
+    const tight = relMad <= 0.05 ? 1 : relMad <= 0.15 ? 0.85 : relMad <= 0.3 ? 0.6 : 0.4;
+    const confidence = r2(Math.max(0.1, Math.min(1, Math.min(1, kept.length / 6) * tight)));
     return { low: kept[0], median, high: kept[kept.length - 1], avg, points: kept.length, confidence };
   }
 

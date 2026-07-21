@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ChartModule } from 'primeng/chart';
 import { ApiService } from '../../core/services/api.service';
 
 const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.data : r) as T;
@@ -12,7 +13,7 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
 @Component({
   selector: 'wa-ai-insights-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ChartModule],
   template: `
     @if (!hidden()) {
       <div class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden shadow-sm">
@@ -81,6 +82,22 @@ const unwrap = <T>(r: any): T => (r && typeof r === 'object' && 'data' in r ? r.
                   <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Best-selling item</p>
                   <p class="text-[13px] font-bold text-gray-900 truncate" [title]="kpis().topProduct || ''">{{ kpis().topProduct || '—' }}</p>
                 </div>
+              </div>
+            }
+
+            <!-- charts: sales trend + top products -->
+            @if (salesChartData()) {
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+                <div class="bg-white rounded-xl border border-gray-100 p-3">
+                  <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Sales — last 6 months</p>
+                  <p-chart type="bar" [data]="salesChartData()" [options]="salesChartOptions" height="180px" />
+                </div>
+                @if (topChartData()) {
+                  <div class="bg-white rounded-xl border border-gray-100 p-3">
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Top products by revenue</p>
+                    <p-chart type="bar" [data]="topChartData()" [options]="topChartOptions" height="180px" />
+                  </div>
+                }
               </div>
             }
 
@@ -154,6 +171,92 @@ export class AiInsightsCardComponent implements OnInit {
     const all = this.data()?.insights || [];
     return this.expanded() ? all : all.slice(0, 4);
   });
+
+  // ── Charts ───────────────────────────────────────────────────────────────────
+  readonly salesChartData = computed(() => {
+    const series = this.data()?.monthlySeries || [];
+    if (series.length < 2) return null; // one month is not a trend
+    return {
+      labels: series.map((m: any) => m.label),
+      datasets: [{
+        label: 'Sales',
+        data: series.map((m: any) => Number(m.sales) || 0),
+        backgroundColor: 'rgba(99,102,241,0.75)',
+        hoverBackgroundColor: 'rgba(79,70,229,0.95)',
+        borderRadius: 6,
+        maxBarThickness: 34,
+      }],
+    };
+  });
+
+  readonly topChartData = computed(() => {
+    const rows = (this.data()?.topProducts || []).slice(0, 5);
+    if (!rows.length) return null;
+    return {
+      labels: rows.map((p: any) => this.shortName(p.name)),
+      datasets: [{
+        label: 'Revenue',
+        data: rows.map((p: any) => Number(p.value) || 0),
+        backgroundColor: ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe'],
+        borderRadius: 6,
+        maxBarThickness: 20,
+      }],
+    };
+  });
+
+  readonly salesChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0f172a', padding: 10, cornerRadius: 8,
+        callbacks: { label: (ctx: any) => ' ₹' + (Number(ctx.parsed?.y) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }) },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+      y: {
+        beginAtZero: true, grid: { color: '#f1f5f9' },
+        ticks: { font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v: any) => this.compactInr(v) },
+      },
+    },
+  };
+
+  readonly topChartOptions = {
+    indexAxis: 'y' as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0f172a', padding: 10, cornerRadius: 8,
+        callbacks: { label: (ctx: any) => ' ₹' + (Number(ctx.parsed?.x) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }) },
+      },
+    },
+    scales: {
+      x: {
+        beginAtZero: true, grid: { color: '#f1f5f9' },
+        ticks: { font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v: any) => this.compactInr(v) },
+      },
+      y: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#64748b' } },
+    },
+  };
+
+  /** ₹ axis labels the Indian way: 1.2Cr / 45L / 80k. */
+  private compactInr(v: unknown): string {
+    const n = Number(v) || 0;
+    const a = Math.abs(n);
+    if (a >= 1e7) return '₹' + (n / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'Cr';
+    if (a >= 1e5) return '₹' + (n / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'L';
+    if (a >= 1e3) return '₹' + (n / 1e3).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + 'k';
+    return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  }
+
+  private shortName(name: unknown): string {
+    const s = String(name ?? '');
+    return s.length > 22 ? s.slice(0, 20) + '…' : s;
+  }
 
   ngOnInit() { this.load(); }
 
