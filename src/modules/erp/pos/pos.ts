@@ -16,6 +16,7 @@ interface CheckoutInput {
   taxRate?: number;
   discount?: number;
   paymentModeId?: string;
+  paymentMethod?: string; // cash | upi | bank | card | online — how the customer paid
   paid?: boolean; // record a full payment immediately
   currency?: string;
 }
@@ -58,7 +59,7 @@ export class PosService {
     });
     let payment: any = null;
     if (input.paid) {
-      const res: any = await this.invoices.recordPayment(schema, invoice.id, { amount: Number(invoice.total), paymentModeId: input.paymentModeId, description: 'POS payment' });
+      const res: any = await this.invoices.recordPayment(schema, invoice.id, { amount: Number(invoice.total), paymentModeId: input.paymentModeId, method: input.paymentMethod, description: 'POS payment' });
       payment = res.payment;
       return { invoice: res.invoice, payment };
     }
