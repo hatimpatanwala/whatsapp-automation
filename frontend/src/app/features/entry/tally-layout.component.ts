@@ -64,7 +64,11 @@ interface MenuGroup {
             }
           </div>
         }
-        <span class="mcl-menubar-right">{{ userName() }}</span>
+        <span class="mcl-menubar-right">
+          <button class="mcl-portal-btn" (click)="exitToPortal()"
+                  title="Go to the Web Portal (WhatsApp, campaigns, dashboard)">⤴ Web Portal</button>
+          <span class="mcl-user">{{ userName() }}</span>
+        </span>
       </nav>
 
       <!-- Function-key toolbar -->
@@ -184,7 +188,9 @@ interface MenuGroup {
       .mcl-item:hover .mcl-item-key { color: #cfe3fa; }
       .mcl-item-key { color: #777; font-size: 11px; font-family: Consolas, monospace; }
       .mcl-sep { height: 1px; background: #d8d4c8; margin: 3px 6px; }
-      .mcl-menubar-right { margin-left: auto; align-self: center; font-size: 11.5px; color: #555; padding-right: 8px; }
+      .mcl-menubar-right { margin-left: auto; align-self: center; font-size: 11.5px; color: #555; padding-right: 8px; display: flex; align-items: center; gap: 10px; }
+      .mcl-portal-btn { background: #14456e; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+      .mcl-portal-btn:hover { background: #1a5a90; }
 
       .mcl-toolbar {
         display: flex; gap: 3px; flex-wrap: wrap; flex: 0 0 auto;
@@ -574,7 +580,16 @@ export class TallyLayoutComponent {
   }
 
   isActive(e: MenuEntry): boolean {
-    return !!e.route && this.router.url.split('?')[0] === e.route;
+    if (!e.route) return false;
+    const [path, qs] = this.router.url.split('?');
+    if (path !== e.route) return false;
+    // Journal (?type=journal) and Contra (?type=contra) share the same route;
+    // discriminate on the query so clicking one doesn't light up both.
+    const wantType = e.query?.['type'];
+    if (wantType != null) {
+      return new URLSearchParams(qs || '').get('type') === String(wantType);
+    }
+    return true;
   }
 
   go(e: MenuEntry): void {

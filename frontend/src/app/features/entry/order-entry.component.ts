@@ -1,5 +1,5 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { EntryDraftService } from '../../core/services/entry-draft.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
@@ -43,9 +43,16 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
         <h1 class="text-lg font-semibold">Sales Order</h1>
         <span class="text-sm text-slate-500">{{ today | date: 'dd-MM-yyyy' }}</span>
         @if (savedNumber()) {
-          <span class="text-sm px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-            ✓ Saved {{ savedNumber() }} (pending) — confirm & fulfil from Orders
-          </span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+              ✓ Saved {{ savedNumber() }} (pending)
+            </span>
+            <button type="button" (click)="goToPortalOrder()"
+                    class="text-sm px-3 py-1.5 rounded bg-[#14456e] text-white hover:bg-[#1a5a90] flex items-center gap-1.5"
+                    title="Open this order in the Web Portal to confirm & fulfil it">
+              Confirm &amp; fulfil in Portal <i class="pi pi-arrow-up-right" style="font-size:.7rem"></i>
+            </button>
+          </div>
         }
       </div>
 
@@ -189,7 +196,8 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
           <div class="flex justify-between"><span class="text-slate-500">Taxable</span><span>{{ fmt(taxable()) }}</span></div>
           <div class="flex justify-between"><span class="text-slate-500">GST</span><span>{{ fmt(totalTax()) }}</span></div>
           <div class="flex justify-between items-center"><span class="text-slate-500">Delivery fee</span>
-            <input type="number" [(ngModel)]="deliveryFee" class="w-24 border rounded px-2 py-0.5 text-right focus:bg-amber-50 focus:outline-none" />
+            <input data-cell="delivery" type="number" [(ngModel)]="deliveryFee" (keydown)="onDeliveryKey($event)"
+                   class="w-24 border rounded px-2 py-0.5 text-right focus:bg-amber-50 focus:outline-none" />
           </div>
           <div class="flex justify-between font-semibold text-base border-t pt-1"><span>Total</span><span>₹{{ fmt(grandTotal()) }}</span></div>
           @if (error()) { <p class="text-red-600 text-xs">{{ error() }}</p> }
@@ -216,6 +224,7 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
   private readonly entry = inject(EntryService);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   private readonly drafts = inject(EntryDraftService);
 
@@ -269,6 +278,7 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
     this.customerQuery = ''; this.customer.set(null); this.customerHits.set([]);
     this.rows = [this.blankRow(), this.blankRow()];
     this.deliveryFee = null; this.notes = '';
+    this.savedNumber.set(null); this.savedOrderId.set(null);
     this.error.set(null);
     this.tick.update((t) => t + 1);
     this.drafts.note('✕ Entry cleared');
@@ -294,6 +304,7 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
   readonly savedNumber = signal<string | null>(null);
+  readonly savedOrderId = signal<string | null>(null);
   readonly qc = signal<{ kind: QuickKind; name: string; row?: number } | null>(null);
 
   private debounce?: ReturnType<typeof setTimeout>;
@@ -439,7 +450,19 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
   }
 
   onNoteKey(e: KeyboardEvent): void {
+    // Route the keyboard flow through the delivery-fee field before saving,
+    // so it can be reached without the mouse.
+    if (e.key === 'Enter') { e.preventDefault(); this.focus('delivery'); }
+  }
+
+  onDeliveryKey(e: KeyboardEvent): void {
     if (e.key === 'Enter') { e.preventDefault(); this.save(); }
+  }
+
+  /** Open the just-saved order in the Web Portal to confirm & fulfil it. */
+  goToPortalOrder(): void {
+    const id = this.savedOrderId();
+    void this.router.navigate(id ? ['/orders', id] : ['/orders']);
   }
 
   private focusNext(r: number, col: Col): void {
@@ -607,6 +630,7 @@ export class OrderEntryComponent implements OnInit, OnDestroy {
         next: (order) => {
           this.saving.set(false);
           this.savedNumber.set(order?.orderNumber || 'order');
+          this.savedOrderId.set(order?.id ?? null);
           this.drafts.clear('order');
           this.rows = [this.blankRow(), this.blankRow()];
           this.notes = '';

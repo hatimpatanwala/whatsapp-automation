@@ -74,11 +74,11 @@ interface Line { productId: string | null; description: string; quantity: number
             <p class="text-xs text-gray-500 mt-1">Total invoices</p>
           </div>
           <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ sym() }}{{ totalBilled() | number:'1.0-0' }}</p>
+            <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none" [title]="sym() + (totalBilled() | number:'1.0-0')">{{ sym() }}{{ short(totalBilled()) }}</p>
             <p class="text-xs text-gray-500 mt-1">Total billed</p>
           </div>
           <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none">{{ sym() }}{{ totalTax() | number:'1.0-0' }}</p>
+            <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none" [title]="sym() + (totalTax() | number:'1.0-0')">{{ sym() }}{{ short(totalTax()) }}</p>
             <p class="text-xs text-gray-500 mt-1">GST collected</p>
           </div>
           <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
@@ -436,6 +436,16 @@ export class InvoicesComponent implements OnInit {
   selectedOrder = computed(() => this.orders().find(o => o.id === this.existingOrderId) || null);
 
   sym(): string { const c = this._currency(); return c === 'USD' ? '$' : c === 'EUR' ? '€' : '₹'; }
+
+  /** Compact money for the summary cards (K/L/Cr) so large totals don't overflow. */
+  short(n: unknown): string {
+    const v = Number(n) || 0;
+    const a = Math.abs(v);
+    if (a >= 1e7) return (v / 1e7).toFixed(a >= 1e8 ? 0 : 1) + 'Cr';
+    if (a >= 1e5) return (v / 1e5).toFixed(a >= 1e6 ? 0 : 1) + 'L';
+    if (a >= 1e3) return (v / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'K';
+    return String(Math.round(v));
+  }
 
   // ── List filters (document type + payment status) ──────────────────────────
   docTypeFilter = '';

@@ -120,7 +120,7 @@ export class ErpService {
   createInvoice(payload: CreateInvoicePayload): Observable<ErpInvoice> {
     return this.api.post('/erp/invoices', payload);
   }
-  recordPayment(id: string, payload: { amount: number; paymentModeId?: string; ref?: string; description?: string }): Observable<{ invoice: ErpInvoice; payment: InvoicePayment }> {
+  recordPayment(id: string, payload: { amount: number; paymentModeId?: string; method?: string; ref?: string; description?: string }): Observable<{ invoice: ErpInvoice; payment: InvoicePayment }> {
     return this.api.post(`/erp/invoices/${id}/payments`, payload);
   }
 

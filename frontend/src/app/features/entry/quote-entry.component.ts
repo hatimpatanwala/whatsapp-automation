@@ -20,6 +20,13 @@ interface Row {
   lastToCustomer?: { price: number; at: string } | null;
 }
 
+interface SavedQuoteLine { name: string; qty: number; rate: number; amount: number; }
+interface SavedQuote {
+  id: string; number: string; customerName: string; customerPhone: string;
+  lines: SavedQuoteLine[]; taxable: number; tax: number; total: number;
+  validUntil: string; notes: string;
+}
+
 const COLS = ['name', 'qty', 'free', 'rate', 'd1', 'd2', 'gstRate'] as const;
 type Col = (typeof COLS)[number];
 const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -40,13 +47,30 @@ const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
       <div class="flex items-center gap-4 mb-3 border-b pb-2">
         <h1 class="text-lg font-semibold">Quotation</h1>
         <span class="text-sm text-slate-500">{{ today | date: 'dd-MM-yyyy' }}</span>
+        <button type="button" (click)="showCatDisc.set(true)"
+                class="text-sm px-3 py-1.5 rounded border border-indigo-300 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1.5"
+                title="Apply a discount to every item in a category at once (Alt+D)">
+          <i class="pi pi-percentage" style="font-size:.75rem"></i> Category discount
+        </button>
         <label class="ml-auto text-sm">Valid until
           <input type="date" [(ngModel)]="validUntil" class="ml-1 border rounded px-2 py-1.5" />
         </label>
-        @if (savedNumber()) {
-          <span class="text-sm px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-            ✓ Saved {{ savedNumber() }} (draft) — send it from Quotes
-          </span>
+        @if (savedQuote(); as sq) {
+          <div class="flex items-center gap-2">
+            <span class="text-sm px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+              ✓ Saved {{ sq.number }}
+            </span>
+            <button type="button" (click)="shareOnWhatsApp()" [disabled]="sending()"
+                    class="text-sm px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-1.5"
+                    title="Send this quote to the party on WhatsApp">
+              <i class="pi pi-whatsapp" style="font-size:.8rem"></i> {{ sent() ? 'Sent ✓' : (sending() ? 'Sending…' : 'Share on WhatsApp') }}
+            </button>
+            <button type="button" (click)="printQuote()"
+                    class="text-sm px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+                    title="Print this quotation">
+              <i class="pi pi-print" style="font-size:.8rem"></i> Print
+            </button>
+          </div>
         }
       </div>
 
@@ -249,6 +273,7 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
     this.rows = [this.blankRow(), this.blankRow()];
     this.notes = '';
     this.error.set(null);
+    this.savedQuote.set(null); this.savedNumber.set(null); this.sent.set(false);
     this.tick.update((t) => t + 1);
     this.drafts.note('✕ Entry cleared');
     setTimeout(() => (this.host.nativeElement.querySelector('[data-cell="party"], input') as HTMLInputElement | null)?.focus());
@@ -273,6 +298,9 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
   readonly savedNumber = signal<string | null>(null);
+  readonly savedQuote = signal<SavedQuote | null>(null);
+  readonly sending = signal(false);
+  readonly sent = signal(false);
   readonly qc = signal<{ kind: QuickKind; name: string; row?: number } | null>(null);
 
   private debounce?: ReturnType<typeof setTimeout>;
@@ -536,6 +564,62 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
 
   fmt(n: unknown): string { return (Number(n) || 0).toFixed(2); }
 
+  /** Snapshot the just-saved quote so Share/Print work after the grid is cleared. */
+  private captureSaved(q: any): void {
+    const c = this.customer();
+    this.sent.set(false);
+    this.savedQuote.set({
+      id: q?.id,
+      number: q?.quoteNumber || 'quote',
+      customerName: c?.name || '',
+      customerPhone: (c as any)?.phone || '',
+      lines: this.liveRows().map((r) => ({
+        name: r.name, qty: Number(r.qty) || 0, rate: Number(r.rate) || 0, amount: this.lineAmount(r),
+      })),
+      taxable: this.taxable(), tax: this.totalTax(), total: this.grandTotal(),
+      validUntil: this.validUntil, notes: this.notes,
+    });
+  }
+
+  /** Share on WhatsApp — mark the quote "sent", the same action the portal exposes
+   *  (fires the tenant's quote workflow which delivers it to the party). */
+  shareOnWhatsApp(): void {
+    const sq = this.savedQuote();
+    if (!sq?.id || this.sending() || this.sent()) return;
+    this.sending.set(true);
+    this.entry.markQuoteSent(sq.id).subscribe({
+      next: () => { this.sending.set(false); this.sent.set(true); this.drafts.note('✓ Quote sent to ' + (sq.customerName || 'party')); },
+      error: (err) => { this.sending.set(false); this.drafts.note(err?.error?.message || 'Could not send the quote'); },
+    });
+  }
+
+  /** Print the saved quotation directly (client-side render — no PDF endpoint needed). */
+  printQuote(): void {
+    const sq = this.savedQuote();
+    if (!sq) return;
+    const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] as string));
+    const rows = sq.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.name)}</td><td class="r">${l.qty}</td><td class="r">${l.rate.toFixed(2)}</td><td class="r">${l.amount.toFixed(2)}</td></tr>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Quotation ${esc(sq.number)}</title>
+      <style>body{font:13px/1.4 Arial,sans-serif;padding:24px;color:#222}h1{font-size:18px;margin:0 0 4px}
+      .muted{color:#666}table{width:100%;border-collapse:collapse;margin-top:14px}
+      th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}.r{text-align:right}
+      tfoot td{font-weight:bold}</style></head><body>
+      <h1>Quotation ${esc(sq.number)}</h1>
+      <div class="muted">To: ${esc(sq.customerName)} ${sq.customerPhone ? '· ' + esc(sq.customerPhone) : ''}</div>
+      <div class="muted">Valid until: ${esc(sq.validUntil)}</div>
+      <table><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr><td colspan="4" class="r">Taxable</td><td class="r">${sq.taxable.toFixed(2)}</td></tr>
+        <tr><td colspan="4" class="r">GST</td><td class="r">${sq.tax.toFixed(2)}</td></tr>
+        <tr><td colspan="4" class="r">Total</td><td class="r">${sq.total.toFixed(2)}</td></tr>
+      </tfoot></table>
+      ${sq.notes ? `<p class="muted">Notes: ${esc(sq.notes)}</p>` : ''}
+      <script>window.onload=function(){window.print();}</script></body></html>`;
+    const w = window.open('', '_blank', 'width=800,height=900');
+    if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+  }
+
   save(): void {
     if (!this.canSave() || this.saving()) return;
     this.saving.set(true);
@@ -565,6 +649,7 @@ export class QuoteEntryComponent implements OnInit, OnDestroy {
         next: (q) => {
           this.saving.set(false);
           this.savedNumber.set(q?.quoteNumber || 'quote');
+          this.captureSaved(q);
           this.drafts.clear('quote');
           this.rows = [this.blankRow(), this.blankRow()];
           this.notes = '';

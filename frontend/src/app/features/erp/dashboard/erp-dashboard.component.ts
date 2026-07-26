@@ -27,8 +27,7 @@ import { AiInsightsCardComponent } from '../../insights/ai-insights-card.compone
         </div>
         <div class="flex items-center gap-2">
           <a routerLink="/erp/reports" class="rounded-xl border border-gray-200 text-gray-600 text-[12.5px] font-semibold px-3 py-2 hover:border-indigo-300 hover:text-indigo-700 transition-colors"><i class="pi pi-chart-line mr-1.5" style="font-size:.75rem"></i>Reports</a>
-          <a routerLink="/erp/intel" class="rounded-xl border border-gray-200 text-gray-600 text-[12.5px] font-semibold px-3 py-2 hover:border-indigo-300 hover:text-indigo-700 transition-colors"><i class="pi pi-sparkles mr-1.5" style="font-size:.75rem"></i>AI Insights Pro</a>
-          <p-button label="New Invoice" icon="pi pi-plus" routerLink="/erp/invoices" />
+          <p-button label="New Invoice" icon="pi pi-plus" routerLink="/entry/sales" />
         </div>
       </div>
 

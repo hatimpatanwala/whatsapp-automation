@@ -106,16 +106,26 @@ const TITLES: Record<string, string> = {
             </div>
           }
           @case ('day-book') {
-            <div class="border rounded-lg overflow-x-auto">
+            <div class="flex items-end gap-3 mb-3 flex-wrap">
+              <label class="text-sm">Date
+                <input type="date" [ngModel]="dayBookDate()" (ngModelChange)="dayBookDate.set($event); reloadDayBook()"
+                       class="block mt-1 border rounded px-2 py-1.5 text-sm" />
+              </label>
+              <label class="text-sm flex-1 max-w-xs">Party name
+                <input type="text" [ngModel]="dayBookParty()" (ngModelChange)="dayBookParty.set($event)"
+                       placeholder="Filter by party…" class="block mt-1 w-full border rounded px-2 py-1.5 text-sm" />
+              </label>
+            </div>
+            <div class="border rounded-lg overflow-auto max-h-[65vh]">
               <table class="w-full text-sm">
-                <thead class="bg-slate-50 text-slate-600"><tr>
+                <thead class="bg-slate-50 text-slate-600 sticky top-0"><tr>
                   <th class="text-left p-2">Type</th><th class="text-left p-2">Number</th><th class="text-left p-2">Party</th><th class="text-right p-2">Amount</th>
                 </tr></thead>
                 <tbody>
-                  @for (v of data().vouchers; track v.id) {
+                  @for (v of dayBookRows(); track v.id) {
                     <tr class="border-t"><td class="p-2 capitalize">{{ v.voucherType }}</td><td class="p-2 font-mono">{{ v.number }}</td>
                       <td class="p-2">{{ v.partyName || '—' }}</td><td class="p-2 text-right">{{ fmt(v.amount) }}</td></tr>
-                  } @empty { <tr><td colspan="4" class="p-3 text-slate-500">No vouchers for {{ data().date }}.</td></tr> }
+                  } @empty { <tr><td colspan="4" class="p-3 text-slate-500">No vouchers{{ dayBookParty() ? ' matching “' + dayBookParty() + '”' : '' }} for {{ data().date }}.</td></tr> }
                 </tbody>
               </table>
             </div>
@@ -250,6 +260,23 @@ export class ReportsComponent {
   readonly statement = signal<any>(null);
   readonly intRate = signal(18);
 
+  // Day Book filters
+  readonly dayBookDate = signal<string>(new Date().toISOString().slice(0, 10));
+  readonly dayBookParty = signal<string>('');
+  /** Day Book vouchers after applying the party-name filter (date filters server-side). */
+  dayBookRows(): any[] {
+    const rows = (this.data()?.vouchers || []) as any[];
+    const q = this.dayBookParty().trim().toLowerCase();
+    return q ? rows.filter((v) => (v.partyName || '').toLowerCase().includes(q)) : rows;
+  }
+  reloadDayBook(): void {
+    this.loading.set(true);
+    this.acc.dayBook(this.dayBookDate() || undefined).subscribe({
+      next: (d) => { this.data.set(d); this.loading.set(false); },
+      error: () => this.loading.set(false),
+    });
+  }
+
   title(): string { return TITLES[this.report()] || 'Report'; }
   fmt(n: unknown): string { return Number(n || 0).toFixed(2); }
   abs(n: number): number { return Math.abs(n); }
@@ -360,7 +387,7 @@ export class ReportsComponent {
     switch (this.report()) {
       case 'pnl': this.acc.pnl().subscribe(done); break;
       case 'balance-sheet': this.acc.balanceSheet().subscribe(done); break;
-      case 'day-book': this.acc.dayBook().subscribe(done); break;
+      case 'day-book': this.acc.dayBook(this.dayBookDate() || undefined).subscribe(done); break;
       case 'ageing': this.acc.ageing().subscribe(done); break;
       case 'stock-summary': this.entry.stockSummary().subscribe(done); break;
       case 'ledger':

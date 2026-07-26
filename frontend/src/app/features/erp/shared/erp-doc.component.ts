@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, Input, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -103,13 +103,21 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <label class="text-xs font-semibold text-gray-500 uppercase">Line Items</label>
               <button pButton icon="pi pi-plus" label="Add line" class="p-button-text p-button-sm" (click)="addLine()"></button>
             </div>
+            <!-- Column headers so each field's purpose is clear -->
+            <div class="flex gap-2 items-center mb-1 px-0.5 text-[11px] font-semibold text-gray-400 uppercase">
+              <span class="flex-1">Item / description</span>
+              <span class="w-20 text-center">Qty</span>
+              <span class="w-28 text-center">Rate</span>
+              <span class="w-24 text-right">Amount</span>
+              <span class="w-8"></span>
+            </div>
             @for (line of form.items; track $index) {
               <div class="flex gap-2 items-center mb-2">
-                <input pInputText [(ngModel)]="line.description" placeholder="Description" class="flex-1" />
-                <p-inputNumber [(ngModel)]="line.quantity" [min]="1" inputStyleClass="w-20" />
-                <p-inputNumber [(ngModel)]="line.unitPrice" mode="currency" currency="INR" locale="en-IN" inputStyleClass="w-28" />
-                <span class="w-24 text-right text-sm font-medium tabular-nums">{{ currency.symbol() }}{{ fmt(line.quantity * line.unitPrice) }}</span>
-                <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger" (click)="removeLine($index)" [disabled]="form.items.length === 1"></button>
+                <input pInputText [(ngModel)]="line.description" placeholder="Item / description" class="flex-1 min-w-0" />
+                <div class="shrink-0" style="width:4.5rem"><p-inputNumber [(ngModel)]="line.quantity" [min]="1" styleClass="w-full" inputStyleClass="w-full text-right" /></div>
+                <div class="shrink-0" style="width:7rem"><p-inputNumber [(ngModel)]="line.unitPrice" mode="currency" currency="INR" locale="en-IN" styleClass="w-full" inputStyleClass="w-full" /></div>
+                <span class="w-24 text-right text-sm font-medium tabular-nums shrink-0">{{ currency.symbol() }}{{ fmt(line.quantity * line.unitPrice) }}</span>
+                <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger shrink-0" (click)="removeLine($index)" [disabled]="form.items.length === 1"></button>
               </div>
             }
           </div>
@@ -163,12 +171,16 @@ export class ErpDocComponent implements OnInit {
   detail = signal<any>(null);
   form = this.blank();
 
-  preview = computed(() => {
+  /** Live totals. A plain method (not a computed) because `form` is a mutable
+   *  object, not a signal — a computed would memoise the initial 0s and never
+   *  update as the user edits qty/price/tax/discount. Called from the template,
+   *  so it re-evaluates every change-detection cycle. */
+  preview() {
     const subtotal = this.form.items.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0);
     const taxable = Math.max(0, subtotal - (Number(this.form.discount) || 0));
     const tax = taxable * ((Number(this.form.taxRatePct) || 0) / 100);
     return { subtotal, tax, total: taxable + tax };
-  });
+  }
 
   ngOnInit() {
     this.load();

@@ -1133,7 +1133,9 @@ export class SalesInvoiceEntryComponent implements OnInit, OnDestroy {
       case 'Tab':
         e.preventDefault();
         if (e.shiftKey) { this.focusPrev(r, col); return; }
-        if (col === 'name' && !this.rows[r].name) { this.focusNote(); return; }
+        // End of item entry: walk into the bill-level CD → TCS → … footer fields
+        // first (not straight to the note), so cash discount & TCS are never skipped.
+        if (col === 'name' && !this.rows[r].name) { this.focusByCell('cd_pct'); return; }
         if (col === 'name' && !this.rows[r].productId && this.rows[r].name.length >= 2 && !hits.length) {
           this.openQuickCreate('product', this.rows[r].name, r);
           return;

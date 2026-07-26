@@ -123,13 +123,17 @@ const ymdLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 
           <!-- Low stock -->
           <div class="hm-panel">
-            <div class="hm-h">Low stock <span class="hm-sub">(≤ min)</span></div>
-            @for (it of lowStock(); track it.id) {
-              <div class="hm-row cursor-pointer" (click)="go('/entry/items')">
-                <span class="truncate">{{ it.name }}</span>
-                <b class="hm-bad">{{ it.stock }} / {{ it.minStock }}</b>
-              </div>
-            } @empty { <p class="hm-none">All items above minimum stock.</p> }
+            <div class="hm-h">Low stock <span class="hm-sub">(≤ min)</span>
+              @if (lowStock().length) { <span class="hm-sub">· {{ lowStock().length }} items</span> }
+            </div>
+            <div class="hm-scroll">
+              @for (it of lowStock(); track it.id) {
+                <div class="hm-row cursor-pointer" (click)="go('/entry/items')">
+                  <span class="truncate">{{ it.name }}</span>
+                  <b class="hm-bad">{{ it.stock }} / {{ it.minStock }}</b>
+                </div>
+              } @empty { <p class="hm-none">All items above minimum stock.</p> }
+            </div>
           </div>
         </div>
       </div>
@@ -156,6 +160,7 @@ const ymdLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
       .hm-chip-red { border-color: #e3a0a0; color: #b91c1c; background: #fdecec; }
       .hm-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 3px 0; border-bottom: 1px solid #f2f5fa; }
       .hm-none { color: #9aa; font-size: 12px; text-align: center; padding: 8px 0; }
+      .hm-scroll { max-height: 220px; overflow-y: auto; }
     `,
   ],
 })
@@ -189,6 +194,7 @@ export class ErpHomeComponent {
   refresh(): void { this.load(); }
 
   private load(): void {
+    this.loading.set(true);
     const now = new Date();
     const todayKey = ymdLocal(now);
     const monthKey = todayKey.slice(0, 7);
@@ -280,7 +286,7 @@ export class ErpHomeComponent {
       const list = items || [];
       this.stockValue.set(money(list.reduce((s, it) =>
         s + (Number(it.stock) || 0) * (Number(it.purchasePrice ?? it.openingRate ?? it.basePrice) || 0), 0)));
-      this.lowStock.set(list.filter((it) => (Number(it.stock) || 0) <= (Number(it.minStock) || 0)).slice(0, 6));
+      this.lowStock.set(list.filter((it) => (Number(it.stock) || 0) <= (Number(it.minStock) || 0)));
     });
   }
 

@@ -126,7 +126,7 @@ interface OrderLine {
                         class="transition-all duration-700"></circle>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
-                      <span class="text-sm font-bold tabular-nums leading-none">{{ pct(me()?.stats?.month?.sales, me()?.stats?.target?.amount) }}%</span>
+                      <span class="text-sm font-bold tabular-nums leading-none">{{ ringLabel(me()?.stats?.month?.sales, me()?.stats?.target?.amount) }}</span>
                     </div>
                   </div>
                   <p class="text-[11px] font-semibold text-slate-600 mt-1.5">Sales</p>
@@ -143,7 +143,7 @@ interface OrderLine {
                         class="transition-all duration-700"></circle>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
-                      <span class="text-sm font-bold tabular-nums leading-none">{{ pct(me()?.stats?.month?.collected, me()?.stats?.target?.collection) }}%</span>
+                      <span class="text-sm font-bold tabular-nums leading-none">{{ ringLabel(me()?.stats?.month?.collected, me()?.stats?.target?.collection) }}</span>
                     </div>
                   </div>
                   <p class="text-[11px] font-semibold text-slate-600 mt-1.5">Collection</p>
@@ -160,7 +160,7 @@ interface OrderLine {
                         class="transition-all duration-700"></circle>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
-                      <span class="text-sm font-bold tabular-nums leading-none">{{ pct(me()?.stats?.month?.visits, me()?.stats?.target?.visits) }}%</span>
+                      <span class="text-sm font-bold tabular-nums leading-none">{{ ringLabel(me()?.stats?.month?.visits, me()?.stats?.target?.visits) }}</span>
                     </div>
                   </div>
                   <p class="text-[11px] font-semibold text-slate-600 mt-1.5">Visits</p>
@@ -169,6 +169,9 @@ interface OrderLine {
               </div>
               <!-- Encouraging remaining line -->
               <div class="mt-3 pt-3 border-t border-slate-100 text-[12px] text-slate-500 leading-relaxed">
+                @if (!me()?.stats?.target?.amount && !me()?.stats?.target?.collection && !me()?.stats?.target?.visits) {
+                  <p class="text-slate-400"><i class="pi pi-info-circle text-[10px]"></i> No monthly targets set yet — ask your manager to set them and these rings will track your progress.</p>
+                }
                 @if (remaining(me()?.stats?.month?.sales, me()?.stats?.target?.amount) > 0) {
                   <p><i class="pi pi-arrow-up-right text-indigo-500 text-[10px]"></i> <span class="font-semibold text-slate-700">₹{{ fmt(remaining(me()?.stats?.month?.sales, me()?.stats?.target?.amount)) }}</span> more in sales to hit your target.</p>
                 } @else if (me()?.stats?.target?.amount) {
@@ -262,6 +265,10 @@ interface OrderLine {
 
         <!-- ── BEAT ───────────────────────────────────────────────── -->
         @if (view() === 'beat') {
+          <!-- Active-visit controls, reused both at the top (out-of-beat check-ins)
+               and inline within the checked-in party's beat card (in-beat), so the
+               salesman never has to scroll up to enter data. -->
+          <ng-template #activeVisitCard>
           @if (activeVisit(); as v) {
             <div class="bg-white rounded-2xl border-2 border-emerald-300 p-4 mb-3 shadow-sm">
               <div class="flex items-center gap-2 mb-3">
@@ -294,6 +301,11 @@ interface OrderLine {
                 <i class="pi pi-sign-out text-xs"></i>{{ busy() ? 'Saving…' : 'Check out' }}
               </button>
             </div>
+          }
+          </ng-template>
+
+          @if (activeVisit() && !activeInBeat()) {
+            <ng-container [ngTemplateOutlet]="activeVisitCard" />
           }
 
           <div class="relative mb-3">
@@ -349,10 +361,14 @@ interface OrderLine {
                   }
                 </div>
               </div>
-              <button (click)="checkIn(c)" [disabled]="busy()"
-                class="w-full mt-3 text-[13px] font-semibold bg-indigo-600 text-white rounded-xl py-2 disabled:opacity-50 flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform">
-                <i class="pi pi-sign-in text-xs"></i> Check in
-              </button>
+              @if (isActiveCard(c)) {
+                <div class="mt-3"><ng-container [ngTemplateOutlet]="activeVisitCard" /></div>
+              } @else {
+                <button (click)="checkIn(c)" [disabled]="busy()"
+                  class="w-full mt-3 text-[13px] font-semibold bg-indigo-600 text-white rounded-xl py-2 disabled:opacity-50 flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform">
+                  <i class="pi pi-sign-in text-xs"></i> Check in
+                </button>
+              }
             </div>
           } @empty {
             @if (!loading()) {
@@ -442,6 +458,15 @@ interface OrderLine {
               }
             </div>
 
+            <!-- Floating View Cart — jumps straight to the order summary so the
+                 salesman doesn't scroll the whole item list to place the order. -->
+            @if (orderLines().length) {
+              <button (click)="scrollToCart()"
+                class="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 bg-slate-900 text-white rounded-full shadow-lg px-5 py-3 flex items-center gap-2 text-[13px] font-bold active:scale-95 transition-transform">
+                <i class="pi pi-shopping-cart"></i> View cart · {{ orderLines().length }} item(s) · ₹{{ fmt(orderTotal()) }}
+              </button>
+            }
+
             @if (orderResult(); as r) {
               <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mt-4 text-center">
                 <i class="pi pi-check-circle text-emerald-500 text-3xl"></i>
@@ -455,7 +480,7 @@ interface OrderLine {
             }
 
             @if (orderLines().length) {
-              <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mt-5 mb-2 flex items-center gap-1.5">
+              <h2 id="msCartSummary" class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mt-5 mb-2 flex items-center gap-1.5 scroll-mt-20">
                 <i class="pi pi-list"></i> Order · {{ orderLines().length }} item(s)
               </h2>
               <div class="bg-white rounded-2xl border border-slate-100 p-3 shadow-sm">
@@ -784,11 +809,12 @@ interface OrderLine {
 export class MySalesComponent implements OnInit {
   private readonly sfa = inject(SfaService);
 
+  // Order & Collect are intentionally NOT top-level tabs: they're reached from the
+  // checked-in card's "Take order" / "Collect" actions (and their views still render
+  // for those flows), so they aren't duplicated in the tab bar.
   readonly tabs: { id: Tab; label: string; icon: string }[] = [
     { id: 'today', label: 'Today', icon: 'pi-home' },
     { id: 'beat', label: 'Beat', icon: 'pi-directions' },
-    { id: 'order', label: 'Order', icon: 'pi-shopping-cart' },
-    { id: 'collect', label: 'Collect', icon: 'pi-wallet' },
     { id: 'performance', label: 'Performance', icon: 'pi-chart-line' },
     { id: 'visits', label: 'Visits', icon: 'pi-calendar' },
   ];
@@ -941,6 +967,24 @@ export class MySalesComponent implements OnInit {
   }
 
   // ─── Beat: check-in / check-out ─────────────────────────────────────────────
+  /** Jump to the order summary at the bottom of the Order tab. */
+  scrollToCart(): void {
+    document.getElementById('msCartSummary')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** Same customer across beat rows / the active visit (tolerant of id vs customerId). */
+  private sameCust(a: any, b: any): boolean {
+    if (!a || !b) return false;
+    return (a.customerId || a.id) === (b.customerId || b.id);
+  }
+  /** This beat card is the one currently checked in — render the visit controls inline. */
+  isActiveCard(c: any): boolean { return this.sameCust(c, this.activeCustomer()); }
+  /** The active visit belongs to a customer in today's beat (so it renders inline, not up top). */
+  activeInBeat(): boolean {
+    const ac = this.activeCustomer();
+    return !!ac && this.beat().some((c) => this.sameCust(c, ac));
+  }
+
   checkIn(c: any) {
     this.busy.set(true);
     this.sfa.appCheckin({ customerId: c.customerId || c.id, customerName: c.name }).subscribe({
@@ -1178,13 +1222,19 @@ export class MySalesComponent implements OnInit {
     return CIRC - (this.pct(part, whole) / 100) * CIRC;
   }
 
+  /** Ring centre label — "—" when no target is set (avoids a misleading red 0%). */
+  ringLabel(part: any, whole: any): string {
+    return (Number(whole) || 0) <= 0 ? '—' : this.pct(part, whole) + '%';
+  }
+
   /** Colour a ring by which metric + how close to goal (red→amber→emerald). */
   ringColor(metric: 'sales' | 'collect' | 'visits'): string {
-    let p = 0;
+    let p = 0, target = 0;
     const s = this.me()?.stats;
-    if (metric === 'sales') p = this.pct(s?.month?.sales, s?.target?.amount);
-    else if (metric === 'collect') p = this.pct(s?.month?.collected, s?.target?.collection);
-    else p = this.pct(s?.month?.visits, s?.target?.visits);
+    if (metric === 'sales') { p = this.pct(s?.month?.sales, s?.target?.amount); target = Number(s?.target?.amount) || 0; }
+    else if (metric === 'collect') { p = this.pct(s?.month?.collected, s?.target?.collection); target = Number(s?.target?.collection) || 0; }
+    else { p = this.pct(s?.month?.visits, s?.target?.visits); target = Number(s?.target?.visits) || 0; }
+    if (target <= 0) return '#cbd5e1'; // no target set — neutral, not a "failing" red
     if (p >= 100) return '#10b981'; // emerald-500
     if (p >= 60) return metric === 'collect' ? '#059669' : metric === 'visits' ? '#f59e0b' : '#6366f1';
     if (p >= 30) return '#f59e0b'; // amber-500

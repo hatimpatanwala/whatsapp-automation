@@ -355,7 +355,7 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Invoices', icon: 'pi-receipt', route: '/invoices', hideWhenErp: true, perm: 'invoices' },
         { label: 'Invoices', icon: 'pi-receipt', route: '/erp/invoices', featureKey: 'erp', perm: 'invoices' },
         { label: 'Recurring Invoices', icon: 'pi-replay', route: '/erp/recurring', featureKey: 'erp', perm: 'invoices' },
-        { label: 'Quotes', icon: 'pi-file-edit', route: '/quotes', featureKey: 'quotes', perm: 'quotes' },
+        { label: 'Quotes', icon: 'pi-file-edit', route: '/quotes', featureKey: 'erp', perm: 'quotes' },
         { label: 'Offers', icon: 'pi-tags', route: '/erp/offers', featureKey: 'erp', perm: 'schemes' },
         { label: 'Credit Notes', icon: 'pi-reply', route: '/erp/credit-notes', featureKey: 'erp', perm: 'invoices' },
         { label: 'E-Way Bills', icon: 'pi-truck', route: '/erp/eway-bills', featureKey: 'erp', perm: 'invoices' },

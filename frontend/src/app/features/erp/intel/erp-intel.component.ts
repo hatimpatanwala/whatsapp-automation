@@ -349,6 +349,14 @@ interface MonthPlanData {
                 </div>
               </div>
 
+              <!-- Graphical comparison of the key inventory-health & pricing signals -->
+              @if (overviewChartData()) {
+                <div class="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
+                  <h3 class="text-sm font-bold text-gray-700 mb-3">Inventory health &amp; pricing — at a glance</h3>
+                  <p-chart type="bar" [data]="overviewChartData()" [options]="overviewChartOptions" height="220px" />
+                </div>
+              }
+
               <!-- count cards → jump to tabs -->
               <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <button (click)="go('performance')" class="text-left bg-white rounded-2xl border border-gray-100 p-4 hover:border-amber-200 hover:shadow-sm transition-all">
@@ -1431,6 +1439,35 @@ export class ErpIntelComponent implements OnInit, OnDestroy {
     scales: {
       x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } },
       y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v: any) => this.compactInr(v) } },
+    },
+  };
+
+  // Overview "at a glance" comparison — turns the four count signals into a chart.
+  readonly overviewChartData = computed(() => {
+    const o = this.overview();
+    if (!o) return null;
+    return {
+      labels: ['Stockout risks', 'Dead stock', 'Underpriced', 'Overpriced'],
+      datasets: [{
+        label: 'Items',
+        data: [o.stockoutRiskCount ?? 0, o.deadStockCount ?? 0, o.underpricedCount ?? 0, o.overpricedCount ?? 0],
+        backgroundColor: ['#f59e0b', '#94a3b8', '#10b981', '#ef4444'],
+        borderRadius: 6, maxBarThickness: 64,
+      }],
+    };
+  });
+  readonly overviewChartOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0f172a', padding: 10, cornerRadius: 8,
+        callbacks: { label: (ctx: any) => ` ${Number(ctx.parsed?.y) || 0} item(s)` },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { precision: 0, font: { size: 10 }, color: '#94a3b8', maxTicksLimit: 5 } },
     },
   };
 

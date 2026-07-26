@@ -55,7 +55,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <i [class]="'pi ' + s.icon" style="font-size:1rem"></i>
             </div>
             <div class="min-w-0">
-              <p class="text-xl font-bold text-gray-900 tabular-nums leading-none">{{ s.value }}</p>
+              <p class="text-xl font-bold text-gray-900 tabular-nums leading-none" [title]="s.full || ''">{{ s.value }}</p>
               <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mt-1 truncate">{{ s.label }}</p>
             </div>
           </div>
@@ -221,9 +221,15 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <p-inputNumber [(ngModel)]="payForm.amount" [min]="0" [max]="num(inv.balanceDue)" mode="currency" currency="INR" locale="en-IN" inputStyleClass="w-full" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Payment Mode</label>
-              <p-select [options]="paymentModeOptions()" [(ngModel)]="payForm.paymentModeId" optionLabel="name" optionValue="id" placeholder="Select mode" [showClear]="true" styleClass="w-full" />
+              <label class="block text-xs font-semibold text-gray-500 mb-1">How paid?</label>
+              <p-select [options]="payMethods" [(ngModel)]="payForm.method" optionLabel="label" optionValue="value" placeholder="Cash / UPI / Bank" [showClear]="true" styleClass="w-full" />
             </div>
+            @if (paymentModeOptions().length) {
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Account (optional)</label>
+                <p-select [options]="paymentModeOptions()" [(ngModel)]="payForm.paymentModeId" optionLabel="name" optionValue="id" placeholder="Select account" [showClear]="true" styleClass="w-full" />
+              </div>
+            }
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">Reference</label>
               <input pInputText [(ngModel)]="payForm.ref" class="w-full" placeholder="Txn / cheque no. (optional)" />
@@ -332,7 +338,14 @@ export class ErpInvoiceListComponent implements OnInit {
   ];
 
   form = this.blankForm();
-  payForm: { amount: number | null; paymentModeId: string | null; ref: string } = { amount: null, paymentModeId: null, ref: '' };
+  payForm: { amount: number | null; paymentModeId: string | null; method: string | null; ref: string } = { amount: null, paymentModeId: null, method: null, ref: '' };
+  readonly payMethods = [
+    { label: 'Cash', value: 'cash' },
+    { label: 'UPI', value: 'upi' },
+    { label: 'Bank', value: 'bank' },
+    { label: 'Card', value: 'card' },
+    { label: 'Online', value: 'online' },
+  ];
 
   paymentModeOptions = computed(() => this.paymentModes());
 
@@ -350,9 +363,18 @@ export class ErpInvoiceListComponent implements OnInit {
       { label: 'Unpaid', value: this.num(s.unpaid), icon: 'pi-clock', iconBg: 'bg-red-50 text-red-600' },
       { label: 'Partial', value: this.num(s.partial), icon: 'pi-hourglass', iconBg: 'bg-amber-50 text-amber-600' },
       { label: 'Paid', value: this.num(s.paid), icon: 'pi-check-circle', iconBg: 'bg-green-50 text-green-600' },
-      { label: 'Outstanding', value: this.baseSym() + this.fmt(this.num(s.outstanding)), icon: 'pi-wallet', iconBg: 'bg-purple-50 text-purple-600' },
+      { label: 'Outstanding', value: this.baseSym() + this.short(this.num(s.outstanding)), full: this.baseSym() + this.fmt(this.num(s.outstanding)), icon: 'pi-wallet', iconBg: 'bg-purple-50 text-purple-600' },
     ];
   });
+
+  /** Compact money (K/L/Cr) so large figures don't overflow the summary cards. */
+  short(n: unknown): string {
+    const v = Number(n) || 0, a = Math.abs(v);
+    if (a >= 1e7) return (v / 1e7).toFixed(a >= 1e8 ? 0 : 1) + 'Cr';
+    if (a >= 1e5) return (v / 1e5).toFixed(a >= 1e6 ? 0 : 1) + 'L';
+    if (a >= 1e3) return (v / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'K';
+    return String(Math.round(v));
+  }
 
   /** code → symbol map from the loaded currencies (fallback: ₹ for INR, else the code). */
   private symMap = computed(() => {
@@ -454,7 +476,7 @@ export class ErpInvoiceListComponent implements OnInit {
     if (!this.access.canWrite('invoices')) return;
     this.activeInvoice.set(inv);
     const def = this.paymentModes().find(m => m.isDefault);
-    this.payForm = { amount: this.num(inv.balanceDue), paymentModeId: def?.id ?? null, ref: '' };
+    this.payForm = { amount: this.num(inv.balanceDue), paymentModeId: def?.id ?? null, method: null, ref: '' };
     this.showPayment.set(true);
   }
 
@@ -465,6 +487,7 @@ export class ErpInvoiceListComponent implements OnInit {
     this.erp.recordPayment(inv.id, {
       amount: Number(this.payForm.amount),
       paymentModeId: this.payForm.paymentModeId || undefined,
+      method: this.payForm.method || undefined,
       ref: this.payForm.ref || undefined,
     }).subscribe({
       next: (r) => {

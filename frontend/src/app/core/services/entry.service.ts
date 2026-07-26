@@ -153,6 +153,12 @@ export class EntryService {
     items: Array<{ productId?: string; description: string; quantity: number; unitPrice: number; discount?: number }>;
   }): Observable<any> { return this.api.post<any>('/quotes', body); }
 
+  /** Mark a saved quote as sent — same action as the portal's "Send to customer",
+   *  which fires the tenant's quote workflow (WhatsApp delivery to the party). */
+  markQuoteSent(id: string): Observable<any> {
+    return this.api.patch<any>(`/quotes/${id}/status`, { status: 'sent' });
+  }
+
   // ─── Returns ───────────────────────────────────────────────────────────────
   createCreditNote(body: {
     customerId?: string; customerName?: string; items: Array<{ description: string; quantity: number; unitPrice: number }>;
