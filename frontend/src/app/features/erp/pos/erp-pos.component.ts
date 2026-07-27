@@ -11,7 +11,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { ErpService } from '../../../core/services/erp.service';
 import { ErpCurrencyService } from '../../../core/services/erp-currency.service';
 import { PartyPickerComponent } from '../../entry/party-picker.component';
-import { CustomerContext } from '../../../core/services/entry.service';
+import { CustomerContext, SupplierContext } from '../../../core/services/entry.service';
 
 interface CartLine { productId?: string; description: string; quantity: number; unitPrice: number; }
 
@@ -220,10 +220,10 @@ export class ErpPosComponent implements OnInit {
   recompute() { this.cart.set([...this.cart()]); this.applyPartyDiscount(); }
 
   /** Party picked → fill the walk-in name/phone and apply the party's agreed discount. */
-  onParty(ctx: CustomerContext) {
+  onParty(ctx: CustomerContext | SupplierContext) {
     this.customerName = ctx.name || '';
-    this.customerPhone = ctx.phone || '';
-    this.partyDiscountPct = Number(ctx.defaultDiscountPct) || 0;
+    this.customerPhone = (ctx as CustomerContext).phone || '';
+    this.partyDiscountPct = Number((ctx as CustomerContext).defaultDiscountPct) || 0;
     this.applyPartyDiscount();
   }
   onPartyCleared() {
