@@ -14,6 +14,7 @@ export const ERP_ROUTES: Routes = [
   { path: 'export', loadComponent: () => import('./export/erp-export.component').then((m) => m.ErpExportComponent) },
   // Invoicing
   { path: 'invoices', loadComponent: () => import('./invoices/erp-invoice-list.component').then((m) => m.ErpInvoiceListComponent) },
+  { path: 'invoices/new', loadComponent: () => import('./invoices/erp-invoice-form.component').then((m) => m.ErpInvoiceFormComponent) },
   { path: 'payment-modes', loadComponent: () => import('./payment-modes/erp-payment-modes.component').then((m) => m.ErpPaymentModesComponent) },
   // CRM
   { path: 'leads', loadComponent: () => import('./crm/erp-leads.component').then((m) => m.ErpLeadsComponent) },

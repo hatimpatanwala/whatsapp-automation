@@ -262,6 +262,11 @@ export const routes: Routes = [
       {
         path: 'workflow-builder',
         canActivate: [featureGuard('workflowBuilder')],
+        loadComponent: () => import('./features/workflow-builder/workflow-packs.component').then(m => m.WorkflowPacksComponent),
+      },
+      {
+        path: 'workflow-builder/advanced',
+        canActivate: [featureGuard('workflowBuilder')],
         loadComponent: () => import('./features/workflow-builder/workflow-builder.component').then(m => m.WorkflowBuilderComponent),
       },
       {

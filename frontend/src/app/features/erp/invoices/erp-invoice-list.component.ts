@@ -1,6 +1,7 @@
 import { Component, OnInit, HostListener, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
@@ -135,82 +136,6 @@ interface LineForm { description: string; quantity: number; unitPrice: number; p
         </p-table>
       </div>
 
-      <!-- ─── Create Invoice dialog ─────────────────────────────────────── -->
-      <p-dialog header="New Invoice" [(visible)]="showCreate" [modal]="true" [style]="{ width: '720px' }" [draggable]="false">
-        <div class="flex flex-col gap-4">
-          <div>
-            <label class="block text-xs font-semibold text-gray-500 mb-1">Customer</label>
-            <wa-party-picker (selected)="onInvoiceParty($event)" (cleared)="onInvoicePartyCleared()"
-                             placeholder="Type customer name / phone / GSTIN…" />
-          </div>
-          @if (branches().length) {
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Branch</label>
-              <p-select [options]="branches()" [(ngModel)]="form.branchId" optionLabel="name" optionValue="id" [showClear]="true" styleClass="w-full" placeholder="No branch" />
-            </div>
-          }
-
-          <!-- Line items -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Line Items</label>
-              <button pButton icon="pi pi-plus" label="Add line" class="p-button-text p-button-sm" (click)="addLine()"></button>
-            </div>
-            <div class="flex flex-col gap-2">
-              @for (line of form.items; track $index; let i = $index) {
-                <div class="flex gap-2 items-center">
-                  <div class="flex-1 min-w-0">
-                    <wa-product-picker [name]="line.description" (nameChange)="line.description = $event"
-                                       [customerId]="form.customerId" mode="sale"
-                                       (picked)="onInvoiceProductPicked(i, $event)" />
-                  </div>
-                  <div class="shrink-0" style="width:4.5rem"><p-inputNumber [(ngModel)]="line.quantity" [min]="1" placeholder="Qty" styleClass="w-full" inputStyleClass="w-full text-right" /></div>
-                  <div class="shrink-0" style="width:7rem"><p-inputNumber [(ngModel)]="line.unitPrice" mode="currency" currency="INR" locale="en-IN" placeholder="Price" styleClass="w-full" inputStyleClass="w-full" /></div>
-                  <span class="w-24 text-right text-sm font-medium tabular-nums shrink-0">{{ sym(form.currency) }}{{ fmt(line.quantity * line.unitPrice) }}</span>
-                  <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger shrink-0" (click)="removeLine($index)" [disabled]="form.items.length === 1"></button>
-                </div>
-              }
-            </div>
-          </div>
-
-          <div class="grid grid-cols-4 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Currency</label>
-              <p-select [options]="currencies()" [(ngModel)]="form.currency" optionLabel="code" optionValue="code" styleClass="w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Tax %</label>
-              <p-inputNumber [(ngModel)]="form.taxRatePct" [min]="0" [max]="100" suffix="%" inputStyleClass="w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Discount</label>
-              <p-inputNumber [(ngModel)]="form.discount" [min]="0" inputStyleClass="w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Due Date</label>
-              <input type="date" [(ngModel)]="form.dueDate" class="w-full border border-gray-300 rounded-md px-2 py-2 text-sm" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-gray-500 mb-1">Note</label>
-            <textarea [(ngModel)]="form.note" rows="2" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="Optional note shown on the invoice"></textarea>
-          </div>
-
-          <!-- Totals preview -->
-          <div class="bg-gray-50 rounded-lg p-3 text-sm">
-            <div class="flex justify-between"><span class="text-gray-500">Subtotal</span><span class="font-medium tabular-nums">{{ sym(form.currency) }}{{ fmt(preview().subtotal) }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">Discount</span><span class="font-medium tabular-nums">− {{ sym(form.currency) }}{{ fmt(preview().discount) }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">Tax</span><span class="font-medium tabular-nums">{{ sym(form.currency) }}{{ fmt(preview().tax) }}</span></div>
-            <div class="flex justify-between mt-1 pt-1 border-t border-gray-200 text-base font-bold"><span>Total</span><span class="tabular-nums">{{ sym(form.currency) }}{{ fmt(preview().total) }}</span></div>
-          </div>
-        </div>
-        <ng-template pTemplate="footer">
-          <p-button label="Cancel" [text]="true" (onClick)="showCreate.set(false)" />
-          <p-button label="Create Invoice" icon="pi pi-check" [loading]="saving()" (onClick)="submitCreate()" />
-        </ng-template>
-      </p-dialog>
-
       <!-- ─── Record Payment dialog ─────────────────────────────────────── -->
       <p-dialog header="Record Payment" [(visible)]="showPayment" [modal]="true" [style]="{ width: '440px' }" [draggable]="false">
         @if (activeInvoice(); as inv) {
@@ -313,6 +238,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; p
 })
 export class ErpInvoiceListComponent implements OnInit {
   private readonly erp = inject(ErpService);
+  private readonly router = inject(Router);
   private readonly api = inject(ApiService);
   private readonly toast = inject(MessageService);
   private readonly waShare = inject(WhatsappShareService);
@@ -445,7 +371,7 @@ export class ErpInvoiceListComponent implements OnInit {
   }
 
   // ─── create ──────────────────────────────────────────────────────────────
-  openCreate() { if (!this.access.canWrite('invoices')) return; this.form = this.blankForm(); this.showCreate.set(true); }
+  openCreate() { if (!this.access.canWrite('invoices')) return; void this.router.navigate(['/erp/invoices/new']); }
   addLine() { this.form.items.push({ description: '', quantity: 1, unitPrice: 0 }); }
   removeLine(i: number) { this.form.items.splice(i, 1); }
 
