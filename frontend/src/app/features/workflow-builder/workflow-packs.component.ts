@@ -5,51 +5,32 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
-import { forkJoin, of } from 'rxjs';
 import { WorkflowService } from './services/workflow.service';
+import { PACKS, PACK_CATEGORIES, SCALES, CUSTOM_TRIGGERS, Pack, WFNode, WFEdge, WFGraph } from './workflow-packs.catalog';
 
-/** A single toggleable notification/feature inside a pack (maps to one node). */
-interface PackFeature {
-  key: string;
-  label: string;
-  event?: string;        // trigger event this notification reacts to (order status, etc.)
-  defaultText: string;
-  default: boolean;
-}
-/** A pre-built automation the user enables with a checkbox. */
-interface Pack {
-  key: string;
-  name: string;
-  description: string;
-  icon: string;
-  triggerType: string;   // e.g. trigger_order
-  triggerLabel: string;
-  triggerConfig: Record<string, any>;
-  features: PackFeature[];
-}
+interface PackState { enabled: boolean; workflowId?: string; features: Record<string, boolean>; texts: Record<string, string>; }
+interface CustomItem { id: string; label: string; triggerType: string; text: string; workflowId?: string; }
+interface Laid { node: WFNode; }
 
-/** Live editor state for a pack (what the user toggled + edited). */
-interface PackState {
-  enabled: boolean;
-  workflowId?: string;
-  features: Record<string, boolean>;
-  texts: Record<string, string>;   // featureKey -> edited message
-}
-
-/** A generated, laid-out node for the locked canvas. */
-interface CanvasNode {
-  id: string; featureKey?: string; kind: 'trigger' | 'message';
-  title: string; text: string; x: number; y: number;
-}
-
-const CARD_W = 240, CARD_H = 96, GAP_Y = 130, COL_X = 260;
+const CARD_W = 210, NODE_H = 78;
+const MSG_TYPES = ['send_text', 'send_buttons', 'send_list', 'send_image'];
+const NODE_ICON: Record<string, string> = {
+  trigger_message: 'pi-comment', trigger_order: 'pi-shopping-cart', trigger_payment: 'pi-wallet',
+  trigger_quote: 'pi-file-edit', trigger_invoice: 'pi-receipt', trigger_schedule: 'pi-clock',
+  send_text: 'pi-comment', send_buttons: 'pi-th-large', send_list: 'pi-list', send_image: 'pi-image',
+  show_catalog: 'pi-shopping-bag', add_to_cart: 'pi-plus-circle', view_cart: 'pi-shopping-cart',
+  checkout: 'pi-credit-card', payment_qr: 'pi-qrcode', search_products: 'pi-search', track_order: 'pi-map-marker',
+  condition: 'pi-share-alt', switch: 'pi-sitemap', wait_for_reply: 'pi-clock', fallback: 'pi-replay',
+  tag_customer: 'pi-tag', update_order: 'pi-sync', assign_agent: 'pi-user', delay: 'pi-hourglass', end: 'pi-stop-circle',
+};
 
 /**
- * Simple, checkbox-driven "Automations" builder. The user ticks a pack (Order,
- * Appointment, …) to enable it, then ticks which notifications/features to include.
- * The blocks are generated onto a read-only canvas (same drag-flow look) where the
- * ONLY thing editable is each block's text — no palette, no connectivity editing.
- * Each enabled pack is saved as a real workflow (trigger + message nodes).
+ * Checkbox-driven Automations builder. Ticking a pack (and its sub-options) AUTO-
+ * GENERATES the complete workflow logic — every node type (catalog, cart, checkout,
+ * conditions, switches, waits, agent hand-off, delays…) with correct connectivity —
+ * onto a locked canvas where only the message TEXT is editable. Also lets the user
+ * compose fully custom notifications (own trigger + message). Each saves as a real
+ * runnable workflow. The manual node editor stays at /workflow-builder/advanced.
  */
 @Component({
   selector: 'wa-workflow-packs',
@@ -59,38 +40,63 @@ const CARD_W = 240, CARD_H = 96, GAP_Y = 130, COL_X = 260;
   template: `
     <p-toast />
     <div class="flex h-[calc(100vh-3.5rem)] bg-gray-50">
-      <!-- Pack picker (checkboxes) -->
+      <!-- Pack picker -->
       <aside class="w-80 shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
         <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
           <h2 class="text-base font-bold text-gray-900">Automations</h2>
           <a routerLink="/workflow-builder/advanced" class="ml-auto text-[11px] text-gray-400 hover:text-indigo-600">Advanced editor</a>
         </div>
-        <p class="px-4 py-2 text-[12px] text-gray-500">Tick an automation to switch it on, then choose which messages to send.</p>
+        <p class="px-4 pt-2 text-[12px] text-gray-500">Tick an automation — we build the whole flow for you. Choose the steps you want; edit any message text.</p>
 
-        @for (pack of packs; track pack.key) {
-          <div class="border-b border-gray-100">
-            <label class="flex items-start gap-2.5 px-4 py-3 cursor-pointer hover:bg-gray-50"
-                   [class.bg-indigo-50/40]="selectedKey() === pack.key" (click)="select(pack.key)">
-              <input type="checkbox" class="mt-0.5 w-4 h-4 accent-indigo-600"
-                     [checked]="state(pack.key).enabled" (click)="$event.stopPropagation()"
-                     (change)="togglePack(pack, $event)" />
-              <span class="min-w-0 flex-1">
-                <span class="flex items-center gap-1.5 font-semibold text-[13.5px] text-gray-900">
-                  <i class="pi {{ pack.icon }} text-indigo-500 text-xs"></i>{{ pack.name }}
+        <!-- Scale filter -->
+        <div class="px-4 py-2 flex items-center gap-1.5">
+          <span class="text-[10px] font-semibold text-gray-400 uppercase mr-1">Business</span>
+          <button (click)="scale.set('all')" class="text-[11px] px-2 py-0.5 rounded-full border"
+                  [class.bg-indigo-600]="scale()==='all'" [class.text-white]="scale()==='all'" [class.border-indigo-600]="scale()==='all'"
+                  [class.border-gray-200]="scale()!=='all'" [class.text-gray-500]="scale()!=='all'">All</button>
+          @for (s of scales; track s.key) {
+            <button (click)="scale.set(s.key)" class="text-[11px] px-2 py-0.5 rounded-full border"
+                    [class.bg-indigo-600]="scale()===s.key" [class.text-white]="scale()===s.key" [class.border-indigo-600]="scale()===s.key"
+                    [class.border-gray-200]="scale()!==s.key" [class.text-gray-500]="scale()!==s.key">{{ s.label }}</button>
+          }
+        </div>
+
+        @for (cat of visibleCategories(); track cat.key) {
+          <div class="border-t border-gray-100">
+            <p class="px-4 pt-2.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">{{ cat.label }}</p>
+            @if (cat.key === 'custom') {
+              <label class="flex items-start gap-2.5 px-4 py-2 cursor-pointer hover:bg-gray-50"
+                     [class.bg-indigo-50/50]="selectedKey()==='__custom__'" (click)="select('__custom__')">
+                <i class="pi pi-bolt text-indigo-500 text-xs mt-0.5"></i>
+                <span class="min-w-0 flex-1">
+                  <span class="font-semibold text-[13.5px] text-gray-900 block">Custom notification</span>
+                  <span class="block text-[11.5px] text-gray-400 leading-snug">Build your own: pick a trigger, write the message.</span>
                 </span>
-                <span class="block text-[11.5px] text-gray-400 leading-snug">{{ pack.description }}</span>
-              </span>
-            </label>
-
-            @if (state(pack.key).enabled) {
-              <div class="px-4 pb-3 pl-10 space-y-1.5">
-                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Messages to send</p>
-                @for (f of pack.features; track f.key) {
-                  <label class="flex items-center gap-2 text-[12.5px] text-gray-700 cursor-pointer">
-                    <input type="checkbox" class="w-3.5 h-3.5 accent-indigo-600"
-                           [(ngModel)]="state(pack.key).features[f.key]" (ngModelChange)="regenerate(pack)" />
-                    {{ f.label }}
-                  </label>
+              </label>
+            }
+            @for (pack of packsIn(cat.key); track pack.key) {
+              <div>
+                <label class="flex items-start gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-gray-50"
+                       [class.bg-indigo-50/50]="selectedKey()===pack.key" (click)="select(pack.key)">
+                  <input type="checkbox" class="mt-0.5 w-4 h-4 accent-indigo-600"
+                         [checked]="st(pack.key).enabled" (click)="$event.stopPropagation()" (change)="togglePack(pack, $event)" />
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-1.5 font-semibold text-[13.5px] text-gray-900">
+                      <i class="pi {{ pack.icon }} text-indigo-500 text-xs"></i>{{ pack.name }}
+                    </span>
+                    <span class="block text-[11.5px] text-gray-400 leading-snug">{{ pack.description }}</span>
+                  </span>
+                </label>
+                @if (st(pack.key).enabled && pack.features.length) {
+                  <div class="px-4 pb-2.5 pl-10 space-y-1.5">
+                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Include</p>
+                    @for (f of pack.features; track f.key) {
+                      <label class="flex items-center gap-2 text-[12.5px] text-gray-700 cursor-pointer">
+                        <input type="checkbox" class="w-3.5 h-3.5 accent-indigo-600"
+                               [(ngModel)]="st(pack.key).features[f.key]" (ngModelChange)="regen(pack)" /> {{ f.label }}
+                      </label>
+                    }
+                  </div>
                 }
               </div>
             }
@@ -98,66 +104,87 @@ const CARD_W = 240, CARD_H = 96, GAP_Y = 130, COL_X = 260;
         }
       </aside>
 
-      <!-- Canvas + inline text edit -->
+      <!-- Canvas / custom builder -->
       <main class="flex-1 relative overflow-hidden">
-        @if (!selected()) {
-          <div class="h-full flex items-center justify-center text-center text-gray-400 px-6">
-            <div>
-              <i class="pi pi-sitemap text-4xl mb-3 block"></i>
-              <p class="text-sm font-medium">Pick an automation on the left to see its flow.</p>
+        @if (selectedKey() === '__custom__') {
+          <!-- Custom notification builder -->
+          <div class="absolute inset-0 overflow-y-auto p-6">
+            <div class="max-w-2xl mx-auto">
+              <div class="flex items-center gap-3 mb-4">
+                <h3 class="text-lg font-bold text-gray-900">Custom notifications</h3>
+                <button pButton label="Add notification" icon="pi pi-plus" class="p-button-sm p-button-outlined" (click)="addCustom()"></button>
+                <button pButton label="Save all" icon="pi pi-check" class="p-button-sm ml-auto" [loading]="saving()" [disabled]="!custom().length" (click)="saveCustom()"></button>
+              </div>
+              @if (!custom().length) {
+                <p class="text-sm text-gray-400">No custom notifications yet — click “Add notification” to create one.</p>
+              }
+              @for (c of custom(); track c.id; let i = $index) {
+                <div class="bg-white rounded-xl border border-gray-200 p-4 mb-3 shadow-sm">
+                  <div class="flex items-center gap-2 mb-2">
+                    <input [(ngModel)]="c.label" class="font-semibold text-sm border-b border-transparent hover:border-gray-200 focus:border-indigo-400 outline-none flex-1" placeholder="Notification name" />
+                    <button class="text-red-400 hover:text-red-600 text-sm" (click)="removeCustom(i)"><i class="pi pi-trash"></i></button>
+                  </div>
+                  <label class="text-[11px] font-semibold text-gray-400 uppercase">Trigger</label>
+                  <select [(ngModel)]="c.triggerType" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm mb-2 bg-white">
+                    @for (tg of customTriggers; track tg.value) { <option [value]="tg.value">{{ tg.label }}</option> }
+                  </select>
+                  <label class="text-[11px] font-semibold text-gray-400 uppercase">Message</label>
+                  <textarea [(ngModel)]="c.text" rows="3" class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" placeholder="Write the WhatsApp message… use {{ '{{customer_name}}' }} etc."></textarea>
+                </div>
+              }
             </div>
+          </div>
+        } @else if (!selected()) {
+          <div class="h-full flex items-center justify-center text-center text-gray-400 px-6">
+            <div><i class="pi pi-sitemap text-4xl mb-3 block"></i><p class="text-sm font-medium">Pick an automation on the left to see its flow.</p></div>
           </div>
         } @else {
           <!-- Toolbar -->
           <div class="absolute top-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-b border-gray-100 px-4 py-2 flex items-center gap-3">
             <span class="font-semibold text-sm text-gray-900">{{ selected()!.name }}</span>
-            @if (!state(selectedKey()).enabled) {
-              <span class="text-[11px] text-amber-600">Not switched on — tick it to activate</span>
-            } @else {
-              <span class="text-[11px] text-emerald-600"><i class="pi pi-check-circle"></i> On</span>
-            }
+            @if (st(selectedKey()).enabled) { <span class="text-[11px] text-emerald-600"><i class="pi pi-check-circle"></i> On</span> }
+            @else { <span class="text-[11px] text-amber-600">Tick it to switch on</span> }
+            <span class="text-[11px] text-gray-400">· {{ nodes().length }} steps auto-created</span>
             <div class="ml-auto flex items-center gap-1.5">
               <button class="text-xs px-2 py-1 rounded border border-gray-200 text-gray-500" (click)="zoomBy(-0.1)">−</button>
               <span class="text-[11px] text-gray-400 w-10 text-center">{{ (zoom()*100)|number:'1.0-0' }}%</span>
               <button class="text-xs px-2 py-1 rounded border border-gray-200 text-gray-500" (click)="zoomBy(0.1)">+</button>
-              <button pButton label="Save" icon="pi pi-check" class="p-button-sm ml-2" [loading]="saving()"
-                      [disabled]="!state(selectedKey()).enabled" (click)="save(selected()!)"></button>
+              <button pButton label="Save" icon="pi pi-check" class="p-button-sm ml-2" [loading]="saving()" [disabled]="!st(selectedKey()).enabled" (click)="save(selected()!)"></button>
             </div>
           </div>
 
-          <!-- Pannable graph -->
           <div class="absolute inset-0 pt-11 overflow-hidden cursor-grab active:cursor-grabbing"
                (mousedown)="startPan($event)" (mousemove)="onPan($event)" (mouseup)="endPan()" (mouseleave)="endPan()">
-            <div class="absolute origin-top-left" [style.transform]="'translate(' + panX() + 'px,' + panY() + 'px) scale(' + zoom() + ')'">
-              <svg class="absolute overflow-visible pointer-events-none" width="1200" height="2000">
-                @for (e of edges(); track e.id) {
+            <div class="absolute origin-top-left" [style.transform]="'translate('+panX()+'px,'+panY()+'px) scale('+zoom()+')'">
+              <svg class="absolute overflow-visible pointer-events-none" width="1400" height="2400">
+                @for (e of edgePaths(); track e.id) {
                   <path [attr.d]="e.d" fill="none" stroke="#c7d2fe" stroke-width="2" />
+                  @if (e.label) { <text [attr.x]="e.lx" [attr.y]="e.ly" fill="#6366f1" font-size="10" font-weight="600" text-anchor="middle">{{ e.label }}</text> }
                 }
               </svg>
               @for (n of nodes(); track n.id) {
                 <div class="absolute rounded-xl border shadow-sm bg-white select-none"
-                     [class.border-indigo-400]="n.kind === 'trigger'" [class.border-gray-200]="n.kind !== 'trigger'"
-                     [style.left.px]="n.x" [style.top.px]="n.y" [style.width.px]="cardW"
-                     (mousedown)="$event.stopPropagation()">
+                     [class.border-indigo-400]="isTrigger(n)" [class.border-gray-200]="!isTrigger(n)"
+                     [style.left.px]="n.x" [style.top.px]="n.y" [style.width.px]="cardW" (mousedown)="$event.stopPropagation()">
                   <div class="px-3 py-1.5 text-[11px] font-bold rounded-t-xl flex items-center gap-1.5"
-                       [class.bg-indigo-50]="n.kind === 'trigger'" [class.text-indigo-700]="n.kind === 'trigger'"
-                       [class.bg-gray-50]="n.kind !== 'trigger'" [class.text-gray-500]="n.kind !== 'trigger'">
-                    <i class="pi text-[10px]" [ngClass]="n.kind === 'trigger' ? 'pi-bolt' : 'pi-comment'"></i>{{ n.title }}
+                       [class.bg-indigo-50]="isTrigger(n)" [class.text-indigo-700]="isTrigger(n)"
+                       [class.bg-gray-50]="!isTrigger(n)" [class.text-gray-600]="!isTrigger(n)">
+                    <i class="pi {{ icon(n) }} text-[10px]"></i>{{ n.label }}
                   </div>
                   <div class="p-2.5">
-                    @if (n.kind === 'trigger') {
-                      <p class="text-[12px] text-gray-500">{{ n.text }}</p>
-                    } @else if (editingId() === n.id) {
-                      <textarea [(ngModel)]="editText" rows="3"
-                                class="w-full text-[12px] border border-indigo-300 rounded p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                                (mousedown)="$event.stopPropagation()"></textarea>
-                      <div class="flex gap-1.5 mt-1.5">
-                        <button class="text-[11px] px-2 py-0.5 rounded bg-indigo-600 text-white" (click)="saveText(n)">Done</button>
-                        <button class="text-[11px] px-2 py-0.5 rounded border border-gray-200 text-gray-500" (click)="editingId.set(null)">Cancel</button>
-                      </div>
+                    @if (isMessage(n)) {
+                      @if (editingId() === n.id) {
+                        <textarea [(ngModel)]="editText" rows="3" class="w-full text-[12px] border border-indigo-300 rounded p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200" (mousedown)="$event.stopPropagation()"></textarea>
+                        <div class="flex gap-1.5 mt-1.5">
+                          <button class="text-[11px] px-2 py-0.5 rounded bg-indigo-600 text-white" (click)="saveText(n)">Done</button>
+                          <button class="text-[11px] px-2 py-0.5 rounded border border-gray-200 text-gray-500" (click)="editingId.set(null)">Cancel</button>
+                        </div>
+                      } @else {
+                        <p class="text-[12px] text-gray-700 whitespace-pre-wrap line-clamp-4 cursor-text" (click)="edit(n)">{{ msgOf(n) }}</p>
+                        <button class="text-[10px] text-indigo-500 mt-1 hover:underline" (click)="edit(n)"><i class="pi pi-pencil text-[9px]"></i> Edit text</button>
+                      }
                     } @else {
-                      <p class="text-[12px] text-gray-700 whitespace-pre-wrap line-clamp-4 cursor-text" (click)="edit(n)">{{ n.text }}</p>
-                      <button class="text-[10px] text-indigo-500 mt-1 hover:underline" (click)="edit(n)"><i class="pi pi-pencil text-[9px]"></i> Edit text</button>
+                      <p class="text-[12px] text-gray-500">{{ summary(n) }}</p>
                     }
                   </div>
                 </div>
@@ -174,213 +201,195 @@ export class WorkflowPacksComponent implements OnInit {
   private readonly toast = inject(MessageService);
 
   readonly cardW = CARD_W;
-  readonly packs: Pack[] = PACKS;
+  readonly packs = PACKS;
+  readonly categories = PACK_CATEGORIES;
+  readonly scales = SCALES;
+  readonly customTriggers = CUSTOM_TRIGGERS;
   private readonly states: Record<string, PackState> = {};
+
+  readonly scale = signal<'all' | 'small' | 'medium' | 'large'>('all');
   readonly selectedKey = signal<string>('');
   readonly saving = signal(false);
+  readonly custom = signal<CustomItem[]>([]);
 
-  // canvas view state
-  readonly zoom = signal(0.9);
-  readonly panX = signal(40);
-  readonly panY = signal(24);
+  readonly zoom = signal(0.85); readonly panX = signal(24); readonly panY = signal(20);
   private panning = false; private px = 0; private py = 0;
+  readonly editingId = signal<string | null>(null); editText = '';
 
-  // inline text edit
-  readonly editingId = signal<string | null>(null);
-  editText = '';
-
-  // generated graph (recomputed on toggle)
-  readonly nodes = signal<CanvasNode[]>([]);
-  readonly edges = signal<{ id: string; d: string }[]>([]);
+  readonly nodes = signal<WFNode[]>([]);
+  readonly edges = signal<WFEdge[]>([]);
 
   selected = computed(() => this.packs.find((p) => p.key === this.selectedKey()) || null);
+  visibleCategories = computed(() => this.categories.filter((c) => c.key === 'custom' || this.packsIn(c.key).length));
 
   ngOnInit() {
-    // seed default state
     for (const p of this.packs) {
-      this.states[p.key] = {
-        enabled: false,
-        features: Object.fromEntries(p.features.map((f) => [f.key, f.default])),
-        texts: {},
-      };
+      this.states[p.key] = { enabled: false, features: Object.fromEntries(p.features.map((f) => [f.key, f.default])), texts: {} };
     }
-    // hydrate from saved workflows (tagged with pack=<key> in description)
     this.wf.getAll({ limit: 200 }).subscribe({
       next: (res: any) => {
         const list = res?.data?.data || res?.data || res || [];
         for (const w of list) {
-          const m = /pack=([a-zA-Z0-9_-]+)/.exec(w.description || '');
+          const cm = /pack=custom\|id=([a-z0-9]+)/.exec(w.description || '');
+          if (cm) { /* custom items hydrate lazily when opened */ continue; }
+          const m = /pack=([a-zA-Z0-9]+)/.exec(w.description || '');
           if (!m || !this.states[m[1]]) continue;
-          const st = this.states[m[1]];
-          st.enabled = w.status === 'active' || w.status === 'draft' || true;
-          st.workflowId = w.id;
-          // restore feature toggles + edited text from the saved definition nodes
+          const st = this.states[m[1]]; st.enabled = true; st.workflowId = w.id;
           const nodes = w.nodes || w.definition?.nodes || [];
           if (nodes.length) {
             const pack = this.packs.find((p) => p.key === m[1])!;
-            for (const f of pack.features) st.features[f.key] = false;
+            const roles = new Set(nodes.map((n: any) => String(n.id || '').split(':')[1]));
+            for (const f of pack.features) st.features[f.key] = roles.has(f.key);
             for (const n of nodes) {
-              const fk = String(n.id || '').split(':')[1];
-              if (fk && st.features[fk] !== undefined) {
-                st.features[fk] = true;
-                if (n.config?.message) st.texts[fk] = n.config.message;
-              }
+              const role = String(n.id || '').split(':')[1];
+              const msg = n.config?.message ?? n.config?.body ?? n.config?.caption;
+              if (role && msg != null) st.texts[role] = msg;
             }
           }
         }
-        if (!this.selectedKey()) this.select(this.packs[0].key);
+        this.hydrateCustom(list);
+        if (!this.selectedKey()) this.select(this.packsIn('orders')[0]?.key || this.packs[0].key);
       },
       error: () => { if (!this.selectedKey()) this.select(this.packs[0].key); },
     });
   }
 
-  state(key: string): PackState { return this.states[key]; }
+  private hydrateCustom(list: any[]) {
+    const items: CustomItem[] = [];
+    for (const w of list) {
+      const cm = /pack=custom\|id=([a-z0-9]+)/.exec(w.description || '');
+      if (!cm) continue;
+      const nodes = w.nodes || w.definition?.nodes || [];
+      const trg = nodes.find((n: any) => String(n.type || '').startsWith('trigger_'));
+      const msg = nodes.find((n: any) => n.config?.message != null);
+      items.push({ id: cm[1], label: w.name || 'Notification', triggerType: trg?.type || 'trigger_order', text: msg?.config?.message || '', workflowId: w.id });
+    }
+    if (items.length) this.custom.set(items);
+  }
+
+  st(key: string) { return this.states[key]; }
+  packsIn(cat: string): Pack[] {
+    const sc = this.scale();
+    return this.packs.filter((p) => p.category === cat && (sc === 'all' || p.scales.includes(sc as any)));
+  }
 
   select(key: string) {
-    this.selectedKey.set(key);
-    this.editingId.set(null);
-    const pack = this.packs.find((p) => p.key === key);
-    if (pack) this.regenerate(pack);
+    this.selectedKey.set(key); this.editingId.set(null);
+    if (key === '__custom__') { this.nodes.set([]); this.edges.set([]); return; }
+    const pack = this.packs.find((p) => p.key === key); if (pack) this.regen(pack);
   }
 
   togglePack(pack: Pack, ev: Event) {
     const on = (ev.target as HTMLInputElement).checked;
-    this.states[pack.key].enabled = on;
-    this.selectedKey.set(pack.key);
-    this.regenerate(pack);
-    if (!on && this.states[pack.key].workflowId) {
-      this.wf.pause(this.states[pack.key].workflowId!).subscribe({ next: () => {}, error: () => {} });
-    }
+    this.states[pack.key].enabled = on; this.selectedKey.set(pack.key); this.regen(pack);
+    if (!on && this.states[pack.key].workflowId) this.wf.pause(this.states[pack.key].workflowId!).subscribe({ next: () => {}, error: () => {} });
   }
 
-  /** Rebuild the canvas graph for a pack from its enabled features + edited text. */
-  regenerate(pack: Pack) {
+  regen(pack: Pack) {
     const st = this.states[pack.key];
-    const nodes: CanvasNode[] = [];
-    const edges: { id: string; d: string }[] = [];
-    const triggerId = `${pack.key}:trigger`;
-    nodes.push({ id: triggerId, kind: 'trigger', title: pack.triggerLabel, text: pack.description, x: 40, y: 24 });
-    let row = 0;
-    for (const f of pack.features) {
-      if (!st.features[f.key]) continue;
-      const id = `${pack.key}:${f.key}`;
-      const x = 40 + COL_X;
-      const y = 24 + row * GAP_Y;
-      nodes.push({ id, featureKey: f.key, kind: 'message', title: f.label, text: st.texts[f.key] ?? f.defaultText, x, y });
-      edges.push({ id: `e-${id}`, d: this.edgePath(40, 24, x, y) });
-      row++;
+    const enabled = new Set(Object.keys(st.features).filter((k) => st.features[k]));
+    const g: WFGraph = pack.generate(enabled, st.texts);
+    this.nodes.set(g.nodes); this.edges.set(g.edges);
+  }
+
+  // ── node rendering helpers ──
+  isTrigger(n: WFNode) { return n.type.startsWith('trigger_'); }
+  isMessage(n: WFNode) { return MSG_TYPES.includes(n.type); }
+  icon(n: WFNode) { return NODE_ICON[n.type] || 'pi-circle'; }
+  msgOf(n: WFNode): string { return n.config['message'] ?? n.config['body'] ?? n.config['caption'] ?? ''; }
+  summary(n: WFNode): string {
+    const c = n.config;
+    switch (n.type) {
+      case 'show_catalog': return 'Show the product catalogue';
+      case 'add_to_cart': return 'Add chosen items to the cart';
+      case 'view_cart': return 'Show the cart & totals';
+      case 'checkout': return 'Checkout' + (c['requireAddress'] ? ' (collect address)' : '') + ' & take payment';
+      case 'payment_qr': return 'Send a payment QR / link';
+      case 'search_products': return 'Let the customer search products';
+      case 'track_order': return 'Let the customer track their order';
+      case 'condition': return `If ${c['variable']} ${c['operator']} “${c['value']}”`;
+      case 'switch': return `Route by ${c['variable']}`;
+      case 'wait_for_reply': return `Wait for a reply (${c['timeoutMinutes'] || 30} min)`;
+      case 'assign_agent': return 'Hand off to a human agent';
+      case 'tag_customer': return `Tag customer: ${c['tag']}`;
+      case 'update_order': return `Update order status: ${c['status']}`;
+      case 'delay': return `Wait ${c['duration']} ${c['unit']}`;
+      case 'end': return 'End of flow';
+      default: return n.label || n.type;
     }
-    this.nodes.set(nodes);
-    this.edges.set(edges);
   }
+  edgePaths = computed(() => {
+    const byId = new Map(this.nodes().map((n) => [n.id, n]));
+    return this.edges().map((e) => {
+      const f = byId.get(e.from), t = byId.get(e.to);
+      if (!f || !t) return { id: e.id, d: '', label: e.label, lx: 0, ly: 0 };
+      const x1 = f.x + CARD_W / 2, y1 = f.y + NODE_H, x2 = t.x + CARD_W / 2, y2 = t.y;
+      const my = (y1 + y2) / 2;
+      return { id: e.id, d: `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`, label: e.label, lx: (x1 + x2) / 2, ly: my - 4 };
+    });
+  });
 
-  private edgePath(fx: number, fy: number, tx: number, ty: number): string {
-    const x1 = fx + CARD_W, y1 = fy + CARD_H / 2, x2 = tx, y2 = ty + 18;
-    const mx = (x1 + x2) / 2;
-    return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
-  }
-
-  edit(n: CanvasNode) { this.editText = n.text; this.editingId.set(n.id); }
-  saveText(n: CanvasNode) {
-    const pack = this.selected(); if (!pack || !n.featureKey) { this.editingId.set(null); return; }
-    this.states[pack.key].texts[n.featureKey] = this.editText;
+  // ── text edit ──
+  edit(n: WFNode) { this.editText = this.msgOf(n); this.editingId.set(n.id); }
+  saveText(n: WFNode) {
+    const pack = this.selected(); if (!pack) { this.editingId.set(null); return; }
+    const role = n.id.split(':')[1];
+    this.states[pack.key].texts[role] = this.editText;
     this.editingId.set(null);
-    this.regenerate(pack);
+    this.regen(pack);
   }
 
+  // ── canvas view ──
   zoomBy(d: number) { this.zoom.set(Math.min(1.6, Math.max(0.4, Math.round((this.zoom() + d) * 10) / 10))); }
   startPan(e: MouseEvent) { this.panning = true; this.px = e.clientX - this.panX(); this.py = e.clientY - this.panY(); }
   onPan(e: MouseEvent) { if (this.panning) { this.panX.set(e.clientX - this.px); this.panY.set(e.clientY - this.py); } }
   endPan() { this.panning = false; }
 
-  /** Persist the pack as a real workflow (create if needed, then save its definition). */
+  // ── save predefined pack ──
   save(pack: Pack) {
-    const st = this.states[pack.key];
-    if (!st.enabled) return;
+    const st = this.states[pack.key]; if (!st.enabled) return;
     this.saving.set(true);
-    const build = () => this.buildDefinition(pack, st);
-    const persist = (id: string) => {
-      const def = build();
-      this.wf.saveDefinition(id, { nodes: def.nodes, edges: def.edges, trigger: pack.triggerType, status: 'active' }).subscribe({
-        next: () => { this.saving.set(false); st.workflowId = id; this.toast.add({ severity: 'success', summary: 'Saved', detail: pack.name + ' is live' }); },
-        error: (e) => { this.saving.set(false); this.toast.add({ severity: 'error', summary: 'Save failed', detail: e?.error?.message || 'Error' }); },
-      });
-    };
+    const g = pack.generate(new Set(Object.keys(st.features).filter((k) => st.features[k])), st.texts);
+    const trigger = g.nodes.find((n) => n.type.startsWith('trigger_'))?.type;
+    const persist = (id: string) => this.wf.saveDefinition(id, { nodes: g.nodes, edges: g.edges, trigger, status: 'active' }).subscribe({
+      next: () => { this.saving.set(false); st.workflowId = id; this.toast.add({ severity: 'success', summary: 'Saved', detail: pack.name + ' is live' }); },
+      error: (e) => { this.saving.set(false); this.toast.add({ severity: 'error', summary: 'Save failed', detail: e?.error?.message || 'Error' }); },
+    });
     if (st.workflowId) { persist(st.workflowId); return; }
-    this.wf.create({ name: pack.name, description: `pack=${pack.key}`, trigger: pack.triggerType }).subscribe({
+    this.wf.create({ name: pack.name, description: `pack=${pack.key}`, trigger }).subscribe({
       next: (w: any) => { const id = w?.data?.id || w?.id; st.workflowId = id; persist(id); },
       error: (e) => { this.saving.set(false); this.toast.add({ severity: 'error', summary: 'Could not create', detail: e?.error?.message || 'Error' }); },
     });
   }
 
-  /** Turn the enabled features into engine nodes/edges (trigger → one message each). */
-  private buildDefinition(pack: Pack, st: PackState) {
-    const nodes: any[] = [];
-    const edges: any[] = [];
-    const triggerId = `${pack.key}:trigger`;
-    const featureIds = pack.features.filter((f) => st.features[f.key]).map((f) => `${pack.key}:${f.key}`);
-    nodes.push({
-      id: triggerId, type: pack.triggerType, label: pack.triggerLabel, description: pack.description,
-      x: 40, y: 24, config: { ...pack.triggerConfig }, outputs: featureIds,
-    });
-    let row = 0;
-    for (const f of pack.features) {
-      if (!st.features[f.key]) continue;
-      const id = `${pack.key}:${f.key}`;
-      nodes.push({
-        id, type: 'send_text', label: f.label, description: '',
-        x: 40 + COL_X, y: 24 + row * GAP_Y,
-        config: { message: st.texts[f.key] ?? f.defaultText, ...(f.event ? { event: f.event } : {}) },
-        outputs: [],
+  // ── custom notifications ──
+  addCustom() {
+    const id = 'c' + Math.abs(Date.now() % 1e9).toString(36);
+    this.custom.set([...this.custom(), { id, label: 'New notification', triggerType: this.customTriggers[0].value, text: '' }]);
+  }
+  removeCustom(i: number) {
+    const item = this.custom()[i];
+    if (item?.workflowId) this.wf.deleteWorkflow(item.workflowId).subscribe({ next: () => {}, error: () => {} });
+    this.custom.set(this.custom().filter((_, j) => j !== i));
+  }
+  saveCustom() {
+    const items = this.custom().filter((c) => c.text.trim());
+    if (!items.length) { this.toast.add({ severity: 'warn', summary: 'Add a message first' }); return; }
+    this.saving.set(true);
+    let pending = items.length;
+    const done = () => { if (--pending <= 0) { this.saving.set(false); this.toast.add({ severity: 'success', summary: 'Saved', detail: 'Custom notifications are live' }); } };
+    for (const c of items) {
+      const trg = this.customTriggers.find((x) => x.value === c.triggerType)!;
+      const nodes: WFNode[] = [
+        { id: `custom:${c.id}:trigger`, type: c.triggerType, label: trg.label, x: 300, y: 40, config: { ...trg.config }, outputs: [`custom:${c.id}:msg`] },
+        { id: `custom:${c.id}:msg`, type: 'send_text', label: c.label || 'Message', x: 300, y: 230, config: { message: c.text }, outputs: [] },
+      ];
+      const edges: WFEdge[] = [{ id: `custom:${c.id}:e`, from: `custom:${c.id}:trigger`, to: `custom:${c.id}:msg` }];
+      const persist = (id: string) => this.wf.saveDefinition(id, { nodes, edges, trigger: c.triggerType, status: 'active' }).subscribe({ next: () => { c.workflowId = id; done(); }, error: done });
+      if (c.workflowId) persist(c.workflowId);
+      else this.wf.create({ name: c.label || 'Custom notification', description: `pack=custom|id=${c.id}`, trigger: c.triggerType }).subscribe({
+        next: (w: any) => { const id = w?.data?.id || w?.id; c.workflowId = id; persist(id); }, error: done,
       });
-      edges.push({ id: `e-${id}`, from: triggerId, to: id });
-      row++;
     }
-    return { nodes, edges };
   }
 }
-
-// ─── Pre-built automation packs (author here; each feature = one message node) ───
-const PACKS: Pack[] = [
-  {
-    key: 'orderUpdates', name: 'Order updates', icon: 'pi-shopping-cart',
-    description: 'Keep customers posted as their order moves along.',
-    triggerType: 'trigger_order', triggerLabel: 'When an order changes', triggerConfig: { event: 'created' },
-    features: [
-      { key: 'confirmed', label: 'Order confirmation', event: 'confirmed', default: true, defaultText: 'Hi {{customer_name}}, thanks for your order {{order_number}}! We\'ve received it and will get it ready. 🧾' },
-      { key: 'packed', label: 'Order packed / processing', event: 'processing', default: true, defaultText: 'Good news {{customer_name}} — your order {{order_number}} is packed and being processed. 📦' },
-      { key: 'out_for_delivery', label: 'Out for delivery', event: 'out_for_delivery', default: true, defaultText: 'Your order {{order_number}} is out for delivery and will reach you soon! 🚚' },
-      { key: 'delivered', label: 'Delivered', event: 'delivered', default: true, defaultText: 'Your order {{order_number}} has been delivered. Thank you for shopping with us! 🎉' },
-      { key: 'review', label: 'Ask for a review', event: 'delivered', default: false, defaultText: 'Hi {{customer_name}}, how was your experience? Reply with a ⭐1–5 rating — it really helps us!' },
-    ],
-  },
-  {
-    key: 'appointment', name: 'Appointment', icon: 'pi-calendar',
-    description: 'Confirm and remind customers about their bookings.',
-    triggerType: 'trigger_message', triggerLabel: 'When someone books', triggerConfig: { keywords: ['book', 'appointment'], matchType: 'contains' },
-    features: [
-      { key: 'confirm', label: 'Booking confirmation', default: true, defaultText: 'Your appointment is confirmed, {{customer_name}}! We look forward to seeing you. 📅' },
-      { key: 'reminder', label: 'Reminder before appointment', default: true, defaultText: 'Reminder: you have an appointment with us coming up. Reply RESCHEDULE if the time no longer works.' },
-      { key: 'followup', label: 'Follow-up after visit', default: false, defaultText: 'Thanks for visiting, {{customer_name}}! We hope it went well — reply here if you need anything else.' },
-    ],
-  },
-  {
-    key: 'welcome', name: 'Welcome & greeting', icon: 'pi-hand',
-    description: 'Greet new customers who message you for the first time.',
-    triggerType: 'trigger_message', triggerLabel: 'When someone says hi', triggerConfig: { keywords: ['hi', 'hello', 'hey'], matchType: 'contains' },
-    features: [
-      { key: 'greeting', label: 'Welcome message', default: true, defaultText: 'Hi there! 👋 Welcome to our store. How can we help you today?' },
-      { key: 'catalog', label: 'Share catalogue link', default: true, defaultText: 'Here\'s our catalogue — browse and reply with what you\'d like to order. 🛍️' },
-      { key: 'hours', label: 'Share business hours', default: false, defaultText: 'We\'re open Mon–Sat, 10am–8pm. We\'ll reply as soon as we can!' },
-    ],
-  },
-  {
-    key: 'payment', name: 'Payment reminders', icon: 'pi-wallet',
-    description: 'Nudge customers about pending and received payments.',
-    triggerType: 'trigger_payment', triggerLabel: 'On a payment event', triggerConfig: { event: 'received' },
-    features: [
-      { key: 'received', label: 'Payment received', event: 'received', default: true, defaultText: 'We\'ve received your payment for {{order_number}} — thank you! ✅' },
-      { key: 'pending', label: 'Payment pending reminder', event: 'expired', default: true, defaultText: 'Gentle reminder: payment for {{order_number}} is still pending. Reply here if you need help completing it.' },
-    ],
-  },
-];
