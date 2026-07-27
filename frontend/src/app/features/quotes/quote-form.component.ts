@@ -18,7 +18,8 @@ import { PermissionService } from '../../core/services/permission.service';
 import { PromoCartService } from '../shared/promo-cart.service';
 import { PromoSectionComponent } from '../shared/promo-section.component';
 import { PartyPickerComponent } from '../entry/party-picker.component';
-import { CustomerContext } from '../../core/services/entry.service';
+import { ProductPickerComponent, PickedProduct } from '../entry/product-picker.component';
+import { CustomerContext, SupplierContext } from '../../core/services/entry.service';
 
 interface QuoteItem {
   productId?: string;
@@ -35,7 +36,7 @@ interface QuoteItem {
     CommonModule, FormsModule, RouterLink,
     ButtonModule, InputTextModule, TextareaModule, InputNumberModule,
     SelectModule, DatePickerModule, DividerModule, ToastModule, CardModule,
-    PromoSectionComponent, PartyPickerComponent,
+    PromoSectionComponent, PartyPickerComponent, ProductPickerComponent,
   ],
   providers: [MessageService, PromoCartService],
   template: `
@@ -83,19 +84,9 @@ interface QuoteItem {
                 <div class="p-3 bg-gray-50 rounded-xl space-y-2">
                   <div class="flex items-start gap-2">
                     <div class="flex-1 min-w-0">
-                      <p-select
-                        [options]="products()"
-                        [(ngModel)]="item.productId"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="Pick a product (optional)"
-                        [showClear]="true"
-                        [filter]="true"
-                        styleClass="w-full"
-                        appendTo="body"
-                        (onChange)="onProductSelect(i)"
-                      />
-                      <input pInputText [(ngModel)]="item.description" class="w-full mt-1.5 text-sm" placeholder="Description" />
+                      <wa-product-picker [name]="item.description" (nameChange)="item.description = $event"
+                                         [customerId]="customerId" mode="sale"
+                                         (picked)="onProductPicked(i, $event)" />
                     </div>
                     <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-rounded p-button-danger shrink-0" (click)="removeItem(i)"></button>
                   </div>
@@ -184,9 +175,6 @@ export class QuoteFormComponent implements OnInit {
   items: QuoteItem[] = [];
   today = new Date();
 
-  customers = signal<{ label: string; value: string }[]>([]);
-  products = signal<{ label: string; value: string; price?: number; name?: string }[]>([]);
-
   subtotal = signal(0);
   lineDiscountTotal = signal(0);
   total = computed(() => Math.max(0, this.subtotal() - this.lineDiscountTotal() - this.promo.totalDiscount()));
@@ -202,9 +190,9 @@ export class QuoteFormComponent implements OnInit {
   /** The party's agreed discount — applied to fresh line items automatically. */
   partyDiscount = 0;
 
-  onParty(ctx: CustomerContext) {
+  onParty(ctx: CustomerContext | SupplierContext) {
     this.customerId = ctx.id;
-    this.partyDiscount = Number(ctx.defaultDiscountPct) || 0;
+    this.partyDiscount = Number((ctx as CustomerContext).defaultDiscountPct) || 0;
     // Fill the party's default discount on any line that hasn't set one yet.
     if (this.partyDiscount > 0) {
       for (const it of this.items) if (!it.discount) it.discount = this.partyDiscount;
@@ -223,52 +211,10 @@ export class QuoteFormComponent implements OnInit {
     if (id) {
       this.isEdit.set(true);
       this.quoteId = id;
-      this.loading.set(true);
-      // Load the customer + product options BEFORE the quote so the dropdowns
-      // can pre-select. p-select with optionValue won't render a selection if the
-      // model is set while the options array is still empty (load-order race).
-      forkJoin({
-        customers: this.api.get<any>('/customers', { limit: 500 }),
-        products: this.api.get<any>('/products', { limit: 500 }),
-      }).subscribe({
-        next: ({ customers, products }) => {
-          this.setCustomers(customers);
-          this.setProducts(products);
-          this.loadQuote(id);
-        },
-        error: () => { this.loadCustomers(); this.loadProducts(); this.loadQuote(id); },
-      });
+      this.loadQuote(id);
     } else {
-      this.loadCustomers();
-      this.loadProducts();
       this.addItem();
     }
-  }
-
-  private arr(r: any): any[] { return Array.isArray(r) ? r : (r?.data ?? r?.items ?? []); }
-
-  private setCustomers(r: any) {
-    this.customers.set(this.arr(r).map((c: any) => ({
-      label: `${c.displayName || c.whatsappName || [c.firstName, c.lastName].filter(Boolean).join(' ') || c.whatsappPhone || c.phone || 'Customer'}${(c.whatsappPhone || c.phone) ? ' \u00B7 ' + (c.whatsappPhone || c.phone) : ''}`,
-      value: c.id,
-    })));
-  }
-
-  private setProducts(r: any) {
-    this.products.set(this.arr(r).map((p: any) => ({
-      label: `${p.name} \u2014 \u20B9${Number(p.price) || 0}`,
-      value: p.id,
-      price: Number(p.price) || 0,
-      name: p.name,
-    })));
-  }
-
-  loadCustomers() {
-    this.api.get<any>('/customers', { limit: 500 }).subscribe({ next: (r) => this.setCustomers(r) });
-  }
-
-  loadProducts() {
-    this.api.get<any>('/products', { limit: 500 }).subscribe({ next: (r) => this.setProducts(r) });
   }
 
   loadQuote(id: string) {
@@ -314,16 +260,13 @@ export class QuoteFormComponent implements OnInit {
     this.recalculate();
   }
 
-  onProductSelect(index: number) {
+  /** Product chosen from the picker → fill the row's id, description & rate. */
+  onProductPicked(index: number, p: PickedProduct) {
     const item = this.items[index];
-    if (item.productId) {
-      const product = this.products().find(p => p.value === item.productId);
-      if (product) {
-        if (!item.description) item.description = product.name || '';
-        if (!item.unitPrice && product.price) item.unitPrice = product.price;
-        this.recalculate();
-      }
-    }
+    item.productId = p.id;
+    item.description = p.name;
+    item.unitPrice = p.rate || item.unitPrice;
+    this.recalculate();
   }
 
   recalculate() {

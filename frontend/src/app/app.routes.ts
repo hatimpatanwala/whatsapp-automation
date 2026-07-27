@@ -246,7 +246,7 @@ export const routes: Routes = [
       },
       {
         path: 'quotes',
-        canActivate: [featureGuard('quotes')],
+        canActivate: [featureGuard('quotes', 'erp')],
         loadChildren: () => import('./features/quotes/quotes.routes').then(m => m.QUOTES_ROUTES),
       },
       {

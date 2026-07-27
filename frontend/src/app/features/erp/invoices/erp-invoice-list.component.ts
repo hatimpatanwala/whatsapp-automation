@@ -17,8 +17,11 @@ import { ErpService, ErpInvoice, PaymentMode } from '../../../core/services/erp.
 import { ApiService } from '../../../core/services/api.service';
 import { WhatsappShareService } from '../../../core/services/whatsapp-share.service';
 import { ErpAccessService } from '../../../core/services/erp-access.service';
+import { PartyPickerComponent } from '../../entry/party-picker.component';
+import { ProductPickerComponent, PickedProduct } from '../../entry/product-picker.component';
+import { CustomerContext, SupplierContext } from '../../../core/services/entry.service';
 
-interface LineForm { description: string; quantity: number; unitPrice: number; }
+interface LineForm { description: string; quantity: number; unitPrice: number; productId?: string; }
 
 @Component({
   selector: 'wa-erp-invoice-list',
@@ -27,6 +30,7 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
     CommonModule, FormsModule,
     ButtonModule, TableModule, TagModule, SelectModule, InputTextModule, InputNumberModule,
     IconFieldModule, InputIconModule, ToastModule, TooltipModule, DialogModule,
+    PartyPickerComponent, ProductPickerComponent,
   ],
   providers: [MessageService],
   template: `
@@ -134,15 +138,10 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
       <!-- ─── Create Invoice dialog ─────────────────────────────────────── -->
       <p-dialog header="New Invoice" [(visible)]="showCreate" [modal]="true" [style]="{ width: '720px' }" [draggable]="false">
         <div class="flex flex-col gap-4">
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Customer Name</label>
-              <input pInputText [(ngModel)]="form.customerName" class="w-full" placeholder="e.g. Acme Corp" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 mb-1">Customer Phone</label>
-              <input pInputText [(ngModel)]="form.customerPhone" class="w-full" placeholder="+9198..." />
-            </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Customer</label>
+            <wa-party-picker (selected)="onInvoiceParty($event)" (cleared)="onInvoicePartyCleared()"
+                             placeholder="Type customer name / phone / GSTIN…" />
           </div>
           @if (branches().length) {
             <div>
@@ -158,13 +157,17 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <button pButton icon="pi pi-plus" label="Add line" class="p-button-text p-button-sm" (click)="addLine()"></button>
             </div>
             <div class="flex flex-col gap-2">
-              @for (line of form.items; track $index) {
+              @for (line of form.items; track $index; let i = $index) {
                 <div class="flex gap-2 items-center">
-                  <input pInputText [(ngModel)]="line.description" placeholder="Description" class="flex-1" />
-                  <p-inputNumber [(ngModel)]="line.quantity" [min]="1" placeholder="Qty" inputStyleClass="w-20" />
-                  <p-inputNumber [(ngModel)]="line.unitPrice" mode="currency" currency="INR" locale="en-IN" placeholder="Price" inputStyleClass="w-28" />
-                  <span class="w-24 text-right text-sm font-medium tabular-nums">{{ sym(form.currency) }}{{ fmt(line.quantity * line.unitPrice) }}</span>
-                  <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger" (click)="removeLine($index)" [disabled]="form.items.length === 1"></button>
+                  <div class="flex-1 min-w-0">
+                    <wa-product-picker [name]="line.description" (nameChange)="line.description = $event"
+                                       [customerId]="form.customerId" mode="sale"
+                                       (picked)="onInvoiceProductPicked(i, $event)" />
+                  </div>
+                  <div class="shrink-0" style="width:4.5rem"><p-inputNumber [(ngModel)]="line.quantity" [min]="1" placeholder="Qty" styleClass="w-full" inputStyleClass="w-full text-right" /></div>
+                  <div class="shrink-0" style="width:7rem"><p-inputNumber [(ngModel)]="line.unitPrice" mode="currency" currency="INR" locale="en-IN" placeholder="Price" styleClass="w-full" inputStyleClass="w-full" /></div>
+                  <span class="w-24 text-right text-sm font-medium tabular-nums shrink-0">{{ sym(form.currency) }}{{ fmt(line.quantity * line.unitPrice) }}</span>
+                  <button pButton icon="pi pi-trash" class="p-button-text p-button-sm p-button-danger shrink-0" (click)="removeLine($index)" [disabled]="form.items.length === 1"></button>
                 </div>
               }
             </div>
@@ -451,9 +454,10 @@ export class ErpInvoiceListComponent implements OnInit {
     if (!items.length) { this.toast.add({ severity: 'warn', summary: 'Add at least one line item' }); return; }
     this.saving.set(true);
     this.erp.createInvoice({
+      customerId: this.form.customerId || undefined,
       customerName: this.form.customerName || undefined,
       customerPhone: this.form.customerPhone || undefined,
-      items: items.map(l => ({ description: l.description, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })),
+      items: items.map(l => ({ productId: l.productId, description: l.description, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })),
       taxRate: (Number(this.form.taxRatePct) || 0) / 100,
       discount: Number(this.form.discount) || 0,
       currency: this.form.currency || undefined,
@@ -583,9 +587,23 @@ export class ErpInvoiceListComponent implements OnInit {
   }
   private blankForm() {
     return {
-      customerName: '', customerPhone: '',
+      customerId: '', customerName: '', customerPhone: '',
       items: [{ description: '', quantity: 1, unitPrice: 0 }] as LineForm[],
       taxRatePct: 0, discount: 0, dueDate: '', note: '', currency: '', branchId: '',
     };
+  }
+
+  onInvoiceParty(ctx: CustomerContext | SupplierContext) {
+    this.form.customerId = ctx.id;
+    this.form.customerName = ctx.name;
+    this.form.customerPhone = (ctx as CustomerContext).phone || '';
+  }
+  onInvoicePartyCleared() { this.form.customerId = ''; this.form.customerName = ''; this.form.customerPhone = ''; }
+
+  onInvoiceProductPicked(i: number, p: PickedProduct) {
+    const line = this.form.items[i];
+    line.productId = p.id;
+    line.description = p.name;
+    line.unitPrice = p.rate || line.unitPrice;
   }
 }

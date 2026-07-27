@@ -15,6 +15,9 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { ApiService } from '../../../core/services/api.service';
 import { ErpCurrencyService } from '../../../core/services/erp-currency.service';
 import { ErpAccessService } from '../../../core/services/erp-access.service';
+import { PartyPickerComponent } from '../../entry/party-picker.component';
+import { ProductPickerComponent, PickedProduct } from '../../entry/product-picker.component';
+import { CustomerContext, SupplierContext } from '../../../core/services/entry.service';
 
 export interface ErpDocConfig {
   title: string;
@@ -36,11 +39,11 @@ export interface ErpDocConfig {
   hasPdf?: boolean;               // show a Download PDF button (default true)
 }
 
-interface LineForm { description: string; quantity: number; unitPrice: number; }
+interface LineForm { description: string; quantity: number; unitPrice: number; productId?: string; }
 
 @Component({
   selector: 'wa-erp-doc', standalone: true,
-  imports: [CommonModule, FormsModule, ButtonModule, TableModule, TagModule, SelectModule, InputTextModule, InputNumberModule, ToastModule, TooltipModule, DialogModule, ConfirmDialogModule],
+  imports: [CommonModule, FormsModule, ButtonModule, TableModule, TagModule, SelectModule, InputTextModule, InputNumberModule, ToastModule, TooltipModule, DialogModule, ConfirmDialogModule, PartyPickerComponent, ProductPickerComponent],
   providers: [MessageService, ConfirmationService],
   template: `
     <div class="p-4 max-w-7xl mx-auto">
@@ -92,7 +95,12 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-gray-500 mb-1">{{ config.partyLabel }}</label>
-              <p-select [options]="partyOptions()" [(ngModel)]="form.party" optionLabel="label" optionValue="value" [showClear]="true" [filter]="true" styleClass="w-full" placeholder="Select" />
+              @if (partyKind(); as pk) {
+                <wa-party-picker [kind]="pk" (selected)="onParty($event)" (cleared)="form.party = null"
+                                 [placeholder]="'Type ' + config.partyLabel.toLowerCase() + ' name / phone / GSTIN…'" />
+              } @else {
+                <p-select [options]="partyOptions()" [(ngModel)]="form.party" optionLabel="label" optionValue="value" [showClear]="true" [filter]="true" styleClass="w-full" placeholder="Select" />
+              }
             </div>
             @if (config.hasTitle) {
               <div><label class="block text-xs font-semibold text-gray-500 mb-1">Title</label><input pInputText [(ngModel)]="form.title" class="w-full" /></div>
@@ -111,9 +119,13 @@ interface LineForm { description: string; quantity: number; unitPrice: number; }
               <span class="w-24 text-right">Amount</span>
               <span class="w-8"></span>
             </div>
-            @for (line of form.items; track $index) {
+            @for (line of form.items; track $index; let li = $index) {
               <div class="flex gap-2 items-center mb-2">
-                <input pInputText [(ngModel)]="line.description" placeholder="Item / description" class="flex-1 min-w-0" />
+                <div class="flex-1 min-w-0">
+                  <wa-product-picker [name]="line.description" (nameChange)="line.description = $event"
+                                     [mode]="partyKind() === 'supplier' ? 'purchase' : 'sale'"
+                                     (picked)="onLineProduct(li, $event)" />
+                </div>
                 <div class="shrink-0" style="width:4.5rem"><p-inputNumber [(ngModel)]="line.quantity" [min]="1" styleClass="w-full" inputStyleClass="w-full text-right" /></div>
                 <div class="shrink-0" style="width:7rem"><p-inputNumber [(ngModel)]="line.unitPrice" mode="currency" currency="INR" locale="en-IN" styleClass="w-full" inputStyleClass="w-full" /></div>
                 <span class="w-24 text-right text-sm font-medium tabular-nums shrink-0">{{ currency.symbol() }}{{ fmt(line.quantity * line.unitPrice) }}</span>
@@ -202,13 +214,29 @@ export class ErpDocComponent implements OnInit {
   addLine() { this.form.items.push({ description: '', quantity: 1, unitPrice: 0 }); }
   removeLine(i: number) { this.form.items.splice(i, 1); }
 
+  /** Which rich picker to use for the party — customer/supplier get wa-party-picker;
+   *  lead-based docs (Offers) keep the plain options dropdown. */
+  partyKind(): 'customer' | 'supplier' | null {
+    const f = this.config.partyField || '';
+    if (f.startsWith('customer')) return 'customer';
+    if (f.startsWith('supplier')) return 'supplier';
+    return null;
+  }
+  onParty(ctx: CustomerContext | SupplierContext) { this.form.party = ctx.id; }
+  onLineProduct(i: number, p: PickedProduct) {
+    const line = this.form.items[i];
+    line.productId = p.id;
+    line.description = p.name;
+    line.unitPrice = p.rate || line.unitPrice;
+  }
+
   submit() {
     const items = this.form.items.filter(l => l.description && l.quantity > 0);
     if (!items.length) { this.toast.add({ severity: 'warn', summary: 'Add at least one line item' }); return; }
     this.saving.set(true);
     const payload: any = {
       [this.config.partyField]: this.form.party || undefined,
-      items: items.map(l => ({ description: l.description, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })),
+      items: items.map(l => ({ productId: l.productId, description: l.description, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })),
       taxRate: (Number(this.form.taxRatePct) || 0) / 100,
       discount: Number(this.form.discount) || 0,
     };
