@@ -109,6 +109,32 @@ interface OrderLine {
               </p>
             </div>
 
+            <!-- Attendance: day-start / day-end punch -->
+            <div class="bg-white rounded-2xl border border-slate-100 p-3.5 mb-3 shadow-sm flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                   [class.bg-emerald-50]="attendance()?.checkinAt" [class.bg-slate-100]="!attendance()?.checkinAt">
+                <i class="pi text-lg" [class.pi-check-circle]="attendance()?.checkinAt" [class.text-emerald-600]="attendance()?.checkinAt"
+                   [class.pi-clock]="!attendance()?.checkinAt" [class.text-slate-400]="!attendance()?.checkinAt"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                @if (!attendance()?.checkinAt) {
+                  <p class="text-[13px] font-bold text-slate-700">Mark your attendance</p>
+                  <p class="text-[11px] text-slate-400">Punch in to start your day</p>
+                } @else if (!attendance()?.checkoutAt) {
+                  <p class="text-[13px] font-bold text-emerald-700">Day started · {{ attendance()?.checkinAt | date:'h:mm a' }}</p>
+                  <p class="text-[11px] text-slate-400">End your day when you're done</p>
+                } @else {
+                  <p class="text-[13px] font-bold text-slate-700">Day complete ✓</p>
+                  <p class="text-[11px] text-slate-400">{{ attendance()?.checkinAt | date:'h:mm a' }} → {{ attendance()?.checkoutAt | date:'h:mm a' }}</p>
+                }
+              </div>
+              @if (!attendance()?.checkinAt) {
+                <button (click)="punch('in')" [disabled]="punching()" class="text-[12px] font-semibold bg-indigo-600 text-white rounded-xl px-3.5 py-2 disabled:opacity-50 shrink-0">{{ punching() ? '…' : 'Start day' }}</button>
+              } @else if (!attendance()?.checkoutAt) {
+                <button (click)="punch('out')" [disabled]="punching()" class="text-[12px] font-semibold bg-slate-900 text-white rounded-xl px-3.5 py-2 disabled:opacity-50 shrink-0">{{ punching() ? '…' : 'End day' }}</button>
+              }
+            </div>
+
             <!-- Day at a glance: target rings -->
             <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
               <i class="pi pi-bullseye"></i> Day at a glance · this month vs target
@@ -922,6 +948,7 @@ export class MySalesComponent implements OnInit {
 
   ngOnInit() {
     this.loadMe();
+    this.loadAttendance();
   }
 
   refresh() {
@@ -1334,6 +1361,26 @@ export class MySalesComponent implements OnInit {
   }
 
   /** Days a bill is past its due date (0 if not overdue / no due date). */
+  // ── Attendance ──
+  readonly attendance = signal<any>(null);
+  readonly punching = signal(false);
+  private loadAttendance() { this.sfa.appAttendance().subscribe({ next: (a) => this.attendance.set(a), error: () => {} }); }
+  punch(type: 'in' | 'out') {
+    if (this.punching()) return;
+    this.punching.set(true);
+    const done = (lat?: number, lng?: number) => {
+      this.sfa.appPunch({ type, latitude: lat, longitude: lng }).subscribe({
+        next: (a) => { this.punching.set(false); this.attendance.set(a); this.showToast(type === 'in' ? 'Day started — have a great day!' : 'Day ended — well done!'); },
+        error: (e) => { this.punching.set(false); this.showToast(e?.error?.message || 'Could not mark attendance'); },
+      });
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => done(p.coords.latitude, p.coords.longitude), () => done(),
+        { timeout: 4000, maximumAge: 60000 });
+    } else { done(); }
+  }
+
   // ── New outlet (field KYC) ──
   readonly showNewOutlet = signal(false);
   readonly outletError = signal('');

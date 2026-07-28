@@ -58,6 +58,10 @@ export class SfaService {
   appCreateOutlet(body: { name: string; phone: string; gstin?: string; billingAddress?: string; area?: string; route?: string }): Observable<any> {
     return this.api.post<any>('/sfa/app/customers', body);
   }
+  appAttendance(): Observable<any> { return this.api.get<any>('/sfa/app/attendance'); }
+  appPunch(body: { type: 'in' | 'out'; latitude?: number; longitude?: number; label?: string }): Observable<any> {
+    return this.api.post<any>('/sfa/app/attendance', body);
+  }
   appProducts(q?: string): Observable<any[]> { return this.api.get<any[]>('/sfa/app/products', q ? { q } : undefined); }
   appPending(): Observable<any[]> { return this.api.get<any[]>('/sfa/app/pending'); }
   appEvaluate(customerId: string | undefined, items: any[]): Observable<any> { return this.api.post<any>('/sfa/app/cart', { customerId, items }); }

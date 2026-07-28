@@ -553,6 +553,39 @@ export class SfaService {
     });
   }
 
+  // ─── Attendance (day-start / day-end punches) ───────────────────────────────
+  attendanceToday(schema: string, salesmanId: string) {
+    return this.cm.executeInTenantContext(schema, async (qr) =>
+      firstRow(await qr.query(`SELECT * FROM "${schema}".salesman_attendance WHERE salesman_id = $1 AND day = CURRENT_DATE`, [salesmanId])) || null);
+  }
+  async punchAttendance(schema: string, salesmanId: string, body: {
+    type?: 'in' | 'out'; latitude?: number; longitude?: number; label?: string; note?: string;
+  }) {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      if (body?.type === 'out') {
+        const row = firstRow(await qr.query(
+          `UPDATE "${schema}".salesman_attendance
+             SET checkout_at = NOW(), checkout_lat = $2, checkout_lng = $3, checkout_label = $4, note = COALESCE($5, note)
+           WHERE salesman_id = $1 AND day = CURRENT_DATE RETURNING *`,
+          [salesmanId, body.latitude ?? null, body.longitude ?? null, body.label ?? null, body.note?.trim() || null],
+        ));
+        if (!row) throw new BadRequestException('Start your day before ending it');
+        return row;
+      }
+      return firstRow(await qr.query(
+        `INSERT INTO "${schema}".salesman_attendance (salesman_id, day, checkin_at, checkin_lat, checkin_lng, checkin_label, note)
+         VALUES ($1, CURRENT_DATE, NOW(), $2, $3, $4, $5)
+         ON CONFLICT (salesman_id, day) DO UPDATE SET
+           checkin_at = COALESCE("${schema}".salesman_attendance.checkin_at, EXCLUDED.checkin_at),
+           checkin_lat = COALESCE(EXCLUDED.checkin_lat, "${schema}".salesman_attendance.checkin_lat),
+           checkin_lng = COALESCE(EXCLUDED.checkin_lng, "${schema}".salesman_attendance.checkin_lng),
+           checkin_label = COALESCE(EXCLUDED.checkin_label, "${schema}".salesman_attendance.checkin_label)
+         RETURNING *`,
+        [salesmanId, body.latitude ?? null, body.longitude ?? null, body.label ?? null, body.note?.trim() || null],
+      ));
+    });
+  }
+
   // ─── Visits (check-in / check-out journal) ──────────────────────────────────
   visits(schema: string, opts: { salesmanId?: string; from?: string; to?: string; customerId?: string }) {
     return this.cm.executeInTenantContext(schema, (qr) =>

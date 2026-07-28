@@ -150,6 +150,18 @@ export class SfaController {
     return this.sfa.createOutlet(schema, salesman.id, body);
   }
 
+  @Get('app/attendance')
+  async appAttendance(@Req() req: Request) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.attendanceToday(schema, salesman.id);
+  }
+
+  @Post('app/attendance')
+  async appPunch(@Req() req: Request, @Body() body: any) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.punchAttendance(schema, salesman.id, body);
+  }
+
   @Get('app/products')
   async appProducts(@Req() req: Request, @Query('q') q?: string) {
     const { schema } = await this.appSalesman(req);
@@ -261,6 +273,18 @@ export class SfaController {
   async createOutletM(@Query('t') t: string, @Query('token') token: string, @Body() body: any) {
     const s = await this.guard(t, token);
     return this.sfa.createOutlet(t, s.id, body);
+  }
+
+  @Public() @Get('m/attendance')
+  async attendanceM(@Query('t') t: string, @Query('token') token: string) {
+    const s = await this.guard(t, token);
+    return this.sfa.attendanceToday(t, s.id);
+  }
+
+  @Public() @Post('m/attendance')
+  async punchM(@Query('t') t: string, @Query('token') token: string, @Body() body: any) {
+    const s = await this.guard(t, token);
+    return this.sfa.punchAttendance(t, s.id, body);
   }
 
   @Public() @Get('m/customers/:id/schemes')

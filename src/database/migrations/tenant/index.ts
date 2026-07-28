@@ -3442,6 +3442,34 @@ const migration091BackfillTaxonomy: TenantMigration = {
   async down() { /* additive backfill — no rollback */ },
 };
 
+// 092 — SFA field attendance: day-start / day-end punches with optional GPS.
+const migration092SalesmanAttendance: TenantMigration = {
+  name: '092_salesman_attendance',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".salesman_attendance (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        salesman_id UUID NOT NULL,
+        day DATE NOT NULL DEFAULT CURRENT_DATE,
+        checkin_at TIMESTAMPTZ,
+        checkin_lat DOUBLE PRECISION,
+        checkin_lng DOUBLE PRECISION,
+        checkin_label VARCHAR(255),
+        checkout_at TIMESTAMPTZ,
+        checkout_lat DOUBLE PRECISION,
+        checkout_lng DOUBLE PRECISION,
+        checkout_label VARCHAR(255),
+        note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_salesman_day ON "${schema}".salesman_attendance (salesman_id, day)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".salesman_attendance`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3534,4 +3562,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration089CustomerUpdates,
   migration090MarketPriceLocations,
   migration091BackfillTaxonomy,
+  migration092SalesmanAttendance,
 ];
