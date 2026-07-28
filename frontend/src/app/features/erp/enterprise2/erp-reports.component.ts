@@ -125,6 +125,54 @@ import { ErpCurrencyService } from '../../../core/services/erp-currency.service'
           <tbody>@for (r of dayBook(); track $index) {<tr class="border-t border-gray-50"><td class="py-1 text-gray-500">{{ r.at | date:'short' }}</td><td>{{ r.type }}</td><td class="font-mono text-xs">{{ r.ref || '-' }}</td><td>{{ r.party || '-' }}</td><td class="text-right tabular-nums" [class.text-red-600]="num(r.amount) < 0">{{ cur.symbol() }}{{ fmt(r.amount) }}</td></tr>} @empty {<tr><td colspan="5" class="text-center py-4 text-gray-400">No transactions</td></tr>}</tbody></table>
         }
       </div>
+
+      <!-- Purchase Register -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-bold text-gray-700">Purchase Register</h3>
+          @if (purchases()?.rows?.length) { <button (click)="showPurchases.set(!showPurchases())" class="text-[12px] font-semibold text-indigo-600">{{ showPurchases() ? 'Hide bills' : 'Show bills' }}</button> }
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div class="rounded-xl bg-indigo-50 p-3"><p class="text-[11px] font-semibold text-indigo-400 uppercase">Purchases</p><p class="text-lg font-bold tabular-nums text-indigo-700">{{ cur.symbol() }}{{ fmt(purchases()?.totals?.purchases) }}</p><p class="text-[11px] text-gray-400">{{ purchases()?.totals?.count || 0 }} bill(s)</p></div>
+          <div class="rounded-xl bg-emerald-50 p-3"><p class="text-[11px] font-semibold text-emerald-500 uppercase">Paid</p><p class="text-lg font-bold tabular-nums text-emerald-700">{{ cur.symbol() }}{{ fmt(purchases()?.totals?.paid) }}</p></div>
+          <div class="rounded-xl bg-red-50 p-3"><p class="text-[11px] font-semibold text-red-400 uppercase">Outstanding</p><p class="text-lg font-bold tabular-nums text-red-600">{{ cur.symbol() }}{{ fmt(purchases()?.totals?.outstanding) }}</p></div>
+          <div class="rounded-xl bg-violet-50 p-3"><p class="text-[11px] font-semibold text-violet-400 uppercase">Input tax</p><p class="text-lg font-bold tabular-nums text-violet-700">{{ cur.symbol() }}{{ fmt(purchases()?.totals?.inputTax) }}</p></div>
+        </div>
+        @if (purchasesChart()) { <p-chart type="bar" [data]="purchasesChart()" [options]="moneyBarOptions" height="180px" /> }
+        @else { <p class="text-gray-400 text-sm py-8 text-center">No purchases in this range</p> }
+        @if (showPurchases()) {
+          <table class="w-full text-sm mt-4"><thead><tr class="text-gray-400 text-xs uppercase text-left"><th class="py-1">Date</th><th>Bill</th><th>Supplier</th><th class="text-right">Tax</th><th class="text-right">Total</th><th class="text-right">Balance</th></tr></thead>
+          <tbody>@for (r of purchases()?.rows || []; track $index) {<tr class="border-t border-gray-50"><td class="py-1 text-gray-500">{{ r.date | date:'d MMM yy' }}</td><td class="font-mono text-xs">{{ r.supplierInvoiceNo || r.orderNumber }}</td><td>{{ r.supplier }}</td><td class="text-right tabular-nums text-gray-500">{{ cur.symbol() }}{{ fmt(r.tax) }}</td><td class="text-right tabular-nums font-semibold">{{ cur.symbol() }}{{ fmt(r.total) }}</td><td class="text-right tabular-nums" [class.text-red-600]="num(r.balance) > 0">{{ cur.symbol() }}{{ fmt(r.balance) }}</td></tr>}</tbody></table>
+        }
+      </div>
+
+      <!-- Cash & Bank Book -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-5">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 class="text-sm font-bold text-gray-700">Cash &amp; Bank Book</h3>
+          <div class="flex items-center gap-2">
+            <select [(ngModel)]="cbAccount" (ngModelChange)="loadCashBank()" class="text-[13px] rounded-lg border border-gray-200 px-2.5 py-1.5">
+              <option value="">All accounts</option>
+              @for (a of cashBank()?.accounts || []; track a.id) { <option [value]="a.id">{{ a.name }}</option> }
+            </select>
+            @if (cashBank()?.txns?.length) { <button (click)="showCashBank.set(!showCashBank())" class="text-[12px] font-semibold text-indigo-600">{{ showCashBank() ? 'Hide' : 'Show ledger' }}</button> }
+          </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+          @for (a of cashBank()?.accounts || []; track a.id) {
+            <div class="rounded-xl border border-gray-100 p-3"><p class="text-[11px] font-semibold text-gray-400 uppercase truncate"><i class="pi {{ a.type === 'cash' ? 'pi-wallet' : 'pi-building-columns' }} text-[10px] mr-1"></i>{{ a.name }}</p><p class="text-base font-bold tabular-nums" [class.text-red-600]="num(a.currentBalance) < 0">{{ cur.symbol() }}{{ fmt(a.currentBalance) }}</p></div>
+          } @empty { <p class="text-gray-400 text-sm py-6 text-center col-span-full">No cash/bank accounts configured</p> }
+        </div>
+        <div class="flex gap-4 text-[13px] font-semibold mt-2">
+          <span class="text-emerald-600">In: {{ cur.symbol() }}{{ fmt(cashBank()?.totalIn) }}</span>
+          <span class="text-red-500">Out: {{ cur.symbol() }}{{ fmt(cashBank()?.totalOut) }}</span>
+          @if (cashBank()?.opening !== null && cashBank()?.opening !== undefined) { <span class="text-gray-500 ml-auto">Opening {{ cur.symbol() }}{{ fmt(cashBank()?.opening) }} → Closing {{ cur.symbol() }}{{ fmt(cashBank()?.closing) }}</span> }
+        </div>
+        @if (showCashBank()) {
+          <table class="w-full text-sm mt-4"><thead><tr class="text-gray-400 text-xs uppercase text-left"><th class="py-1">Date</th><th>Type</th><th>Party</th><th>Mode</th><th class="text-right">In</th><th class="text-right">Out</th>@if (cbAccount) { <th class="text-right">Balance</th> }</tr></thead>
+          <tbody>@for (r of cashBank()?.txns || []; track $index) {<tr class="border-t border-gray-50"><td class="py-1 text-gray-500">{{ r.at | date:'d MMM, h:mm a' }}</td><td>{{ r.type }}</td><td>{{ r.party || '-' }}</td><td class="text-xs text-gray-400 capitalize">{{ r.method }}{{ r.account ? ' · ' + r.account : '' }}</td><td class="text-right tabular-nums text-emerald-600">{{ r.inflow ? cur.symbol() + fmt(r.inflow) : '' }}</td><td class="text-right tabular-nums text-red-500">{{ r.outflow ? cur.symbol() + fmt(r.outflow) : '' }}</td>@if (cbAccount) { <td class="text-right tabular-nums font-semibold">{{ cur.symbol() }}{{ fmt(r.balance) }}</td> }</tr>} @empty {<tr><td [attr.colspan]="cbAccount ? 7 : 6" class="text-center py-4 text-gray-400">No cash/bank movements</td></tr>}</tbody></table>
+        }
+      </div>
     </div>
   `,
 })
@@ -140,10 +188,15 @@ export class ErpReportsComponent implements OnInit {
   pl = signal<any>(null);
   dayBook = signal<any[]>([]);
   gst = signal<any>(null);
+  purchases = signal<any>(null);
+  cashBank = signal<any>(null);
+  cbAccount = '';
   showExpTable = signal(false);
   showAgingTable = signal(false);
   showGstTable = signal(false);
   showDayBook = signal(false);
+  showPurchases = signal(false);
+  showCashBank = signal(false);
 
   // ── Charts ───────────────────────────────────────────────────────────────────
   salesDayChart = computed(() => {
@@ -212,6 +265,15 @@ export class ErpReportsComponent implements OnInit {
     };
   });
 
+  purchasesChart = computed(() => {
+    const rows: any[] = this.purchases()?.byDay || [];
+    if (!rows.length) return null;
+    return {
+      labels: rows.map((r) => new Date(r.day).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })),
+      datasets: [{ label: 'Purchases', data: rows.map((r) => Number(r.amount) || 0), backgroundColor: 'rgba(139,92,246,0.75)', borderRadius: 6, maxBarThickness: 44 }],
+    };
+  });
+
   gstChart = computed(() => {
     const rows: any[] = this.gst()?.byRate || [];
     if (!rows.length) return null;
@@ -264,6 +326,13 @@ export class ErpReportsComponent implements OnInit {
     this.api.get<any>('/erp/reports/profit-loss', p).subscribe({ next: (r) => this.pl.set(r) });
     this.api.get<any>('/erp/reports/day-book', p).subscribe({ next: (r) => this.dayBook.set(r || []) });
     this.api.get<any>('/erp/reports/gst', p).subscribe({ next: (r) => this.gst.set(r) });
+    this.api.get<any>('/erp/reports/purchases', p).subscribe({ next: (r) => this.purchases.set(r) });
+    this.loadCashBank();
+  }
+  loadCashBank() {
+    const p: any = { from: this.from, to: this.to };
+    if (this.cbAccount) p.accountId = this.cbAccount;
+    this.api.get<any>('/erp/reports/cash-bank', p).subscribe({ next: (r) => this.cashBank.set(r) });
   }
   num(v: any): number { return parseFloat(v ?? 0) || 0; }
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }

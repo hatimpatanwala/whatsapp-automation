@@ -199,6 +199,96 @@ export class ReportsService {
          ORDER BY issued_at`, [f, t]));
   }
 
+  /** Purchase register: supplier bills over the range (mirror of the sales register). */
+  async purchases(schema: string, from?: string, to?: string) {
+    const [f, t] = this.range(from, to);
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const totals = (await qr.query(
+        `SELECT COUNT(*)::int AS count, COALESCE(SUM(total),0)::float AS purchases,
+                COALESCE(SUM(amount_paid),0)::float AS paid,
+                COALESCE(SUM(total - amount_paid),0)::float AS outstanding,
+                COALESCE(SUM(total_tax),0)::float AS input_tax
+         FROM "${schema}".supplier_orders
+         WHERE removed = false AND status <> 'draft'
+           AND COALESCE(supplier_invoice_date, created_at::date) BETWEEN $1 AND $2`, [f, t]))[0];
+      const byDay = await qr.query(
+        `SELECT COALESCE(supplier_invoice_date, created_at::date) AS day, COALESCE(SUM(total),0)::float AS amount, COUNT(*)::int AS count
+         FROM "${schema}".supplier_orders
+         WHERE removed = false AND status <> 'draft'
+           AND COALESCE(supplier_invoice_date, created_at::date) BETWEEN $1 AND $2
+         GROUP BY day ORDER BY day`, [f, t]);
+      const byStatus = await qr.query(
+        `SELECT payment_status, COUNT(*)::int AS count, COALESCE(SUM(total),0)::float AS amount
+         FROM "${schema}".supplier_orders
+         WHERE removed = false AND status <> 'draft'
+           AND COALESCE(supplier_invoice_date, created_at::date) BETWEEN $1 AND $2
+         GROUP BY payment_status`, [f, t]);
+      const rows = await qr.query(
+        `SELECT so.order_number, so.supplier_invoice_no,
+                COALESCE(so.supplier_invoice_date, so.created_at::date) AS date,
+                COALESCE(s.company, 'Unknown supplier') AS supplier,
+                so.total::float AS total, so.total_tax::float AS tax,
+                (so.total - so.amount_paid)::float AS balance, so.payment_status
+         FROM "${schema}".supplier_orders so
+         LEFT JOIN "${schema}".suppliers s ON s.id = so.supplier_id
+         WHERE so.removed = false AND so.status <> 'draft'
+           AND COALESCE(so.supplier_invoice_date, so.created_at::date) BETWEEN $1 AND $2
+         ORDER BY date DESC, so.created_at DESC LIMIT 300`, [f, t]);
+      return { from: f, to: t, totals, byDay, byStatus, rows };
+    });
+  }
+
+  /**
+   * Cash & Bank book: money-account balances plus the receipt/payment ledger over
+   * the range. A payment linked to an invoice is money IN; one linked to a supplier
+   * order is money OUT. With `accountId`, adds an opening balance (as of `from`) and
+   * a running balance per row.
+   */
+  async cashBank(schema: string, from?: string, to?: string, accountId?: string) {
+    const [f, t] = this.range(from, to);
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const accounts = await qr.query(
+        `SELECT id, name, type, account_number, bank_name, current_balance::float AS current_balance
+         FROM "${schema}".bank_accounts WHERE removed = false AND enabled = true ORDER BY is_default DESC, name`);
+      const txns = await qr.query(
+        `SELECT p.created_at AS at, p.method, p.ref,
+                CASE WHEN p.invoice_id IS NOT NULL THEN 'Receipt' ELSE 'Payment' END AS type,
+                COALESCE(c.name, s.company) AS party, ba.name AS account,
+                (CASE WHEN p.invoice_id IS NOT NULL THEN p.amount ELSE 0 END)::float AS inflow,
+                (CASE WHEN p.supplier_order_id IS NOT NULL THEN p.amount ELSE 0 END)::float AS outflow
+         FROM "${schema}".payments p
+         LEFT JOIN "${schema}".bank_accounts ba ON ba.id = p.bank_account_id
+         LEFT JOIN "${schema}".invoices i ON i.id = p.invoice_id
+         LEFT JOIN "${schema}".customers c ON c.id = i.customer_id
+         LEFT JOIN "${schema}".supplier_orders so ON so.id = p.supplier_order_id
+         LEFT JOIN "${schema}".suppliers s ON s.id = so.supplier_id
+         WHERE COALESCE(p.status,'') <> 'failed'
+           AND (p.invoice_id IS NOT NULL OR p.supplier_order_id IS NOT NULL)
+           AND ($3::uuid IS NULL OR p.bank_account_id = $3)
+           AND p.created_at::date BETWEEN $1 AND $2
+         ORDER BY p.created_at`, [f, t, accountId || null]);
+      let opening: number | null = null;
+      let running: number | null = null;
+      if (accountId) {
+        const acc = (await qr.query(`SELECT opening_balance::float AS ob FROM "${schema}".bank_accounts WHERE id = $1`, [accountId]))[0];
+        const prior = (await qr.query(
+          `SELECT COALESCE(SUM(CASE WHEN invoice_id IS NOT NULL THEN amount ELSE -amount END),0)::float AS net
+           FROM "${schema}".payments
+           WHERE COALESCE(status,'') <> 'failed' AND (invoice_id IS NOT NULL OR supplier_order_id IS NOT NULL)
+             AND bank_account_id = $1 AND created_at::date < $2`, [accountId, f]))[0];
+        opening = Math.round(((acc?.ob || 0) + (prior?.net || 0)) * 100) / 100;
+        running = opening;
+      }
+      const rows = txns.map((x: any) => {
+        if (running !== null) { running = Math.round((running + x.inflow - x.outflow) * 100) / 100; return { ...x, balance: running }; }
+        return x;
+      });
+      const totalIn = Math.round(txns.reduce((a: number, x: any) => a + x.inflow, 0) * 100) / 100;
+      const totalOut = Math.round(txns.reduce((a: number, x: any) => a + x.outflow, 0) * 100) / 100;
+      return { from: f, to: t, accounts, txns: rows, opening, closing: running, totalIn, totalOut };
+    });
+  }
+
   async tax(schema: string, from?: string, to?: string) {
     const [f, t] = this.range(from, to);
     return this.cm.executeInTenantContext(schema, async (qr) => {
@@ -224,6 +314,8 @@ export class ReportsController {
   @Get('tax') @Roles('owner', 'seller') tax(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string) { return this.service.tax(req.tenantContext.schemaName, from, to); }
   @Get('profit-loss') @Roles('owner', 'seller') pl(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string) { return this.service.profitLoss(req.tenantContext.schemaName, from, to); }
   @Get('day-book') @Roles('owner', 'seller') dayBook(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string) { return this.service.dayBook(req.tenantContext.schemaName, from, to); }
+  @Get('purchases') @Roles('owner', 'seller') purchases(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string) { return this.service.purchases(req.tenantContext.schemaName, from, to); }
+  @Get('cash-bank') @Roles('owner', 'seller') cashBank(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string, @Query('accountId') accountId?: string) { return this.service.cashBank(req.tenantContext.schemaName, from, to, accountId); }
   @Get('party-statement') @Roles('owner', 'seller') party(@Req() req: Request, @Query('customerId') customerId: string) { return this.service.partyStatement(req.tenantContext.schemaName, customerId); }
   @Get('gst') @Roles('owner', 'seller') gst(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string) { return this.service.gst(req.tenantContext.schemaName, from, to); }
 
