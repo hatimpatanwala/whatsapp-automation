@@ -69,6 +69,22 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
 
           @if (perfError()) { <div class="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5">{{ perfError() }}</div> }
 
+          <!-- Leaderboard podium (top 3 by sales) -->
+          @if (performance().length) {
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              @for (r of performance().slice(0, 3); track r.id; let i = $index) {
+                <div class="bg-white rounded-2xl border p-4 text-center shadow-sm"
+                     [class.border-amber-300]="i===0" [class.border-slate-200]="i===1" [class.border-orange-200]="i===2">
+                  <div class="text-2xl leading-none">{{ i===0 ? '🥇' : i===1 ? '🥈' : '🥉' }}</div>
+                  <p class="font-bold text-[13px] truncate mt-1.5">{{ r.name }}</p>
+                  <p class="text-lg font-bold tabular-nums text-indigo-700">₹{{ inr(r.orderValue) }}</p>
+                  <p class="text-[11px] text-gray-400">{{ r.orders || 0 }} orders · ₹{{ inr(r.collected) }} collected</p>
+                  @if (achievement(r); as pct) { <p class="text-[11px] font-semibold mt-0.5" [class.text-emerald-600]="pct>=100" [class.text-indigo-500]="pct<100">{{ pct }}% of target</p> }
+                </div>
+              }
+            </div>
+          }
+
           <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-6">
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 class="text-sm font-bold text-gray-700">Team performance</h2>
@@ -92,10 +108,13 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                     </tr>
                   </thead>
                   <tbody>
-                    @for (r of performance(); track r.id) {
+                    @for (r of performance(); track r.id; let i = $index) {
                       <tr class="border-b border-gray-50 hover:bg-gray-50/60">
                         <td class="px-4 py-2.5">
-                          <div class="font-semibold">{{ r.name }}</div>
+                          <div class="font-semibold flex items-center gap-1.5">
+                            <span class="text-[11px] text-gray-400 tabular-nums w-4">{{ i < 3 ? (i===0?'🥇':i===1?'🥈':'🥉') : '#' + (i+1) }}</span>
+                            {{ r.name }}
+                          </div>
                           <div class="text-[11px] text-gray-400">{{ r.phone }}
                             @if (!r.isActive) { <span class="ml-1 text-red-500 font-semibold">· inactive</span> }
                           </div>

@@ -223,11 +223,16 @@ interface OrderLine {
             </div>
 
             <!-- Start my day + promises jump -->
-            <div class="grid grid-cols-2 gap-3 mt-4">
+            <div class="grid grid-cols-3 gap-3 mt-4">
               <button (click)="go('beat')" class="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white p-4 text-left shadow-sm active:scale-[0.98] transition-transform">
                 <i class="pi pi-play-circle text-lg"></i>
                 <p class="text-sm font-bold mt-1">Start my day</p>
                 <p class="text-[11px] opacity-80">Go to your beat</p>
+              </button>
+              <button (click)="go('collect')" class="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 text-white p-4 text-left shadow-sm active:scale-[0.98] transition-transform">
+                <i class="pi pi-wallet text-lg"></i>
+                <p class="text-sm font-bold mt-1">Collections</p>
+                <p class="text-[11px] opacity-80">Dues &amp; statements</p>
               </button>
               <button (click)="jumpToPromises()"
                 class="rounded-2xl border p-4 text-left shadow-sm active:scale-[0.98] transition-transform"
@@ -524,6 +529,9 @@ interface OrderLine {
             <div class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-3">
               <i class="pi pi-user text-emerald-600 text-sm"></i>
               <p class="text-[13px] font-semibold text-emerald-800 flex-1 truncate">{{ cc.name }}</p>
+              @if (collectBills().length) {
+                <button (click)="sendStatement()" class="text-[11px] font-semibold text-green-700 flex items-center gap-1"><i class="pi pi-whatsapp text-[11px]"></i> Statement</button>
+              }
               <button (click)="clearCollectCustomer()" class="text-[11px] font-semibold text-emerald-700">Change</button>
             </div>
           } @else {
@@ -552,7 +560,19 @@ interface OrderLine {
           @if (collectCustomer()) {
             <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
               <i class="pi pi-file"></i> Open bills
+              <span class="ml-auto normal-case text-slate-500">Total ₹{{ fmt(billsTotal()) }}</span>
             </h2>
+            @if (collectBills().length) {
+              @if (agingBuckets(); as ag) {
+                <div class="grid grid-cols-5 gap-1 mb-2.5 text-center">
+                  <div class="bg-white rounded-lg border border-slate-100 py-1.5"><p class="text-[9px] text-slate-400 uppercase">Current</p><p class="text-[11px] font-bold tabular-nums text-slate-700">₹{{ short(ag.current) }}</p></div>
+                  <div class="bg-white rounded-lg border border-amber-100 py-1.5"><p class="text-[9px] text-slate-400 uppercase">1–30</p><p class="text-[11px] font-bold tabular-nums text-amber-700">₹{{ short(ag.d1_30) }}</p></div>
+                  <div class="bg-white rounded-lg border border-orange-100 py-1.5"><p class="text-[9px] text-slate-400 uppercase">31–60</p><p class="text-[11px] font-bold tabular-nums text-orange-700">₹{{ short(ag.d31_60) }}</p></div>
+                  <div class="bg-white rounded-lg border border-red-100 py-1.5"><p class="text-[9px] text-slate-400 uppercase">61–90</p><p class="text-[11px] font-bold tabular-nums text-red-600">₹{{ short(ag.d61_90) }}</p></div>
+                  <div class="bg-white rounded-lg border border-red-200 py-1.5"><p class="text-[9px] text-slate-400 uppercase">90+</p><p class="text-[11px] font-bold tabular-nums text-red-700">₹{{ short(ag.d90p) }}</p></div>
+                </div>
+              }
+            }
             @if (billsLoading()) {
               @for (i of [1,2]; track i) { <div class="h-20 rounded-2xl bg-slate-200/60 animate-pulse mb-2"></div> }
             }
@@ -1294,6 +1314,35 @@ export class MySalesComponent implements OnInit {
   }
 
   /** Days a bill is past its due date (0 if not overdue / no due date). */
+  billsTotal(): number { return this.collectBills().reduce((s, b) => s + (Number(b.balanceDue) || 0), 0); }
+  /** Ageing of the selected customer's open bills by days overdue. */
+  agingBuckets() {
+    const g = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90p: 0 };
+    for (const b of this.collectBills()) {
+      const amt = Number(b.balanceDue) || 0; const od = this.overdueDays(b);
+      if (od <= 0) g.current += amt; else if (od <= 30) g.d1_30 += amt;
+      else if (od <= 60) g.d31_60 += amt; else if (od <= 90) g.d61_90 += amt; else g.d90p += amt;
+    }
+    return g;
+  }
+  short(n: unknown): string {
+    const v = Number(n) || 0, a = Math.abs(v);
+    if (a >= 1e7) return (v / 1e7).toFixed(1) + 'Cr';
+    if (a >= 1e5) return (v / 1e5).toFixed(1) + 'L';
+    if (a >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+    return String(Math.round(v));
+  }
+  /** Compose the customer's outstanding statement and share it on WhatsApp. */
+  sendStatement() {
+    const cc = this.collectCustomer(); const bills = this.collectBills();
+    if (!cc || !bills.length) { this.showToast('No open bills to send'); return; }
+    const phone = String(cc.phone || '').replace(/\D/g, '');
+    if (!phone) { this.showToast('No phone number on file'); return; }
+    const lines = bills.map((b: any) => { const od = this.overdueDays(b); return `• ${b.invoiceNumber} — ₹${this.fmt(b.balanceDue)}${od > 0 ? ` (${od}d overdue)` : ''}`; }).join('\n');
+    const msg = `Hello ${cc.name}, your outstanding statement:\n\n${lines}\n\nTotal due: ₹${this.fmt(this.billsTotal())}\n\nKindly arrange payment. Thank you!`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  }
+
   overdueDays(b: any): number {
     const due = b?.dueDate || b?.dueDate;
     if (!due) return 0;
