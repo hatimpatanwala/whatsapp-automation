@@ -100,6 +100,7 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                       <th class="px-4 py-2.5">Salesman</th>
                       <th class="px-4 py-2.5">Route / Area</th>
                       <th class="px-4 py-2.5 text-right">Visits</th>
+                      <th class="px-4 py-2.5 text-right">Adherence</th>
                       <th class="px-4 py-2.5 text-right">Orders</th>
                       <th class="px-4 py-2.5 text-right">Sales</th>
                       <th class="px-4 py-2.5 text-right">Collected</th>
@@ -121,6 +122,15 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                         </td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ r.route || '—' }}{{ r.area ? ' · ' + r.area : '' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ r.visits || 0 }}</td>
+                        <td class="px-4 py-2.5 text-right">
+                          @if (r.beatSize > 0) {
+                            <span class="text-[12px] font-semibold px-2 py-0.5 rounded-full tabular-nums"
+                              [class.bg-emerald-100]="r.adherencePct >= 80" [class.text-emerald-700]="r.adherencePct >= 80"
+                              [class.bg-indigo-100]="r.adherencePct >= 50 && r.adherencePct < 80" [class.text-indigo-700]="r.adherencePct >= 50 && r.adherencePct < 80"
+                              [class.bg-amber-100]="r.adherencePct < 50" [class.text-amber-700]="r.adherencePct < 50">{{ r.adherencePct }}%</span>
+                            <div class="text-[10px] text-gray-400 tabular-nums">{{ r.beatCovered }}/{{ r.beatSize }}</div>
+                          } @else { <span class="text-[12px] text-gray-300">—</span> }
+                        </td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ r.orders || 0 }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(r.orderValue) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700">₹{{ inr(r.collected) }}</td>

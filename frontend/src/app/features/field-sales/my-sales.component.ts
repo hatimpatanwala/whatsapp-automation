@@ -378,6 +378,32 @@ interface OrderLine {
             </div>
           }
 
+          @if (beat().length) {
+            <div class="bg-white rounded-2xl border border-slate-100 p-4 mb-3 shadow-sm flex items-center gap-4">
+              <div class="relative w-16 h-16 shrink-0">
+                <svg viewBox="0 0 36 36" class="w-16 h-16 -rotate-90">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" stroke-width="4" />
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke-width="4" stroke-linecap="round"
+                    [attr.stroke]="beatAdherence() >= 80 ? '#10b981' : beatAdherence() >= 50 ? '#6366f1' : '#f59e0b'"
+                    [attr.stroke-dasharray]="97.4" [attr.stroke-dashoffset]="97.4 * (1 - beatAdherence()/100)"
+                    style="transition: stroke-dashoffset .6s ease" />
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span class="text-[15px] font-bold tabular-nums">{{ beatAdherence() }}%</span>
+                </div>
+              </div>
+              <div class="min-w-0">
+                <p class="text-[13px] font-bold text-slate-700">Beat adherence</p>
+                <p class="text-[12px] text-slate-400">{{ beatVisitedCount() }} of {{ beat().length }} stops covered today</p>
+                @if (beatVisitedCount() < beat().length) {
+                  <p class="text-[11px] font-semibold text-indigo-600 mt-0.5">{{ beat().length - beatVisitedCount() }} left — keep going!</p>
+                } @else {
+                  <p class="text-[11px] font-semibold text-emerald-600 mt-0.5">Full coverage — great work! 🎉</p>
+                }
+              </div>
+            </div>
+          }
+
           <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
             <i class="pi pi-directions"></i> Today's beat @if (beat().length) { <span class="text-slate-300">·</span> <span class="text-slate-400 normal-case font-semibold">{{ beat().length }} stops</span> }
           </h2>
@@ -385,7 +411,7 @@ interface OrderLine {
             @for (i of [1,2,3]; track i) { <div class="h-24 rounded-2xl bg-slate-200/60 animate-pulse mb-2"></div> }
           }
           @for (c of beat(); track c.customerId) {
-            <div class="bg-white rounded-2xl border border-slate-100 p-3.5 mb-2 shadow-sm">
+            <div class="bg-white rounded-2xl border p-3.5 mb-2 shadow-sm" [class.border-emerald-200]="c.visitedToday" [class.border-slate-100]="!c.visitedToday">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex items-start gap-3">
                   <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 font-bold text-sm">
@@ -414,6 +440,11 @@ interface OrderLine {
               </div>
               @if (isActiveCard(c)) {
                 <div class="mt-3"><ng-container [ngTemplateOutlet]="activeVisitCard" /></div>
+              } @else if (c.visitedToday) {
+                <div class="w-full mt-3 text-[13px] font-semibold bg-emerald-50 text-emerald-700 rounded-xl py-2 flex items-center justify-center gap-1.5">
+                  <i class="pi pi-check-circle text-xs"></i> Visited today
+                  <button (click)="checkIn(c)" [disabled]="busy()" class="ml-2 text-[11px] font-semibold text-indigo-600 underline">Visit again</button>
+                </div>
               } @else {
                 <button (click)="checkIn(c)" [disabled]="busy()"
                   class="w-full mt-3 text-[13px] font-semibold bg-indigo-600 text-white rounded-xl py-2 disabled:opacity-50 flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform">
@@ -981,6 +1012,11 @@ export class MySalesComponent implements OnInit {
 
   readonly me = signal<any>(null);
   readonly beat = signal<any[]>([]);
+  readonly beatVisitedCount = computed(() => this.beat().filter((c) => c.visitedToday).length);
+  readonly beatAdherence = computed(() => {
+    const total = this.beat().length;
+    return total ? Math.round((this.beatVisitedCount() / total) * 100) : 0;
+  });
   readonly customers = signal<any[]>([]);
   readonly products = signal<any[]>([]);
   readonly visits = signal<any[]>([]);

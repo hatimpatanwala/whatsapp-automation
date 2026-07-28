@@ -483,7 +483,12 @@ export class SfaService {
         `SELECT b.id AS beat_id, b.day_of_week, b.sort_order,
                 c.id AS customer_id, COALESCE(c.display_name, c.name) AS name, c.phone, c.area, c.route,
                 COALESCE(ar.outstanding, 0) AS outstanding, COALESCE(ar.open_bills, 0) AS open_bills,
-                lv.last_visit_at
+                lv.last_visit_at,
+                EXISTS (
+                  SELECT 1 FROM "${schema}".salesman_visits vt
+                  WHERE vt.customer_id = c.id AND vt.salesman_id = b.salesman_id
+                    AND vt.checkin_at::date = CURRENT_DATE
+                ) AS visited_today
          FROM "${schema}".salesman_beats b
          JOIN "${schema}".customers c ON c.id = b.customer_id AND c.deleted_at IS NULL
          LEFT JOIN LATERAL (
@@ -759,7 +764,12 @@ export class SfaService {
                 COALESCE(vis.visited_customers,0)::int AS visited_customers,
                 COALESCE(tgt.target_amount,0) AS target_amount,
                 COALESCE(tgt.target_collection,0) AS target_collection,
-                COALESCE(tgt.target_visits,0)::int AS target_visits
+                COALESCE(tgt.target_visits,0)::int AS target_visits,
+                COALESCE(bt.beat_size,0)::int AS beat_size,
+                COALESCE(bt.beat_covered,0)::int AS beat_covered,
+                CASE WHEN COALESCE(bt.beat_size,0) > 0
+                     THEN ROUND(COALESCE(bt.beat_covered,0)::numeric * 100 / bt.beat_size)
+                     ELSE 0 END::int AS adherence_pct
          FROM "${schema}".salesmen s
          LEFT JOIN LATERAL (
            SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS order_value, COUNT(DISTINCT customer_id) AS customers_ordered
@@ -787,6 +797,16 @@ export class SfaService {
            SELECT target_amount, target_collection, target_visits FROM "${schema}".salesman_targets t
            WHERE t.salesman_id = s.id AND t.period_month = date_trunc('month', COALESCE($1::date, CURRENT_DATE))::date
          ) tgt ON true
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS beat_size,
+                  COUNT(*) FILTER (WHERE EXISTS (
+                    SELECT 1 FROM "${schema}".salesman_visits bv
+                    WHERE bv.customer_id = b.customer_id AND bv.salesman_id = s.id AND bv.checkin_at IS NOT NULL
+                      AND bv.checkin_at >= COALESCE($1::date, CURRENT_DATE - INTERVAL '30 days')
+                      AND bv.checkin_at < COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'
+                  )) AS beat_covered
+           FROM "${schema}".salesman_beats b WHERE b.salesman_id = s.id
+         ) bt ON true
          WHERE ($3::uuid IS NULL OR s.id = $3)
          ORDER BY order_value DESC, s.name`,
         [opts.from || null, opts.to || null, opts.salesmanId || null],
