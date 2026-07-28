@@ -674,6 +674,22 @@ export class SfaService {
     });
   }
 
+  /** Append geo-tagged photo URLs to a visit (shopfront / shelf shots). */
+  async addVisitPhotos(schema: string, salesmanId: string, visitId: string, urls: string[]) {
+    const clean = (urls || []).filter((u) => typeof u === 'string' && u.trim()).slice(0, 6);
+    if (!clean.length) throw new BadRequestException('No photos to attach');
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const row = firstRow(await qr.query(
+        `UPDATE "${schema}".salesman_visits
+           SET photos = COALESCE(photos, '[]'::jsonb) || $3::jsonb
+         WHERE id = $1 AND salesman_id = $2 RETURNING *`,
+        [visitId, salesmanId, JSON.stringify(clean)],
+      ));
+      if (!row) throw new NotFoundException('Visit not found');
+      return row;
+    });
+  }
+
   /** Close a visit with an outcome; order/collection totals get stamped on it. */
   async checkOut(schema: string, salesmanId: string, visitId: string, body: { outcome?: string; note?: string }) {
     return this.cm.executeInTenantContext(schema, async (qr) => {

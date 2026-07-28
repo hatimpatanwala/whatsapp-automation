@@ -859,6 +859,24 @@ interface OrderLine {
                   </p>
                   @if (v.outcome) { <p class="text-[11px] text-slate-500 mt-0.5"><span class="font-semibold">Outcome:</span> {{ human(v.outcome) }}</p> }
                   @if (v.note) { <p class="text-[11px] text-slate-500 italic">"{{ v.note }}"</p> }
+
+                  <!-- Photos -->
+                  @if (v.photos?.length) {
+                    <div class="flex gap-1.5 mt-2 overflow-x-auto">
+                      @for (ph of v.photos; track $index) {
+                        <a [href]="ph" target="_blank" rel="noopener" class="shrink-0">
+                          <img [src]="ph" alt="visit photo" class="w-14 h-14 rounded-lg object-cover border border-slate-200" loading="lazy" />
+                        </a>
+                      }
+                    </div>
+                  }
+                  <label class="inline-flex items-center gap-1.5 mt-2 text-[12px] font-semibold cursor-pointer"
+                         [class.text-indigo-600]="uploadingPhoto() !== v.id" [class.text-slate-400]="uploadingPhoto() === v.id">
+                    <i class="pi" [ngClass]="uploadingPhoto() === v.id ? 'pi-spin pi-spinner' : 'pi-camera'"></i>
+                    {{ uploadingPhoto() === v.id ? 'Uploading…' : (v.photos?.length ? 'Add photo' : 'Add shopfront photo') }}
+                    <input type="file" accept="image/*" capture="environment" class="hidden"
+                           [disabled]="uploadingPhoto() === v.id" (change)="onVisitPhoto($event, v)" />
+                  </label>
                 </div>
               </div>
             } @empty {
@@ -1482,6 +1500,36 @@ export class MySalesComponent implements OnInit {
       },
       error: (e) => { this.savingExpense.set(false); this.showToast(e?.error?.message || 'Could not submit claim'); },
     });
+  }
+
+  // ── Visit photos (presigned S3 upload) ──
+  readonly uploadingPhoto = signal<string | null>(null);
+  onVisitPhoto(ev: Event, visit: any) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || this.uploadingPhoto()) { input.value = ''; return; }
+    this.uploadingPhoto.set(visit.id);
+    const safeName = `visit-${visit.id}-${file.name}`.replace(/[^\w.\-]/g, '_');
+    this.sfa.appVisitPhotoUrl(safeName, file.type || 'image/jpeg').subscribe({
+      next: async ({ uploadUrl, fileUrl }) => {
+        try {
+          const res = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'image/jpeg' } });
+          if (!res.ok) throw new Error('upload failed');
+          this.sfa.appAddVisitPhotos(visit.id, [fileUrl]).subscribe({
+            next: (updated) => {
+              this.uploadingPhoto.set(null);
+              this.visits.update((rows) => rows.map((r) => (r.id === visit.id ? { ...r, photos: updated.photos } : r)));
+              this.showToast('Photo attached to visit');
+            },
+            error: () => { this.uploadingPhoto.set(null); this.showToast('Could not save photo'); },
+          });
+        } catch {
+          this.uploadingPhoto.set(null); this.showToast('Upload failed — check your connection');
+        }
+      },
+      error: () => { this.uploadingPhoto.set(null); this.showToast('Could not start upload'); },
+    });
+    input.value = '';
   }
 
   // ── New outlet (field KYC) ──

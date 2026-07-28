@@ -82,6 +82,12 @@ export class SfaService {
   appPlanVisit(body: any): Observable<any> { return this.api.post<any>('/sfa/app/visits', body); }
   appCheckin(body: any): Observable<any> { return this.api.post<any>('/sfa/app/checkin', body); }
   appCheckout(id: string, body: any): Observable<any> { return this.api.post<any>(`/sfa/app/visits/${id}/checkout`, body); }
+  appVisitPhotoUrl(fileName: string, contentType: string): Observable<{ uploadUrl: string; fileUrl: string }> {
+    return this.api.post<{ uploadUrl: string; fileUrl: string }>('/sfa/app/visits/photo-url', { fileName, contentType });
+  }
+  appAddVisitPhotos(visitId: string, urls: string[]): Observable<any> {
+    return this.api.post<any>(`/sfa/app/visits/${visitId}/photos`, { urls });
+  }
   appPerformance(q: { from?: string; to?: string } = {}): Observable<any> { return this.api.get<any>('/sfa/app/performance', this.clean(q)); }
 
   private clean(q: Record<string, string | undefined>): Record<string, string> {

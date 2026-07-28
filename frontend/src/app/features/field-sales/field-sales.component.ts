@@ -511,6 +511,7 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                       <th class="px-4 py-2.5">Outcome</th>
                       <th class="px-4 py-2.5 text-right">Order</th>
                       <th class="px-4 py-2.5 text-right">Collected</th>
+                      <th class="px-4 py-2.5">Photos</th>
                       <th class="px-4 py-2.5">Note</th>
                     </tr>
                   </thead>
@@ -536,6 +537,16 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                         <td class="px-4 py-2.5 text-[12px] text-gray-500">{{ human(v.outcome) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ +v.orderAmount > 0 ? '₹' + inr(v.orderAmount) : '—' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700">{{ +v.collectedAmount > 0 ? '₹' + inr(v.collectedAmount) : '—' }}</td>
+                        <td class="px-4 py-2.5">
+                          @if (v.photos?.length) {
+                            <div class="flex gap-1">
+                              @for (ph of v.photos.slice(0, 3); track $index) {
+                                <a [href]="ph" target="_blank" rel="noopener"><img [src]="ph" alt="visit" class="w-9 h-9 rounded object-cover border border-gray-200" loading="lazy" /></a>
+                              }
+                              @if (v.photos.length > 3) { <span class="text-[11px] text-gray-400 self-center">+{{ v.photos.length - 3 }}</span> }
+                            </div>
+                          } @else { <span class="text-gray-300">—</span> }
+                        </td>
                         <td class="px-4 py-2.5 text-[12px] text-gray-500 max-w-[16rem]">{{ v.note || '—' }}</td>
                       </tr>
                     }

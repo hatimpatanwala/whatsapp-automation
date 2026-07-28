@@ -6,6 +6,7 @@ import { ErpFeatureGuard } from '../../common/guards/erp-feature.guard';
 import { RequiresPermission } from '../../common/decorators/requires-permission.decorator';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { SfaService } from './sfa.service';
+import { MediaService } from '../media/media.service';
 
 /**
  * SFA — salesman field app.
@@ -15,7 +16,7 @@ import { SfaService } from './sfa.service';
  */
 @Controller('sfa')
 export class SfaController {
-  constructor(private readonly sfa: SfaService) {}
+  constructor(private readonly sfa: SfaService, private readonly media: MediaService) {}
 
   private schema(req: Request): string {
     const schema = req.tenantContext?.schemaName;
@@ -258,6 +259,19 @@ export class SfaController {
   async appCheckout(@Req() req: Request, @Param('id') id: string, @Body() body: any) {
     const { schema, salesman } = await this.appSalesman(req);
     return this.sfa.checkOut(schema, salesman.id, id, body || {});
+  }
+
+  /** Mint a presigned S3 URL so the salesman app can upload a visit photo directly. */
+  @Post('app/visits/photo-url')
+  async appVisitPhotoUrl(@Req() req: Request, @Body() body: { fileName: string; contentType: string }) {
+    const { schema } = await this.appSalesman(req);
+    return this.media.getPresignedUploadUrl(schema, body.fileName, body.contentType);
+  }
+
+  @Post('app/visits/:id/photos')
+  async appAddVisitPhotos(@Req() req: Request, @Param('id') id: string, @Body() body: { urls?: string[] }) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.addVisitPhotos(schema, salesman.id, id, body?.urls || []);
   }
 
   @Get('app/performance')
