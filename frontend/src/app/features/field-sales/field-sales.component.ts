@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SfaService } from '../../core/services/sfa.service';
 
-type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'followups';
+type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'followups' | 'expenses';
 
 /**
  * Field Sales (SFA) manager console — the paid, session-authed cockpit a manager
@@ -546,6 +546,74 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
           </div>
         }
 
+        <!-- ══ EXPENSES / TA-DA approvals ═══════════════════════════════ -->
+        @if (tab() === 'expenses') {
+          <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-5 flex flex-wrap items-center gap-2">
+            <label class="text-[11px] font-semibold text-gray-400 uppercase mr-1">Status</label>
+            @for (s of ['pending','approved','rejected','']; track s) {
+              <button (click)="expenseStatus = $any(s); loadExpenses()"
+                class="px-3 py-1.5 rounded-lg text-[13px] font-semibold capitalize"
+                [class.bg-indigo-600]="expenseStatus === s" [class.text-white]="expenseStatus === s"
+                [class.bg-gray-100]="expenseStatus !== s" [class.text-gray-600]="expenseStatus !== s">{{ s === '' ? 'All' : s }}</button>
+            }
+            <div class="flex-1"></div>
+            @if (pendingExpenseTotal() > 0) {
+              <div class="text-right">
+                <p class="text-[11px] text-gray-400 uppercase font-semibold">Pending payout</p>
+                <p class="text-lg font-bold tabular-nums text-amber-600">₹{{ inr(pendingExpenseTotal()) }}</p>
+              </div>
+            }
+          </div>
+          @if (expensesError()) { <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4">{{ expensesError() }}</div> }
+          @if (expensesLoading()) { <p class="text-sm text-gray-400 py-8 text-center">Loading expenses…</p> }
+          @else if (!expenses().length) {
+            <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400 text-sm">No expense claims for this filter.</div>
+          } @else {
+            <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-[11px] uppercase text-gray-400">
+                  <tr>
+                    <th class="px-4 py-2.5 text-left font-semibold">Salesman</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Category</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Date</th>
+                    <th class="px-4 py-2.5 text-right font-semibold">Amount</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Note</th>
+                    <th class="px-4 py-2.5 text-left font-semibold">Status</th>
+                    <th class="px-4 py-2.5 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                  @for (e of expenses(); track e.id) {
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-2.5 font-semibold text-gray-800">{{ e.salesmanName || '—' }}</td>
+                      <td class="px-4 py-2.5 capitalize text-gray-600">{{ e.category }}{{ e.distanceKm ? ' · ' + e.distanceKm + ' km' : '' }}</td>
+                      <td class="px-4 py-2.5 text-[12px] text-gray-500 whitespace-nowrap">{{ fmtDate(e.day) }}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums font-semibold">₹{{ inr(e.amount) }}</td>
+                      <td class="px-4 py-2.5 text-[12px] text-gray-500 max-w-[14rem]">{{ e.note || '—' }}</td>
+                      <td class="px-4 py-2.5">
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize"
+                          [class.bg-emerald-100]="e.status === 'approved'" [class.text-emerald-700]="e.status === 'approved'"
+                          [class.bg-red-100]="e.status === 'rejected'" [class.text-red-700]="e.status === 'rejected'"
+                          [class.bg-amber-100]="e.status === 'pending'" [class.text-amber-700]="e.status === 'pending'">{{ e.status }}</span>
+                      </td>
+                      <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                        @if (e.status === 'pending') {
+                          <button (click)="reviewExpense(e.id, 'approved')" [disabled]="reviewingExpense() === e.id"
+                            class="text-[12px] font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-40 mr-3">Approve</button>
+                          <button (click)="reviewExpense(e.id, 'rejected')" [disabled]="reviewingExpense() === e.id"
+                            class="text-[12px] font-semibold text-red-500 hover:text-red-600 disabled:opacity-40">Reject</button>
+                        } @else {
+                          <span class="text-[12px] text-gray-300">—</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+
         <!-- ══ FOLLOW-UPS (promise-to-pay) ══════════════════════════════ -->
         @if (tab() === 'followups') {
           <div class="bg-white rounded-2xl border border-gray-100 p-4 mb-5 flex flex-wrap items-center gap-2">
@@ -613,6 +681,7 @@ export class FieldSalesComponent implements OnInit {
     { id: 'beats', label: 'Beats' },
     { id: 'targets', label: 'Targets' },
     { id: 'visits', label: 'Visits' },
+    { id: 'expenses', label: 'Expenses' },
     { id: 'followups', label: 'Follow-ups' },
   ];
 
@@ -695,8 +764,34 @@ export class FieldSalesComponent implements OnInit {
     this.tab.set(t);
     if (t === 'performance' && !this.performance().length) this.loadPerformance();
     if (t === 'visits' && !this.visits().length) this.loadVisits();
+    if (t === 'expenses' && !this.expenses().length) this.loadExpenses();
     if (t === 'followups' && !this.followups().length) this.loadFollowups();
     if (!this.salesmen().length) this.loadSalesmen();
+  }
+
+  // ── Expenses / TA-DA approvals ──────────────────────────────────────────────
+  readonly expenses = signal<any[]>([]);
+  readonly expensesLoading = signal(false);
+  readonly expensesError = signal('');
+  expenseStatus: '' | 'pending' | 'approved' | 'rejected' = 'pending';
+  readonly reviewingExpense = signal<string | null>(null);
+  readonly pendingExpenseTotal = computed(() =>
+    this.expenses().filter((e) => e.status === 'pending').reduce((s, e) => s + Number(e.amount || 0), 0));
+  loadExpenses() {
+    this.expensesLoading.set(true);
+    this.expensesError.set('');
+    this.sfa.managerExpenses({ status: this.expenseStatus || undefined, salesmanId: this.perfSalesman || undefined }).subscribe({
+      next: (r) => { this.expenses.set(r || []); this.expensesLoading.set(false); },
+      error: (e) => { this.expensesError.set(this.msg(e, 'Could not load expenses.')); this.expensesLoading.set(false); },
+    });
+  }
+  reviewExpense(id: string, status: 'approved' | 'rejected') {
+    if (this.reviewingExpense()) return;
+    this.reviewingExpense.set(id);
+    this.sfa.reviewExpense(id, status).subscribe({
+      next: () => { this.reviewingExpense.set(null); this.loadExpenses(); },
+      error: () => { this.reviewingExpense.set(null); },
+    });
   }
 
   // ── Follow-ups ──────────────────────────────────────────────────────────────

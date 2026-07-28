@@ -3470,6 +3470,34 @@ const migration092SalesmanAttendance: TenantMigration = {
   },
 };
 
+// 093 — SFA expense/TA-DA claims + a photos column on visits (for field photos).
+const migration093SalesmanExpenses: TenantMigration = {
+  name: '093_salesman_expenses',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".salesman_expenses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        salesman_id UUID NOT NULL,
+        day DATE NOT NULL DEFAULT CURRENT_DATE,
+        category VARCHAR(40) NOT NULL DEFAULT 'misc',
+        amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+        distance_km NUMERIC(10,2),
+        note TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        reviewed_at TIMESTAMPTZ,
+        reviewed_by UUID,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS ix_expenses_salesman ON "${schema}".salesman_expenses (salesman_id, day)`);
+    await qr.query(`ALTER TABLE "${schema}".salesman_visits ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]'::jsonb`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".salesman_expenses`);
+    await qr.query(`ALTER TABLE "${schema}".salesman_visits DROP COLUMN IF EXISTS photos`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3563,4 +3591,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration090MarketPriceLocations,
   migration091BackfillTaxonomy,
   migration092SalesmanAttendance,
+  migration093SalesmanExpenses,
 ];

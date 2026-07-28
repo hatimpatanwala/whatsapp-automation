@@ -81,6 +81,20 @@ export class SfaController {
     return this.sfa.visits(this.schema(req), { from, to, salesmanId, customerId });
   }
 
+  @Get('expenses')
+  @UseGuards(ErpFeatureGuard, PermissionGuard)
+  @RequiresFeature('sfa') @RequiresPermission('salesmen', 'read')
+  adminExpenses(@Req() req: Request, @Query('status') status?: string, @Query('from') from?: string, @Query('to') to?: string, @Query('salesmanId') salesmanId?: string) {
+    return this.sfa.listExpenses(this.schema(req), { status, from, to, salesmanId });
+  }
+
+  @Patch('expenses/:id')
+  @UseGuards(ErpFeatureGuard, PermissionGuard)
+  @RequiresFeature('sfa') @RequiresPermission('salesmen', 'write')
+  adminReviewExpense(@Req() req: Request, @Param('id') id: string, @Body() body: { status: string }) {
+    return this.sfa.reviewExpense(this.schema(req), id, body?.status, (req.session as any)?.userId);
+  }
+
   @Get('salesmen/:id/daywise')
   @UseGuards(ErpFeatureGuard, PermissionGuard)
   @RequiresFeature('sfa') @RequiresPermission('salesmen', 'read')
@@ -160,6 +174,18 @@ export class SfaController {
   async appPunch(@Req() req: Request, @Body() body: any) {
     const { schema, salesman } = await this.appSalesman(req);
     return this.sfa.punchAttendance(schema, salesman.id, body);
+  }
+
+  @Get('app/expenses')
+  async appExpenses(@Req() req: Request) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.myExpenses(schema, salesman.id);
+  }
+
+  @Post('app/expenses')
+  async appAddExpense(@Req() req: Request, @Body() body: any) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.createExpense(schema, salesman.id, body);
   }
 
   @Get('app/products')

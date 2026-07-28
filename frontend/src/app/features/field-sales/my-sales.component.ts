@@ -741,6 +741,73 @@ interface OrderLine {
               <p class="text-[12px] text-slate-400 mt-1">See your orders, collections and best-selling items.</p>
             </div>
           }
+
+          <!-- ── EXPENSES / TA-DA ─────────────────────────────────── -->
+          <div class="flex items-center justify-between mt-6 mb-2">
+            <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5"><i class="pi pi-wallet text-rose-400"></i> Expenses &amp; TA/DA</h2>
+            <button (click)="showExpense.set(!showExpense())" class="text-[12px] font-semibold text-indigo-600">{{ showExpense() ? 'Close' : '+ Claim' }}</button>
+          </div>
+
+          @if (showExpense()) {
+            <div class="bg-white rounded-2xl border border-slate-100 p-4 mb-3 shadow-sm space-y-3">
+              <div class="grid grid-cols-3 gap-2">
+                @for (c of expenseCats; track c.id) {
+                  <button (click)="newExpense.category = c.id"
+                          class="rounded-xl border px-2 py-2.5 text-[12px] font-semibold flex flex-col items-center gap-1 transition-all"
+                          [class.border-indigo-500]="newExpense.category === c.id" [class.bg-indigo-50]="newExpense.category === c.id"
+                          [class.text-indigo-700]="newExpense.category === c.id" [class.border-slate-200]="newExpense.category !== c.id" [class.text-slate-500]="newExpense.category !== c.id">
+                    <i class="pi {{ c.icon }} text-[15px]"></i>{{ c.label }}
+                  </button>
+                }
+              </div>
+              @if (newExpense.category === 'travel') {
+                <div>
+                  <label class="text-[11px] font-semibold text-slate-400 uppercase">Distance (km)</label>
+                  <input type="number" [(ngModel)]="newExpense.distanceKm" placeholder="e.g. 24" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white" />
+                </div>
+              }
+              <div>
+                <label class="text-[11px] font-semibold text-slate-400 uppercase">Amount (₹)</label>
+                <input type="number" [(ngModel)]="newExpense.amount" placeholder="0" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold text-slate-400 uppercase">Note</label>
+                <input type="text" [(ngModel)]="newExpense.note" placeholder="Optional — what was this for?" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white" />
+              </div>
+              <button (click)="saveExpense()" [disabled]="savingExpense()" class="w-full bg-indigo-600 text-white text-[13px] font-semibold rounded-xl py-2.5 disabled:opacity-50">{{ savingExpense() ? 'Submitting…' : 'Submit claim' }}</button>
+            </div>
+          }
+
+          @if (expenses().length) {
+            <div class="bg-white rounded-2xl border border-slate-100 p-3 mb-2 flex items-center justify-between shadow-sm">
+              <p class="text-[12px] font-semibold text-slate-500">This period · {{ expenses().length }} claim(s)</p>
+              <p class="text-sm font-bold tabular-nums">₹{{ fmt(expenseTotal()) }}</p>
+            </div>
+            @for (e of expenses(); track e.id) {
+              <div class="bg-white rounded-2xl border border-slate-100 p-3 mb-2 flex items-center justify-between shadow-sm">
+                <div class="min-w-0 flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center shrink-0"><i class="pi {{ expenseIcon(e.category) }} text-[13px]"></i></div>
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold capitalize truncate">{{ e.category }}<span class="text-slate-400 font-normal"> · {{ e.day | date:'d MMM' }}</span></p>
+                    <p class="text-[11px] text-slate-400 truncate">{{ e.note || (e.distanceKm ? e.distanceKm + ' km' : '—') }}</p>
+                  </div>
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-sm font-bold tabular-nums">₹{{ fmt(e.amount) }}</p>
+                  <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
+                        [class.bg-amber-50]="e.status === 'pending'" [class.text-amber-600]="e.status === 'pending'"
+                        [class.bg-emerald-50]="e.status === 'approved'" [class.text-emerald-600]="e.status === 'approved'"
+                        [class.bg-rose-50]="e.status === 'rejected'" [class.text-rose-500]="e.status === 'rejected'">{{ e.status }}</span>
+                </div>
+              </div>
+            }
+          } @else if (!showExpense()) {
+            <div class="bg-white rounded-2xl border border-slate-100 p-6 text-center shadow-sm">
+              <i class="pi pi-wallet text-slate-300 text-2xl"></i>
+              <p class="text-[13px] font-semibold text-slate-500 mt-2">No claims yet</p>
+              <p class="text-[11px] text-slate-400 mt-0.5">Log travel, food &amp; other field expenses for reimbursement.</p>
+            </div>
+          }
         }
 
         <!-- ── VISITS ─────────────────────────────────────────────── -->
@@ -957,7 +1024,7 @@ export class MySalesComponent implements OnInit {
     if (v === 'today') this.loadMe();
     else if (v === 'beat') this.loadBeat();
     else if (v === 'order') this.searchProducts();
-    else if (v === 'performance') this.loadPerformance();
+    else if (v === 'performance') { this.loadPerformance(); this.loadExpenses(); }
     else if (v === 'visits') this.loadVisits();
     else this.loadMe();
   }
@@ -978,6 +1045,7 @@ export class MySalesComponent implements OnInit {
     if (t === 'beat' && !this.beat().length) this.loadBeat();
     if (t === 'order' && !this.products().length) this.searchProducts();
     if (t === 'performance' && !this.perf()) this.loadPerformance();
+    if (t === 'performance' && !this.expenses().length) this.loadExpenses();
     if (t === 'visits' && !this.visits().length) this.loadVisits();
   }
 
@@ -1379,6 +1447,41 @@ export class MySalesComponent implements OnInit {
         (p) => done(p.coords.latitude, p.coords.longitude), () => done(),
         { timeout: 4000, maximumAge: 60000 });
     } else { done(); }
+  }
+
+  // ── Expenses / TA-DA ──
+  readonly expenses = signal<any[]>([]);
+  readonly showExpense = signal(false);
+  readonly savingExpense = signal(false);
+  readonly expenseCats = [
+    { id: 'travel', label: 'Travel', icon: 'pi-car' },
+    { id: 'food', label: 'Food', icon: 'pi-shopping-bag' },
+    { id: 'stay', label: 'Stay', icon: 'pi-home' },
+    { id: 'misc', label: 'Misc', icon: 'pi-ellipsis-h' },
+  ];
+  newExpense: { category: string; amount: number | null; distanceKm: number | null; note: string } = { category: 'travel', amount: null, distanceKm: null, note: '' };
+  readonly expenseTotal = computed(() => this.expenses().reduce((s, e) => s + Number(e.amount || 0), 0));
+  expenseIcon(cat: string) { return this.expenseCats.find((c) => c.id === cat)?.icon || 'pi-wallet'; }
+  private loadExpenses() { this.sfa.appExpenses().subscribe({ next: (e) => this.expenses.set(e || []), error: () => {} }); }
+  saveExpense() {
+    if (this.savingExpense()) return;
+    const amt = Number(this.newExpense.amount) || 0;
+    const km = Number(this.newExpense.distanceKm) || 0;
+    if (amt <= 0 && !km) { this.showToast('Enter an amount or distance'); return; }
+    this.savingExpense.set(true);
+    this.sfa.appAddExpense({
+      category: this.newExpense.category,
+      amount: amt || undefined,
+      distanceKm: km || undefined,
+      note: this.newExpense.note?.trim() || undefined,
+    }).subscribe({
+      next: () => {
+        this.savingExpense.set(false); this.showExpense.set(false);
+        this.newExpense = { category: 'travel', amount: null, distanceKm: null, note: '' };
+        this.showToast('Claim submitted for approval'); this.loadExpenses();
+      },
+      error: (e) => { this.savingExpense.set(false); this.showToast(e?.error?.message || 'Could not submit claim'); },
+    });
   }
 
   // ── New outlet (field KYC) ──

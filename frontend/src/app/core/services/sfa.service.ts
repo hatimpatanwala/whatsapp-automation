@@ -62,6 +62,14 @@ export class SfaService {
   appPunch(body: { type: 'in' | 'out'; latitude?: number; longitude?: number; label?: string }): Observable<any> {
     return this.api.post<any>('/sfa/app/attendance', body);
   }
+  appExpenses(): Observable<any[]> { return this.api.get<any[]>('/sfa/app/expenses'); }
+  appAddExpense(body: { category: string; amount?: number; distanceKm?: number; note?: string }): Observable<any> {
+    return this.api.post<any>('/sfa/app/expenses', body);
+  }
+  managerExpenses(params?: { status?: string; from?: string; to?: string; salesmanId?: string }): Observable<any[]> {
+    return this.api.get<any[]>('/sfa/expenses', params as any);
+  }
+  reviewExpense(id: string, status: string): Observable<any> { return this.api.patch<any>(`/sfa/expenses/${id}`, { status }); }
   appProducts(q?: string): Observable<any[]> { return this.api.get<any[]>('/sfa/app/products', q ? { q } : undefined); }
   appPending(): Observable<any[]> { return this.api.get<any[]>('/sfa/app/pending'); }
   appEvaluate(customerId: string | undefined, items: any[]): Observable<any> { return this.api.post<any>('/sfa/app/cart', { customerId, items }); }

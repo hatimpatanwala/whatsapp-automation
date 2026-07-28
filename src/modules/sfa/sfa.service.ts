@@ -586,6 +586,46 @@ export class SfaService {
     });
   }
 
+  // ─── Expenses / TA-DA claims ────────────────────────────────────────────────
+  async createExpense(schema: string, salesmanId: string, body: {
+    category?: string; amount?: number; distanceKm?: number; note?: string; day?: string;
+  }) {
+    const amount = Number(body?.amount) || 0;
+    const km = body?.distanceKm != null ? Number(body.distanceKm) : null;
+    if (amount <= 0 && !km) throw new BadRequestException('Enter an amount or distance');
+    return this.cm.executeInTenantContext(schema, async (qr) =>
+      firstRow(await qr.query(
+        `INSERT INTO "${schema}".salesman_expenses (salesman_id, day, category, amount, distance_km, note)
+         VALUES ($1, COALESCE($2::date, CURRENT_DATE), $3, $4, $5, $6) RETURNING *`,
+        [salesmanId, body.day || null, (body.category || 'misc').trim(), amount, km, body.note?.trim() || null],
+      )));
+  }
+  myExpenses(schema: string, salesmanId: string) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(`SELECT * FROM "${schema}".salesman_expenses WHERE salesman_id = $1 ORDER BY day DESC, created_at DESC LIMIT 60`, [salesmanId]));
+  }
+  listExpenses(schema: string, opts: { from?: string; to?: string; status?: string; salesmanId?: string } = {}) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT e.*, s.name AS salesman_name FROM "${schema}".salesman_expenses e
+         LEFT JOIN "${schema}".salesmen s ON s.id = e.salesman_id
+         WHERE ($1::uuid IS NULL OR e.salesman_id = $1)
+           AND ($2::text IS NULL OR e.status = $2)
+           AND (e.day >= COALESCE($3::date, CURRENT_DATE - INTERVAL '90 days'))
+           AND (e.day < COALESCE($4::date, CURRENT_DATE) + INTERVAL '1 day')
+         ORDER BY e.day DESC, e.created_at DESC LIMIT 300`,
+        [opts.salesmanId || null, opts.status || null, opts.from || null, opts.to || null],
+      ));
+  }
+  async reviewExpense(schema: string, id: string, status: string, reviewerId?: string) {
+    if (!['approved', 'rejected', 'pending'].includes(status)) throw new BadRequestException('Invalid status');
+    return this.cm.executeInTenantContext(schema, async (qr) =>
+      firstRow(await qr.query(
+        `UPDATE "${schema}".salesman_expenses SET status = $2, reviewed_at = NOW(), reviewed_by = $3 WHERE id = $1 RETURNING *`,
+        [id, status, reviewerId || null],
+      )));
+  }
+
   // ─── Visits (check-in / check-out journal) ──────────────────────────────────
   visits(schema: string, opts: { salesmanId?: string; from?: string; to?: string; customerId?: string }) {
     return this.cm.executeInTenantContext(schema, (qr) =>
