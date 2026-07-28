@@ -70,6 +70,15 @@ export class SfaService {
     return this.api.get<any[]>('/sfa/expenses', params as any);
   }
   reviewExpense(id: string, status: string): Observable<any> { return this.api.patch<any>(`/sfa/expenses/${id}`, { status }); }
+  remindAllOverdue(): Observable<{ sent: number; total?: number; reason?: string }> {
+    return this.api.post<{ sent: number; total?: number; reason?: string }>('/sfa/reminders/run', {});
+  }
+  managerRemindInvoice(id: string): Observable<{ sent: number; reason?: string }> {
+    return this.api.post<{ sent: number; reason?: string }>(`/sfa/reminders/invoice/${id}`, {});
+  }
+  appRemindInvoice(id: string): Observable<{ sent: number; reason?: string }> {
+    return this.api.post<{ sent: number; reason?: string }>(`/sfa/app/reminders/invoice/${id}`, {});
+  }
   appProducts(q?: string): Observable<any[]> { return this.api.get<any[]>('/sfa/app/products', q ? { q } : undefined); }
   appPending(): Observable<any[]> { return this.api.get<any[]>('/sfa/app/pending'); }
   appEvaluate(customerId: string | undefined, items: any[]): Observable<any> { return this.api.post<any>('/sfa/app/cart', { customerId, items }); }

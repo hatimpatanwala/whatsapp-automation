@@ -65,6 +65,6 @@ import { DocDeliveryController } from './doc-delivery.controller';
     ErpReminderService,
     ErpReminderCron,
   ],
-  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService, InvoiceService, DocDeliveryService],
+  exports: [WhatsAppApiService, WhatsAppMessageService, ConversationHelper, CommerceSettingsHelper, MessageOrchestratorService, SmartNotificationService, InvoiceService, DocDeliveryService, ErpReminderService],
 })
 export class WhatsAppModule {}

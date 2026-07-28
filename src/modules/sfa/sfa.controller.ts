@@ -7,6 +7,7 @@ import { RequiresPermission } from '../../common/decorators/requires-permission.
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { SfaService } from './sfa.service';
 import { MediaService } from '../media/media.service';
+import { ErpReminderService } from '../whatsapp/erp-reminder.service';
 
 /**
  * SFA — salesman field app.
@@ -16,12 +17,22 @@ import { MediaService } from '../media/media.service';
  */
 @Controller('sfa')
 export class SfaController {
-  constructor(private readonly sfa: SfaService, private readonly media: MediaService) {}
+  constructor(
+    private readonly sfa: SfaService,
+    private readonly media: MediaService,
+    private readonly reminders: ErpReminderService,
+  ) {}
 
   private schema(req: Request): string {
     const schema = req.tenantContext?.schemaName;
     if (!schema) throw new UnauthorizedException('No tenant context');
     return schema;
+  }
+
+  private tenantId(req: Request): string {
+    const id = req.tenantContext?.id;
+    if (!id) throw new UnauthorizedException('No tenant context');
+    return id;
   }
 
   // ─── Admin (session-authed; gated by the `sfa` plan feature) ────────────────
@@ -94,6 +105,21 @@ export class SfaController {
   @RequiresFeature('sfa') @RequiresPermission('salesmen', 'write')
   adminReviewExpense(@Req() req: Request, @Param('id') id: string, @Body() body: { status: string }) {
     return this.sfa.reviewExpense(this.schema(req), id, body?.status, (req.session as any)?.userId);
+  }
+
+  // ─── Collection reminders (bulk + single, WhatsApp) ─────────────────────────
+  @Post('reminders/run')
+  @UseGuards(ErpFeatureGuard, PermissionGuard)
+  @RequiresFeature('sfa') @RequiresPermission('salesmen', 'write')
+  remindAllOverdue(@Req() req: Request) {
+    return this.reminders.remindOverdue(this.tenantId(req), this.schema(req));
+  }
+
+  @Post('reminders/invoice/:id')
+  @UseGuards(ErpFeatureGuard, PermissionGuard)
+  @RequiresFeature('sfa') @RequiresPermission('salesmen', 'write')
+  remindOneInvoice(@Req() req: Request, @Param('id') id: string) {
+    return this.reminders.remindInvoice(this.tenantId(req), this.schema(req), id);
   }
 
   @Get('salesmen/:id/daywise')
@@ -187,6 +213,13 @@ export class SfaController {
   async appAddExpense(@Req() req: Request, @Body() body: any) {
     const { schema, salesman } = await this.appSalesman(req);
     return this.sfa.createExpense(schema, salesman.id, body);
+  }
+
+  /** Salesman fires a WhatsApp payment reminder for one of their customer's overdue bills. */
+  @Post('app/reminders/invoice/:id')
+  async appRemindInvoice(@Req() req: Request, @Param('id') id: string) {
+    const { schema } = await this.appSalesman(req);
+    return this.reminders.remindInvoice(this.tenantId(req), schema, id);
   }
 
   @Get('app/products')

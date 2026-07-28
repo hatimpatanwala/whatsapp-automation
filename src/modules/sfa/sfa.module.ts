@@ -5,6 +5,7 @@ import { OrderModule } from '../order/order.module';
 import { EntryModule } from '../entry/entry.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { MediaModule } from '../media/media.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { SfaController } from './sfa.controller';
 import { SfaService } from './sfa.service';
@@ -16,7 +17,7 @@ import { SfaService } from './sfa.service';
  * instrument details) and record promise-to-pay follow-ups.
  */
 @Module({
-  imports: [ErpModule, OrderModule, EntryModule, PromotionsModule, MediaModule, TypeOrmModule.forFeature([Tenant])],
+  imports: [ErpModule, OrderModule, EntryModule, PromotionsModule, MediaModule, WhatsAppModule, TypeOrmModule.forFeature([Tenant])],
   controllers: [SfaController],
   providers: [SfaService],
   exports: [SfaService],

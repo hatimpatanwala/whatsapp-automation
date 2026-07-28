@@ -645,7 +645,21 @@ type Tab = 'performance' | 'salesmen' | 'beats' | 'targets' | 'visits' | 'follow
                 [class.bg-indigo-600]="followScope === s" [class.text-white]="followScope === s"
                 [class.bg-gray-100]="followScope !== s" [class.text-gray-600]="followScope !== s">{{ s === 'due' ? 'Due today' : s }}</button>
             }
+            <div class="flex-1"></div>
+            <button (click)="remindAllOverdue()" [disabled]="remindingAll()"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold px-3.5 py-1.5 hover:bg-emerald-700 disabled:opacity-50">
+              <i class="pi" [ngClass]="remindingAll() ? 'pi-spin pi-spinner' : 'pi-whatsapp'"></i>
+              {{ remindingAll() ? 'Sending…' : 'Remind all overdue' }}
+            </button>
           </div>
+          @if (remindResult(); as rr) {
+            <div class="mb-4 rounded-xl border px-4 py-2.5 text-sm"
+              [class.bg-emerald-50]="!rr.reason" [class.border-emerald-200]="!rr.reason" [class.text-emerald-800]="!rr.reason"
+              [class.bg-amber-50]="rr.reason" [class.border-amber-200]="rr.reason" [class.text-amber-800]="rr.reason">
+              @if (rr.reason) { {{ rr.reason }} }
+              @else { Sent {{ rr.sent }} WhatsApp reminder(s){{ rr.total ? ' of ' + rr.total + ' overdue bill(s)' : '' }}. }
+            </div>
+          }
           @if (followError()) { <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4">{{ followError() }}</div> }
           @if (followLoading()) { <p class="text-sm text-gray-400 py-8 text-center">Loading follow-ups…</p> }
           @else if (!followups().length) {
@@ -812,6 +826,19 @@ export class FieldSalesComponent implements OnInit {
     this.sfa.reviewExpense(id, status).subscribe({
       next: () => { this.reviewingExpense.set(null); this.loadExpenses(); },
       error: () => { this.reviewingExpense.set(null); },
+    });
+  }
+
+  // ── Collection reminders ────────────────────────────────────────────────────
+  readonly remindingAll = signal(false);
+  readonly remindResult = signal<{ sent: number; total?: number; reason?: string } | null>(null);
+  remindAllOverdue() {
+    if (this.remindingAll()) return;
+    this.remindingAll.set(true);
+    this.remindResult.set(null);
+    this.sfa.remindAllOverdue().subscribe({
+      next: (r) => { this.remindingAll.set(false); this.remindResult.set(r); },
+      error: (e) => { this.remindingAll.set(false); this.remindResult.set({ sent: 0, reason: this.msg(e, 'Could not send reminders.') }); },
     });
   }
 

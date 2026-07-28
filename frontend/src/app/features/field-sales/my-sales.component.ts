@@ -667,6 +667,9 @@ interface OrderLine {
                 </div>
                 <div class="flex gap-2 mt-2.5">
                   <button (click)="openCollect(b)" class="flex-1 text-[12px] font-semibold bg-emerald-600 text-white rounded-xl py-2 flex items-center justify-center gap-1.5"><i class="pi pi-wallet text-[10px]"></i> Collect</button>
+                  <button (click)="remindBill(b)" [disabled]="remindingBill() === b.id"
+                    class="text-[12px] font-semibold text-green-700 border border-green-300 rounded-xl px-3 flex items-center gap-1.5 disabled:opacity-50">
+                    <i class="pi text-[10px]" [ngClass]="remindingBill() === b.id ? 'pi-spin pi-spinner' : 'pi-whatsapp'"></i> Remind</button>
                   <button (click)="openPromise(b)" class="text-[12px] font-semibold text-amber-700 border border-amber-300 rounded-xl px-3 flex items-center gap-1.5"><i class="pi pi-calendar-clock text-[10px]"></i> Promise</button>
                 </div>
               </div>
@@ -1045,6 +1048,7 @@ export class MySalesComponent implements OnInit {
   readonly collectCustomer = signal<any>(null);
   readonly collectBills = signal<any[]>([]);
   readonly collectFor = signal<any>(null);
+  readonly remindingBill = signal<string | null>(null);
   readonly colMethod = signal('cash');
   colAmount: number | null = null;
   colInstrument = '';
@@ -1535,6 +1539,19 @@ export class MySalesComponent implements OnInit {
         this.showToast('Claim submitted for approval'); this.loadExpenses();
       },
       error: (e) => { this.savingExpense.set(false); this.showToast(e?.error?.message || 'Could not submit claim'); },
+    });
+  }
+
+  // ── WhatsApp payment reminder (single bill) ──
+  remindBill(bill: any) {
+    if (this.remindingBill() || !bill?.id) return;
+    this.remindingBill.set(bill.id);
+    this.sfa.appRemindInvoice(bill.id).subscribe({
+      next: (r) => {
+        this.remindingBill.set(null);
+        this.showToast(r?.sent ? 'Reminder sent on WhatsApp' : (r?.reason || 'Could not send reminder'));
+      },
+      error: (e) => { this.remindingBill.set(null); this.showToast(e?.error?.message || 'Could not send reminder'); },
     });
   }
 
