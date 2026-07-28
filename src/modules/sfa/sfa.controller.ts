@@ -144,6 +144,12 @@ export class SfaController {
     return this.sfa.customerDetail(schema, id);
   }
 
+  @Post('app/customers')
+  async appCreateOutlet(@Req() req: Request, @Body() body: any) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.createOutlet(schema, salesman.id, body);
+  }
+
   @Get('app/products')
   async appProducts(@Req() req: Request, @Query('q') q?: string) {
     const { schema } = await this.appSalesman(req);
@@ -249,6 +255,12 @@ export class SfaController {
   async customer(@Query('t') t: string, @Query('token') token: string, @Param('id') id: string) {
     await this.guard(t, token);
     return this.sfa.customerDetail(t, id);
+  }
+
+  @Public() @Post('m/customers')
+  async createOutletM(@Query('t') t: string, @Query('token') token: string, @Body() body: any) {
+    const s = await this.guard(t, token);
+    return this.sfa.createOutlet(t, s.id, body);
   }
 
   @Public() @Get('m/customers/:id/schemes')

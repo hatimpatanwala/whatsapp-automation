@@ -313,11 +313,31 @@ interface OrderLine {
             <ng-container [ngTemplateOutlet]="activeVisitCard" />
           }
 
-          <div class="relative mb-3">
+          <div class="relative mb-2">
             <i class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
             <input [(ngModel)]="custQ" (ngModelChange)="searchCustomers()" placeholder="Find a customer outside your beat…"
               class="w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none" />
           </div>
+          <button (click)="showNewOutlet.set(!showNewOutlet())" class="w-full mb-3 text-[13px] font-semibold border border-dashed border-indigo-300 text-indigo-600 rounded-xl py-2 flex items-center justify-center gap-1.5">
+            <i class="pi pi-plus-circle text-xs"></i> New outlet
+          </button>
+          @if (showNewOutlet()) {
+            <div class="bg-white rounded-2xl border border-indigo-100 p-4 mb-3 shadow-sm space-y-2.5">
+              <p class="text-sm font-bold text-slate-700">Add a new outlet to your beat</p>
+              <input [(ngModel)]="newOutlet.name" placeholder="Shop / outlet name *" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              <input [(ngModel)]="newOutlet.phone" placeholder="Phone / WhatsApp *" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              <div class="grid grid-cols-2 gap-2">
+                <input [(ngModel)]="newOutlet.gstin" placeholder="GSTIN (optional)" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                <input [(ngModel)]="newOutlet.area" placeholder="Area / market" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              </div>
+              <textarea [(ngModel)]="newOutlet.billingAddress" rows="2" placeholder="Address (optional)" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none"></textarea>
+              @if (outletError()) { <p class="text-[12px] text-red-600">{{ outletError() }}</p> }
+              <div class="flex gap-2">
+                <button (click)="saveOutlet()" [disabled]="busy()" class="flex-1 bg-indigo-600 text-white text-[13px] font-semibold rounded-xl py-2.5 disabled:opacity-50">{{ busy() ? 'Saving…' : 'Save outlet' }}</button>
+                <button (click)="showNewOutlet.set(false)" class="text-[13px] text-slate-500 px-3">Cancel</button>
+              </div>
+            </div>
+          }
           @if (custQ && customers().length) {
             <div class="bg-white rounded-2xl border border-slate-100 p-1 mb-3 shadow-sm">
               @for (c of customers(); track c.id) {
@@ -1314,6 +1334,25 @@ export class MySalesComponent implements OnInit {
   }
 
   /** Days a bill is past its due date (0 if not overdue / no due date). */
+  // ── New outlet (field KYC) ──
+  readonly showNewOutlet = signal(false);
+  readonly outletError = signal('');
+  newOutlet: { name: string; phone: string; gstin: string; area: string; billingAddress: string } = { name: '', phone: '', gstin: '', area: '', billingAddress: '' };
+  saveOutlet() {
+    this.outletError.set('');
+    if (!this.newOutlet.name.trim()) { this.outletError.set('Outlet name is required'); return; }
+    if (!this.newOutlet.phone.trim()) { this.outletError.set('Phone is required'); return; }
+    this.busy.set(true);
+    this.sfa.appCreateOutlet(this.newOutlet).subscribe({
+      next: () => {
+        this.busy.set(false); this.showNewOutlet.set(false);
+        this.newOutlet = { name: '', phone: '', gstin: '', area: '', billingAddress: '' };
+        this.showToast('Outlet added to your beat'); this.loadBeat();
+      },
+      error: (e) => { this.busy.set(false); this.outletError.set(e?.error?.message || 'Could not add outlet'); },
+    });
+  }
+
   billsTotal(): number { return this.collectBills().reduce((s, b) => s + (Number(b.balanceDue) || 0), 0); }
   /** Ageing of the selected customer's open bills by days overdue. */
   agingBuckets() {

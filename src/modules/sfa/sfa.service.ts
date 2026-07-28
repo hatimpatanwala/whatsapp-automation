@@ -518,6 +518,41 @@ export class SfaService {
     });
   }
 
+  /** Capture a NEW outlet from the field (retailer KYC) and add it to the rep's beat. */
+  async createOutlet(schema: string, salesmanId: string, body: {
+    name?: string; phone?: string; gstin?: string; billingAddress?: string; area?: string; route?: string; addToBeat?: boolean;
+  }) {
+    const name = (body?.name || '').trim();
+    const phone = (body?.phone || '').trim();
+    if (!name) throw new BadRequestException('Outlet name is required');
+    if (!phone) throw new BadRequestException('Phone is required');
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const row = firstRow(await qr.query(
+        `INSERT INTO "${schema}".customers (phone, name, display_name, gstin, billing_address, area, route, is_erp_client)
+         VALUES ($1,$2,$2,$3,$4,$5,$6,true)
+         ON CONFLICT (phone) DO UPDATE SET
+           name = COALESCE("${schema}".customers.name, EXCLUDED.name),
+           display_name = COALESCE("${schema}".customers.display_name, EXCLUDED.display_name),
+           gstin = COALESCE(EXCLUDED.gstin, "${schema}".customers.gstin),
+           billing_address = COALESCE(EXCLUDED.billing_address, "${schema}".customers.billing_address),
+           area = COALESCE(EXCLUDED.area, "${schema}".customers.area),
+           route = COALESCE(EXCLUDED.route, "${schema}".customers.route),
+           updated_at = NOW()
+         RETURNING id, COALESCE(display_name, name) AS name, phone, area, route`,
+        [phone, name, body.gstin?.trim() || null, body.billingAddress?.trim() || null, body.area?.trim() || null, body.route?.trim() || null],
+      ));
+      if (body.addToBeat !== false && salesmanId && row?.id) {
+        await qr.query(
+          `INSERT INTO "${schema}".salesman_beats (salesman_id, customer_id, sort_order)
+           VALUES ($1,$2, COALESCE((SELECT MAX(sort_order) + 1 FROM "${schema}".salesman_beats WHERE salesman_id = $1), 0))
+           ON CONFLICT (salesman_id, customer_id) DO NOTHING`,
+          [salesmanId, row.id],
+        );
+      }
+      return row;
+    });
+  }
+
   // ─── Visits (check-in / check-out journal) ──────────────────────────────────
   visits(schema: string, opts: { salesmanId?: string; from?: string; to?: string; customerId?: string }) {
     return this.cm.executeInTenantContext(schema, (qr) =>

@@ -55,6 +55,9 @@ export class SfaService {
   appMe(): Observable<any> { return this.api.get<any>('/sfa/app/me'); }
   appCustomers(q?: string): Observable<any[]> { return this.api.get<any[]>('/sfa/app/customers', q ? { q } : undefined); }
   appCustomer(id: string): Observable<any> { return this.api.get<any>(`/sfa/app/customers/${id}`); }
+  appCreateOutlet(body: { name: string; phone: string; gstin?: string; billingAddress?: string; area?: string; route?: string }): Observable<any> {
+    return this.api.post<any>('/sfa/app/customers', body);
+  }
   appProducts(q?: string): Observable<any[]> { return this.api.get<any[]>('/sfa/app/products', q ? { q } : undefined); }
   appPending(): Observable<any[]> { return this.api.get<any[]>('/sfa/app/pending'); }
   appEvaluate(customerId: string | undefined, items: any[]): Observable<any> { return this.api.post<any>('/sfa/app/cart', { customerId, items }); }
