@@ -10,6 +10,7 @@ import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { tenantInterceptor } from './core/interceptors/tenant.interceptor';
 import { apiResponseInterceptor } from './core/interceptors/api-response.interceptor';
 import { retryInterceptor } from './core/interceptors/retry.interceptor';
+import { offlineQueueInterceptor } from './core/interceptors/offline-queue.interceptor';
 import { KeyboardShortcutsService } from './core/services/keyboard-shortcuts.service';
 
 export const appConfig: ApplicationConfig = {
@@ -18,7 +19,7 @@ export const appConfig: ApplicationConfig = {
     // Tally-style keyboard navigation (Phase 3).
     provideAppInitializer(() => inject(KeyboardShortcutsService).init()),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(withInterceptors([retryInterceptor, authInterceptor, tenantInterceptor, apiResponseInterceptor])),
+    provideHttpClient(withInterceptors([retryInterceptor, authInterceptor, tenantInterceptor, apiResponseInterceptor, offlineQueueInterceptor])),
     provideAnimationsAsync(),
     providePrimeNG({
       theme: {

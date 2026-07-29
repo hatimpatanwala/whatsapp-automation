@@ -2,6 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SfaService } from '../../core/services/sfa.service';
+import { OfflineQueueService } from '../../core/services/offline-queue.service';
 
 type Tab = 'today' | 'beat' | 'order' | 'collect' | 'performance' | 'visits';
 
@@ -70,6 +71,27 @@ interface OrderLine {
           }
         </div>
       </header>
+
+      <!-- ── OFFLINE / SYNC STATUS ─────────────────────────────── -->
+      @if (!offline.online() || offline.count() > 0) {
+        <div class="max-w-2xl mx-auto px-4 pt-2">
+          @if (!offline.online()) {
+            <div class="flex items-center gap-2 text-[12px] font-semibold rounded-xl px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200">
+              <i class="pi pi-wifi" style="opacity:.6"></i> You're offline — changes are saved and will sync automatically.
+              @if (offline.count() > 0) { <span class="ml-auto tabular-nums">{{ offline.count() }} pending</span> }
+            </div>
+          } @else if (offline.syncing()) {
+            <div class="flex items-center gap-2 text-[12px] font-semibold rounded-xl px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <i class="pi pi-spin pi-spinner"></i> Syncing {{ offline.count() }} change(s)…
+            </div>
+          } @else {
+            <div class="flex items-center gap-2 text-[12px] font-semibold rounded-xl px-3 py-2 bg-slate-50 text-slate-600 border border-slate-200">
+              <i class="pi pi-clock"></i> {{ offline.count() }} change(s) waiting to sync
+              <button (click)="offline.flush()" class="ml-auto text-indigo-600 underline">Sync now</button>
+            </div>
+          }
+        </div>
+      }
 
       @if (error()) {
         <div class="max-w-2xl mx-auto px-4 pt-4">
@@ -993,6 +1015,7 @@ interface OrderLine {
 })
 export class MySalesComponent implements OnInit {
   private readonly sfa = inject(SfaService);
+  readonly offline = inject(OfflineQueueService);
 
   // Order & Collect are intentionally NOT top-level tabs: they're reached from the
   // checked-in card's "Take order" / "Collect" actions (and their views still render
