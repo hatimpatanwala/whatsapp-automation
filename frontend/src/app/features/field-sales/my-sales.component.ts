@@ -340,6 +340,9 @@ interface OrderLine {
                   <i class="pi pi-wallet text-xs"></i> Collect
                 </button>
               </div>
+              <button (click)="openReturnFromVisit()" class="w-full text-[12px] font-semibold text-rose-600 border border-rose-200 rounded-xl py-2 mb-3 flex items-center justify-center gap-1.5">
+                <i class="pi pi-replay text-[10px]"></i> Record return
+              </button>
               <textarea [(ngModel)]="visitNote" rows="2" placeholder="Add a visit note…"
                 class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm mb-2 resize-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"></textarea>
               <label class="text-[11px] font-semibold text-slate-400 uppercase">How did the visit go?</label>
@@ -983,6 +986,46 @@ interface OrderLine {
         </div>
       }
 
+      <!-- ── RETURN SHEET ───────────────────────────────────────── -->
+      @if (returnFor(); as cust) {
+        <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="returnFor.set(null)">
+          <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 max-h-[92vh] overflow-y-auto" (click)="$event.stopPropagation()">
+            <div class="w-10 h-1 rounded-full bg-slate-200 mx-auto mb-3 sm:hidden"></div>
+            <h3 class="text-base font-bold mb-1 flex items-center gap-2"><i class="pi pi-replay text-rose-500"></i> Record return</h3>
+            <p class="text-[12px] text-slate-400 mb-3">{{ cust.name }} — goods returned by the shop</p>
+
+            @for (ln of returnItems; track $index) {
+              <div class="flex gap-1.5 mb-2">
+                <input [(ngModel)]="ln.description" placeholder="Item" class="flex-1 min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                <input type="number" [(ngModel)]="ln.quantity" placeholder="Qty" class="w-14 rounded-xl border border-slate-200 px-2 py-2 text-sm tabular-nums" />
+                <input type="number" [(ngModel)]="ln.unitPrice" placeholder="Rate" class="w-20 rounded-xl border border-slate-200 px-2 py-2 text-sm tabular-nums" />
+                @if (returnItems.length > 1) { <button (click)="removeReturnLine($index)" class="text-slate-300 px-1"><i class="pi pi-times"></i></button> }
+              </div>
+            }
+            <button (click)="addReturnLine()" class="text-[12px] font-semibold text-indigo-600 mb-3"><i class="pi pi-plus text-[10px]"></i> Add item</button>
+
+            <div class="flex gap-2 mb-3">
+              <div class="flex-1">
+                <label class="text-[11px] font-semibold text-slate-400 uppercase">GST %</label>
+                <input type="number" [(ngModel)]="returnTaxPct" placeholder="0" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm tabular-nums" />
+              </div>
+              <div class="flex-1 text-right">
+                <label class="text-[11px] font-semibold text-slate-400 uppercase">Credit total</label>
+                <p class="text-lg font-bold tabular-nums text-rose-600">₹{{ fmt(returnTotal()) }}</p>
+              </div>
+            </div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase">Reason</label>
+            <input [(ngModel)]="returnReason" placeholder="e.g. damaged / expired / wrong item" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm mb-4" />
+            @if (sheetError()) { <p class="text-[12px] text-red-600 mb-2"><i class="pi pi-exclamation-circle text-[10px]"></i> {{ sheetError() }}</p> }
+            <button (click)="submitReturn()" [disabled]="busy()"
+              class="w-full bg-rose-600 text-white font-bold rounded-xl py-3.5 disabled:opacity-50 flex items-center justify-center gap-2">
+              @if (busy()) { <i class="pi pi-spin pi-spinner"></i> Saving… } @else { <i class="pi pi-check"></i> Create credit note }
+            </button>
+            <p class="text-[11px] text-slate-400 text-center mt-2">Reduces the customer's outstanding and posts to the books.</p>
+          </div>
+        </div>
+      }
+
       <!-- ── PROMISE SHEET ──────────────────────────────────────── -->
       @if (promiseSheet()) {
         <div class="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center sm:justify-center" (click)="promiseSheet.set(false)">
@@ -1562,6 +1605,41 @@ export class MySalesComponent implements OnInit {
         this.showToast('Claim submitted for approval'); this.loadExpenses();
       },
       error: (e) => { this.savingExpense.set(false); this.showToast(e?.error?.message || 'Could not submit claim'); },
+    });
+  }
+
+  // ── Sales returns (field-recorded credit notes) ──
+  readonly returnFor = signal<any>(null);
+  returnItems: Array<{ description: string; quantity: number | null; unitPrice: number | null }> = [{ description: '', quantity: null, unitPrice: null }];
+  returnTaxPct: number | null = null;
+  returnReason = '';
+  returnTotal(): number {
+    const sub = this.returnItems.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0);
+    const tax = sub * ((Number(this.returnTaxPct) || 0) / 100);
+    return Math.round((sub + tax) * 100) / 100;
+  }
+  openReturnFromVisit() {
+    const c = this.activeCustomer();
+    if (!c) { this.showToast('Check in on a customer first'); return; }
+    this.returnItems = [{ description: '', quantity: null, unitPrice: null }];
+    this.returnTaxPct = null; this.returnReason = ''; this.sheetError.set('');
+    this.returnFor.set({ id: c.id || c.customerId, name: c.name || c.customerName });
+  }
+  addReturnLine() { this.returnItems = [...this.returnItems, { description: '', quantity: null, unitPrice: null }]; }
+  removeReturnLine(i: number) { this.returnItems = this.returnItems.filter((_, idx) => idx !== i); }
+  submitReturn() {
+    if (this.busy()) return;
+    const cust = this.returnFor();
+    const items = this.returnItems
+      .filter((l) => l.description?.trim() && Number(l.quantity) > 0)
+      .map((l) => ({ description: l.description.trim(), quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) || 0 }));
+    if (!items.length) { this.sheetError.set('Add at least one returned item'); return; }
+    this.sheetError.set(''); this.busy.set(true);
+    this.sfa.appRecordReturn({
+      customerId: cust.id, items, taxRatePct: Number(this.returnTaxPct) || 0, reason: this.returnReason.trim() || undefined,
+    }).subscribe({
+      next: (n) => { this.busy.set(false); this.returnFor.set(null); this.showToast(`Return recorded — ${n?.noteNumber || 'credit note'} created`); },
+      error: (e) => { this.busy.set(false); this.sheetError.set(e?.error?.message || 'Could not record return'); },
     });
   }
 

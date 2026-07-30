@@ -13,6 +13,7 @@ import { PromotionsEngine, CartItemInput } from '../promotions/promotions-engine
 import { customerSegmentFlags } from '../promotions/customer-segments';
 import { CartService } from '../order/cart.service';
 import { PlanFeatureService } from '../erp/common/plan-feature.service';
+import { CreditNoteService } from '../erp/vyapar/return-note';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -35,6 +36,7 @@ export class SfaService {
     private readonly promos: PromotionsEngine,
     private readonly carts: CartService,
     private readonly planFeatures: PlanFeatureService,
+    private readonly creditNotes: CreditNoteService,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
   ) {}
 
@@ -629,6 +631,41 @@ export class SfaService {
         `UPDATE "${schema}".salesman_expenses SET status = $2, reviewed_at = NOW(), reviewed_by = $3 WHERE id = $1 RETURNING *`,
         [id, status, reviewerId || null],
       )));
+  }
+
+  // ─── Sales returns (field-recorded credit notes) ────────────────────────────
+  /**
+   * A salesman records goods a retailer returned. Creates a credit note (which
+   * auto-posts to the ledger and reduces the customer's outstanding), reusing
+   * the ERP CreditNoteService. `taxRatePct` comes in as a percentage (18) and is
+   * converted to the fraction the credit-note engine expects.
+   */
+  async recordReturn(schema: string, salesman: any, body: {
+    customerId?: string; invoiceId?: string; reason?: string; discount?: number; taxRatePct?: number;
+    items?: Array<{ description: string; quantity: number; unitPrice: number }>;
+  }) {
+    if (!body?.customerId) throw new BadRequestException('Customer is required');
+    const items = (body.items || []).filter((i) => i?.description?.trim() && Number(i.quantity) > 0);
+    if (!items.length) throw new BadRequestException('Add at least one returned item');
+    const customer = await this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(`SELECT COALESCE(display_name, name) AS name, phone FROM "${schema}".customers WHERE id = $1`, [body.customerId]).then(firstRow));
+    return this.creditNotes.create(schema, {
+      customerId: body.customerId,
+      invoiceId: body.invoiceId,
+      customerName: customer?.name,
+      customerPhone: customer?.phone,
+      items,
+      taxRate: (Number(body.taxRatePct) || 0) / 100,
+      discount: Number(body.discount) || 0,
+      reason: body.reason?.trim() || `Field return by ${salesman?.name || 'salesman'}`,
+    });
+  }
+
+  /** A salesman's recent returns (credit notes) for their day view. */
+  myReturns(schema: string, salesmanId?: string) {
+    return this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(`SELECT id, note_number, customer_name, total, reason, created_at
+                FROM "${schema}".credit_notes WHERE removed = false ORDER BY created_at DESC LIMIT 30`));
   }
 
   // ─── Visits (check-in / check-out journal) ──────────────────────────────────

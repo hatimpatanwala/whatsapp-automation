@@ -133,6 +133,7 @@ import { ErpExportService } from './export/erp-export.service';
     ErpInvoiceService,
     ErpDocumentService,
     LeadService,
+    CreditNoteService,
   ],
 })
 export class ErpModule {}

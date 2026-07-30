@@ -222,6 +222,18 @@ export class SfaController {
     return this.reminders.remindInvoice(this.tenantId(req), schema, id);
   }
 
+  @Get('app/returns')
+  async appReturns(@Req() req: Request) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.myReturns(schema, salesman.id);
+  }
+
+  @Post('app/returns')
+  async appRecordReturn(@Req() req: Request, @Body() body: any) {
+    const { schema, salesman } = await this.appSalesman(req);
+    return this.sfa.recordReturn(schema, salesman, body);
+  }
+
   @Get('app/products')
   async appProducts(@Req() req: Request, @Query('q') q?: string) {
     const { schema } = await this.appSalesman(req);
