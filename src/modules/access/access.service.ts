@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { firstRow } from '../erp/common/sql-result.util';
 import { ACCESS_FEATURES, FEATURE_KEYS, Level, fullAccess } from './access.constants';
+import { EmailRegistryService } from './email-registry.service';
 
 /**
  * RBAC engine: roles (per-feature read/write maps), employees (tenant login
@@ -12,7 +13,10 @@ import { ACCESS_FEATURES, FEATURE_KEYS, Level, fullAccess } from './access.const
  */
 @Injectable()
 export class AccessService {
-  constructor(private readonly cm: TenantConnectionManager) {}
+  constructor(
+    private readonly cm: TenantConnectionManager,
+    private readonly emails: EmailRegistryService,
+  ) {}
 
   features() { return ACCESS_FEATURES; }
 
@@ -92,6 +96,15 @@ export class AccessService {
     if (!body?.name?.trim()) throw new BadRequestException('Name is required');
     if (!body?.email?.trim() && !body?.phone?.trim()) throw new BadRequestException('Email or phone is required');
     if (!body?.password || body.password.length < 6) throw new BadRequestException('Password must be at least 6 characters');
+    // Platform-wide uniqueness: an email/phone already backing a live account
+    // anywhere (this or any other company) cannot be re-registered. It frees up
+    // only when that account is deactivated or its company is deleted.
+    if (body.email?.trim() && await this.emails.isEmailTaken(body.email)) {
+      throw new BadRequestException('This email is already registered on the platform. Use a different email, or deactivate/remove the existing account first.');
+    }
+    if (body.phone?.trim() && await this.emails.isPhoneTaken(body.phone)) {
+      throw new BadRequestException('This phone number is already registered on the platform. Use a different number, or deactivate/remove the existing account first.');
+    }
     const hash = await bcrypt.hash(body.password, 12);
     return this.cm.executeInTenantContext(schema, async (qr) => {
       // The legacy `role` string is 'seller' for every RBAC employee — enough to

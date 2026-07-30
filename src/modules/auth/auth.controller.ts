@@ -17,6 +17,7 @@ import { Subscription } from '../../database/entities/public/subscription.entity
 import { SubscriptionPlan } from '../../database/entities/public/subscription-plan.entity';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
 import { AccessService } from '../access/access.service';
+import { EmailRegistryService } from '../access/email-registry.service';
 
 @Controller('auth')
 export class AuthController {
@@ -26,6 +27,7 @@ export class AuthController {
     private readonly emailVerification: EmailVerificationService,
     private readonly tenantProvisioning: TenantProvisioningService,
     private readonly access: AccessService,
+    private readonly emailRegistry: EmailRegistryService,
     @InjectRepository(Tenant)
     private readonly tenantRepository: Repository<Tenant>,
     @InjectRepository(SuperAdmin)
@@ -240,27 +242,13 @@ export class AuthController {
     };
   }
 
-  private async isEmailTaken(email: string): Promise<boolean> {
-    const existingTenants = await this.tenantRepository.find({
-      where: { status: 'active' },
-      select: ['id', 'schemaName'],
-    });
-
-    for (const t of existingTenants) {
-      try {
-        const existingUser = await this.authService['connectionManager'].executeInTenantContext(
-          t.schemaName,
-          async (qr) => {
-            const result = await qr.query(`SELECT id FROM users WHERE email = $1`, [email]);
-            return result[0] || null;
-          },
-        );
-        if (existingUser) return true;
-      } catch {
-        continue;
-      }
-    }
-    return false;
+  /**
+   * Platform-wide: is this email already backing a LIVE account? Delegates to the
+   * shared registry, which only counts ACTIVE users in ACTIVE tenants — so an
+   * email frees up once its account is deactivated or its company is deleted.
+   */
+  private isEmailTaken(email: string): Promise<boolean> {
+    return this.emailRegistry.isEmailTaken(email);
   }
 
   @Post('register')
