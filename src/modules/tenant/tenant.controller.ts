@@ -259,36 +259,43 @@ export class TenantController {
     }
 
     const currentPlan = sub.subscriptionPlan;
+    const customName = `${(currentPlan.name || 'Plan').replace(/ \(Custom.*$/, '')} (Custom - ${id.substring(0, 8)})`;
     let updatedPlan: SubscriptionPlan;
 
     if (currentPlan.tier === 'custom') {
-      // Update the custom plan directly — use save() to properly persist JSONB
-      const merged = { ...(currentPlan.features || {}), ...body.features };
-      currentPlan.features = merged;
+      // Update the tenant's existing custom plan in place.
+      currentPlan.features = { ...(currentPlan.features || {}), ...body.features };
       updatedPlan = await this.planRepo.save(currentPlan);
     } else {
-      // Create a new custom plan based on the current one
-      const customPlan = this.planRepo.create({
-        name: `${currentPlan.name} (Custom - ${id.substring(0, 8)})`,
-        tier: 'custom',
-        description: `Custom plan based on ${currentPlan.name}`,
-        monthlyPrice: currentPlan.monthlyPrice,
-        yearlyPrice: currentPlan.yearlyPrice,
-        pricePerConversation: currentPlan.pricePerConversation,
-        limits: { ...currentPlan.limits },
-        features: { ...(currentPlan.features || {}), ...body.features },
-        isActive: false, // Don't show in public plan list
-        sortOrder: 99,
-      });
+      // Reuse this tenant's custom plan if one already exists, else create it —
+      // avoids piling up duplicate custom plans (and unique-name collisions) on
+      // repeated saves, which left the override un-persisted.
+      let customPlan = await this.planRepo.findOne({ where: { name: customName, tier: 'custom' } });
+      const features = { ...(currentPlan.features || {}), ...body.features };
+      if (customPlan) {
+        customPlan.features = features;
+        customPlan.limits = { ...currentPlan.limits };
+      } else {
+        customPlan = this.planRepo.create({
+          name: customName, tier: 'custom', description: `Custom plan based on ${currentPlan.name}`,
+          monthlyPrice: currentPlan.monthlyPrice, yearlyPrice: currentPlan.yearlyPrice,
+          pricePerConversation: currentPlan.pricePerConversation,
+          limits: { ...currentPlan.limits }, features, isActive: false, sortOrder: 99,
+        });
+      }
       updatedPlan = await this.planRepo.save(customPlan);
-
-      // Point the subscription to the new custom plan
-      await this.subscriptionRepo.update(sub.id, { planId: updatedPlan.id });
     }
 
+    // Point EVERY active subscription for this tenant at the resolved plan (guards
+    // against stray duplicate active rows that would otherwise read the old plan).
+    await this.subscriptionRepo.update({ tenantId: id, status: 'active' }, { planId: updatedPlan.id });
+
+    // Re-read from the DB so the response reflects exactly what was persisted.
+    const fresh = await this.planRepo.findOne({ where: { id: updatedPlan.id } });
     return {
       message: 'Features updated',
-      features: updatedPlan.features,
+      features: fresh?.features ?? updatedPlan.features,
+      enabledFeatures: (fresh ?? updatedPlan).getEnabledFeatures?.() ?? [],
       planId: updatedPlan.id,
     };
   }

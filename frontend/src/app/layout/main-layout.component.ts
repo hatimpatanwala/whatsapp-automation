@@ -337,7 +337,7 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Dashboard', icon: 'pi-home', route: '/dashboard', hideWhenErp: true, supersededPerm: 'business_overview' },
         // Back into the keyboard-first ERP chrome (Miracle view) — the reverse of
         // the ERP status bar's "Web Portal ⤴" link.
-        { label: 'ERP (Keyboard view)', icon: 'pi-table', route: '/home', featureKey: 'erp' },
+        { label: 'ERP (Keyboard view)', icon: 'pi-table', route: '/home', featureKey: 'erp', perm: 'business_overview' },
         { label: 'Business Overview', icon: 'pi-chart-bar', route: '/erp/dashboard', featureKey: 'erp', perm: 'business_overview' },
         { label: 'Reports & Analytics', icon: 'pi-chart-line', route: '/erp/reports', featureKey: 'erp', perm: 'reports' },
         // Premium BI — visible to every ERP tenant; the page shows the upgrade
@@ -416,34 +416,34 @@ export class MainLayoutComponent implements OnInit {
     {
       title: 'Marketing & WhatsApp',
       items: [
-        { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns', wa: true },
-        { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations', wa: true },
-        { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog', wa: true },
-        { label: 'WhatsApp Connect', icon: 'pi-qrcode', route: '/whatsapp-connect', featureKey: 'whatsappSuite', wa: true },
-        { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder', wa: true },
+        { label: 'Campaigns', icon: 'pi-megaphone', route: '/campaigns', featureKey: 'campaigns', wa: true, perm: 'campaigns' },
+        { label: 'Conversations', icon: 'pi-comments', route: '/conversations', featureKey: 'conversations', wa: true, perm: 'conversations' },
+        { label: 'WhatsApp Catalog', icon: 'pi-shopping-bag', route: '/catalog-management', featureKey: 'whatsappCatalog', wa: true, perm: 'whatsapp' },
+        { label: 'WhatsApp Connect', icon: 'pi-qrcode', route: '/whatsapp-connect', featureKey: 'whatsappSuite', wa: true, perm: 'whatsapp' },
+        { label: 'Workflow Builder', icon: 'pi-sitemap', route: '/workflow-builder', featureKey: 'workflowBuilder', wa: true, perm: 'workflows' },
       ],
     },
     {
       title: 'Operations & HR',
       items: [
-        { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries', featureKey: 'deliveries' },
-        { label: 'Employees', icon: 'pi-id-card', route: '/erp/employees', featureKey: 'erp' },
-        { label: 'Branches', icon: 'pi-sitemap', route: '/erp/branches', featureKey: 'erp' },
+        { label: 'Deliveries', icon: 'pi-truck', route: '/deliveries', featureKey: 'deliveries', perm: 'deliveries' },
+        { label: 'Employees', icon: 'pi-id-card', route: '/erp/employees', featureKey: 'erp', perm: 'employees' },
+        { label: 'Branches', icon: 'pi-sitemap', route: '/erp/branches', featureKey: 'erp', perm: 'settings' },
       ],
     },
     {
       title: 'Administration',
       items: [
-        { label: 'API Keys', icon: 'pi-key', route: '/erp/api-keys', featureKey: 'erp' },
-        { label: 'Export Data', icon: 'pi-download', route: '/erp/export', featureKey: 'erp' },
-        { label: 'Business Settings', icon: 'pi-sliders-h', route: '/erp/settings', featureKey: 'erp' },
+        { label: 'API Keys', icon: 'pi-key', route: '/erp/api-keys', featureKey: 'erp', perm: 'settings' },
+        { label: 'Export Data', icon: 'pi-download', route: '/erp/export', featureKey: 'erp', perm: 'settings' },
+        { label: 'Business Settings', icon: 'pi-sliders-h', route: '/erp/settings', featureKey: 'erp', perm: 'settings' },
         // Team & Roles (RBAC) — employees + per-feature permissions.
         { label: 'Team & Roles', icon: 'pi-users', route: '/team', perm: 'employees' },
         { label: 'Notifications', icon: 'pi-bell', route: '/notifications' },
         // Offline desktop app — shown ONLY to tenants licensed for it (erpOffline).
         // Online-only plans never see this entry.
         { label: 'Desktop App (Offline)', icon: 'pi-desktop', route: '/desktop-app', featureLive: 'erpOffline' },
-        { label: 'App Settings', icon: 'pi-cog', route: '/settings' },
+        { label: 'App Settings', icon: 'pi-cog', route: '/settings', perm: 'settings' },
       ],
     },
   ];

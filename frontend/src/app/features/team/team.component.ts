@@ -168,6 +168,9 @@ export class TeamComponent implements OnInit {
   nRoleName = '';
 
   ngOnInit() {
+    // Make sure our own permissions are resolved — otherwise canManage() stays
+    // false and every role/permission control renders permanently disabled.
+    void this.perms.ensure();
     this.api.get<Feature[]>('/access/features').subscribe((f) => this.features.set(f || []));
     this.loadRoles();
     this.loadEmployees();

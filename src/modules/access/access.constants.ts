@@ -24,8 +24,16 @@ export const ACCESS_FEATURES: { key: string; label: string; group: string }[] = 
   { key: 'payments', label: 'Payments', group: 'Accounting' },
   { key: 'accounting', label: 'Accounting / Ledgers', group: 'Accounting' },
   { key: 'gst', label: 'GST Returns', group: 'Accounting' },
-  { key: 'reports', label: 'Reports', group: 'Insights' },
-  { key: 'settings', label: 'Business Settings', group: 'Admin' },
+  { key: 'reports', label: 'Reports & Analytics', group: 'Insights' },
+  // Marketing & WhatsApp modules.
+  { key: 'campaigns', label: 'Campaigns', group: 'Marketing & WhatsApp' },
+  { key: 'conversations', label: 'Conversations (Inbox)', group: 'Marketing & WhatsApp' },
+  { key: 'whatsapp', label: 'WhatsApp Catalog & Connect', group: 'Marketing & WhatsApp' },
+  { key: 'workflows', label: 'Automations & Workflows', group: 'Marketing & WhatsApp' },
+  // Operations.
+  { key: 'deliveries', label: 'Deliveries', group: 'Operations' },
+  // Admin / settings.
+  { key: 'settings', label: 'Business & App Settings', group: 'Admin' },
   { key: 'employees', label: 'Employees & Roles', group: 'Admin' },
 ];
 

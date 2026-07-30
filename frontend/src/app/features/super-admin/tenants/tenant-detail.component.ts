@@ -883,13 +883,16 @@ export class TenantDetailComponent implements OnInit {
     this.subscriptionService.updateTenantFeatures(this.tenantId, this.featureOverrides).subscribe({
       next: (res: any) => {
         this.savingFeatures.set(false);
-        // Update local state with the actual persisted features from backend
+        // Trust the backend's authoritative persisted features. Do NOT re-fetch the
+        // subscription here — that overwrote the freshly-saved toggles with a stale
+        // read and made every change appear to "revert".
         if (res?.features) {
           this.planFeatures.set({ ...res.features });
           this.featureOverrides = { ...res.features };
+          const sub = this.activeSub();
+          if (sub) this.activeSub.set({ ...sub, planFeatures: res.features, planId: res.planId ?? sub.planId });
         }
         this.toast('success', 'Features updated');
-        this.loadSubscription();
       },
       error: () => { this.savingFeatures.set(false); this.toast('error', 'Failed to update features'); },
     });
