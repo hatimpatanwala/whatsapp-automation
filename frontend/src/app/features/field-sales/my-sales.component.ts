@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SfaService } from '../../core/services/sfa.service';
 import { OfflineQueueService } from '../../core/services/offline-queue.service';
+import { WebPushService } from '../../core/services/web-push.service';
 
 type Tab = 'today' | 'beat' | 'order' | 'collect' | 'performance' | 'visits';
 
@@ -53,6 +54,14 @@ interface OrderLine {
               {{ salesman()?.name || 'Loading…' }}{{ salesman()?.route ? ' · ' + salesman()?.route : '' }}{{ salesman()?.area ? ' · ' + salesman()?.area : '' }}
             </p>
           </div>
+          @if (webpush.available()) {
+            <button (click)="webpush.toggle()" [disabled]="webpush.busy()" [title]="webpush.enabled() ? 'Notifications on' : 'Enable notifications'"
+              class="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 active:bg-slate-50 disabled:opacity-40"
+              [class.border-indigo-200]="webpush.enabled()" [class.text-indigo-600]="webpush.enabled()"
+              [class.border-slate-200]="!webpush.enabled()" [class.text-slate-400]="!webpush.enabled()">
+              <i class="pi text-sm" [ngClass]="webpush.busy() ? 'pi-spin pi-spinner' : webpush.enabled() ? 'pi-bell' : 'pi-bell-slash'"></i>
+            </button>
+          }
           <button (click)="refresh()" [disabled]="loading()"
             class="w-9 h-9 rounded-xl border border-slate-200 text-slate-500 flex items-center justify-center shrink-0 active:bg-slate-50 disabled:opacity-40">
             <i class="pi pi-refresh text-sm" [class.pi-spin]="loading()"></i>
@@ -1059,6 +1068,7 @@ interface OrderLine {
 export class MySalesComponent implements OnInit {
   private readonly sfa = inject(SfaService);
   readonly offline = inject(OfflineQueueService);
+  readonly webpush = inject(WebPushService);
 
   // Order & Collect are intentionally NOT top-level tabs: they're reached from the
   // checked-in card's "Take order" / "Collect" actions (and their views still render
@@ -1140,6 +1150,7 @@ export class MySalesComponent implements OnInit {
   ngOnInit() {
     this.loadMe();
     this.loadAttendance();
+    this.webpush.init();
   }
 
   refresh() {

@@ -3498,6 +3498,29 @@ const migration093SalesmanExpenses: TenantMigration = {
   },
 };
 
+const migration094PushSubscriptions: TenantMigration = {
+  name: '094_push_subscriptions',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".push_subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ
+      )
+    `);
+    await qr.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_push_endpoint ON "${schema}".push_subscriptions (endpoint)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS ix_push_user ON "${schema}".push_subscriptions (user_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".push_subscriptions`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3592,4 +3615,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration091BackfillTaxonomy,
   migration092SalesmanAttendance,
   migration093SalesmanExpenses,
+  migration094PushSubscriptions,
 ];

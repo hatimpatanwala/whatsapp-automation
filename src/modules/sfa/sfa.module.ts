@@ -9,6 +9,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { Tenant } from '../../database/entities/public/tenant.entity';
 import { SfaController } from './sfa.controller';
 import { SfaService } from './sfa.service';
+import { PushService } from './push.service';
 
 /**
  * SFA (Sales Force Automation): admin registers salesmen by WhatsApp number;
@@ -19,7 +20,7 @@ import { SfaService } from './sfa.service';
 @Module({
   imports: [ErpModule, OrderModule, EntryModule, PromotionsModule, MediaModule, WhatsAppModule, TypeOrmModule.forFeature([Tenant])],
   controllers: [SfaController],
-  providers: [SfaService],
+  providers: [SfaService, PushService],
   exports: [SfaService],
 })
 export class SfaModule {}

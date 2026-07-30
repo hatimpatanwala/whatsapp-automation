@@ -8,6 +8,7 @@ import { PermissionGuard } from '../../common/guards/permission.guard';
 import { SfaService } from './sfa.service';
 import { MediaService } from '../media/media.service';
 import { ErpReminderService } from '../whatsapp/erp-reminder.service';
+import { PushService } from './push.service';
 
 /**
  * SFA — salesman field app.
@@ -21,6 +22,7 @@ export class SfaController {
     private readonly sfa: SfaService,
     private readonly media: MediaService,
     private readonly reminders: ErpReminderService,
+    private readonly pushSvc: PushService,
   ) {}
 
   private schema(req: Request): string {
@@ -226,6 +228,27 @@ export class SfaController {
   async appReturns(@Req() req: Request) {
     const { schema, salesman } = await this.appSalesman(req);
     return this.sfa.myReturns(schema, salesman.id);
+  }
+
+  // ─── Web-push (browser notifications) ───────────────────────────────────────
+  @Get('app/push/key')
+  async appPushKey(@Req() req: Request) {
+    await this.appSalesman(req);
+    return { publicKey: this.pushSvc.getPublicKey(), enabled: this.pushSvc.configured() };
+  }
+
+  @Post('app/push/subscribe')
+  async appPushSubscribe(@Req() req: Request, @Body() body: any) {
+    const { schema } = await this.appSalesman(req);
+    const userId = (req.session as any)?.userId;
+    return this.pushSvc.saveSubscription(schema, userId, body?.subscription || body, req.headers['user-agent'] as string);
+  }
+
+  @Post('app/push/unsubscribe')
+  async appPushUnsubscribe(@Req() req: Request, @Body() body: { endpoint?: string }) {
+    const { schema } = await this.appSalesman(req);
+    if (!body?.endpoint) return { removed: false };
+    return this.pushSvc.removeSubscription(schema, body.endpoint);
   }
 
   @Post('app/returns')

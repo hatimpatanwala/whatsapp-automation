@@ -14,6 +14,7 @@ import { customerSegmentFlags } from '../promotions/customer-segments';
 import { CartService } from '../order/cart.service';
 import { PlanFeatureService } from '../erp/common/plan-feature.service';
 import { CreditNoteService } from '../erp/vyapar/return-note';
+import { PushService } from './push.service';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -37,6 +38,7 @@ export class SfaService {
     private readonly carts: CartService,
     private readonly planFeatures: PlanFeatureService,
     private readonly creditNotes: CreditNoteService,
+    private readonly push: PushService,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
   ) {}
 
@@ -626,11 +628,29 @@ export class SfaService {
   }
   async reviewExpense(schema: string, id: string, status: string, reviewerId?: string) {
     if (!['approved', 'rejected', 'pending'].includes(status)) throw new BadRequestException('Invalid status');
-    return this.cm.executeInTenantContext(schema, async (qr) =>
+    const row = await this.cm.executeInTenantContext(schema, async (qr) =>
       firstRow(await qr.query(
         `UPDATE "${schema}".salesman_expenses SET status = $2, reviewed_at = NOW(), reviewed_by = $3 WHERE id = $1 RETURNING *`,
         [id, status, reviewerId || null],
       )));
+    // Nudge the salesman on their phone (best-effort; no-op until VAPID is configured).
+    if (row && status !== 'pending') {
+      this.pushToSalesman(schema, row.salesman_id, {
+        title: status === 'approved' ? 'Expense approved ✅' : 'Expense rejected',
+        body: `Your ${row.category} claim of ₹${row.amount} was ${status}.`,
+        url: '/field-sales/my-sales', tag: 'expense',
+      }).catch(() => {});
+    }
+    return row;
+  }
+
+  /** Resolve a salesman's login user and push a browser notification (best-effort). */
+  async pushToSalesman(schema: string, salesmanId: string, payload: { title: string; body: string; url?: string; tag?: string }) {
+    if (!salesmanId || !this.push.configured()) return { sent: 0 };
+    const userId = await this.cm.executeInTenantContext(schema, (qr) =>
+      qr.query(`SELECT user_id FROM "${schema}".salesmen WHERE id = $1`, [salesmanId]).then((r) => r[0]?.user_id));
+    if (!userId) return { sent: 0 };
+    return this.push.sendToUser(schema, userId, payload);
   }
 
   // ─── Sales returns (field-recorded credit notes) ────────────────────────────
