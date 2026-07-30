@@ -83,6 +83,11 @@ export class InventoryService {
     );
   }
 
+  /** Recent stock movements across all items (Stock Movement log). */
+  getRecentMovements(): Observable<any[]> {
+    return this.api.get<any[]>('/inventory/movements');
+  }
+
   /**
    * Get all items currently below their low-stock threshold.
    */

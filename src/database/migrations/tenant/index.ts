@@ -3521,6 +3521,42 @@ const migration094PushSubscriptions: TenantMigration = {
   },
 };
 
+const migration095ExpenseFreeText: TenantMigration = {
+  name: '095_expense_free_text_fields',
+  async up(qr, schema) {
+    // Category becomes free-text (no dropdown); paid_via holds a simple bank/cash/upi.
+    await qr.query(`ALTER TABLE "${schema}".expenses ADD COLUMN IF NOT EXISTS category VARCHAR(120)`);
+    await qr.query(`ALTER TABLE "${schema}".expenses ADD COLUMN IF NOT EXISTS paid_via VARCHAR(20)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`ALTER TABLE "${schema}".expenses DROP COLUMN IF EXISTS category`);
+    await qr.query(`ALTER TABLE "${schema}".expenses DROP COLUMN IF EXISTS paid_via`);
+  },
+};
+
+const migration096InventoryMovements: TenantMigration = {
+  name: '096_inventory_movements',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".inventory_movements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        inventory_id UUID,
+        product_id UUID,
+        delta INT NOT NULL DEFAULT 0,
+        new_quantity INT NOT NULL DEFAULT 0,
+        type VARCHAR(20) NOT NULL DEFAULT 'adjustment',
+        reason TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await qr.query(`CREATE INDEX IF NOT EXISTS ix_inv_moves_created ON "${schema}".inventory_movements (created_at DESC)`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS ix_inv_moves_item ON "${schema}".inventory_movements (inventory_id)`);
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".inventory_movements`);
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3616,4 +3652,6 @@ export const tenantMigrations: TenantMigration[] = [
   migration092SalesmanAttendance,
   migration093SalesmanExpenses,
   migration094PushSubscriptions,
+  migration095ExpenseFreeText,
+  migration096InventoryMovements,
 ];

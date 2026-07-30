@@ -207,8 +207,12 @@ export class BulkUploadService {
     });
 
     const rows = products.map((p: any) => {
-      const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata || '{}') : p.metadata || {};
-      const images: string[] = Array.isArray(p.images) ? p.images : [];
+      // A single malformed metadata/images value must NOT blank the whole export —
+      // parse defensively so every product still makes it into the sheet.
+      let meta: any = {};
+      try { meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata || '{}') : (p.metadata || {}); } catch { meta = {}; }
+      let images: string[] = [];
+      try { images = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []); } catch { images = []; }
       const tags = Array.isArray(meta.tags) ? meta.tags.join(', ') : meta.tags || '';
       return {
         id: p.id,

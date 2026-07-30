@@ -242,6 +242,29 @@ interface OrderLine {
               </div>
             </div>
 
+            <!-- Last 7 days trend (always renders from real activity) -->
+            @if (trendData().length) {
+              <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mt-5 mb-2 flex items-center gap-1.5">
+                <i class="pi pi-chart-bar"></i> Last 7 days
+              </h2>
+              <div class="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                <div class="flex items-end gap-1.5 h-28">
+                  @for (d of trendData(); track $index) {
+                    <div class="flex-1 flex flex-col items-center justify-end h-full gap-1" [title]="(d.day | date:'d MMM') + ' · sales ₹' + fmt(d.sales) + ' · collected ₹' + fmt(d.collected)">
+                      <div class="w-full flex flex-col justify-end h-full">
+                        <div class="w-full rounded-t bg-gradient-to-t from-indigo-500 to-indigo-400 transition-all duration-500" [style.height.%]="barPct(d.sales, trendMax())"></div>
+                      </div>
+                      <span class="text-[9px] text-slate-400 tabular-nums">{{ d.day | date:'EEEEE' }}</span>
+                    </div>
+                  }
+                </div>
+                <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px]">
+                  <span class="flex items-center gap-1 text-slate-500"><span class="w-2 h-2 rounded-sm bg-indigo-500"></span> Sales (7d) <span class="font-bold tabular-nums text-slate-700">₹{{ fmtShort(trendTotal('sales')) }}</span></span>
+                  <span class="flex items-center gap-1 text-slate-500">Collected <span class="font-bold tabular-nums text-emerald-700">₹{{ fmtShort(trendTotal('collected')) }}</span></span>
+                </div>
+              </div>
+            }
+
             <!-- Today's numbers -->
             <h2 class="text-[12px] font-bold text-slate-400 uppercase tracking-wide mt-5 mb-2">Today so far</h2>
             <div class="grid grid-cols-2 gap-3">
@@ -1518,6 +1541,15 @@ export class MySalesComponent implements OnInit {
 
   maxDaySales(days: any[]): number {
     return (days || []).reduce((m, d) => Math.max(m, Number(d.sales) || 0), 0);
+  }
+
+  /** Last-7-days trend for the Today view (always renders when there's activity). */
+  readonly trendData = computed<any[]>(() => this.me()?.stats?.trend || []);
+  trendMax(): number {
+    return this.trendData().reduce((m, d) => Math.max(m, Number(d.sales) || 0), 0);
+  }
+  trendTotal(key: 'sales' | 'collected'): number {
+    return this.trendData().reduce((s, d) => s + (Number(d[key]) || 0), 0);
   }
 
   /** Keep the last ~14 days so the CSS bar chart stays readable. */

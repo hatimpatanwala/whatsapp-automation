@@ -6,7 +6,7 @@ import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { ErpFeatureGuard } from '../../../common/guards/erp-feature.guard';
 import { RequiresFeature } from '../../../common/decorators/requires-feature.decorator';
 
-const COLS = ['name', 'description', 'ref', 'expense_category_id', 'supplier_id', 'amount', 'tax_amount', 'total', 'payment_mode_id', 'expense_date'];
+const COLS = ['name', 'description', 'ref', 'category', 'expense_category_id', 'supplier_id', 'amount', 'tax_amount', 'total', 'paid_via', 'payment_mode_id', 'expense_date'];
 const money = (n: any) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
 @Injectable()

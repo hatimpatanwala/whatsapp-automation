@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AccountingService, Ledger } from '../../core/services/accounting.service';
@@ -155,12 +155,21 @@ const TITLES: Record<string, string> = {
             </div>
           }
           @case ('ledger') {
-            <div class="flex items-center gap-2 mb-4">
+            <div class="flex flex-wrap items-center gap-2 mb-4">
               <label class="text-sm font-medium">Ledger</label>
+              <input type="text" [ngModel]="ledgerSearch()" (ngModelChange)="ledgerSearch.set($event)"
+                     placeholder="Search customer / ledger…" class="border rounded px-2 py-1.5 text-sm min-w-56" />
               <select [ngModel]="ledgerId()" (ngModelChange)="pickLedger($event)" class="border rounded px-2 py-1.5 text-sm min-w-64">
                 <option value="">— select a ledger —</option>
-                @for (l of ledgers(); track l.id) { <option [value]="l.id">{{ l.name }} ({{ l.groupName }})</option> }
+                @for (l of filteredLedgers(); track l.id) { <option [value]="l.id">{{ l.name }} ({{ l.groupName }})</option> }
               </select>
+              @if (ledgerSearch() && !filteredLedgers().length) { <span class="text-xs text-slate-400">No match</span> }
+              @if (statement()) {
+                <div class="ml-auto flex gap-2">
+                  <button (click)="shareLedger()" class="text-[13px] font-semibold text-green-700 border border-green-300 rounded-lg px-3 py-1.5 flex items-center gap-1.5"><i class="pi pi-whatsapp text-[12px]"></i> Share</button>
+                  <button (click)="downloadPdf()" class="text-[13px] font-semibold text-indigo-600 border border-indigo-300 rounded-lg px-3 py-1.5 flex items-center gap-1.5"><i class="pi pi-print text-[12px]"></i> Print / PDF</button>
+                </div>
+              }
             </div>
             @if (statement(); as st) {
               <div class="border rounded-lg overflow-x-auto max-w-4xl">
@@ -259,6 +268,23 @@ export class ReportsComponent {
   readonly ledgerId = signal('');
   readonly statement = signal<any>(null);
   readonly intRate = signal(18);
+  readonly ledgerSearch = signal('');
+  /** Ledgers filtered by the search box (name or group). */
+  readonly filteredLedgers = computed(() => {
+    const q = this.ledgerSearch().trim().toLowerCase();
+    const all = this.ledgers();
+    if (!q) return all;
+    return all.filter((l) => (l.name || '').toLowerCase().includes(q) || (l.groupName || '').toLowerCase().includes(q));
+  });
+  /** Share the current ledger statement summary on WhatsApp. */
+  shareLedger(): void {
+    const st = this.statement();
+    if (!st) return;
+    const name = this.ledgers().find((l) => l.id === this.ledgerId())?.name || 'Ledger';
+    const lines = (st.lines || []).length;
+    const text = `*Ledger — ${name}*\nOpening: ${this.fmt(st.opening)}\nEntries: ${lines}\nClosing balance: *${this.fmt(st.closing)}*`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }
 
   // Day Book filters
   readonly dayBookDate = signal<string>(new Date().toISOString().slice(0, 10));
@@ -304,29 +330,39 @@ export class ReportsComponent {
         summary: [{ label: 'Total Debit', value: M(d.totalDebit) }, { label: 'Total Credit', value: M(d.totalCredit) }, { label: d.balanced ? 'Balanced ✓' : 'Not balanced ✗', value: '' }],
       });
     } else if (rep === 'pnl') {
-      const rows = [
-        ...(d.income || []).map((r: any) => ({ side: 'Income', name: r.name, amount: r.amount })),
-        { side: '', name: 'Total Income', amount: d.totalIncome },
-        ...(d.expense || []).map((r: any) => ({ side: 'Expense', name: r.name, amount: r.amount })),
-        { side: '', name: 'Total Expense', amount: d.totalExpense },
+      // Clean vertical statement: section headers, indented accounts, subtotals.
+      const blank = { particulars: '', amount: '' };
+      const rows: any[] = [
+        { particulars: 'INCOME', amount: '' },
+        ...(d.income || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
+        { particulars: 'Total Income', amount: M(d.totalIncome) },
+        blank,
+        { particulars: 'EXPENSES', amount: '' },
+        ...(d.expense || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
+        { particulars: 'Total Expenses', amount: M(d.totalExpense) },
+        blank,
+        { particulars: `Net ${d.netProfit >= 0 ? 'Profit' : 'Loss'}`, amount: M(Math.abs(d.netProfit)) },
       ];
       await this.pdf.exportTable({
         title, subtitle: `Period ending ${today}`,
-        columns: [{ header: 'Group', key: 'side' }, { header: 'Account', key: 'name' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
+        columns: [{ header: 'Particulars', key: 'particulars' }, { header: 'Amount', key: 'amount', align: 'right' }],
         rows,
-        summary: [{ label: `Net ${d.netProfit >= 0 ? 'Profit' : 'Loss'}`, value: M(Math.abs(d.netProfit)) }],
       });
     } else if (rep === 'balance-sheet') {
-      const rows = [
-        ...(d.liabilities || []).map((r: any) => ({ side: 'Liabilities', name: r.name, amount: r.amount })),
-        { side: 'Liabilities', name: 'Net Profit', amount: d.netProfit },
-        { side: '', name: 'Total Liabilities', amount: d.totalLiabilities },
-        ...(d.assets || []).map((r: any) => ({ side: 'Assets', name: r.name, amount: r.amount })),
-        { side: '', name: 'Total Assets', amount: d.totalAssets },
+      const blank = { particulars: '', amount: '' };
+      const rows: any[] = [
+        { particulars: 'LIABILITIES', amount: '' },
+        ...(d.liabilities || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
+        { particulars: '   Net Profit', amount: M(d.netProfit) },
+        { particulars: 'Total Liabilities', amount: M(d.totalLiabilities) },
+        blank,
+        { particulars: 'ASSETS', amount: '' },
+        ...(d.assets || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
+        { particulars: 'Total Assets', amount: M(d.totalAssets) },
       ];
       await this.pdf.exportTable({
         title, subtitle: `As on ${today}`,
-        columns: [{ header: 'Section', key: 'side' }, { header: 'Account', key: 'name' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
+        columns: [{ header: 'Particulars', key: 'particulars' }, { header: 'Amount', key: 'amount', align: 'right' }],
         rows,
       });
     } else if (rep === 'day-book') {

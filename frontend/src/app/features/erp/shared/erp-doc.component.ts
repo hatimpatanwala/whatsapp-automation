@@ -34,6 +34,7 @@ export interface ErpDocConfig {
   statuses: { label: string; value: string }[];
   statusBadge: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast'>;
   hasTitle?: boolean;             // offers carry a title
+  hasReason?: boolean;            // credit/debit notes carry a reason/remarks
   convertLabel?: string;          // 'Convert to Invoice'
   removeMethod?: 'delete' | 'put-remove';
   hasPdf?: boolean;               // show a Download PDF button (default true)
@@ -137,6 +138,11 @@ interface LineForm { description: string; quantity: number; unitPrice: number; p
             <div><label class="block text-xs font-semibold text-gray-500 mb-1">Tax %</label><p-inputNumber [(ngModel)]="form.taxRatePct" [min]="0" [max]="100" suffix="%" inputStyleClass="w-full" /></div>
             <div><label class="block text-xs font-semibold text-gray-500 mb-1">Discount ({{ currency.symbol() }})</label><p-inputNumber [(ngModel)]="form.discount" [min]="0" inputStyleClass="w-full" /></div>
           </div>
+          @if (config.hasReason) {
+            <div><label class="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label>
+              <textarea [(ngModel)]="form.reason" rows="2" placeholder="e.g. damaged goods, price difference, wrong item"
+                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300"></textarea></div>
+          }
           <div class="bg-gray-50 rounded-lg p-3 text-sm">
             <div class="flex justify-between"><span class="text-gray-500">Subtotal</span><span class="tabular-nums">{{ currency.symbol() }}{{ fmt(preview().subtotal) }}</span></div>
             <div class="flex justify-between"><span class="text-gray-500">Tax</span><span class="tabular-nums">{{ currency.symbol() }}{{ fmt(preview().tax) }}</span></div>
@@ -241,6 +247,7 @@ export class ErpDocComponent implements OnInit {
       discount: Number(this.form.discount) || 0,
     };
     if (this.config.hasTitle) payload.title = this.form.title || undefined;
+    if (this.config.hasReason) payload.reason = this.form.reason || undefined;
     this.api.post(this.config.apiPath, payload).subscribe({
       next: () => { this.saving.set(false); this.showCreate.set(false); this.toast.add({ severity: 'success', summary: 'Created' }); this.load(); },
       error: (e) => { this.saving.set(false); this.toast.add({ severity: 'error', summary: 'Create failed', detail: e?.error?.error?.message || 'Error' }); },
@@ -287,5 +294,5 @@ export class ErpDocComponent implements OnInit {
 
   fmt(v: any): string { return (parseFloat(v ?? 0) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   badge(s: string) { return this.config.statusBadge[s] || 'secondary'; }
-  private blank() { return { party: null as any, title: '', items: [{ description: '', quantity: 1, unitPrice: 0 }] as LineForm[], taxRatePct: 0, discount: 0 }; }
+  private blank() { return { party: null as any, title: '', reason: '', items: [{ description: '', quantity: 1, unitPrice: 0 }] as LineForm[], taxRatePct: 0, discount: 0 }; }
 }

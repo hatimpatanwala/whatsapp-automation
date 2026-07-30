@@ -376,8 +376,7 @@ export class MainLayoutComponent implements OnInit {
         // Base Customers — superseded by ERP Clients (same `customers` table).
         { label: 'Customers', icon: 'pi-users', route: '/customers', featureKey: 'customers', hideWhenErp: true, perm: 'customers' },
         { label: 'Customers', icon: 'pi-users', route: '/erp/clients', featureKey: 'erp', perm: 'customers' },
-        { label: 'Companies', icon: 'pi-building', route: '/erp/companies', featureKey: 'erp', perm: 'customers' },
-        { label: 'People', icon: 'pi-user', route: '/erp/people', featureKey: 'erp', perm: 'customers' },
+        { label: 'Companies & People', icon: 'pi-building', route: '/erp/contacts', featureKey: 'erp', perm: 'customers' },
         { label: 'Leads', icon: 'pi-filter', route: '/erp/leads', featureKey: 'erp', perm: 'customers' },
       ],
     },
@@ -402,7 +401,6 @@ export class MainLayoutComponent implements OnInit {
         { label: 'Balance Sheet', icon: 'pi-book', route: '/accounting/reports/balance-sheet', featureKey: 'erp', perm: 'accounting' },
         { label: 'Payments', icon: 'pi-credit-card', route: '/payments', perm: 'payments' },
         { label: 'Cash & Bank', icon: 'pi-wallet', route: '/erp/bank-accounts', featureKey: 'erp', perm: 'payments' },
-        { label: 'Payment Modes', icon: 'pi-money-bill', route: '/erp/payment-modes', featureKey: 'erp', perm: 'payments' },
         { label: 'Currencies', icon: 'pi-dollar', route: '/erp/currencies', featureKey: 'erp', perm: 'accounting' },
       ],
     },
@@ -569,7 +567,9 @@ export class MainLayoutComponent implements OnInit {
   }
 
   currentPageTitle = computed(() => {
-    const url = this.router.url;
+    // Depend on the reactive currentUrl signal (updated on NavigationEnd), NOT the
+    // static router.url — otherwise the header title never changes without a refresh.
+    const url = this.currentUrl() || this.router.url;
     // Most-specific (longest) matching route wins, so /erp/invoices beats /erp.
     const match = this.allItems
       .filter((n) => url.startsWith(n.route))

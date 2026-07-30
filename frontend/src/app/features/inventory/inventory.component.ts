@@ -49,7 +49,7 @@ import { PermissionService } from '../../core/services/permission.service';
         </div>
         <div class="flex gap-2">
           <button pButton label="Export" icon="pi pi-download" class="p-button-outlined p-button-sm" [disabled]="!filteredItems().length" (click)="exportCsv()"></button>
-          <button pButton label="Stock Movement" icon="pi pi-list" class="p-button-sm" severity="secondary"></button>
+          <button pButton label="Stock Movement" icon="pi pi-list" class="p-button-sm" severity="secondary" (click)="openMovements()"></button>
         </div>
       </div>
 
@@ -199,6 +199,37 @@ import { PermissionService } from '../../core/services/permission.service';
           }
         </ng-template>
       </p-dialog>
+
+      <!-- Stock Movement log -->
+      <p-dialog [(visible)]="movementDialog" header="Stock Movement" [modal]="true" [style]="{width:'560px'}">
+        @if (movementsLoading()) {
+          <p class="text-gray-400 text-sm py-8 text-center">Loading movements…</p>
+        } @else if (!movements().length) {
+          <div class="py-10 text-center text-gray-400">
+            <i class="pi pi-inbox text-3xl"></i>
+            <p class="text-sm mt-2">No stock movements yet.</p>
+            <p class="text-xs mt-1">Adjustments you make will appear here as an audit trail.</p>
+          </div>
+        } @else {
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-[11px] uppercase text-gray-400 border-b border-gray-100">
+              <th class="py-1.5">Date</th><th>Product</th><th class="text-center">Type</th><th class="text-right">Change</th><th class="text-right">Balance</th><th>Reason</th>
+            </tr></thead>
+            <tbody>
+              @for (m of movements(); track m.id) {
+                <tr class="border-b border-gray-50">
+                  <td class="py-1.5 text-gray-500 whitespace-nowrap">{{ m.createdAt | date:'d MMM, h:mm a' }}</td>
+                  <td class="text-gray-800">{{ m.productName || '—' }}</td>
+                  <td class="text-center"><span class="text-[11px] font-semibold px-1.5 py-0.5 rounded" [class.bg-emerald-100]="m.delta >= 0" [class.text-emerald-700]="m.delta >= 0" [class.bg-red-100]="m.delta < 0" [class.text-red-700]="m.delta < 0">{{ m.delta >= 0 ? 'IN' : 'OUT' }}</span></td>
+                  <td class="text-right tabular-nums font-semibold" [class.text-emerald-700]="m.delta >= 0" [class.text-red-600]="m.delta < 0">{{ m.delta >= 0 ? '+' : '' }}{{ m.delta }}</td>
+                  <td class="text-right tabular-nums text-gray-600">{{ m.newQuantity }}</td>
+                  <td class="text-gray-500 max-w-[10rem] truncate">{{ m.reason || '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </p-dialog>
     </div>
   `,
 })
@@ -210,6 +241,9 @@ export class InventoryComponent implements OnInit {
   loading = signal(true);
   adjusting = signal(false);
   adjustDialog = false;
+  movementDialog = false;
+  movements = signal<any[]>([]);
+  movementsLoading = signal(false);
   selectedItem = signal<InventoryItem | null>(null);
   searchQuery = '';
   stockFilter = '';
@@ -332,6 +366,15 @@ export class InventoryComponent implements OnInit {
     this.adjustReason = '';
     this.newStockPreview.set(item.currentStock);
     this.adjustDialog = true;
+  }
+
+  openMovements() {
+    this.movementDialog = true;
+    this.movementsLoading.set(true);
+    this.inventoryService.getRecentMovements().subscribe({
+      next: (rows) => { this.movements.set(rows || []); this.movementsLoading.set(false); },
+      error: () => { this.movements.set([]); this.movementsLoading.set(false); },
+    });
   }
 
   calcPreview() {

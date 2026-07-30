@@ -14,5 +14,6 @@ export class ErpDebitNotesComponent {
     statuses: [{ label: 'Issued', value: 'issued' }],
     statusBadge: { issued: 'info' },
     removeMethod: 'put-remove',
+    hasReason: true,
   };
 }

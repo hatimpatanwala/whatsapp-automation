@@ -21,6 +21,12 @@ export class InventoryController {
     return this.inventoryService.getLowStock(req.tenantContext.schemaName);
   }
 
+  @Get('movements')
+  @Roles('owner', 'seller')
+  async getMovements(@Req() req: Request) {
+    return this.inventoryService.recentMovements(req.tenantContext.schemaName);
+  }
+
   @Put(':id/adjust')
   @Roles('owner', 'seller')
   async adjustStock(

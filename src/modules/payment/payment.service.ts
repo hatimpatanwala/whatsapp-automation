@@ -61,10 +61,17 @@ export class PaymentService {
 
   async findAll(schema: string, status?: string): Promise<any[]> {
     return this.connectionManager.executeInTenantContext(schema, async (qr) => {
-      let query = `SELECT p.*, o.order_number, c.phone as customer_phone, c.name as customer_name
+      // LEFT JOINs so payments linked to an INVOICE (ERP/SFA collections) or a
+      // supplier order show up too — an inner JOIN on orders hid all of them,
+      // which is why this page looked empty.
+      let query = `SELECT p.*, o.order_number, i.invoice_number,
+                          COALESCE(c.phone, ic.phone) AS customer_phone,
+                          COALESCE(c.name, ic.name, i.customer_name) AS customer_name
                    FROM payments p
-                   JOIN orders o ON o.id = p.order_id
-                   JOIN customers c ON c.id = o.customer_id`;
+                   LEFT JOIN orders o ON o.id = p.order_id
+                   LEFT JOIN customers c ON c.id = o.customer_id
+                   LEFT JOIN invoices i ON i.id = p.invoice_id
+                   LEFT JOIN customers ic ON ic.id = i.customer_id`;
       const params: any[] = [];
 
       if (status) {

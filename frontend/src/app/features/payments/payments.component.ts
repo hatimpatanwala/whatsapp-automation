@@ -16,6 +16,7 @@ import { FormsModule } from '@angular/forms';
 import { ImageModule } from 'primeng/image';
 import { PaymentService } from '../../core/services/payment.service';
 import { PermissionService } from '../../core/services/permission.service';
+import { ApiService } from '../../core/services/api.service';
 
 interface PaymentRow {
   id: string;
@@ -61,7 +62,28 @@ interface PaymentRow {
           <h1 class="text-2xl font-bold text-gray-900">Payments</h1>
           <p class="text-gray-500 text-sm">Verify and manage payment proofs</p>
         </div>
+        @if (perms.canWrite('payments')) {
+          <button pButton label="Add Payment Mode" icon="pi pi-plus" class="p-button-outlined p-button-sm" (click)="openAddMode()"></button>
+        }
       </div>
+
+      <!-- Add Payment Mode dialog -->
+      <p-dialog [(visible)]="addModeDialog" header="New Payment Mode" [modal]="true" [style]="{width:'380px'}">
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Name</label>
+            <input pInputText [(ngModel)]="newMode.name" placeholder="e.g. UPI, Bank Transfer, Cheque" class="w-full" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1">Description (optional)</label>
+            <input pInputText [(ngModel)]="newMode.description" class="w-full" />
+          </div>
+        </div>
+        <ng-template pTemplate="footer">
+          <button pButton label="Cancel" class="p-button-outlined" (click)="addModeDialog = false"></button>
+          <button pButton label="Save" [loading]="savingMode()" [disabled]="!newMode.name.trim()" (click)="savePaymentMode()"></button>
+        </ng-template>
+      </p-dialog>
 
       <!-- Stats -->
       <div class="grid grid-cols-3 gap-4">
@@ -223,7 +245,22 @@ export class PaymentsComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly paymentService = inject(PaymentService);
+  private readonly api = inject(ApiService);
   readonly perms = inject(PermissionService);
+
+  // Add-payment-mode (replaces the standalone Payment Modes page)
+  addModeDialog = false;
+  savingMode = signal(false);
+  newMode = { name: '', description: '' };
+  openAddMode() { this.newMode = { name: '', description: '' }; this.addModeDialog = true; }
+  savePaymentMode() {
+    if (!this.newMode.name.trim() || this.savingMode()) return;
+    this.savingMode.set(true);
+    this.api.post('/erp/payment-modes', { name: this.newMode.name.trim(), description: this.newMode.description.trim() || undefined, enabled: true }).subscribe({
+      next: () => { this.savingMode.set(false); this.addModeDialog = false; this.messageService.add({ severity: 'success', summary: 'Payment mode added' }); },
+      error: (e) => { this.savingMode.set(false); this.messageService.add({ severity: 'error', summary: 'Could not add', detail: e?.error?.error?.message || 'Error' }); },
+    });
+  }
 
   loading = signal(true);
   proofDialog = false;

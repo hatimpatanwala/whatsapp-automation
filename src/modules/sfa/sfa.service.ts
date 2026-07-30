@@ -942,7 +942,18 @@ export class SfaService {
         [salesmanId],
       );
       const [beatCount] = await qr.query(`SELECT COUNT(*)::int AS n FROM "${schema}".salesman_beats WHERE salesman_id = $1`, [salesmanId]);
+      const trend = await qr.query(
+        `WITH days AS (
+           SELECT generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day')::date AS d
+         )
+         SELECT d.d AS day,
+           COALESCE((SELECT SUM(total) FROM "${schema}".orders o WHERE o.salesman_id = $1 AND o.placed_at::date = d.d),0)::float AS sales,
+           COALESCE((SELECT SUM(amount) FROM "${schema}".payments p WHERE p.collected_by = $1::text AND p.created_at::date = d.d AND COALESCE(p.status,'') <> 'failed'),0)::float AS collected
+         FROM days d ORDER BY d.d`,
+        [salesmanId],
+      );
       return {
+        trend: trend.map((r: any) => ({ day: r.day, sales: round2(Number(r.sales) || 0), collected: round2(Number(r.collected) || 0) })),
         today: {
           sales: round2(Number(today?.sales_today) || 0), orders: Number(today?.orders_today) || 0,
           collected: round2(Number(today?.collected_today) || 0), visits: Number(today?.visits_today) || 0,

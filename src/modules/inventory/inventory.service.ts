@@ -100,6 +100,13 @@ export class InventoryService {
         [newQuantity, inventoryId],
       );
 
+      // Audit trail so the Stock Movement log has data.
+      await qr.query(
+        `INSERT INTO "${schema}".inventory_movements (inventory_id, product_id, delta, new_quantity, type, reason)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [inventoryId, inv[0].product_id, adjustment, newQuantity, adjustment >= 0 ? 'in' : 'out', reason ?? null],
+      );
+
       // Check low stock
       const available = newQuantity - inv[0].reserved_quantity;
       if (available <= inv[0].low_stock_threshold) {
@@ -110,6 +117,21 @@ export class InventoryService {
 
       return { ...inv[0], stock_quantity: newQuantity };
     });
+  }
+
+  /** Recent stock movements across all items (drives the Stock Movement log). */
+  async recentMovements(schema: string, limit = 100): Promise<any[]> {
+    return this.connectionManager.executeInTenantContext(schema, (qr) =>
+      qr.query(
+        `SELECT m.id, m.delta, m.new_quantity, m.type, m.reason, m.created_at,
+                p.name AS product_name
+         FROM "${schema}".inventory_movements m
+         LEFT JOIN "${schema}".products p ON p.id = m.product_id
+         ORDER BY m.created_at DESC
+         LIMIT $1`,
+        [Math.min(Math.max(Number(limit) || 100, 1), 500)],
+      ),
+    );
   }
 
   async getAvailableStock(schema: string, productId: string, variantId?: string): Promise<number> {
