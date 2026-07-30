@@ -13,6 +13,7 @@ import { FeatureService } from '../core/services/feature.service';
 import { ErpAccessService } from '../core/services/erp-access.service';
 import { PermissionService } from '../core/services/permission.service';
 import { PushRegistrationService } from '../core/services/push-registration.service';
+import { SfaService } from '../core/services/sfa.service';
 import { environment } from '../../environments/environment';
 
 interface NavItem {
@@ -37,6 +38,8 @@ interface NavItem {
   perm?: string;
   /** WhatsApp-only item — hidden in the "ERP" (no-WhatsApp) mobile build variant. */
   wa?: boolean;
+  /** Shown ONLY to users who are registered salesmen (the field-app workspace). */
+  salesmanOnly?: boolean;
 }
 
 interface NavSection {
@@ -308,6 +311,10 @@ export class MainLayoutComponent implements OnInit {
   readonly erpAccess = inject(ErpAccessService);
   readonly permissions = inject(PermissionService);
   private readonly push = inject(PushRegistrationService);
+  private readonly sfa = inject(SfaService);
+
+  /** Whether the signed-in user is a registered salesman (gates "My Field App"). */
+  readonly isSalesman = signal(false);
 
   sidebarOpen = signal(true);
   isMobile = signal(false);
@@ -350,7 +357,9 @@ export class MainLayoutComponent implements OnInit {
         // Field Sales = the single manager hub (register salesmen + reports, beats,
         // targets, visits, follow-ups); My Field App = the salesman's own workspace.
         { label: 'Field Sales', icon: 'pi-chart-bar', route: '/field-sales', featureLive: 'sfa', perm: 'salesmen' },
-        { label: 'My Field App', icon: 'pi-briefcase', route: '/my-sales', featureLive: 'sfa', perm: 'salesmen' },
+        // Only the salesman's own workspace — shown ONLY to users registered as a
+        // salesman (never owners/admins/managers, who use the Field Sales hub).
+        { label: 'My Field App', icon: 'pi-briefcase', route: '/my-sales', featureLive: 'sfa', salesmanOnly: true },
         // Base Invoices (GST/order docs) — superseded by ERP Invoices (same `invoices` table).
         { label: 'Invoices', icon: 'pi-receipt', route: '/invoices', hideWhenErp: true, perm: 'invoices' },
         { label: 'Invoices', icon: 'pi-receipt', route: '/erp/invoices', featureKey: 'erp', perm: 'invoices' },
@@ -487,7 +496,12 @@ export class MainLayoutComponent implements OnInit {
           }
           // Live-feature items (salesman app, offline desktop) — shown only when the
           // tenant is actually entitled, independent of the ERP master switch.
-          if (it.featureLive) return ready && this.erpAccess.has(it.featureLive);
+          if (it.featureLive) {
+            if (!(ready && this.erpAccess.has(it.featureLive))) return false;
+            // Salesman-only items appear solely for users registered as a salesman.
+            if (it.salesmanOnly) return this.isSalesman();
+            return true;
+          }
           // RBAC: hide anything the user's role can't even read. Until permissions
           // resolve, don't hide (avoids a flash); owner passes everything.
           if (it.perm && this.permissions.ready() && !this.permissions.can(it.perm, 'read')) return false;
@@ -582,6 +596,8 @@ export class MainLayoutComponent implements OnInit {
     window.addEventListener('resize', () => this.checkMobile());
     this.erpAccess.load();
     this.permissions.load();
+    // Decide whether to surface the salesman "My Field App" (salesmen only).
+    this.sfa.isSalesman().subscribe({ next: (r) => this.isSalesman.set(!!r?.isSalesman), error: () => this.isSalesman.set(false) });
     // Register for push on the native app (no-op on the web).
     void this.push.init();
     this.currentUrl.set(this.router.url);

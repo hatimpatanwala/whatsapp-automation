@@ -175,6 +175,15 @@ export class SfaController {
     return { salesman, ...home, stats };
   }
 
+  /** Lightweight, non-throwing: is the signed-in user a salesman? (nav gating) */
+  @Get('app/is-salesman')
+  async appIsSalesman(@Req() req: Request) {
+    const userId = (req.session as any)?.userId;
+    const schema = req.tenantContext?.schemaName;
+    if (!userId || !schema) return { isSalesman: false };
+    return { isSalesman: await this.sfa.isSalesmanUser(schema, userId) };
+  }
+
   @Get('app/customers')
   async appCustomers(@Req() req: Request, @Query('q') q?: string) {
     const { schema } = await this.appSalesman(req);

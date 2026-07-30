@@ -56,14 +56,29 @@ export class SfaService {
   ) {
     if (!s?.name?.trim() || !s?.phone?.trim()) throw new BadRequestException('Name and WhatsApp number are required');
     const token = randomBytes(24).toString('hex');
+    const phone = s.phone.trim();
+    const email = s.email?.trim()?.toLowerCase() || null;
     return this.cm.executeInTenantContext(schema, async (qr) => {
+      // One identity per phone/email across the platform: a salesman's number/email
+      // must not already belong to a NON-salesman platform user (owner/admin/staff),
+      // otherwise the two identities clash (and a login upsert would clobber them).
+      const clash = await qr.query(
+        `SELECT u.id FROM "${schema}".users u
+         WHERE (u.phone = $1 OR ($2::text IS NOT NULL AND lower(u.email) = $2))
+           AND NOT EXISTS (SELECT 1 FROM "${schema}".salesmen sm WHERE sm.user_id = u.id)
+         LIMIT 1`,
+        [phone, email],
+      );
+      if (clash.length) {
+        throw new BadRequestException('This phone or email already belongs to a platform user (owner/admin/staff). Salesman identities must be unique — use a different number/email.');
+      }
       const rows = await qr.query(
         `INSERT INTO "${schema}".salesmen (name, phone, route, area, access_token, code, email)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, route = EXCLUDED.route, area = EXCLUDED.area,
            code = EXCLUDED.code, email = COALESCE(EXCLUDED.email, "${schema}".salesmen.email), is_active = true
          RETURNING id, access_token`,
-        [s.name.trim(), s.phone.trim(), s.route?.trim() || null, s.area?.trim() || null, token, s.code?.trim() || null, s.email?.trim()?.toLowerCase() || null],
+        [s.name.trim(), phone, s.route?.trim() || null, s.area?.trim() || null, token, s.code?.trim() || null, email],
       );
       const salesman = rows[0];
       // Unify identity: optionally back the salesman with an email/password login so
@@ -108,23 +123,29 @@ export class SfaService {
       throw new UnauthorizedException('The salesman module is not enabled for this business.');
     }
     return this.cm.executeInTenantContext(schema, async (qr) => {
-      let s = (await qr.query(
+      const s = (await qr.query(
         `SELECT id, name, phone, route, area, code FROM "${schema}".salesmen WHERE user_id = $1 AND is_active = true`,
         [userId],
       ))[0];
-      if (s) return s;
-      const user = (await qr.query(`SELECT id, name, phone, email FROM "${schema}".users WHERE id = $1`, [userId]))[0];
-      if (!user) throw new UnauthorizedException('User not found');
-      const token = randomBytes(24).toString('hex');
-      s = (await qr.query(
-        `INSERT INTO "${schema}".salesmen (name, phone, access_token, email, user_id)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (phone) DO UPDATE SET user_id = EXCLUDED.user_id, is_active = true
-         RETURNING id, name, phone, route, area, code`,
-        [user.name, user.phone, token, user.email || null, userId],
-      ))[0];
+      // Do NOT auto-register the logged-in user as a salesman — that pollutes the
+      // salesmen roster/reports and clashes with RBAC. A salesman must be created
+      // explicitly by a manager (which links the login). Non-salesmen (owners,
+      // admins, staff) simply don't have the field app.
+      if (!s) throw new UnauthorizedException('You are not registered as a salesman on this account.');
       return s;
     });
+  }
+
+  /** Non-throwing check used to decide whether to show the salesman field app. */
+  isSalesmanUser(schema: string, userId: string): Promise<boolean> {
+    if (!userId) return Promise.resolve(false);
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const r = await qr.query(
+        `SELECT 1 FROM "${schema}".salesmen WHERE user_id = $1 AND is_active = true LIMIT 1`,
+        [userId],
+      );
+      return r.length > 0;
+    }).catch(() => false);
   }
 
   async updateSalesman(schema: string, id: string, body: { isActive?: boolean; rotateToken?: boolean }) {

@@ -53,6 +53,7 @@ export class SfaService {
 
   // ─── Salesman self (portal login) ───────────────────────────────────────────
   appMe(): Observable<any> { return this.api.get<any>('/sfa/app/me'); }
+  isSalesman(): Observable<{ isSalesman: boolean }> { return this.api.get<{ isSalesman: boolean }>('/sfa/app/is-salesman'); }
   appCustomers(q?: string): Observable<any[]> { return this.api.get<any[]>('/sfa/app/customers', q ? { q } : undefined); }
   appCustomer(id: string): Observable<any> { return this.api.get<any>(`/sfa/app/customers/${id}`); }
   appCreateOutlet(body: { name: string; phone: string; gstin?: string; billingAddress?: string; area?: string; route?: string }): Observable<any> {
