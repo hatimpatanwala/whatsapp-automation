@@ -153,12 +153,17 @@ export class SfaService {
       const token = body.rotateToken ? randomBytes(24).toString('hex') : null;
       const row = firstRow(await qr.query(
         `UPDATE "${schema}".salesmen SET
-           is_active = COALESCE($2, is_active),
+           is_active = COALESCE($2::boolean, is_active),
            access_token = COALESCE($3, access_token)
-         WHERE id = $1 RETURNING id, access_token, is_active`,
-        [id, body.isActive ?? null, token],
+         WHERE id = $1 RETURNING id, user_id, access_token, is_active`,
+        [id, body.isActive === undefined ? null : body.isActive, token],
       ));
       if (!row) throw new NotFoundException('Salesman not found');
+      // Cascade activation state to the linked login so a deactivated salesman
+      // actually can't sign in (and reactivation restores access).
+      if (body.isActive !== undefined && row.user_id) {
+        await qr.query(`UPDATE "${schema}".users SET is_active = $2, updated_at = NOW() WHERE id = $1`, [row.user_id, body.isActive]);
+      }
       return row;
     });
   }

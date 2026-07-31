@@ -474,6 +474,16 @@ export class MainLayoutComponent implements OnInit {
       .map((s) => ({
         title: s.title,
         items: s.items.filter((it) => {
+          const owner = this.permissions.owner();
+          // A registered salesman (who isn't the owner) gets a locked-down app:
+          // ONLY their "My Field App", nothing else.
+          const salesmanMode = ready && this.isSalesman() && !owner;
+          if (salesmanMode) return !!it.salesmanOnly && this.erpAccess.has('sfa');
+          // For everyone else, the salesman-only field app is never shown — so an
+          // owner/admin with SFA enabled does NOT see "My Field App".
+          if (it.salesmanOnly) return false;
+          // Administration is owner/admin-only — no other role sees it.
+          if (s.title === 'Administration' && !owner) return false;
           // WhatsApp suite master gate: drop the whole 'Marketing & WhatsApp'
           // section when the tenant is not entitled (empty section is then
           // filtered out below, so no orphan header renders).
@@ -494,14 +504,10 @@ export class MainLayoutComponent implements OnInit {
           if (it.featureKey === 'erp') {
             return erpFull && (!it.perm || !this.permissions.ready() || this.permissions.can(it.perm, 'read'));
           }
-          // Live-feature items (salesman app, offline desktop) — shown only when the
-          // tenant is actually entitled, independent of the ERP master switch.
-          if (it.featureLive) {
-            if (!(ready && this.erpAccess.has(it.featureLive))) return false;
-            // Salesman-only items appear solely for users registered as a salesman.
-            if (it.salesmanOnly) return this.isSalesman();
-            return true;
-          }
+          // Live-feature items (offline desktop, Field Sales hub) — shown only when
+          // the tenant is entitled, independent of the ERP master switch. (The
+          // salesman-only "My Field App" is handled above.)
+          if (it.featureLive) return ready && this.erpAccess.has(it.featureLive);
           // RBAC: hide anything the user's role can't even read. Until permissions
           // resolve, don't hide (avoids a flash); owner passes everything.
           if (it.perm && this.permissions.ready() && !this.permissions.can(it.perm, 'read')) return false;

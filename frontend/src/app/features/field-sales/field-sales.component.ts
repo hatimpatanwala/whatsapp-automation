@@ -917,7 +917,7 @@ export class FieldSalesComponent implements OnInit {
   toggleActive(s: any) {
     const next = !s.isActive;
     this.sfa.updateSalesman(s.id, { isActive: next }).subscribe({
-      next: () => { s.isActive = next; },
+      next: (r) => { s.isActive = (r && typeof r.isActive === 'boolean') ? r.isActive : next; },
       error: (e) => this.salesmenError.set(this.msg(e, 'Could not update salesman.')),
     });
   }
