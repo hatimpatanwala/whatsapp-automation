@@ -1,7 +1,7 @@
 {
   "name": "wacommerce-desktop",
-  "version": "0.1.1",
-  "description": "WhatsApp-Commerce ERP \u00e2\u20ac\u201d Windows desktop shell (Electron)",
+  "version": "0.1.2",
+  "description": "WhatsApp-Commerce ERP â€” Windows desktop shell (Electron)",
   "author": "BeatRoute",
   "license": "UNLICENSED",
   "private": true,
