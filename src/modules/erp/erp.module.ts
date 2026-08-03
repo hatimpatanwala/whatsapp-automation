@@ -119,6 +119,7 @@ import { ErpExportService } from './export/erp-export.service';
     BankAccountService,
     CreditNoteService,
     DebitNoteService,
+    ReturnsRegisterService,
     BatchService,
     RecurringInvoiceService,
     RecurringInvoiceCron,
