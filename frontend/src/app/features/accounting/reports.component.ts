@@ -324,75 +324,65 @@ export class ReportsComponent {
 
     if (rep === 'trial-balance') {
       await this.pdf.exportTable({
-        title, subtitle: `As on ${today}`,
-        columns: [{ header: 'Ledger', key: 'name' }, { header: 'Debit', key: 'debit', align: 'right', fmt: M }, { header: 'Credit', key: 'credit', align: 'right', fmt: M }],
-        rows: d.rows || [],
-        summary: [{ label: 'Total Debit', value: M(d.totalDebit) }, { label: 'Total Credit', value: M(d.totalCredit) }, { label: d.balanced ? 'Balanced ✓' : 'Not balanced ✗', value: '' }],
+        title: 'Trial Balance', subtitle: `as on ${today}`, tally: true,
+        columns: [{ header: 'Particulars', key: 'name' }, { header: 'Debit', key: 'debit', align: 'right', fmt: M }, { header: 'Credit', key: 'credit', align: 'right', fmt: M }],
+        rows: [...(d.rows || []), { name: 'Total', debit: d.totalDebit, credit: d.totalCredit }],
       });
     } else if (rep === 'pnl') {
-      // Clean vertical statement: section headers, indented accounts, subtotals.
-      const blank = { particulars: '', amount: '' };
-      const rows: any[] = [
-        { particulars: 'INCOME', amount: '' },
-        ...(d.income || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
-        { particulars: 'Total Income', amount: M(d.totalIncome) },
-        blank,
-        { particulars: 'EXPENSES', amount: '' },
-        ...(d.expense || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
-        { particulars: 'Total Expenses', amount: M(d.totalExpense) },
-        blank,
-        { particulars: `Net ${d.netProfit >= 0 ? 'Profit' : 'Loss'}`, amount: M(Math.abs(d.netProfit)) },
-      ];
-      await this.pdf.exportTable({
-        title, subtitle: `Period ending ${today}`,
-        columns: [{ header: 'Particulars', key: 'particulars' }, { header: 'Amount', key: 'amount', align: 'right' }],
-        rows,
+      // Tally Profit & Loss A/c — two-sided: Expenditure (Dr) | Income (Cr).
+      // Net Profit sits on the expenditure side, Net Loss on the income side, so
+      // both columns total to the same figure (as in Tally).
+      const np = Number(d.netProfit) || 0;
+      const left = (d.expense || []).map((r: any) => ({ name: r.name, amount: Number(r.amount) || 0 }));
+      if (np >= 0) left.push({ name: 'Net Profit', amount: np });
+      const right = (d.income || []).map((r: any) => ({ name: r.name, amount: Number(r.amount) || 0 }));
+      if (np < 0) right.push({ name: 'Net Loss', amount: -np });
+      await this.pdf.exportTallyStatement({
+        title: 'Profit & Loss A/c', period: `for the period ending ${today}`,
+        left: { heading: 'Expenditure', rows: left, totalLabel: 'Total' },
+        right: { heading: 'Income', rows: right, totalLabel: 'Total' },
       });
     } else if (rep === 'balance-sheet') {
-      const blank = { particulars: '', amount: '' };
-      const rows: any[] = [
-        { particulars: 'LIABILITIES', amount: '' },
-        ...(d.liabilities || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
-        { particulars: '   Net Profit', amount: M(d.netProfit) },
-        { particulars: 'Total Liabilities', amount: M(d.totalLiabilities) },
-        blank,
-        { particulars: 'ASSETS', amount: '' },
-        ...(d.assets || []).map((r: any) => ({ particulars: `   ${r.name}`, amount: M(r.amount) })),
-        { particulars: 'Total Assets', amount: M(d.totalAssets) },
-      ];
-      await this.pdf.exportTable({
-        title, subtitle: `As on ${today}`,
-        columns: [{ header: 'Particulars', key: 'particulars' }, { header: 'Amount', key: 'amount', align: 'right' }],
-        rows,
+      // Tally Balance Sheet — Liabilities | Assets. Net Profit adds to the
+      // liabilities (capital) side so both sides balance.
+      const liab = (d.liabilities || []).map((r: any) => ({ name: r.name, amount: Number(r.amount) || 0 }));
+      liab.push({ name: 'Net Profit (to Capital)', amount: Number(d.netProfit) || 0 });
+      const assets = (d.assets || []).map((r: any) => ({ name: r.name, amount: Number(r.amount) || 0 }));
+      await this.pdf.exportTallyStatement({
+        title: 'Balance Sheet', period: `as at ${today}`,
+        left: { heading: 'Liabilities', rows: liab, totalLabel: 'Total' },
+        right: { heading: 'Assets', rows: assets, totalLabel: 'Total' },
       });
     } else if (rep === 'day-book') {
       await this.pdf.exportTable({
-        title, subtitle: `Date ${d.date || today}`,
-        columns: [{ header: 'Type', key: 'voucherType' }, { header: 'Number', key: 'number' }, { header: 'Party', key: 'partyName' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
-        rows: (d.vouchers || []).map((v: any) => ({ ...v, partyName: v.partyName || '—' })),
+        title: 'Day Book', subtitle: `${d.date || today}`, tally: true,
+        columns: [{ header: 'Date', key: '_date' }, { header: 'Particulars', key: 'partyName' }, { header: 'Vch Type', key: 'voucherType' }, { header: 'Vch No', key: 'number' }, { header: 'Amount', key: 'amount', align: 'right', fmt: M }],
+        rows: (d.vouchers || []).map((v: any) => ({ ...v, _date: d.date || today, partyName: v.partyName || '—' })),
       });
     } else if (rep === 'stock-summary') {
       const rows = (d as any[]) || [];
       await this.pdf.exportTable({
-        title, subtitle: `As on ${today}`,
-        columns: [{ header: 'Item', key: 'name' }, { header: 'UoM', key: 'uom' }, { header: 'Stock', key: 'stock', align: 'right' }, { header: 'Rate', key: 'rate', align: 'right', fmt: M }, { header: 'Value', key: 'stockValue', align: 'right', fmt: M }],
-        rows: rows.map((r: any) => ({ ...r, rate: r.salePrice ?? r.basePrice })),
-        summary: [{ label: 'Total stock value', value: M(this.stockTotal()) }],
+        title: 'Stock Summary', subtitle: `as on ${today}`, tally: true,
+        columns: [{ header: 'Particulars', key: 'name' }, { header: 'Unit', key: 'uom' }, { header: 'Quantity', key: 'stock', align: 'right' }, { header: 'Rate', key: 'rate', align: 'right', fmt: M }, { header: 'Value', key: 'stockValue', align: 'right', fmt: M }],
+        rows: [...rows.map((r: any) => ({ ...r, rate: r.salePrice ?? r.basePrice })), { name: 'Grand Total', uom: '', stock: '', rate: '', stockValue: this.stockTotal() }],
       });
     } else if (rep === 'ledger') {
       const st = this.statement();
       if (!st) return;
       const name = this.ledgers().find((l) => l.id === this.ledgerId())?.name || 'Ledger';
       await this.pdf.exportTable({
-        title: `Ledger — ${name}`, subtitle: `Opening ${M(st.opening)} · Closing ${M(st.closing)}`,
-        columns: [{ header: 'Date', key: 'date' }, { header: 'Voucher', key: 'number' }, { header: 'Type', key: 'voucherType' }, { header: 'Debit', key: 'debit', align: 'right', fmt: M }, { header: 'Credit', key: 'credit', align: 'right', fmt: M }, { header: 'Balance', key: 'balance', align: 'right', fmt: M }],
-        rows: st.lines || [],
-        summary: [{ label: 'Closing balance', value: M(st.closing) }],
+        title: `Ledger: ${name}`, subtitle: `Opening ${M(st.opening)}  ·  Closing ${M(st.closing)}`, tally: true,
+        columns: [{ header: 'Date', key: 'date' }, { header: 'Particulars', key: 'voucherType' }, { header: 'Vch No', key: 'number' }, { header: 'Debit', key: 'debit', align: 'right', fmt: M }, { header: 'Credit', key: 'credit', align: 'right', fmt: M }, { header: 'Balance', key: 'balance', align: 'right', fmt: M }],
+        rows: [
+          { date: '', voucherType: 'Opening Balance', number: '', debit: '', credit: '', balance: M(st.opening) },
+          ...(st.lines || []),
+          { date: '', voucherType: 'Closing Balance', number: '', debit: '', credit: '', balance: M(st.closing) },
+        ],
       });
     } else if (rep === 'ageing') {
       await this.pdf.exportTable({
-        title: 'Bills Outstanding — Receivables', subtitle: `As on ${today}`, orientation: 'landscape',
-        columns: [{ header: 'Party', key: 'party' }, { header: '0–30d', key: 'd030', align: 'right', fmt: M }, { header: '31–60d', key: 'd3160', align: 'right', fmt: M }, { header: '61–90d', key: 'd6190', align: 'right', fmt: M }, { header: '90d+', key: 'd90Plus', align: 'right', fmt: M }, { header: 'Total', key: 'total', align: 'right', fmt: M }, { header: 'Bills', key: 'bills', align: 'right' }, { header: 'Interest', key: '_int', align: 'right', fmt: M }],
+        title: 'Bills Outstanding — Receivables', subtitle: `as on ${today}`, orientation: 'landscape', tally: true,
+        columns: [{ header: 'Particulars', key: 'party' }, { header: '0–30d', key: 'd030', align: 'right', fmt: M }, { header: '31–60d', key: 'd3160', align: 'right', fmt: M }, { header: '61–90d', key: 'd6190', align: 'right', fmt: M }, { header: '90d+', key: 'd90Plus', align: 'right', fmt: M }, { header: 'Total', key: 'total', align: 'right', fmt: M }, { header: 'Bills', key: 'bills', align: 'right' }, { header: 'Interest', key: '_int', align: 'right', fmt: M }],
         rows: (d.receivables || []).map((r: any) => ({ ...r, _int: this.interestOf(r) })),
         summary: [{ label: 'Total receivable', value: M(d.totals?.receivable) }, { label: 'Total payable', value: M(d.totals?.payable) }],
       });

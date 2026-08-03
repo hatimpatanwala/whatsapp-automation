@@ -36,6 +36,7 @@ export const ERP_ROUTES: Routes = [
   // Enterprise CRM + admin + analytics
   { path: 'reports', loadComponent: () => import('./enterprise2/erp-reports.component').then((m) => m.ErpReportsComponent) },
   { path: 'contacts', loadComponent: () => import('./enterprise2/erp-contacts.component').then((m) => m.ErpContactsComponent) },
+  { path: 'returns', loadComponent: () => import('./vyapar/erp-returns.component').then((m) => m.ErpReturnsComponent) },
   { path: 'companies', loadComponent: () => import('./enterprise2/erp-companies.component').then((m) => m.ErpCompaniesComponent) },
   { path: 'people', loadComponent: () => import('./enterprise2/erp-people.component').then((m) => m.ErpPeopleComponent) },
   { path: 'branches', loadComponent: () => import('./enterprise2/erp-branches.component').then((m) => m.ErpBranchesComponent) },

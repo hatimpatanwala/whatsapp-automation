@@ -129,3 +129,53 @@ export class DebitNoteController {
   @Post() @Roles('owner', 'seller') create(@Req() req: Request, @Body() b: any) { return this.service.create(req.tenantContext.schemaName, b); }
   @Put(':id/remove') @Roles('owner') remove(@Req() req: Request, @Param('id') id: string) { return this.service.remove(req.tenantContext.schemaName, id); }
 }
+
+/**
+ * Returns register — one place to see every return: sales returns (credit notes,
+ * party = customer) and purchase returns (debit notes, party = supplier), each
+ * with the party name resolved and period totals.
+ */
+@Injectable()
+export class ReturnsRegisterService {
+  constructor(private readonly cm: TenantConnectionManager) {}
+  async register(schema: string, opts: { from?: string; to?: string } = {}) {
+    return this.cm.executeInTenantContext(schema, async (qr) => {
+      const range = `AND created_at::date >= COALESCE($1::date, CURRENT_DATE - INTERVAL '365 days')
+                     AND created_at::date <  COALESCE($2::date, CURRENT_DATE) + INTERVAL '1 day'`;
+      const salesReturns = await qr.query(
+        `SELECT cn.id, cn.note_number, cn.created_at, cn.invoice_id,
+                COALESCE(NULLIF(cn.customer_name,''), c.name, 'Walk-in') AS party,
+                cn.total::float AS total, cn.total_tax::float AS tax, cn.reason, cn.status
+         FROM "${schema}".credit_notes cn
+         LEFT JOIN "${schema}".customers c ON c.id = cn.customer_id
+         WHERE cn.removed = false ${range}
+         ORDER BY cn.created_at DESC LIMIT 500`, [opts.from || null, opts.to || null]);
+      const purchaseReturns = await qr.query(
+        `SELECT dn.id, dn.note_number, dn.created_at,
+                COALESCE(s.company, 'Unknown supplier') AS party,
+                dn.total::float AS total, dn.total_tax::float AS tax, dn.reason, dn.status
+         FROM "${schema}".debit_notes dn
+         LEFT JOIN "${schema}".suppliers s ON s.id = dn.supplier_id
+         WHERE dn.removed = false ${range}
+         ORDER BY dn.created_at DESC LIMIT 500`, [opts.from || null, opts.to || null]);
+      const sum = (a: any[]) => Math.round(a.reduce((s, r) => s + (Number(r.total) || 0), 0) * 100) / 100;
+      return {
+        salesReturns, purchaseReturns,
+        totals: {
+          salesCount: salesReturns.length, salesValue: sum(salesReturns),
+          purchaseCount: purchaseReturns.length, purchaseValue: sum(purchaseReturns),
+        },
+      };
+    });
+  }
+}
+
+@Controller('erp/returns')
+@UseGuards(TenantGuard, ErpFeatureGuard)
+@RequiresFeature('erp')
+export class ReturnsController {
+  constructor(private readonly service: ReturnsRegisterService) {}
+  @Get() @Roles('owner', 'seller') register(@Req() req: Request, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.register(req.tenantContext.schemaName, { from, to });
+  }
+}

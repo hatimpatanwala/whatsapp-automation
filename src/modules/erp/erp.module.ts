@@ -31,7 +31,7 @@ import { BranchController, BranchService } from './enterprise2/branch';
 import { ApiKeyController, ApiKeyService } from './enterprise2/api-key';
 import { ReportsController, ReportsService } from './enterprise2/reports';
 import { BankAccountController, BankAccountService } from './vyapar/bank-account';
-import { CreditNoteController, CreditNoteService, DebitNoteController, DebitNoteService } from './vyapar/return-note';
+import { CreditNoteController, CreditNoteService, DebitNoteController, DebitNoteService, ReturnsController, ReturnsRegisterService } from './vyapar/return-note';
 import { BatchController, BatchService } from './advanced/batch';
 import { RecurringInvoiceController, RecurringInvoiceService, RecurringInvoiceCron } from './advanced/recurring-invoice';
 import { PosController, PosService } from './pos/pos';
@@ -80,6 +80,7 @@ import { ErpExportService } from './export/erp-export.service';
     BankAccountController,
     CreditNoteController,
     DebitNoteController,
+    ReturnsController,
     // advanced
     BatchController,
     RecurringInvoiceController,
