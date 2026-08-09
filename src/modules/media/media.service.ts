@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 // Only allow safe, non-executable media types; never text/html or SVG (stored XSS).
 const ALLOWED_CONTENT_TYPES = new Set([
@@ -42,7 +42,7 @@ export class MediaService {
     }
     // Strip any path components from the client-supplied filename.
     const safeName = (fileName || 'file').replace(/[/\\]/g, '_').replace(/[^\w.\-]/g, '_').slice(0, 100);
-    const key = `${tenantSchema}/${uuidv4()}-${safeName}`;
+    const key = `${tenantSchema}/${randomUUID()}-${safeName}`;
 
     const command = new PutObjectCommand({
       Bucket: this.bucket,
@@ -61,7 +61,7 @@ export class MediaService {
   }
 
   async uploadBuffer(tenantSchema: string, buffer: Buffer, fileName: string, contentType: string): Promise<string> {
-    const key = `${tenantSchema}/${uuidv4()}-${fileName}`;
+    const key = `${tenantSchema}/${randomUUID()}-${fileName}`;
 
     await this.s3Client.send(new PutObjectCommand({
       Bucket: this.bucket,

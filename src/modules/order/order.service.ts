@@ -3,7 +3,6 @@ import { TenantConnectionManager } from '../../database/tenant-connection.manage
 import { EventBusService } from '../events/event-bus.service';
 import { OrderCreatedEvent, OrderStatusChangedEvent } from '../events/domain-events';
 import { PaginationDto, PaginatedResponse } from '../../common/dto/pagination.dto';
-import { v4 as uuidv4 } from 'uuid';
 import { randomBytes } from 'crypto';
 
 @Injectable()
