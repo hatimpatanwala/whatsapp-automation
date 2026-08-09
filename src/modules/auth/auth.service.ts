@@ -29,6 +29,9 @@ export class AuthService {
    * Unified login: checks super_admins first, then searches all tenant schemas for the email.
    */
   async unifiedLogin(email: string, password: string): Promise<UnifiedLoginResult> {
+    // Emails are stored lower-cased (signup + Miracle import normalise them), so
+    // normalise the typed email too — login must be case-insensitive.
+    email = (email || '').trim().toLowerCase();
     // 0. Desktop hybrid auth: when ONLINE the cloud account is the source of truth —
     //    a successful cloud login is mirrored into the local DB (user row + bcrypt of
     //    the typed password), so the SAME credentials keep working OFFLINE later.
