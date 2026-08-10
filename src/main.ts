@@ -45,6 +45,13 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
+  // Delta-sync applies batches of up to a few hundred rows in one POST — GL vouchers,
+  // invoices with large JSONB line-items, etc. easily exceed the tight default limit,
+  // which 413'd the request BEFORE the handler and wedged sync (cursor never advanced).
+  // Parse these routes with a much larger cap, scoped to the sync endpoints only so the
+  // public webhook/API limit stays small (DoS surface unchanged elsewhere).
+  app.use(['/api/sync/apply', '/api/sync/changes'], json({ limit: '64mb' }));
+
   // Raw body parsing for webhook signature verification (bounded to limit DoS).
   app.use(
     json({
