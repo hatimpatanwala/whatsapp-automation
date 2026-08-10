@@ -9,11 +9,14 @@ const VOUCHER_PREFIX: Record<string, string> = {
   purchase: 'PUR',
   payment: 'PAY',
   receipt: 'RCP',
-  contra: 'CON',
   journal: 'JRN',
   debit_note: 'DN',
   credit_note: 'CN',
 };
+
+// Contra was merged into Journal — fold any incoming legacy type to its canonical form.
+const VOUCHER_TYPE_CANONICAL: Record<string, string> = { contra: 'journal' };
+const canonicalVoucherType = (t: string): string => VOUCHER_TYPE_CANONICAL[t] ?? t;
 
 interface LedgerBalance {
   id: string;
@@ -113,14 +116,15 @@ export class AccountingService {
   ) {
     const totalDebit = round2(p.entries.reduce((s, e) => s + (e.debit || 0), 0));
     const year = Number(p.date.slice(0, 4));
-    const prefix = VOUCHER_PREFIX[p.type] ?? 'VCH';
-    const num = await this.seq.next(schema, `voucher_${p.type}`, { year, prefix }, qr);
+    const type = canonicalVoucherType(p.type);
+    const prefix = VOUCHER_PREFIX[type] ?? 'VCH';
+    const num = await this.seq.next(schema, `voucher_${type}`, { year, prefix }, qr);
     const voucher = (
       await qr.query(
         `INSERT INTO "${schema}".vouchers
            (voucher_type, number, date, narration, party_ledger_id, amount, reference, source_type, source_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [p.type, num.formatted, p.date, p.narration ?? null, p.partyLedgerId ?? null, totalDebit, p.reference ?? null, p.sourceType ?? null, p.sourceId ?? null],
+        [type, num.formatted, p.date, p.narration ?? null, p.partyLedgerId ?? null, totalDebit, p.reference ?? null, p.sourceType ?? null, p.sourceId ?? null],
       )
     )[0];
     for (const e of p.entries) {

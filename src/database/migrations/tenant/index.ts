@@ -3623,6 +3623,25 @@ const migration097SyncAccounting: TenantMigration = {
   },
 };
 
+// Merge the Contra voucher type into Journal (they were handled identically; Journal is
+// the standard, more-used term). Existing 'contra' vouchers become 'journal' so there is
+// one manual double-entry voucher type going forward. Runs on cloud + desktop; the sync
+// triggers propagate the change either way (idempotent — only touches remaining contras).
+const migration098MergeContraJournal: TenantMigration = {
+  name: '098_merge_contra_into_journal',
+  async up(qr, schema) {
+    const exists = await qr.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'vouchers'`,
+      [schema],
+    );
+    if (!exists.length) return;
+    await qr.query(`UPDATE "${schema}".vouchers SET voucher_type = 'journal' WHERE voucher_type = 'contra'`);
+  },
+  async down() {
+    /* irreversible — contra history is now journal (no data lost, only relabelled) */
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3721,4 +3740,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration095ExpenseFreeText,
   migration096InventoryMovements,
   migration097SyncAccounting,
+  migration098MergeContraJournal,
 ];

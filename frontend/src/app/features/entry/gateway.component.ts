@@ -64,7 +64,6 @@ export class GatewayComponent {
         { label: 'Returns (CN / DN)', route: '/entry/returns' },
         { label: 'Stock Journal / Transfer', route: '/entry/stock' },
         { label: 'Journal Voucher', route: '/accounting/vouchers/new', key: 'F7', query: { type: 'journal' } },
-        { label: 'Contra Voucher', route: '/accounting/vouchers/new', key: 'F4', query: { type: 'contra' } },
       ],
     },
     {

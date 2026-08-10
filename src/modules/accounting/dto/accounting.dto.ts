@@ -17,11 +17,17 @@ export const VOUCHER_TYPES = [
   'purchase',
   'payment',
   'receipt',
-  'contra',
+  // 'contra' was merged into 'journal' — a Contra is just a Journal restricted to
+  // cash/bank ledgers, and both were handled identically. Journal is the more-used,
+  // standard term (kept as the single manual double-entry voucher). Incoming 'contra'
+  // is still accepted and normalised to 'journal' in AccountingService.insertVoucher.
   'journal',
   'debit_note',
   'credit_note',
 ] as const;
+
+/** Legacy voucher types accepted on input but folded into a canonical type. */
+export const VOUCHER_TYPE_ALIASES: Record<string, string> = { contra: 'journal' };
 
 export class CreateLedgerDto {
   @IsString()
@@ -64,7 +70,9 @@ export class VoucherEntryDto {
 }
 
 export class CreateVoucherDto {
-  @IsIn(VOUCHER_TYPES as unknown as string[])
+  // Accept legacy aliases (e.g. 'contra') so an older offline client still validates;
+  // the service folds them to the canonical type.
+  @IsIn([...(VOUCHER_TYPES as unknown as string[]), ...Object.keys(VOUCHER_TYPE_ALIASES)])
   type!: string;
 
   @IsOptional()

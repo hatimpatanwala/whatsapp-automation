@@ -873,8 +873,10 @@ export class MiracleImportService {
           }
           const amount = entries.reduce((s2, e) => s2 + e.debit, 0);
           const prefix = j.kind === 'contra' ? 'CON' : 'JV';
+          // Contra merged into Journal — store as voucher_type 'journal'; provenance is
+          // kept in source_type (miracle_contra) and the CON/ number prefix.
           const vid = await this.writeVoucher(
-            qr, schema, j.kind, `${prefix}/${j.narration || j.miracleId}`, j.date, null, amount,
+            qr, schema, 'journal', `${prefix}/${j.narration || j.miracleId}`, j.date, null, amount,
             j.narration || '', j.kind === 'contra' ? 'miracle_contra' : 'miracle_journal', null, entries,
           );
           if (vid) { await this.putMap(qr, schema, 'journal', j.miracleId, vid, map); c(j.kind === 'contra' ? 'contras' : 'journals'); }

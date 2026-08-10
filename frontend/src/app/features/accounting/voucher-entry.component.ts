@@ -99,7 +99,7 @@ export class VoucherEntryComponent {
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
 
-  readonly voucherTypes = ['sales', 'purchase', 'payment', 'receipt', 'contra', 'journal', 'debit_note', 'credit_note'];
+  readonly voucherTypes = ['sales', 'purchase', 'payment', 'receipt', 'journal', 'debit_note', 'credit_note'];
   type = 'journal';
   date = new Date().toISOString().slice(0, 10);
   narration = '';
@@ -110,7 +110,9 @@ export class VoucherEntryComponent {
   ];
 
   constructor() {
-    this.type = this.route.snapshot.queryParamMap.get('type') || 'journal';
+    // 'contra' was merged into 'journal' — normalise any old links/shortcuts.
+    const t = this.route.snapshot.queryParamMap.get('type') || 'journal';
+    this.type = t === 'contra' ? 'journal' : t;
     this.acc.ledgers().subscribe((l) => this.ledgers.set(l || []));
   }
 

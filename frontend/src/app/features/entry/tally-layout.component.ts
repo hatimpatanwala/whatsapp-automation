@@ -28,7 +28,7 @@ interface MenuGroup {
  *   4. a bottom STATUS BAR with the active shortcut legend.
  * Styling is plain scoped CSS on purpose — the frame must survive even if the global
  * stylesheet fails. Keymap follows Miracle: F2 Sales, F8 Purchase, F5 Receipt,
- * F6 Payment, F7 Journal, F4 Contra, F3 Masters, F9 Day Book, F11 Setup.
+ * F6 Payment, F7 Journal, F3 Masters, F9 Day Book, F11 Setup.
  */
 @Component({
   selector: 'wa-tally-layout',
@@ -321,7 +321,7 @@ export class TallyLayoutComponent {
       title: 'Vouchers',
       keys: [
         ['F2', 'Sales Invoice'], ['F8', 'Purchase'], ['F5', 'Receipt'], ['F6', 'Payment'],
-        ['F7', 'Journal'], ['F4', 'Contra'], ['F3', 'Gateway'],
+        ['F7', 'Journal'], ['F3', 'Gateway'],
         ['Alt+Q', 'Quotation'], ['Alt+O', 'Sales Order'], ['Alt+N', 'Returns (CN/DN)'],
         ['Alt+J', 'Stock Journal'], ['Alt+K', 'Item Master'],
       ],
@@ -478,7 +478,6 @@ export class TallyLayoutComponent {
         { label: 'Receipt (bill-wise)', route: '/entry/receipt', key: 'F5' },
         { label: 'Payment (bill-wise)', route: '/entry/payment', key: 'F6' },
         { label: 'Journal Voucher', route: '/accounting/vouchers/new', query: { type: 'journal' }, key: 'F7' },
-        { label: 'Contra Voucher', route: '/accounting/vouchers/new', query: { type: 'contra' }, key: 'F4' },
         { divider: true, label: 'd1' },
         { label: 'Quotation', route: '/entry/quote', key: 'Alt+Q' },
         { label: 'Sales Order', route: '/entry/order', key: 'Alt+O' },
@@ -545,7 +544,6 @@ export class TallyLayoutComponent {
     { key: 'F5', label: 'Receipt', route: '/entry/receipt' },
     { key: 'F6', label: 'Payment', route: '/entry/payment' },
     { key: 'F7', label: 'Journal', route: '/accounting/vouchers/new', query: { type: 'journal' } },
-    { key: 'F4', label: 'Contra', route: '/accounting/vouchers/new', query: { type: 'contra' } },
     { key: 'Alt+Q', label: 'Quote', route: '/entry/quote' },
     { key: 'Alt+O', label: 'Order', route: '/entry/order' },
     { key: 'Alt+N', label: 'Returns', route: '/entry/returns' },
@@ -583,8 +581,8 @@ export class TallyLayoutComponent {
     if (!e.route) return false;
     const [path, qs] = this.router.url.split('?');
     if (path !== e.route) return false;
-    // Journal (?type=journal) and Contra (?type=contra) share the same route;
-    // discriminate on the query so clicking one doesn't light up both.
+    // Voucher entries (e.g. ?type=journal) share the /accounting/vouchers/new route;
+    // discriminate on the query so clicking one doesn't light up another.
     const wantType = e.query?.['type'];
     if (wantType != null) {
       return new URLSearchParams(qs || '').get('type') === String(wantType);

@@ -137,7 +137,6 @@ export class VouchersComponent {
     { type: 'purchase', label: 'Purchase', key: 'ledger' },
     { type: 'receipt', label: 'Receipt', key: 'ledger' },
     { type: 'payment', label: 'Payment', key: 'ledger' },
-    { type: 'contra', label: 'Contra', key: 'F4' },
     { type: 'journal', label: 'Journal', key: 'F7' },
   ];
 

@@ -217,7 +217,8 @@ function buildMenu(): void {
       ],
     },
     {
-      // Miracle keymap: F2 Sales, F8 Purchase, F5 Receipt, F6 Payment, F7 Journal, F4 Contra.
+      // Miracle keymap: F2 Sales, F8 Purchase, F5 Receipt, F6 Payment, F7 Journal.
+      // (Contra was merged into Journal — F4 is no longer bound.)
       label: 'Transaction',
       submenu: [
         { label: 'Sales Invoice (F2)', accelerator: 'F2', click: () => sendMenuCommand('voucher:sales') },
@@ -225,7 +226,6 @@ function buildMenu(): void {
         { label: 'Receipt (F5)', accelerator: 'F5', click: () => sendMenuCommand('voucher:receipt') },
         { label: 'Payment (F6)', accelerator: 'F6', click: () => sendMenuCommand('voucher:payment') },
         { label: 'Journal (F7)', accelerator: 'F7', click: () => sendMenuCommand('voucher:journal') },
-        { label: 'Contra (F4)', accelerator: 'F4', click: () => sendMenuCommand('voucher:contra') },
       ],
     },
     {

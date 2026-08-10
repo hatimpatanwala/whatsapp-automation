@@ -17,12 +17,12 @@ export class KeyboardShortcutsService {
   /** command → route (with optional ?query). */
   /**
    * MIRACLE keymap (user's reference ERP): F2 Sales, F8 Purchase, F5 Receipt (cash/bank
-   * in), F6 Payment (out), F7 Journal, F4 Contra, F3 Masters/Gateway, F9 Day Book,
+   * in), F6 Payment (out), F7 Journal, F3 Masters/Gateway, F9 Day Book,
    * F11 Setup (price & credit). F1 also opens the Gateway (help key).
+   * (Contra was merged into Journal; F4 is now unbound.)
    */
   private readonly routeMap: Record<string, string> = {
     gateway: '/gateway',
-    'voucher:contra': '/accounting/vouchers/new?type=contra',
     'voucher:payment': '/entry/payment',
     'voucher:receipt': '/entry/receipt',
     'voucher:journal': '/accounting/vouchers/new?type=journal',
@@ -124,7 +124,6 @@ export class KeyboardShortcutsService {
       case 'F1': return 'help';
       case 'F2': return 'voucher:sales';
       case 'F3': return 'gateway';
-      case 'F4': return 'voucher:contra';
       case 'F5': return 'voucher:receipt';
       case 'F6': return 'voucher:payment';
       case 'F7': return 'voucher:journal';
