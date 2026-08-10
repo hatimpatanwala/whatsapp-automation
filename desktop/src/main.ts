@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, shell, ipcMain, dialog, MenuItemConstructorOptions } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
+import * as fs from 'fs';
 import {
   LOCAL_APP_URL,
   CLOUD_PORTAL_URL,
@@ -10,7 +11,9 @@ import {
   PRODUCT_NAME,
   UPDATE_FEED_URL,
   DEFAULT_TENANT,
+  DB_MODE,
 } from './config';
+import { stateFile } from './paths';
 import { startLocalDb, stopLocalDb } from './localdb';
 import { startBackend, stopBackend } from './backend';
 import { provision, isProvisioned } from './provision';
@@ -102,6 +105,32 @@ function showBootScreen(message: string): void {
   mainWindow?.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
 }
 
+// Persist which app version / DB mode the current web cache belongs to, so we only
+// bust the cache when one of them actually changes (see bootLocalStack).
+function cacheMarkerFile(): string {
+  return stateFile('web-cache.json');
+}
+/** Returns a reason string if the web cache must be cleared, else '' (keep it warm). */
+function cacheResetReason(): string {
+  const now = { version: app.getVersion(), dbMode: DB_MODE };
+  try {
+    const prev = JSON.parse(fs.readFileSync(cacheMarkerFile(), 'utf8'));
+    if (prev.version !== now.version) return `updated ${prev.version} → ${now.version}`;
+    if (prev.dbMode !== now.dbMode) return `db-mode ${prev.dbMode} → ${now.dbMode}`;
+    return '';
+  } catch {
+    return 'first run';
+  }
+}
+function markCacheState(): void {
+  try {
+    fs.mkdirSync(path.dirname(cacheMarkerFile()), { recursive: true });
+    fs.writeFileSync(cacheMarkerFile(), JSON.stringify({ version: app.getVersion(), dbMode: DB_MODE }));
+  } catch {
+    /* non-fatal — worst case we clear again next launch */
+  }
+}
+
 /** Boot the embedded backend, then point the window at it. Falls back to cloud on failure. */
 async function bootLocalStack(): Promise<void> {
   // Dev / shell-only: skip the embedded stack and just load a URL.
@@ -123,11 +152,21 @@ async function bootLocalStack(): Promise<void> {
     await startBackend();
 
     // Assets are local and hashed — a stale HTTP cache can pin an old index.html whose
-    // stylesheet hashes no longer exist (renders unstyled). A stale session cookie can
-    // also point at a tenant from a different DB mode (embedded↔docker) and 500 every
-    // request. Both clears are instant for a local app.
-    await mainWindow?.webContents.session.clearCache();
-    await mainWindow?.webContents.session.clearStorageData({ storages: ['cookies'] });
+    // stylesheet hashes no longer exist (renders unstyled), and a stale session cookie
+    // can point at a tenant from a different DB mode (embedded↔docker) and 500 every
+    // request. BUT clearing both on EVERY launch was the real startup-slowness culprit:
+    // it forced a cold re-download/parse of the whole Angular bundle and logged the user
+    // out (triggering a fresh sync) each time. Only clear when it actually matters — after
+    // an app update (hashes changed) or a DB-mode switch — so normal launches stay warm.
+    const reset = cacheResetReason();
+    if (reset) {
+      console.log(`[boot] clearing web cache + session (${reset})`);
+      await mainWindow?.webContents.session.clearCache();
+      await mainWindow?.webContents.session.clearStorageData({ storages: ['cookies'] });
+      markCacheState();
+    }
+
+    showBootScreen('Loading your workspace…');
     try {
       await mainWindow?.loadURL(LOCAL_APP_URL);
     } catch (navErr) {
