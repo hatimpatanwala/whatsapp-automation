@@ -3557,6 +3557,72 @@ const migration096InventoryMovements: TenantMigration = {
   },
 };
 
+// Wire delta-sync onto the accounting / GL, returns, expenses, banking and
+// stock-movement tables so the full migrated books reach the offline desktop app.
+// Same shape as migration 077: add sync columns, attach the sync_stamp (BEFORE)
+// and sync_enqueue (AFTER) triggers, then backfill sync_version on existing rows
+// under sync.apply='on' so they become pullable WITHOUT echoing to the outbox.
+// Order is FK-safe (parents first) so backfilled versions ascend parent→child and
+// the cloud→local pull applies them in a referentially-valid order.
+const SYNC_TABLES_097 = [
+  'ledger_groups',
+  'ledger_accounts',
+  'vouchers',
+  'voucher_entries',
+  'expense_categories',
+  'expenses',
+  'bank_accounts',
+  'credit_notes',
+  'debit_notes',
+  'inventory_movements',
+];
+const migration097SyncAccounting: TenantMigration = {
+  name: '097_sync_accounting_tables',
+  async up(qr, schema) {
+    for (const t of SYNC_TABLES_097) {
+      const exists = await qr.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+        [schema, t],
+      );
+      if (!exists.length) continue;
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS origin_node UUID`);
+      await qr.query(`ALTER TABLE "${schema}".${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+      await qr.query(`CREATE INDEX IF NOT EXISTS idx_${t}_sync_version ON "${schema}".${t}(sync_version)`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(
+        `CREATE TRIGGER trg_${t}_sync_stamp BEFORE INSERT OR UPDATE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_stamp()`,
+      );
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+      await qr.query(
+        `CREATE TRIGGER trg_${t}_sync_enqueue AFTER INSERT OR UPDATE OR DELETE ON "${schema}".${t} FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_enqueue()`,
+      );
+    }
+    // Backfill: stamp sync_version on existing rows (in apply mode so sync_enqueue
+    // does NOT re-push them to the cloud outbox — they only need to be *pullable*).
+    await qr.query(`SET sync.apply = 'on'`);
+    try {
+      for (const t of SYNC_TABLES_097) {
+        const exists = await qr.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+          [schema, t],
+        );
+        if (!exists.length) continue;
+        await qr.query(`UPDATE "${schema}".${t} SET updated_at = updated_at WHERE sync_version = 0`);
+      }
+    } finally {
+      await qr.query(`RESET sync.apply`);
+    }
+  },
+  async down(qr, schema) {
+    for (const t of SYNC_TABLES_097) {
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_stamp ON "${schema}".${t}`);
+      await qr.query(`DROP TRIGGER IF EXISTS trg_${t}_sync_enqueue ON "${schema}".${t}`);
+    }
+  },
+};
+
 export const tenantMigrations: TenantMigration[] = [
   migration001Users,
   migration002Customers,
@@ -3654,4 +3720,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration094PushSubscriptions,
   migration095ExpenseFreeText,
   migration096InventoryMovements,
+  migration097SyncAccounting,
 ];

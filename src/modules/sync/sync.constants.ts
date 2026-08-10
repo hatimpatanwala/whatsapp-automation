@@ -39,6 +39,18 @@ export const SYNCABLE_TABLES = [
   'salesman_beats',
   'salesman_targets',
   'salesman_visits',
+  // accounting / GL, returns, expenses, banking, stock movements (migration 097)
+  // parents first so version-ordered apply satisfies FKs (ledgers → vouchers → entries)
+  'ledger_groups',
+  'ledger_accounts',
+  'vouchers',
+  'voucher_entries',
+  'expense_categories',
+  'expenses',
+  'bank_accounts',
+  'credit_notes',
+  'debit_notes',
+  'inventory_movements',
 ] as const;
 
 export type SyncableTable = (typeof SYNCABLE_TABLES)[number];
