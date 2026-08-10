@@ -315,8 +315,25 @@ async function tick(): Promise<void> {
       if (res.ok) nodeId = ((await res.json()) as any)?.data?.nodeId;
     }
     const cursors = loadCursors();
-    await push(cursors);
-    await pull(cursors);
+    // Push and pull are independent: a hiccup uploading local changes must not stop
+    // us from downloading cloud data (and vice versa). Local-first means the app keeps
+    // working regardless — we just capture whichever direction failed to retry later.
+    let pushErr: Error | null = null;
+    let pullErr: Error | null = null;
+    try {
+      await push(cursors);
+    } catch (e) {
+      pushErr = e as Error;
+      console.error('[sync] push failed:', pushErr.message);
+    }
+    try {
+      await pull(cursors);
+    } catch (e) {
+      pullErr = e as Error;
+      console.error('[sync] pull failed:', pullErr.message);
+    }
+    if (pushErr || pullErr) throw pushErr || pullErr; // surface for retry/badge
+
     state.lastSyncAt = new Date().toISOString();
     state.error = null;
     state.phase = 'done';

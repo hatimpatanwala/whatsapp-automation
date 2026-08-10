@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
@@ -29,6 +29,7 @@ export interface SyncReadResult {
  */
 @Injectable()
 export class SyncService {
+  private readonly logger = new Logger(SyncService.name);
   private readonly colCache = new Map<string, string[]>();
   private readonly existCache = new Map<string, string[]>();
 
@@ -190,36 +191,55 @@ export class SyncService {
           continue;
         }
 
-        if (ch.op === 'D') {
-          await qr.query(
-            `UPDATE "${schema}".${ch.table} SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
-            [row.id],
+        // Isolate every row in a savepoint: one bad row (FK violation, constraint,
+        // type mismatch) must NOT abort the whole batch. Without this a single
+        // "poison" row wedges sync forever — the batch 500s, the cursor never
+        // advances, and the client retries the same failing batch every tick.
+        await qr.query(`SAVEPOINT sync_row`);
+        try {
+          if (ch.op === 'D') {
+            await qr.query(
+              `UPDATE "${schema}".${ch.table} SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+              [row.id],
+            );
+            await qr.query(`RELEASE SAVEPOINT sync_row`);
+            applied.push(row.id);
+            continue;
+          }
+
+          const payload = { ...row };
+          delete payload.sync_version; // the local trigger assigns version in this node's space
+
+          const cols = await this.columns(schema, ch.table);
+          const setCols = cols.filter((c) => c !== 'id' && c !== 'sync_version');
+          const setClause = setCols.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ');
+
+          const res = await qr.query(
+            `INSERT INTO "${schema}".${ch.table}
+             SELECT * FROM jsonb_populate_record(NULL::"${schema}".${ch.table}, $1::jsonb)
+             ON CONFLICT (id) DO UPDATE SET ${setClause}
+             WHERE "${schema}".${ch.table}.updated_at IS NULL
+                OR "${schema}".${ch.table}.updated_at < EXCLUDED.updated_at
+             RETURNING id`,
+            [JSON.stringify(payload)],
           );
-          applied.push(row.id);
-          continue;
+          await qr.query(`RELEASE SAVEPOINT sync_row`);
+          if (res.length) applied.push(row.id);
+          else skipped.push(row.id); // older than local copy — LWW kept local
+        } catch (e) {
+          // Skip the offending row and keep going so the batch commits and the
+          // cursor advances. Logged so we can see WHAT failed (e.g. a missing FK).
+          await qr.query(`ROLLBACK TO SAVEPOINT sync_row`);
+          const reason = (e as Error).message?.split('\n')[0] ?? 'error';
+          skipped.push(`${ch.table}:${row.id}`);
+          this.logger.warn(`[sync.apply] skipped ${ch.table}:${row.id} — ${reason}`);
         }
-
-        const payload = { ...row };
-        delete payload.sync_version; // the local trigger assigns version in this node's space
-
-        const cols = await this.columns(schema, ch.table);
-        const setCols = cols.filter((c) => c !== 'id' && c !== 'sync_version');
-        const setClause = setCols.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ');
-
-        const res = await qr.query(
-          `INSERT INTO "${schema}".${ch.table}
-           SELECT * FROM jsonb_populate_record(NULL::"${schema}".${ch.table}, $1::jsonb)
-           ON CONFLICT (id) DO UPDATE SET ${setClause}
-           WHERE "${schema}".${ch.table}.updated_at IS NULL
-              OR "${schema}".${ch.table}.updated_at < EXCLUDED.updated_at
-           RETURNING id`,
-          [JSON.stringify(payload)],
-        );
-        if (res.length) applied.push(row.id);
-        else skipped.push(row.id); // older than local copy — LWW kept local
       }
     });
 
+    if (skipped.length) {
+      this.logger.warn(`[sync.apply] ${schema}: applied ${applied.length}, skipped ${skipped.length}`);
+    }
     return { applied, skipped, count: applied.length };
   }
 
