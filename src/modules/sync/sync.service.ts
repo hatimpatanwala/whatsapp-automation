@@ -114,10 +114,16 @@ export class SyncService {
     const tables = await this.existingTables(schema);
     if (!tables.length) return { changes: [], cursor: since };
 
+    // Top-N merge: push ORDER BY sync_version + LIMIT into EACH branch so every table
+    // returns at most `limit` rows via an index scan on idx_<t>_sync_version — instead
+    // of scanning ALL rows > since in every table and sorting the union globally. On a
+    // large tenant the old query re-scanned ~90k voucher_entries rows on every batch
+    // (~3s each); this reads ~limit rows per table (a few ms).
     const union = tables
       .map(
         (t) =>
-          `SELECT '${t}'::text AS table_name, sync_version, to_jsonb(x) AS row FROM "${schema}".${t} x WHERE sync_version > $1`,
+          `(SELECT '${t}'::text AS table_name, sync_version, to_jsonb(x) AS row ` +
+          `FROM "${schema}".${t} x WHERE sync_version > $1 ORDER BY sync_version ASC LIMIT $2)`,
       )
       .join(' UNION ALL ');
 
