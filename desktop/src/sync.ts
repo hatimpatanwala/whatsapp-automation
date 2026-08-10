@@ -55,20 +55,70 @@ export interface SyncState {
   enabled: boolean;
   online: boolean;
   syncing: boolean;
+  /** Current stage of an in-flight run. */
+  phase: 'idle' | 'connecting' | 'push' | 'pull' | 'done';
+  /** 0..100 progress of the current phase (best-effort). */
+  percent: number;
+  /** Rows pushed to the cloud this run. */
+  uploaded: number;
+  /** Rows pulled from the cloud this run. */
+  downloaded: number;
+  /** Table the last processed batch belonged to (for a human-readable hint). */
+  currentTable: string | null;
   lastSyncAt: string | null;
   error: string | null;
+  /** Local changes still queued to upload (>0 ⇒ more work; a resume is pending). */
+  pendingUpload: number;
 }
 const state: SyncState = {
   enabled: SYNC_ENABLED,
   online: false,
   syncing: false,
+  phase: 'idle',
+  percent: 0,
+  uploaded: 0,
+  downloaded: 0,
+  currentTable: null,
   lastSyncAt: null,
   error: null,
+  pendingUpload: 0,
 };
+
+// Denominators captured at the start of each phase so we can show a percentage.
+let pushTotalStart = 0;
+let pullStart = 0;
+let pullHead = 0;
+
+// Live progress fan-out: the main process subscribes and forwards each snapshot to
+// the renderer (window.desktop badge) so the progress bar animates in real time
+// rather than only on the 2s poll.
+type SyncListener = (s: SyncState) => void;
+const listeners = new Set<SyncListener>();
+export function onSyncState(cb: SyncListener): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+function emit(): void {
+  const snap = getSyncState();
+  for (const cb of listeners) {
+    try {
+      cb(snap);
+    } catch {
+      /* a bad listener must never break sync */
+    }
+  }
+}
 
 /** Snapshot for the renderer's status badge (via IPC). */
 export function getSyncState(): SyncState {
   return { ...state };
+}
+
+function lastTable(changes: any[]): string | null {
+  const c = changes[changes.length - 1];
+  return c?.table ?? c?.table_name ?? null;
 }
 
 function stateDir(): string {
@@ -179,26 +229,65 @@ function authHeaders(local: boolean): Record<string, string> {
   return cloudToken ? { 'x-sync-token': cloudToken } : { cookie: cloudCookie };
 }
 
+/** How many local changes are still queued to upload (progress denominator + resume hint). */
+async function localOutboxCount(): Promise<number> {
+  try {
+    const res = await fetch(`${LOCAL_API}/sync/status`, { headers: authHeaders(true) });
+    if (!res.ok) return 0;
+    return Number(((await res.json()) as any)?.data?.outboxCount ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
+/** The cloud's highest sync_version (head) — the target the pull cursor climbs toward. */
+async function cloudHeadVersion(): Promise<number> {
+  try {
+    const res = await fetch(`${CLOUD_API_URL}/sync/status`, { headers: authHeaders(false) });
+    if (!res.ok) return 0;
+    return Number(((await res.json()) as any)?.data?.maxVersion ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
 /** Drain the local outbox to the cloud. */
 async function push(cursors: Cursors): Promise<void> {
+  state.phase = 'push';
+  pushTotalStart = await localOutboxCount();
+  emit();
   for (;;) {
     const batch = await readChanges(LOCAL_API, 'outbox', cursors.lastPushOutboxId, true);
     if (!batch.changes.length) break;
     await applyChanges(CLOUD_API_URL, batch.changes, false);
     cursors.lastPushOutboxId = batch.cursor;
     saveCursors(cursors);
+    state.uploaded += batch.changes.length;
+    state.currentTable = lastTable(batch.changes) ?? state.currentTable;
+    state.percent = pushTotalStart > 0 ? Math.min(99, Math.round((state.uploaded / pushTotalStart) * 100)) : 100;
+    emit();
     if (batch.changes.length < BATCH) break;
   }
 }
 
 /** Drain cloud changes into the local DB. */
 async function pull(cursors: Cursors): Promise<void> {
+  state.phase = 'pull';
+  pullStart = cursors.lastPullVersion;
+  pullHead = await cloudHeadVersion();
+  state.percent = 0;
+  emit();
   for (;;) {
     const batch = await readChanges(CLOUD_API_URL, 'version', cursors.lastPullVersion, false);
     if (!batch.changes.length) break;
     await applyChanges(LOCAL_API, batch.changes, true);
     cursors.lastPullVersion = batch.cursor;
     saveCursors(cursors);
+    state.downloaded += batch.changes.length;
+    state.currentTable = lastTable(batch.changes) ?? state.currentTable;
+    const span = pullHead - pullStart;
+    state.percent = span > 0 ? Math.min(99, Math.round(((cursors.lastPullVersion - pullStart) / span) * 100)) : 100;
+    emit();
     if (batch.changes.length < BATCH) break;
   }
 }
@@ -207,9 +296,17 @@ async function tick(): Promise<void> {
   if (running) return; // never overlap
   running = true;
   state.syncing = true;
+  state.phase = 'connecting';
+  state.percent = 0;
+  state.uploaded = 0;
+  state.downloaded = 0;
+  state.currentTable = null;
+  emit();
   try {
     if (!(await ensureCloudAuth())) {
       state.online = false;
+      state.phase = 'idle';
+      state.error = state.error || 'Could not reach the cloud. Check your connection and try again.';
       return; // offline / auth failed → try next tick
     }
     state.online = true;
@@ -222,11 +319,18 @@ async function tick(): Promise<void> {
     await pull(cursors);
     state.lastSyncAt = new Date().toISOString();
     state.error = null;
+    state.phase = 'done';
+    state.percent = 100;
+    // Anything still queued means the run stopped short — surfaced as a resume hint.
+    state.pendingUpload = await localOutboxCount();
   } catch (e) {
-    // A failed tick (e.g. went offline mid-sync) just retries next interval.
+    // A failed tick (e.g. went offline mid-sync) leaves the persisted cursors where
+    // they were, so the next run (auto every interval, or the "Sync now" button)
+    // resumes from exactly this point — no data is lost, nothing is re-done.
     const msg = (e as Error).message;
     console.error('[sync] tick error:', msg);
-    state.error = msg;
+    state.error = friendlyError(msg);
+    state.phase = 'idle';
     if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(msg)) state.online = false;
     if (msg.includes('401')) {
       cloudCookie = '';
@@ -235,7 +339,17 @@ async function tick(): Promise<void> {
   } finally {
     running = false;
     state.syncing = false;
+    emit();
   }
+}
+
+/** Turn a raw fetch/HTTP error into something a user can act on. */
+function friendlyError(msg: string): string {
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|network|ETIMEDOUT/i.test(msg))
+    return 'Lost connection while syncing. It will resume automatically — or click to retry now.';
+  if (msg.includes('401') || /auth/i.test(msg)) return 'Your session expired. Sign in again to continue syncing.';
+  if (/50\d/.test(msg)) return 'The server had a problem. Sync paused — click to retry (it resumes where it stopped).';
+  return `Sync interrupted (${msg}). Click to resume where it stopped.`;
 }
 
 /**
@@ -258,6 +372,22 @@ export function setCloudCreds(email: string, password: string): void {
 /** Run one push+pull cycle right now (the "Sync now" button / on-login trigger). */
 export async function syncNow(): Promise<SyncState> {
   if (!SYNC_ENABLED) return { ...state };
+  await tick();
+  return { ...state };
+}
+
+/**
+ * Re-download the ENTIRE cloud dataset from scratch ("Full resync" / "sync complete
+ * database"). Resets only the pull cursor to 0 — every cloud row is re-fetched and
+ * re-applied (upserts are idempotent, so this repairs any gaps from an interrupted
+ * sync without duplicating anything). The upload cursor is left alone so local work
+ * isn't re-sent.
+ */
+export async function fullResync(): Promise<SyncState> {
+  if (!SYNC_ENABLED) return { ...state };
+  const c = loadCursors();
+  c.lastPullVersion = 0;
+  saveCursors(c);
   await tick();
   return { ...state };
 }

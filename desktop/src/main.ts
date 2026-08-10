@@ -14,7 +14,7 @@ import {
 import { startLocalDb, stopLocalDb } from './localdb';
 import { startBackend, stopBackend } from './backend';
 import { provision, isProvisioned } from './provision';
-import { startSync, stopSync, getSyncState, setCloudCreds, syncNow } from './sync';
+import { startSync, stopSync, getSyncState, setCloudCreds, syncNow, fullResync, onSyncState } from './sync';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -230,6 +230,11 @@ function buildMenu(): void {
 function initAutoUpdate(): void {
   if (IS_DEV) return;
   try {
+    // Download the FULL installer for every update instead of block-level patching.
+    // Differential (delta) downloads can leave a runtime DLL missing (e.g. ffmpeg.dll)
+    // if AV or a file lock interrupts the patch — turning it off trades a slightly
+    // larger download for an integrity-verified, all-or-nothing update.
+    autoUpdater.disableDifferentialDownload = true;
     autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_FEED_URL });
     autoUpdater.checkForUpdatesAndNotify();
   } catch (err) {
@@ -246,8 +251,10 @@ ipcMain.handle('sync:login', async (_e, creds: { email?: string; password?: stri
   if (creds?.email && creds?.password) setCloudCreds(creds.email, creds.password);
   return syncNow();
 });
-// "Sync now" button.
+// "Sync now" button (also resumes after an interrupted/failed run).
 ipcMain.handle('sync:now', () => syncNow());
+// "Full resync" — redownload the entire cloud dataset from scratch.
+ipcMain.handle('sync:full-resync', () => fullResync());
 ipcMain.handle('app:get-default-login', () => ({
   email: DEFAULT_TENANT.ownerEmail,
   // password intentionally not exposed to the renderer
@@ -262,6 +269,15 @@ ipcMain.handle('app:check-updates', async () => {
 app.whenReady().then(async () => {
   buildMenu();
   createWindow();
+
+  // Stream every sync-state change to the renderer so the badge's progress bar
+  // animates live (the renderer also polls as a fallback).
+  onSyncState((s) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sync:state', s);
+    }
+  });
+
   await bootLocalStack();
   initAutoUpdate();
 
@@ -270,9 +286,32 @@ app.whenReady().then(async () => {
   });
 });
 
-// Tear down the backend + Postgres cleanly on quit.
+// Tear down the backend + Postgres cleanly on quit. If a sync is mid-flight, warn
+// first — closing is safe (it resumes next launch), but the user should know.
+let quitting = false;
 app.on('before-quit', async (e) => {
+  if (quitting) return; // teardown already in progress
   e.preventDefault();
+
+  if (getSyncState().syncing) {
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    const opts = {
+      type: 'warning' as const,
+      title: 'Sync in progress',
+      message: 'Your account is still syncing.',
+      detail:
+        'If you close now, syncing will pause. It resumes automatically the next time ' +
+        'you open the app and no data is lost — but some records may not appear until ' +
+        'it finishes.\n\nClose anyway?',
+      buttons: ['Keep syncing', 'Close anyway'],
+      defaultId: 0,
+      cancelId: 0,
+    };
+    const choice = parent ? dialog.showMessageBoxSync(parent, opts) : dialog.showMessageBoxSync(opts);
+    if (choice !== 1) return; // user chose to keep syncing — cancel the quit
+  }
+
+  quitting = true;
   stopSync();
   stopBackend();
   await stopLocalDb();
