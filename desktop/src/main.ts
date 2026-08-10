@@ -14,7 +14,7 @@ import {
 import { startLocalDb, stopLocalDb } from './localdb';
 import { startBackend, stopBackend } from './backend';
 import { provision, isProvisioned } from './provision';
-import { startSync, stopSync, getSyncState } from './sync';
+import { startSync, stopSync, getSyncState, setCloudCreds, syncNow } from './sync';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -240,6 +240,14 @@ function initAutoUpdate(): void {
 // ─── IPC handlers (bridge for the renderer / Angular) ────────────────────────
 ipcMain.handle('app:get-version', () => app.getVersion());
 ipcMain.handle('sync:get-state', () => getSyncState());
+// The renderer hands us the just-logged-in user's cloud credentials so the relay
+// syncs THEIR tenant, then we kick an immediate cycle.
+ipcMain.handle('sync:login', async (_e, creds: { email?: string; password?: string }) => {
+  if (creds?.email && creds?.password) setCloudCreds(creds.email, creds.password);
+  return syncNow();
+});
+// "Sync now" button.
+ipcMain.handle('sync:now', () => syncNow());
 ipcMain.handle('app:get-default-login', () => ({
   email: DEFAULT_TENANT.ownerEmail,
   // password intentionally not exposed to the renderer

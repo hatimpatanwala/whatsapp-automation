@@ -45,6 +45,12 @@ let cloudCookie = '';
 let cloudToken = '';
 let nodeId: string | undefined;
 
+// The cloud account the relay authenticates as. Defaults to the config value, but
+// is overridden by the ACTUAL user who logs into the app (setCloudCreds via IPC),
+// so each device syncs the tenant of whoever signed in.
+let cloudEmail = SYNC_CLOUD_EMAIL;
+let cloudPassword = SYNC_CLOUD_PASSWORD;
+
 export interface SyncState {
   enabled: boolean;
   online: boolean;
@@ -117,12 +123,15 @@ async function ensureCloudAuth(): Promise<boolean> {
   loadToken();
   if (cloudToken) return true;
 
+  // No stored token yet — we need real credentials (set by the logged-in user).
+  if (!cloudEmail || !cloudPassword) return false;
+
   // First time on this device: log in, then mint a token.
   try {
     const login = await fetch(`${CLOUD_API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: SYNC_CLOUD_EMAIL, password: SYNC_CLOUD_PASSWORD }),
+      body: JSON.stringify({ email: cloudEmail, password: cloudPassword }),
     });
     if (!login.ok) {
       console.error(`[sync] cloud login failed: ${login.status}`);
@@ -229,15 +238,39 @@ async function tick(): Promise<void> {
   }
 }
 
+/**
+ * Point the relay at the account that just logged into the app. When a DIFFERENT
+ * user signs in we drop the cached token/cookie so we re-auth (and re-scope) as
+ * them, then sync immediately. Called from the renderer via IPC on every login.
+ */
+export function setCloudCreds(email: string, password: string): void {
+  const e = (email || '').trim();
+  if (!e) return;
+  if (e.toLowerCase() !== (cloudEmail || '').toLowerCase()) {
+    cloudToken = '';
+    cloudCookie = '';
+    try { fs.rmSync(tokenFile(), { force: true }); } catch { /* fine */ }
+  }
+  cloudEmail = e;
+  cloudPassword = password || '';
+}
+
+/** Run one push+pull cycle right now (the "Sync now" button / on-login trigger). */
+export async function syncNow(): Promise<SyncState> {
+  if (!SYNC_ENABLED) return { ...state };
+  await tick();
+  return { ...state };
+}
+
 export function startSync(): void {
   if (!SYNC_ENABLED) {
-    console.log('[sync] disabled (set DESKTOP_SYNC=1 to enable)');
+    console.log('[sync] disabled (set DESKTOP_SYNC=0 to disable)');
     return;
   }
   if (timer) return;
   console.log(`[sync] relay starting — cloud=${CLOUD_API_URL}, every ${SYNC_POLL_MS}ms`);
   timer = setInterval(() => void tick(), SYNC_POLL_MS);
-  void tick(); // run one immediately
+  void tick(); // run one immediately (uses a stored token if a prior login left one)
 }
 
 export function stopSync(): void {

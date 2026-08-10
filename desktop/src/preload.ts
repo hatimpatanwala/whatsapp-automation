@@ -37,6 +37,13 @@ const api = {
     error: string | null;
   }> => ipcRenderer.invoke('sync:get-state'),
 
+  /** Point the sync relay at the just-logged-in cloud account + sync immediately. */
+  syncLogin: (email: string, password: string): Promise<any> =>
+    ipcRenderer.invoke('sync:login', { email, password }),
+
+  /** Manually run a push+pull cycle now ("Sync now"). */
+  syncNow: (): Promise<any> => ipcRenderer.invoke('sync:now'),
+
   /**
    * Subscribe to native menu / global-shortcut commands (Tally keymap forwarded from
    * the main process). Returns an unsubscribe function.
@@ -72,8 +79,13 @@ function mountSyncBadge(): void {
     'gap:6px',
     'box-shadow:0 2px 8px rgba(0,0,0,.15)',
     'user-select:none',
-    'pointer-events:none',
+    'pointer-events:auto',
+    'cursor:pointer',
   ].join(';');
+  badge.title = 'Click to sync now';
+  badge.addEventListener('click', () => {
+    api.syncNow().then(render).catch(() => undefined);
+  });
   document.body.appendChild(badge);
 
   const render = (s: {
@@ -103,7 +115,7 @@ function mountSyncBadge(): void {
     badge.style.background = '#0f172a';
     badge.style.color = '#e2e8f0';
     badge.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:${dot};display:inline-block"></span>${text}`;
-    badge.title = s.lastSyncAt ? `Last sync: ${new Date(s.lastSyncAt).toLocaleString()}` : '';
+    badge.title = (s.lastSyncAt ? `Last sync: ${new Date(s.lastSyncAt).toLocaleString()}\n` : '') + 'Click to sync now';
   };
 
   const poll = () => api.getSyncState().then(render).catch(() => undefined);

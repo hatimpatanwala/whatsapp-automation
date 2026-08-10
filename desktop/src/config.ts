@@ -54,8 +54,9 @@ export const DEFAULT_TENANT = {
 /** Cloud API base the desktop relays to (…/api). */
 export const CLOUD_API_URL = process.env.DESKTOP_CLOUD_API || 'https://staging-whatsappdemo.duckdns.org/api';
 
-/** Master switch. Off by default until the cloud has the /sync endpoints + a real account. */
-export const SYNC_ENABLED = process.env.DESKTOP_SYNC === '1';
+/** Master switch. ON by default (the cloud has the /sync endpoints); set
+ *  DESKTOP_SYNC=0 to force a purely-offline install with no cloud sync. */
+export const SYNC_ENABLED = process.env.DESKTOP_SYNC !== '0';
 
 // (The desktop→local-backend sync key now comes from the per-install secrets file —
 // see secrets.ts; DESKTOP_SYNC_KEY env still overrides for testing.)

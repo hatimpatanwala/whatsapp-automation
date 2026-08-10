@@ -296,6 +296,12 @@ export class LoginComponent {
 
     this.authService.login({ email: email!, password: password! }).subscribe({
       next: (res) => {
+        // Desktop app: point the offline sync relay at this account and kick an
+        // immediate cloud sync so their data is pulled/pushed on login.
+        const desktop = (window as any).desktop;
+        if (desktop?.isDesktop && res.type !== 'admin') {
+          try { desktop.syncLogin(email!, password!); } catch { /* web app: no-op */ }
+        }
         if (res.type === 'admin') {
           this.router.navigate(['/admin']);
         } else {
