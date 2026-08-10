@@ -6,12 +6,15 @@ import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
+import { ToastModule } from 'primeng/toast';
+import { MessageService } from 'primeng/api';
 import { AuthService } from '../../core/services/auth.service';
 import { SocialLoginButtonsComponent } from './social-login-buttons.component';
 
 @Component({
   selector: 'wa-login',
   standalone: true,
+  providers: [MessageService],
   imports: [
     CommonModule,
     ReactiveFormsModule,
@@ -19,10 +22,12 @@ import { SocialLoginButtonsComponent } from './social-login-buttons.component';
     PasswordModule,
     ButtonModule,
     MessageModule,
+    ToastModule,
     RouterLink,
     SocialLoginButtonsComponent,
   ],
   template: `
+    <p-toast position="top-right" />
     <div class="wa-login-wrapper">
       <div class="wa-login-left">
         <div class="wa-login-left-content">
@@ -258,6 +263,7 @@ export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly toast = inject(MessageService);
 
   readonly year = new Date().getFullYear();
   loading = signal(false);
@@ -298,10 +304,49 @@ export class LoginComponent {
         }
       },
       error: (err) => {
-        this.errorMessage.set(err?.error?.message ?? 'Invalid credentials. Please try again.');
+        const { summary, detail } = this.describeLoginError(err);
+        this.errorMessage.set(detail);
+        this.toast.add({ severity: 'error', summary, detail, life: 7000 });
         this.loading.set(false);
       },
       complete: () => this.loading.set(false),
     });
+  }
+
+  /**
+   * Turn a login failure into a clear, specific message. The API wraps errors as
+   * { success:false, error:{ message } }, so the real reason lives at
+   * err.error.error.message — reading err.error.message alone always fell back to
+   * a generic "Invalid credentials", hiding things like the offline-app licence
+   * block or a deactivated account.
+   */
+  private describeLoginError(err: any): { summary: string; detail: string } {
+    const status = Number(err?.status);
+    const serverMsg = String(err?.error?.error?.message ?? err?.error?.message ?? err?.message ?? '').trim();
+    const m = serverMsg.toLowerCase();
+
+    if (status === 0) {
+      return { summary: 'Can’t reach the server', detail: 'Check your internet connection and try again.' };
+    }
+    if (status === 403 || m.includes('offline desktop app') || m.includes('not licensed')) {
+      return {
+        summary: 'Offline app not licensed',
+        detail: serverMsg || 'This account isn’t licensed for the offline desktop app. Use the web version in a browser, or ask your administrator to enable it.',
+      };
+    }
+    if (m.includes('deactivat') || m.includes('disabled') || m.includes('not active')) {
+      return {
+        summary: 'Account deactivated',
+        detail: serverMsg || 'Your account has been deactivated. Please contact your administrator.',
+      };
+    }
+    if (status === 429 || m.includes('too many')) {
+      return { summary: 'Too many attempts', detail: 'Please wait a moment and try again.' };
+    }
+    if (status === 401 || m.includes('invalid credential') || m.includes('incorrect')) {
+      return { summary: 'Incorrect email or password', detail: 'Please double-check your email and password, then try again.' };
+    }
+    // Anything else — surface the server's own message if it gave one.
+    return { summary: 'Sign-in failed', detail: serverMsg || 'Something went wrong signing you in. Please try again.' };
   }
 }
