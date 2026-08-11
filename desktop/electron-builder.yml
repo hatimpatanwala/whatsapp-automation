@@ -1,6 +1,6 @@
 appId: com.beatroute.wacommerce.erp
-productName: WhatsApp Commerce ERP
-copyright: Copyright © BeatRoute
+productName: NexusFlow
+copyright: Copyright © NexusFlow
 
 # The embedded NestJS backend runs as its own Node process (Node ABI), so native
 # modules must NOT be rebuilt against Electron's ABI. Auth now uses pure-JS
@@ -65,7 +65,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: WhatsApp Commerce ERP
+  shortcutName: NexusFlow
 
 # Auto-update feed (npm run release publishes here). Swap provider to `github` to use
 # GitHub Releases instead.

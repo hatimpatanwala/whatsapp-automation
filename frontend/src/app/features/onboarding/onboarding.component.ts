@@ -57,7 +57,7 @@ import { DirectNumberRegistrationComponent } from '../../shared/direct-number-re
           <div class="flex items-center justify-center w-16 h-16 bg-primary-500 rounded-2xl mx-auto mb-4 shadow-lg">
             <i class="pi pi-whatsapp text-white" style="font-size:2rem"></i>
           </div>
-          <h1 class="text-3xl font-bold text-gray-900">Welcome to WA Commerce</h1>
+          <h1 class="text-3xl font-bold text-gray-900">Welcome to NexusFlow</h1>
           <p class="text-gray-500 mt-2">Let's get your WhatsApp store set up in a few simple steps</p>
         </div>
 

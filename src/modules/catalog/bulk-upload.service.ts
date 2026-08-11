@@ -65,7 +65,7 @@ export class BulkUploadService {
   /** Build the styled Products sheet (+ category/status dropdowns, references, instructions). */
   private async buildWorkbook(schema: string, products?: any[]): Promise<ExcelJS.Workbook> {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'WhatsApp Commerce';
+    workbook.creator = 'NexusFlow';
     const sheet = workbook.addWorksheet('Products');
     sheet.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }));
 

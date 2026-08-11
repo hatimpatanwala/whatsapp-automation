@@ -28,9 +28,9 @@ import { SocialLoginButtonsComponent } from './social-login-buttons.component';
       <div class="wa-login-left">
         <div class="wa-login-left-content">
           <div class="wa-login-brand">
-            <i class="pi pi-whatsapp" style="font-size:2.5rem; color: white"></i>
+            <img src="/logo.png" alt="NexusFlow" style="width:56px;height:56px;border-radius:14px" />
           </div>
-          <h1>WA Commerce</h1>
+          <h1>NexusFlow</h1>
           <p>Start selling on WhatsApp in minutes. Create your store, connect your number, and start receiving orders today.</p>
           <div class="wa-login-features">
             <div class="wa-feature-item">
@@ -172,7 +172,7 @@ import { SocialLoginButtonsComponent } from './social-login-buttons.component';
             Already have an account? <a routerLink="/auth/login">Sign in</a>
           </p>
 
-          <p class="wa-login-footer">&copy; {{ year }} WA Commerce</p>
+          <p class="wa-login-footer">&copy; {{ year }} NexusFlow</p>
         </div>
       </div>
     </div>

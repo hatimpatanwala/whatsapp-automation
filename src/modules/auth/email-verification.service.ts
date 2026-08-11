@@ -84,11 +84,11 @@ export class EmailVerificationService {
         await this.transporter.sendMail({
           from: this.fromEmail,
           to: email,
-          subject: 'WA Commerce - Verify Your Email',
+          subject: 'NexusFlow - Verify Your Email',
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
               <div style="text-align: center; margin-bottom: 24px;">
-                <h2 style="color: #059669; margin: 0;">WA Commerce</h2>
+                <h2 style="color: #059669; margin: 0;">NexusFlow</h2>
               </div>
               <p>Hi ${signupData.name},</p>
               <p>Your verification code is:</p>

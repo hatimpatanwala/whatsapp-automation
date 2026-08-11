@@ -126,7 +126,7 @@ export function buildEwayBillPdf(e: any, invoice: any | null, s: ErpPdfSettings)
         'System-generated e-way bill in the standard EWB-01 format. For statutory use, generate/validate on the government portal (ewaybillgst.gov.in).',
         left, y, { width: W, align: 'center' },
       );
-      doc.fontSize(7).fillColor('#bbb').text('Generated via WhatsApp Commerce ERP', left, y + 18, { width: W, align: 'center' });
+      doc.fontSize(7).fillColor('#bbb').text('Generated via NexusFlow', left, y + 18, { width: W, align: 'center' });
 
       doc.end();
     } catch (err) {

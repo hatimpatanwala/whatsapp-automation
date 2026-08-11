@@ -39,7 +39,7 @@ interface MenuGroup {
       <!-- Title bar -->
       <header class="mcl-title">
         <span class="mcl-co">{{ companyName() }}</span>
-        <span class="mcl-app">WhatsApp Commerce ERP</span>
+        <span class="mcl-app">NexusFlow</span>
         <span class="mcl-date">{{ today | date: 'dd-MM-yyyy' }} · F.Y. {{ fy }}</span>
       </header>
 

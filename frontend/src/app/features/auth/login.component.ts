@@ -32,10 +32,10 @@ import { SocialLoginButtonsComponent } from './social-login-buttons.component';
       <div class="wa-login-left">
         <div class="wa-login-left-content">
           <div class="wa-login-brand">
-            <i class="pi pi-whatsapp" style="font-size:2.5rem; color: white"></i>
+            <img src="/logo.png" alt="NexusFlow" style="width:56px;height:56px;border-radius:14px" />
           </div>
-          <h1>WA Commerce</h1>
-          <p>The complete WhatsApp commerce platform for modern sellers. Manage products, orders, payments, and customer conversations — all in one place.</p>
+          <h1>NexusFlow</h1>
+          <p>Connect. Automate. Grow. The WhatsApp-powered business platform for modern sellers — products, orders, payments and customer conversations, all in one place.</p>
           <div class="wa-login-features">
             <div class="wa-feature-item">
               <i class="pi pi-shopping-cart"></i>
@@ -103,7 +103,7 @@ import { SocialLoginButtonsComponent } from './social-login-buttons.component';
             Don't have an account? <a routerLink="/auth/register">Create one</a>
           </p>
 
-          <p class="wa-login-footer">&copy; {{ year }} WA Commerce</p>
+          <p class="wa-login-footer">&copy; {{ year }} NexusFlow</p>
         </div>
       </div>
     </div>

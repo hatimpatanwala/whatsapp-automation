@@ -208,7 +208,7 @@ export class BillingDashboardComponent implements OnInit {
       key: order.keyId || this.razorpayKeyId,
       amount: order.amount,
       currency: order.currency,
-      name: 'WA Commerce',
+      name: 'NexusFlow',
       description: 'Wallet Top-up',
       order_id: order.razorpayOrderId,
       handler: (response: any) => {

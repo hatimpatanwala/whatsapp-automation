@@ -14,7 +14,7 @@ const KEY = process.env.WA_DEPLOY_KEY || path.resolve('..', 'wa-commece.pem');
 const HOST = process.env.WA_DEPLOY_HOST || 'ubuntu@52.66.40.206';
 const DEST = process.env.WA_UPDATE_FEED_DIR || '/var/www/desktop-updates/';
 
-const exe = `WhatsApp Commerce ERP-Setup-${version}.exe`;
+const exe = `NexusFlow-Setup-${version}.exe`;
 const files = ['latest.yml', exe, `${exe}.blockmap`].map((f) => path.join('release', f));
 
 for (const f of files) {

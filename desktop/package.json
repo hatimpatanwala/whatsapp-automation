@@ -1,7 +1,7 @@
 {
   "name": "wacommerce-desktop",
-  "version": "0.2.0",
-  "description": "WhatsApp-Commerce ERP â€” Windows desktop shell (Electron)",
+  "version": "0.2.1",
+  "description": "NexusFlow — Windows desktop shell (Electron)",
   "author": "BeatRoute",
   "license": "UNLICENSED",
   "private": true,

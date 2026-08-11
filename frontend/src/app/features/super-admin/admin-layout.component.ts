@@ -30,7 +30,7 @@ interface AdminNavGroup {
             <i class="pi pi-shield text-white" style="font-size:1.1rem"></i>
           </div>
           <div>
-            <p class="text-sm font-bold text-gray-900 tracking-wide">WA Commerce</p>
+            <p class="text-sm font-bold text-gray-900 tracking-wide">NexusFlow</p>
             <p class="text-[10px] uppercase tracking-widest text-emerald-600 font-semibold">Super Admin</p>
           </div>
         </div>

@@ -123,7 +123,7 @@ export class ErpExportService {
   async buildWorkbook(schema: string): Promise<Buffer> {
     return this.cm.executeInTenantContext(schema, async (qr) => {
       const wb = new Workbook();
-      wb.creator = 'WA Commerce ERP';
+      wb.creator = 'NexusFlow';
 
       const index = wb.addWorksheet('Overview');
       index.columns = [

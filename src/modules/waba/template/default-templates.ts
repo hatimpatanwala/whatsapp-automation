@@ -42,7 +42,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, your order #{{2}} has been confirmed! {{3}} items totalling {{4}}. We\'ll notify you when it ships. Thank you for shopping with us!',
         example: { body_text: [['Rahul', 'ORD-0042', '3', 'Rs. 1,299']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
     ],
   },
   {
@@ -55,7 +55,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, great news! Your order #{{2}} has been shipped. {{3}} Track your delivery or reply here for updates.',
         example: { body_text: [['Rahul', 'ORD-0042', 'Expected delivery: 20 May 2026']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
       {
         type: 'BUTTONS',
         buttons: [{ type: 'QUICK_REPLY', text: 'Track Order' }],
@@ -72,7 +72,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, your order #{{2}} has been delivered! We hope you love it. Reply "HELP" if you have any issues or "REORDER" to place a new order.',
         example: { body_text: [['Rahul', 'ORD-0042']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
       {
         type: 'BUTTONS',
         buttons: [
@@ -92,7 +92,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, your order #{{2}} has been cancelled. {{3}} If you have any questions, reply to this message.',
         example: { body_text: [['Rahul', 'ORD-0042', 'Reason: Out of stock']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
     ],
   },
 
@@ -107,7 +107,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, we\'ve received your payment of {{2}} for order #{{3}}. Your order is now being processed. Thank you!',
         example: { body_text: [['Rahul', 'Rs. 999', 'ORD-0042']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
     ],
   },
   {
@@ -120,7 +120,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, your payment of {{2}} for order #{{3}} has been verified. Your order will be shipped soon!',
         example: { body_text: [['Rahul', 'Rs. 999', 'ORD-0042']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
     ],
   },
   {
@@ -133,7 +133,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, a friendly reminder that payment of {{2}} is pending for your order #{{3}}. Please complete the payment to avoid cancellation. Reply "PAY" for payment options.',
         example: { body_text: [['Rahul', 'Rs. 999', 'ORD-0042']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
       {
         type: 'BUTTONS',
         buttons: [
@@ -153,7 +153,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, your refund of {{2}} for order #{{3}} has been processed. It may take 3-5 business days to reflect in your account. Reply if you need any help.',
         example: { body_text: [['Rahul', 'Rs. 999', 'ORD-0042']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
     ],
   },
 
@@ -168,7 +168,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, delivery update for order #{{2}}: {{3}}. {{4}} — reply here if you need any help.',
         example: { body_text: [['Rahul', 'ORD-0042', 'Out for delivery', 'Expected by 6 PM today']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
       {
         type: 'BUTTONS',
         buttons: [{ type: 'QUICK_REPLY', text: 'Track' }],
@@ -185,7 +185,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplateDefinition[] = [
         text: 'Hi {{1}}, we were unable to deliver your order #{{2}}. Reason: {{3}}. We\'ll retry delivery tomorrow. Reply "RESCHEDULE" to pick a new time or "PICKUP" for self-collection.',
         example: { body_text: [['Rahul', 'ORD-0042', 'No one at home']] },
       },
-      { type: 'FOOTER', text: 'Powered by WA Commerce' },
+      { type: 'FOOTER', text: 'Powered by NexusFlow' },
       {
         type: 'BUTTONS',
         buttons: [

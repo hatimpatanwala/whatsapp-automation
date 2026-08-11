@@ -267,7 +267,7 @@ export class BaileysSessionService implements OnModuleDestroy {
       version,
       auth: state,
       printQRInTerminal: false,
-      browser: Browsers?.appropriate ? Browsers.appropriate('Chrome') : ['WA Commerce', 'Chrome', '1.0'],
+      browser: Browsers?.appropriate ? Browsers.appropriate('Chrome') : ['NexusFlow', 'Chrome', '1.0'],
       markOnlineOnConnect: false, // don't steal presence from the user's phone
       syncFullHistory: false,
       logger: silent,

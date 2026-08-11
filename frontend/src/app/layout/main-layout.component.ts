@@ -84,12 +84,12 @@ interface NavSection {
       >
         <!-- Logo area -->
         <div class="flex items-center gap-3 px-4 py-5 border-b border-gray-100">
-          <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-primary-500 flex-shrink-0">
-            <i class="pi pi-whatsapp text-white" style="font-size:1.25rem"></i>
+          <div class="flex items-center justify-center w-9 h-9 rounded-xl overflow-hidden flex-shrink-0">
+            <img src="/logo.png" alt="NexusFlow" class="w-9 h-9 object-cover" />
           </div>
           @if (sidebarOpen()) {
             <div class="overflow-hidden">
-              <div class="text-sm font-bold text-gray-900 truncate">WA Commerce</div>
+              <div class="text-sm font-bold text-gray-900 truncate">NexusFlow</div>
               <div class="text-xs text-gray-400 truncate">{{ tenantName() }}</div>
             </div>
           }
