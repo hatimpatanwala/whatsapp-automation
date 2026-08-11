@@ -51,6 +51,8 @@ export const SYNCABLE_TABLES = [
   'credit_notes',
   'debit_notes',
   'inventory_movements',
+  // user-customizable document templates (migration 099)
+  'document_templates',
 ] as const;
 
 export type SyncableTable = (typeof SYNCABLE_TABLES)[number];

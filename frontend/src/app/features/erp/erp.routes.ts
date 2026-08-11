@@ -33,6 +33,7 @@ export const ERP_ROUTES: Routes = [
   { path: 'currencies', loadComponent: () => import('./enterprise/erp-currencies.component').then((m) => m.ErpCurrenciesComponent) },
   { path: 'tax-rates', loadComponent: () => import('./enterprise/erp-tax-rates.component').then((m) => m.ErpTaxRatesComponent) },
   { path: 'settings', loadComponent: () => import('./enterprise/erp-settings.component').then((m) => m.ErpSettingsComponent) },
+  { path: 'document-templates', loadComponent: () => import('./templates/document-templates.component').then((m) => m.DocumentTemplatesComponent) },
   // Enterprise CRM + admin + analytics
   { path: 'reports', loadComponent: () => import('./enterprise2/erp-reports.component').then((m) => m.ErpReportsComponent) },
   { path: 'contacts', loadComponent: () => import('./enterprise2/erp-contacts.component').then((m) => m.ErpContactsComponent) },

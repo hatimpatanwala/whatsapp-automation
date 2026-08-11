@@ -438,6 +438,7 @@ export class MainLayoutComponent implements OnInit {
         { label: 'API Keys', icon: 'pi-key', route: '/erp/api-keys', featureKey: 'erp', perm: 'settings' },
         { label: 'Export Data', icon: 'pi-download', route: '/erp/export', featureKey: 'erp', perm: 'settings' },
         { label: 'Business Settings', icon: 'pi-sliders-h', route: '/erp/settings', featureKey: 'erp', perm: 'settings' },
+        { label: 'Document Templates', icon: 'pi-file-edit', route: '/erp/document-templates', featureKey: 'erp', perm: 'settings' },
         // Team & Roles (RBAC) — employees + per-feature permissions.
         { label: 'Team & Roles', icon: 'pi-users', route: '/team', perm: 'employees' },
         { label: 'Notifications', icon: 'pi-bell', route: '/notifications' },

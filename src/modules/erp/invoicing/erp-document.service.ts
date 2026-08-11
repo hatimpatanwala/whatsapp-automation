@@ -5,6 +5,7 @@ import { buildErpInvoicePdf, ErpPdfSettings } from './erp-invoice-pdf';
 import { buildErpDocPdf } from './erp-doc-pdf';
 import { buildEwayBillPdf } from '../compliance/eway-pdf';
 import { firstRow } from '../common/sql-result.util';
+import { DEFAULT_TEMPLATE_CONFIG, normalizeTemplateConfig, DocType } from '../templates/document-template.types';
 
 /**
  * Renders ERP documents (invoices) to PDF.
@@ -25,7 +26,7 @@ export class ErpDocumentService {
     const { invoice, settings } = await this.cm.executeInTenantContext(schema, async (qr) => {
       const invoice = (await qr.query(`SELECT * FROM "${schema}".invoices WHERE id = $1 LIMIT 1`, [invoiceId]))[0];
       if (!invoice) throw new NotFoundException(`Invoice ${invoiceId} not found`);
-      const settings = await this.loadSettings(qr, schema);
+      const settings = await this.loadSettings(qr, schema, 'invoice');
       return { invoice, settings };
     });
 
@@ -41,7 +42,7 @@ export class ErpDocumentService {
       if (!doc) throw new NotFoundException('Offer not found');
       const items = await qr.query(`SELECT * FROM "${schema}".offer_items WHERE offer_id = $1 ORDER BY sort_order`, [offerId]);
       const lead = doc.lead_id ? firstRow(await qr.query(`SELECT first_name, last_name, phone FROM "${schema}".leads WHERE id = $1`, [doc.lead_id])) : null;
-      return { doc, settings: await this.loadSettings(qr, schema), items, lead };
+      return { doc, settings: await this.loadSettings(qr, schema, 'offer'), items, lead };
     });
     const buffer = await buildErpDocPdf({
       docTitle: 'OFFER', number: doc.offer_number, date: doc.created_at,
@@ -59,7 +60,7 @@ export class ErpDocumentService {
       if (!doc) throw new NotFoundException('Purchase order not found');
       const items = await qr.query(`SELECT * FROM "${schema}".supplier_order_items WHERE supplier_order_id = $1 ORDER BY sort_order`, [soId]);
       const supplier = doc.supplier_id ? firstRow(await qr.query(`SELECT company, phone FROM "${schema}".suppliers WHERE id = $1`, [doc.supplier_id])) : null;
-      return { doc, settings: await this.loadSettings(qr, schema), items, supplier };
+      return { doc, settings: await this.loadSettings(qr, schema, 'purchase_order'), items, supplier };
     });
     const buffer = await buildErpDocPdf({
       docTitle: 'PURCHASE ORDER', number: doc.order_number, date: doc.created_at,
@@ -78,7 +79,7 @@ export class ErpDocumentService {
       let party: any;
       if (table === 'credit_notes') party = doc.customer_name ? { label: 'Customer', name: doc.customer_name, phone: doc.customer_phone } : undefined;
       else if (doc.supplier_id) { const s = firstRow(await qr.query(`SELECT company, phone FROM "${schema}".suppliers WHERE id = $1`, [doc.supplier_id])); party = s ? { label: 'Supplier', name: s.company, phone: s.phone } : undefined; }
-      return { doc, settings: await this.loadSettings(qr, schema), party };
+      return { doc, settings: await this.loadSettings(qr, schema, table === 'credit_notes' ? 'credit_note' : 'debit_note'), party };
     });
     const isCredit = table === 'credit_notes';
     const buffer = await buildErpDocPdf({
@@ -90,6 +91,31 @@ export class ErpDocumentService {
     return { buffer, filename: `${String(doc.note_number).replace(/[^\w.-]/g, '_')}.pdf`, doc };
   }
 
+  /** Quotation PDF (line items + customer), themed by the tenant's 'quote' template. */
+  async getQuotePdf(schema: string, quoteId: string): Promise<{ buffer: Buffer; filename: string; doc: any }> {
+    const { doc, settings, items, customer } = await this.cm.executeInTenantContext(schema, async (qr) => {
+      const doc = firstRow(await qr.query(`SELECT * FROM "${schema}".quotes WHERE id = $1 AND deleted_at IS NULL`, [quoteId]));
+      if (!doc) throw new NotFoundException('Quote not found');
+      const items = await qr.query(
+        `SELECT description, quantity, unit_price, line_total, discount FROM "${schema}".quote_items
+          WHERE quote_id = $1 AND deleted_at IS NULL ORDER BY sort_order`,
+        [quoteId],
+      );
+      const customer = doc.customer_id
+        ? firstRow(await qr.query(`SELECT name, phone FROM "${schema}".customers WHERE id = $1`, [doc.customer_id]))
+        : null;
+      return { doc, items, customer, settings: await this.loadSettings(qr, schema, 'quote') };
+    });
+    const buffer = await buildErpDocPdf({
+      docTitle: 'QUOTATION', number: doc.quote_number, date: doc.created_at,
+      party: customer ? { label: 'Quote To', name: customer.name, phone: customer.phone } : undefined,
+      items, subtotal: doc.subtotal, totalTax: doc.tax_amount, total: doc.total_amount,
+      statusLabel: doc.status, note: doc.notes,
+      extraRows: doc.valid_until ? [{ label: 'Valid Until', value: new Date(doc.valid_until).toLocaleDateString('en-IN') }] : undefined,
+    }, settings);
+    return { buffer, filename: `${String(doc.quote_number).replace(/[^\w.-]/g, '_')}.pdf`, doc };
+  }
+
   /** Payment receipt PDF for a single payment against an invoice. */
   async getPaymentReceiptPdf(schema: string, paymentId: string): Promise<{ buffer: Buffer; filename: string; payment: any }> {
     const { payment, settings } = await this.cm.executeInTenantContext(schema, async (qr) => {
@@ -97,7 +123,7 @@ export class ErpDocumentService {
         `SELECT p.*, i.invoice_number, i.customer_name, i.customer_phone, i.total AS invoice_total, i.balance_due
          FROM "${schema}".payments p LEFT JOIN "${schema}".invoices i ON i.id = p.invoice_id WHERE p.id = $1`, [paymentId]));
       if (!payment) throw new NotFoundException('Payment not found');
-      return { payment, settings: await this.loadSettings(qr, schema) };
+      return { payment, settings: await this.loadSettings(qr, schema, 'receipt') };
     });
     const buffer = await buildErpDocPdf({
       docTitle: 'PAYMENT RECEIPT',
@@ -123,18 +149,22 @@ export class ErpDocumentService {
       const invoice = eway.invoice_id
         ? firstRow(await qr.query(`SELECT * FROM "${schema}".invoices WHERE id = $1`, [eway.invoice_id]))
         : null;
-      return { eway, invoice, settings: await this.loadSettings(qr, schema) };
+      return { eway, invoice, settings: await this.loadSettings(qr, schema, 'invoice') };
     });
     const buffer = await buildEwayBillPdf(eway, invoice, settings);
     const filename = `eway-${String(eway.eway_number).replace(/[^\w.-]/g, '_')}.pdf`;
     return { buffer, filename, eway };
   }
 
-  /** Pull the business header fields from the tenant settings KV table. */
-  private async loadSettings(qr: QueryRunner, schema: string): Promise<ErpPdfSettings> {
+  /**
+   * Pull the business header fields from the tenant settings KV table and resolve the
+   * document template for this doc type (branding + layout the PDF builders apply).
+   */
+  private async loadSettings(qr: QueryRunner, schema: string, docType: DocType): Promise<ErpPdfSettings> {
     const rows = await qr.query(
       `SELECT key, value FROM "${schema}".settings
-       WHERE key IN ('business_name','invoice_legal_name','invoice_address','invoice_gstin','erp_currency','currency')`,
+       WHERE key IN ('business_name','invoice_legal_name','invoice_address','invoice_gstin',
+                     'erp_company_email','erp_company_phone','erp_company_website','erp_currency','currency')`,
     );
     const m: Record<string, any> = {};
     for (const r of rows) m[r.key] = r.value;
@@ -142,7 +172,28 @@ export class ErpDocumentService {
       businessName: m.invoice_legal_name || m.business_name || 'Your Business',
       address: m.invoice_address || undefined,
       gstin: m.invoice_gstin || undefined,
+      email: m.erp_company_email || undefined,
+      phone: m.erp_company_phone || undefined,
+      website: m.erp_company_website || undefined,
       currency: m.erp_currency || m.currency || 'INR',
+      template: await this.resolveTemplate(qr, schema, docType),
     };
+  }
+
+  /** Active template config for a doc type (assigned → default → built-in Classic). */
+  private async resolveTemplate(qr: QueryRunner, schema: string, docType: DocType) {
+    try {
+      const rows = await qr.query(
+        `SELECT config FROM "${schema}".document_templates
+          WHERE deleted_at IS NULL AND ($1 = ANY(applies_to) OR is_default)
+          ORDER BY ($1 = ANY(applies_to)) DESC, is_default DESC, updated_at DESC
+          LIMIT 1`,
+        [docType],
+      );
+      return rows.length ? normalizeTemplateConfig(rows[0].config) : DEFAULT_TEMPLATE_CONFIG;
+    } catch {
+      // Table not present yet (pre-migration) — fall back to the built-in default.
+      return DEFAULT_TEMPLATE_CONFIG;
+    }
   }
 }

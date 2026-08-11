@@ -1,8 +1,10 @@
 import PDFDocument from 'pdfkit';
 import { ErpPdfSettings } from './erp-invoice-pdf';
+import { DEFAULT_TEMPLATE_CONFIG } from '../templates/document-template.types';
+import { fonts, drawHeader, drawTitle, tableHeaderFill, drawBlocks } from '../templates/pdf-template';
 
 export interface ErpDocPdfData {
-  docTitle: string;             // 'OFFER' | 'PURCHASE ORDER' | 'PAYMENT RECEIPT'
+  docTitle: string;             // 'OFFER' | 'PURCHASE ORDER' | 'PAYMENT RECEIPT' | 'QUOTATION' | …
   number: string;
   date?: string | Date;
   party?: { label: string; name?: string; phone?: string };
@@ -19,13 +21,15 @@ export interface ErpDocPdfData {
 }
 
 /**
- * Generic ERP document PDF (offers, purchase orders, receipts) — same look as the
- * invoice renderer but field-agnostic, so any line-item document can produce a PDF
- * without bespoke layout code. pdfkit, in-memory, returns a Buffer.
+ * Generic ERP document PDF (offers, purchase orders, receipts, quotations, notes) — same
+ * look as the invoice renderer but field-agnostic, and driven by the tenant's document
+ * template (logo, colours, font, item columns, text blocks). pdfkit, returns a Buffer.
  */
 export function buildErpDocPdf(d: ErpDocPdfData, s: ErpPdfSettings): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
+      const cfg = s.template || DEFAULT_TEMPLATE_CONFIG;
+      const f = fonts(cfg);
       const doc = new PDFDocument({ size: 'A4', margin: 40 });
       const chunks: Buffer[] = [];
       doc.on('data', (c: Buffer) => chunks.push(c));
@@ -37,73 +41,68 @@ export function buildErpDocPdf(d: ErpDocPdfData, s: ErpPdfSettings): Promise<Buf
       const items: any[] = Array.isArray(d.items) ? d.items : [];
       const left = 40, right = 555;
 
-      doc.fontSize(16).fillColor('#111').text(s.businessName || 'Your Business', left, 40);
-      doc.fontSize(9).fillColor('#555');
-      if (s.address) doc.text(s.address, { width: 300 });
-      if (s.gstin) doc.text(`GSTIN: ${s.gstin}`);
+      const headerBottom = drawHeader(doc, cfg, s, left, right);
+      drawTitle(doc, cfg, d.docTitle, d.statusLabel ? d.statusLabel.toUpperCase() : null, right);
 
-      doc.fontSize(22).fillColor('#111').text(d.docTitle, 320, 40, { align: 'right', width: right - 320 });
-      if (d.statusLabel) doc.fontSize(11).fillColor(d.statusColor || '#555').text(d.statusLabel.toUpperCase(), 320, 68, { align: 'right', width: right - 320 });
-
-      let y = Math.max(doc.y, 110);
-      doc.strokeColor('#ddd').moveTo(left, y).lineTo(right, y).stroke();
+      let y = Math.max(headerBottom, 108) + 6;
+      doc.strokeColor(cfg.accentColor).lineWidth(1).moveTo(left, y).lineTo(right, y).stroke();
       y += 12;
-      doc.fontSize(9).fillColor('#333');
+      doc.font(f.normal).fontSize(9).fillColor('#333');
       doc.text(`No: ${d.number}`, left, y);
       doc.text(`Date: ${new Date(d.date || Date.now()).toLocaleDateString('en-IN')}`, left, y + 14);
       if (d.party) {
-        doc.fillColor('#111').text(d.party.label, 320, y);
-        doc.fillColor('#333');
+        doc.font(f.bold).fillColor(cfg.textColor).text(d.party.label, 320, y);
+        doc.font(f.normal).fillColor('#333');
         if (d.party.name) doc.text(d.party.name, 320, y + 14);
         if (d.party.phone) doc.text(d.party.phone, 320, y + 28);
       }
       y += 56;
 
-      const cols = [
-        { x: left, w: 270, align: 'left' as const },
-        { x: 320, w: 50, align: 'right' as const },
-        { x: 375, w: 85, align: 'right' as const },
-        { x: 465, w: 90, align: 'right' as const },
-      ];
-      doc.rect(left, y - 3, right - left, 18).fill('#f3f4f6');
-      doc.fillColor('#111').fontSize(9);
-      ['Item', 'Qty', 'Rate', 'Amount'].forEach((t, i) => doc.text(t, cols[i].x, y, { width: cols[i].w, align: cols[i].align }));
+      // Column set honours the template's HSN/qty/rate/amount toggles (Item always shown).
+      const c = cfg.columns;
+      const spec: Array<{ t: string; w: number; align: 'left' | 'right'; get: (it: any) => string }> = [];
+      spec.push({ t: 'Item', w: 0, align: 'left', get: (it) => String(it.description || '') });
+      if (c.hsn) spec.push({ t: 'HSN', w: 52, align: 'left', get: (it) => String(it.hsn || it.hsnCode || '') });
+      if (c.qty) spec.push({ t: 'Qty', w: 45, align: 'right', get: (it) => String(Number(it.quantity || 0)) });
+      if (c.rate) spec.push({ t: 'Rate', w: 82, align: 'right', get: (it) => money(it.unitPrice ?? it.unit_price ?? 0) });
+      if (c.amount) spec.push({ t: 'Amount', w: 88, align: 'right', get: (it) => money(it.lineTotal ?? it.line_total ?? Number(it.quantity || 0) * Number(it.unitPrice ?? it.unit_price ?? 0)) });
+      const fixed = spec.reduce((sum, sp) => sum + sp.w, 0);
+      let cx = left;
+      const cols = spec.map((sp) => { const w = sp.t === 'Item' ? Math.max(150, right - left - fixed) : sp.w; const col = { ...sp, x: cx, w }; cx += w; return col; });
+
+      tableHeaderFill(doc, cfg, left, right - left, y);
+      doc.font(f.bold).fillColor('#ffffff').fontSize(9);
+      cols.forEach((col) => doc.text(col.t, col.x, y, { width: col.w, align: col.align }));
       y += 18;
-      doc.fillColor('#333');
+      doc.font(f.normal).fillColor('#333');
       for (const it of items) {
-        const qty = Number(it.quantity || 0);
-        const rate = Number(it.unitPrice ?? it.unit_price ?? 0);
-        const amt = Number(it.lineTotal ?? it.line_total ?? qty * rate);
-        doc.text(String(it.description || ''), cols[0].x, y, { width: cols[0].w });
-        doc.text(String(qty), cols[1].x, y, { width: cols[1].w, align: 'right' });
-        doc.text(money(rate), cols[2].x, y, { width: cols[2].w, align: 'right' });
-        doc.text(money(amt), cols[3].x, y, { width: cols[3].w, align: 'right' });
+        cols.forEach((col) => doc.text(col.get(it), col.x, y, { width: col.w, align: col.align }));
         y += 18;
-        if (y > 720) { doc.addPage(); y = 60; }
+        if (y > 700) { doc.addPage(); y = 60; }
       }
-      doc.strokeColor('#ddd').moveTo(left, y).lineTo(right, y).stroke();
+      doc.strokeColor('#ddd').lineWidth(0.5).moveTo(left, y).lineTo(right, y).stroke();
       y += 10;
 
       const labelX = 360, valX = 465, valW = 90;
       const row = (label: string, val: string, bold = false, color = '#333') => {
-        doc.fontSize(bold ? 11 : 9).fillColor(color);
+        doc.font(bold ? f.bold : f.normal).fontSize(bold ? 11 : 9).fillColor(color);
         doc.text(label, labelX, y, { width: 100, align: 'right' });
         doc.text(val, valX, y, { width: valW, align: 'right' });
         y += bold ? 18 : 15;
       };
       if (d.subtotal !== undefined) row('Subtotal', money(d.subtotal));
-      if (Number(d.discount) > 0) row('Discount', `- ${money(d.discount)}`);
-      if (Number(d.totalTax) > 0) row('Tax', money(d.totalTax));
-      row('Total', money(d.total), true, '#111');
+      if (cfg.totals.showDiscount && Number(d.discount) > 0) row('Discount', `- ${money(d.discount)}`);
+      if (cfg.totals.showTaxBreakup && Number(d.totalTax) > 0) row('Tax', money(d.totalTax));
+      row('Total', money(d.total), true, cfg.accentColor);
       for (const er of d.extraRows || []) row(er.label, er.value);
 
       if (d.note) {
         y += 14;
-        doc.fontSize(9).fillColor('#555').text('Note:', left, y);
-        doc.fillColor('#333').text(String(d.note), left, y + 12, { width: 300 });
+        doc.font(f.bold).fontSize(8.5).fillColor(cfg.accentColor).text('Note', left, y);
+        doc.font(f.normal).fillColor('#333').text(String(d.note), left, doc.y + 1, { width: 320 });
+        y = doc.y;
       }
-      doc.moveDown(2);
-      doc.fontSize(8).fillColor('#999').text('Generated via WhatsApp Commerce ERP', left, doc.y, { align: 'center', width: right - left });
+      drawBlocks(doc, cfg, left, right, y);
       doc.end();
     } catch (err) {
       reject(err as Error);

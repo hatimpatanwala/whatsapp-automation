@@ -10,6 +10,7 @@ import { ErpFeatureGuard } from '../../common/guards/erp-feature.guard';
 import { PaymentModeController } from './invoicing/payment-mode.controller';
 import { PaymentModeService } from './invoicing/payment-mode.service';
 import { ErpInvoiceController } from './invoicing/erp-invoice.controller';
+import { ErpQuotePdfController } from './invoicing/erp-quote-pdf.controller';
 import { ErpInvoiceService } from './invoicing/erp-invoice.service';
 import { ErpDocumentService } from './invoicing/erp-document.service';
 import { LeadController, LeadService } from './crm/lead';
@@ -25,6 +26,7 @@ import { TaxRateController, TaxRatePublicController, TaxRateService } from './en
 import { WarehouseController, WarehouseService } from './enterprise/warehouse';
 import { StockController, StockService } from './enterprise/stock';
 import { ErpSettingsController, ErpSettingsService } from './enterprise/erp-settings';
+import { DocumentTemplateController, DocumentTemplateService } from './templates/document-template';
 import { CompanyController, CompanyService } from './enterprise2/company';
 import { PersonController, PersonService } from './enterprise2/person';
 import { BranchController, BranchService } from './enterprise2/branch';
@@ -52,6 +54,7 @@ import { ErpExportService } from './export/erp-export.service';
     // invoicing
     PaymentModeController,
     ErpInvoiceController,
+    ErpQuotePdfController,
     // crm
     LeadController,
     ClientController,
@@ -70,6 +73,7 @@ import { ErpExportService } from './export/erp-export.service';
     WarehouseController,
     StockController,
     ErpSettingsController,
+    DocumentTemplateController,
     // enterprise CRM + admin
     CompanyController,
     PersonController,
@@ -111,6 +115,7 @@ import { ErpExportService } from './export/erp-export.service';
     WarehouseService,
     StockService,
     ErpSettingsService,
+    DocumentTemplateService,
     CompanyService,
     PersonService,
     BranchService,

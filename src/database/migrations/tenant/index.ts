@@ -3623,6 +3623,46 @@ const migration097SyncAccounting: TenantMigration = {
   },
 };
 
+// User-customizable document templates (invoice/quote/PO/receipt/notes branding + layout).
+// One table, synced to the desktop, seeded with a single deterministic "Classic" default
+// (fixed id so cloud + desktop don't each create a different default that then collides).
+const migration099DocumentTemplates: TenantMigration = {
+  name: '099_document_templates',
+  async up(qr, schema) {
+    await qr.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".document_templates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        config JSONB NOT NULL DEFAULT '{}'::jsonb,
+        applies_to TEXT[] NOT NULL DEFAULT '{}',
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    // Sync wiring (same shape as migration 097).
+    await qr.query(`ALTER TABLE "${schema}".document_templates ADD COLUMN IF NOT EXISTS sync_version BIGINT NOT NULL DEFAULT 0`);
+    await qr.query(`ALTER TABLE "${schema}".document_templates ADD COLUMN IF NOT EXISTS origin_node UUID`);
+    await qr.query(`ALTER TABLE "${schema}".document_templates ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+    await qr.query(`CREATE INDEX IF NOT EXISTS idx_document_templates_sync_version ON "${schema}".document_templates(sync_version)`);
+    await qr.query(`DROP TRIGGER IF EXISTS trg_document_templates_sync_stamp ON "${schema}".document_templates`);
+    await qr.query(`CREATE TRIGGER trg_document_templates_sync_stamp BEFORE INSERT OR UPDATE ON "${schema}".document_templates FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_stamp()`);
+    await qr.query(`DROP TRIGGER IF EXISTS trg_document_templates_sync_enqueue ON "${schema}".document_templates`);
+    await qr.query(`CREATE TRIGGER trg_document_templates_sync_enqueue AFTER INSERT OR UPDATE OR DELETE ON "${schema}".document_templates FOR EACH ROW EXECUTE FUNCTION "${schema}".sync_enqueue()`);
+    // Seed the default (empty config ⇒ resolver fills built-in Classic defaults). Fixed id
+    // + ON CONFLICT keeps it single across nodes after sync.
+    await qr.query(
+      `INSERT INTO "${schema}".document_templates (id, name, config, applies_to, is_default)
+       VALUES ('00000000-0000-0000-0000-0000000000d1', 'Classic', '{}'::jsonb,
+               ARRAY['invoice','quote','purchase_order','receipt','credit_note','debit_note','offer'], true)
+       ON CONFLICT (id) DO NOTHING`,
+    );
+  },
+  async down(qr, schema) {
+    await qr.query(`DROP TABLE IF EXISTS "${schema}".document_templates`);
+  },
+};
+
 // Merge the Contra voucher type into Journal (they were handled identically; Journal is
 // the standard, more-used term). Existing 'contra' vouchers become 'journal' so there is
 // one manual double-entry voucher type going forward. Runs on cloud + desktop; the sync
@@ -3741,4 +3781,5 @@ export const tenantMigrations: TenantMigration[] = [
   migration096InventoryMovements,
   migration097SyncAccounting,
   migration098MergeContraJournal,
+  migration099DocumentTemplates,
 ];
