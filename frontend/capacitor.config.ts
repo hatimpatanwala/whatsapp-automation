@@ -23,7 +23,7 @@ const liveUrl = process.env.WA_LIVE_URL || 'https://staging-whatsappdemo.duckdns
 
 const config: CapacitorConfig = {
   appId: erp ? 'com.wacommerce.erp' : 'com.wacommerce.app',
-  appName: erp ? 'WA Commerce ERP' : 'WA Commerce',
+  appName: erp ? 'NexusFlow ERP' : 'NexusFlow',
   webDir: 'dist/wa-commerce/browser',
   server: {
     androidScheme: 'https',
