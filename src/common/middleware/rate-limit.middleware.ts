@@ -20,8 +20,17 @@ export class RateLimitMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
-      // Per-IP throttle on sensitive auth/OTP endpoints.
       const reqPath = req.originalUrl || req.url || req.path || '';
+
+      // Delta-sync is token-authenticated and legitimately high-volume (many batches).
+      // It has no tenantContext, so it would share the 'anonymous' 100/min bucket and
+      // 429 mid-sync. Skip it here — NestJS .exclude() is unreliable under the global
+      // 'api' prefix, so we bypass explicitly.
+      if (/\/sync\//.test(reqPath) || reqPath.endsWith('/sync')) {
+        return next();
+      }
+
+      // Per-IP throttle on sensitive auth/OTP endpoints.
       if (this.authPathRe.test(reqPath)) {
         const ip = (req.ip || req.socket.remoteAddress || 'unknown').toString();
         const akey = `ratelimit:auth:${ip}:${Math.floor(Date.now() / this.authWindowMs)}`;
