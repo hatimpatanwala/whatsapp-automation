@@ -4,6 +4,8 @@ import type EmbeddedPostgres from 'embedded-postgres' with { 'resolution-mode': 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
+import * as crypto from 'crypto';
 import { pgDataDir, parentRoot } from './paths';
 import { PG_PORT, PG_USER, PG_PASSWORD, DB_NAME, DB_MODE, DOCKER_PG_PORT } from './config';
 
@@ -63,19 +65,78 @@ function pgError(stage: string, err: unknown): Error {
  * which ESM-exports absolute paths to its binaries. The specifier is a variable so
  * TypeScript doesn't demand type declarations for the platform package.
  */
+function platformBinPkg(): string {
+  return process.platform === 'win32'
+    ? '@embedded-postgres/windows-x64'
+    : process.platform === 'darwin'
+      ? (process.arch === 'arm64' ? '@embedded-postgres/darwin-arm64' : '@embedded-postgres/darwin-x64')
+      : (process.arch === 'arm64' ? '@embedded-postgres/linux-arm64' : '@embedded-postgres/linux-x64');
+}
+
+// Binaries cannot be spawned from inside the asar archive — use the unpacked copy.
+function unpackedBin(p: string): string {
+  return String(p).replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+}
+
 let pgCtlExe: string | null = null;
 async function getPgCtl(): Promise<string> {
   if (pgCtlExe) return pgCtlExe;
-  const pkg =
-    process.platform === 'win32'
-      ? '@embedded-postgres/windows-x64'
-      : process.platform === 'darwin'
-        ? (process.arch === 'arm64' ? '@embedded-postgres/darwin-arm64' : '@embedded-postgres/darwin-x64')
-        : (process.arch === 'arm64' ? '@embedded-postgres/linux-arm64' : '@embedded-postgres/linux-x64');
-  const mod: { pg_ctl: string } = await import(pkg as string);
-  // Binaries cannot be spawned from inside the asar archive — use the unpacked copy.
-  pgCtlExe = String(mod.pg_ctl).replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+  const mod: { pg_ctl: string } = await import(platformBinPkg() as string);
+  pgCtlExe = unpackedBin(mod.pg_ctl);
   return pgCtlExe;
+}
+
+let initdbExe: string | null = null;
+async function getInitdb(): Promise<string> {
+  if (initdbExe) return initdbExe;
+  const mod: { initdb: string } = await import(platformBinPkg() as string);
+  initdbExe = unpackedBin(mod.initdb);
+  return initdbExe;
+}
+
+/**
+ * Initialise a fresh cluster with initdb — run via the UNPACKED binary. We deliberately
+ * do NOT use embedded-postgres's own `initialise()`: it resolves initdb to the packed
+ * app.asar path, which the OS can't execute ("spawn …app.asar…initdb.exe ENOENT" on
+ * first run). Args mirror the library's (auth=password + a temp pwfile); the server
+ * itself is started separately via pg_ctl.
+ */
+async function runInitdb(dataDir: string): Promise<void> {
+  const exe = await getInitdb();
+  const pwfile = path.join(os.tmpdir(), `pg-pw-${crypto.randomBytes(6).toString('hex')}`);
+  fs.writeFileSync(pwfile, PG_PASSWORD + '\n');
+  try {
+    const code = await new Promise<number>((resolve) => {
+      const child = spawn(
+        exe,
+        [
+          `--pgdata=${dataDir}`,
+          '--auth=password',
+          `--username=${PG_USER}`,
+          `--pwfile=${pwfile}`,
+          // Force UTF-8 + C locale so ₹/Unicode store correctly regardless of the
+          // Windows system codepage.
+          '--encoding=UTF8',
+          '--locale=C',
+        ],
+        { windowsHide: true },
+      );
+      child.stdout?.on('data', captureLog);
+      child.stderr?.on('data', captureLog);
+      child.on('error', (e) => {
+        captureLog(String(e));
+        resolve(-1);
+      });
+      child.on('exit', (c) => resolve(c ?? -1));
+    });
+    if (code !== 0) throw pgError('Database initialisation (initdb)', undefined);
+  } finally {
+    try {
+      fs.rmSync(pwfile, { force: true });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /** Run pg_ctl with the given args, capturing output; resolves with the exit code. */
@@ -123,26 +184,11 @@ export async function startLocalDb(): Promise<void> {
   }
 
   if (!initialised) {
-    // initdb (via the library) tolerates elevation; only the server start needs pg_ctl.
-    const { default: EmbeddedPostgres } = await import('embedded-postgres');
-    const pg: EmbeddedPostgres = new EmbeddedPostgres({
-      databaseDir: dataDir,
-      user: PG_USER,
-      password: PG_PASSWORD,
-      port: PG_PORT,
-      persistent: true,
-      // Windows initdb defaults to the system codepage (e.g. WIN1252 on English-India),
-      // which cannot store ₹ and other Unicode — force UTF-8 like the cloud DB.
-      initdbFlags: ['--encoding=UTF8', '--locale=C'],
-      onLog: captureLog,
-      onError: captureLog,
-    });
+    // Create the cluster with initdb from the UNPACKED binary (see runInitdb). The server
+    // is started below via pg_ctl. We no longer use the embedded-postgres library at
+    // runtime, so its packed-asar binary path can't break startup.
     fs.mkdirSync(dataDir, { recursive: true });
-    try {
-      await pg.initialise();
-    } catch (err) {
-      throw pgError('Database initialisation (initdb)', err);
-    }
+    await runInitdb(dataDir);
   }
 
   // Reuse a server left running by a previous unclean app exit; else start one.
