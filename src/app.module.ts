@@ -125,7 +125,10 @@ export class AppModule implements NestModule {
       .forRoutes('*');
     consumer
       .apply(RateLimitMiddleware)
-      .exclude('health', 'api/webhook/whatsapp')
+      // Delta-sync is token-authenticated and legitimately high-volume (it drains data
+      // in many batches). It authenticates by sync token, so it has no tenantContext and
+      // would fall into the shared 'anonymous' 100/min bucket → 429. Exclude it.
+      .exclude('health', 'api/webhook/whatsapp', 'api/sync', 'api/sync/(.*)')
       .forRoutes('*');
   }
 }
