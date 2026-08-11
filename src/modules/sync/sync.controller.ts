@@ -88,6 +88,26 @@ export class SyncController {
     const tenantId = req.tenantContext?.id;
     if (!tenantId) throw new UnauthorizedException('login required to mint a sync token');
     const token = await this.sync.issueToken(tenantId, body?.label);
-    return { success: true, data: { token } };
+    // Return the tenant id so the desktop can detect a company switch and wipe the
+    // local mirror before syncing a different company (prevents cross-company leaks).
+    return { success: true, data: { token, tenantId } };
+  }
+
+  /**
+   * Wipe the local desktop mirror. DESKTOP-ONLY: guarded by DESKTOP_MODE + the shared
+   * local sync key so it can NEVER be invoked against the cloud (a token or session is
+   * explicitly not accepted here). Used when a different company's user signs in on a
+   * shared install, so no other company's data lingers in the local database.
+   */
+  @Public()
+  @Post('reset')
+  async reset(@Req() req: Request) {
+    const key = req.headers['x-sync-key'];
+    const localKey = process.env.SYNC_LOCAL_KEY;
+    if (process.env.DESKTOP_MODE !== '1' || !localKey || key !== localKey) {
+      throw new UnauthorizedException('reset is only available on the local desktop app');
+    }
+    const schema = await this.sync.singleTenantSchema();
+    return { success: true, data: await this.sync.resetLocalData(schema) };
   }
 }

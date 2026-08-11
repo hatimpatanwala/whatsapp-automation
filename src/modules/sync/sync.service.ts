@@ -249,6 +249,29 @@ export class SyncService {
     return { applied, skipped, count: applied.length };
   }
 
+  /**
+   * Wipe every synced table (+ the outbox) in the local mirror. Runs with triggers and
+   * FK checks disabled (session_replication_role = replica) so it's a fast, order-free
+   * clean slate — used when a different company's user signs in on a shared desktop so
+   * their data replaces, never merges with, the previous company's.
+   */
+  async resetLocalData(schema: string): Promise<{ cleared: string[] }> {
+    const tables = await this.existingTables(schema);
+    const cleared: string[] = [];
+    await this.cm.executeInTransaction(schema, async (qr) => {
+      await qr.query(`SET LOCAL session_replication_role = 'replica'`);
+      for (const t of tables) {
+        await qr.query(`DELETE FROM "${schema}".${t}`);
+        cleared.push(t);
+      }
+      // Drop any pending local changes + peer cursors so nothing from the old company
+      // is pushed or re-applied after the switch.
+      await qr.query(`TRUNCATE "${schema}".sync_outbox`).catch(() => undefined);
+      await qr.query(`DELETE FROM "${schema}".sync_state WHERE peer <> '_self'`).catch(() => undefined);
+    });
+    return { cleared };
+  }
+
   /** Lightweight status for debugging / the desktop sync indicator. */
   async status(schema: string): Promise<Record<string, any>> {
     return this.cm.executeInTenantContext(schema, async (qr) => {

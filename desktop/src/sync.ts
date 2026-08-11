@@ -44,6 +44,9 @@ let running = false;
 let cloudCookie = '';
 let cloudToken = '';
 let nodeId: string | undefined;
+// Set to the cloud tenant id whenever we freshly mint a token, so tick() can compare it
+// to the tenant the local mirror is bound to and wipe on a company switch.
+let mintedTenantId: string | null = null;
 
 // The cloud account the relay authenticates as. Defaults to the config value, but
 // is overridden by the ACTUAL user who logs into the app (setCloudCreds via IPC),
@@ -130,6 +133,27 @@ function cursorsFile(): string {
 function tokenFile(): string {
   return path.join(stateDir(), 'sync-token.txt');
 }
+function tenantFile(): string {
+  return path.join(stateDir(), 'sync-tenant.txt');
+}
+
+// The cloud tenant (company) the local mirror currently holds data for. Used to detect a
+// company switch on login so we wipe the mirror before syncing a different company.
+function loadBoundTenant(): string {
+  try {
+    return fs.readFileSync(tenantFile(), 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+function saveBoundTenant(id: string): void {
+  try {
+    fs.mkdirSync(stateDir(), { recursive: true });
+    fs.writeFileSync(tenantFile(), id);
+  } catch (e) {
+    console.error('[sync] tenant marker save failed', e);
+  }
+}
 
 function loadToken(): void {
   try {
@@ -196,7 +220,10 @@ async function ensureCloudAuth(): Promise<boolean> {
       body: JSON.stringify({ label: 'desktop' }),
     });
     if (mint.ok) {
-      cloudToken = ((await mint.json()) as any)?.data?.token || '';
+      const data = ((await mint.json()) as any)?.data || {};
+      cloudToken = data.token || '';
+      // Remember which company this token is for so tick() can wipe the mirror on a switch.
+      mintedTenantId = data.tenantId || null;
       if (cloudToken) saveToken(cloudToken);
     }
     // Even without a token we can proceed this session on the cookie.
@@ -310,6 +337,9 @@ async function tick(): Promise<void> {
       return; // offline / auth failed → try next tick
     }
     state.online = true;
+    // Company-switch guard: wipe the local mirror if a different tenant just authenticated,
+    // so no other company's data can linger locally. Must run before we load cursors.
+    await enforceTenantIsolation();
     if (!nodeId) {
       const res = await fetch(`${LOCAL_API}/sync/status`, { headers: authHeaders(true) });
       if (res.ok) nodeId = ((await res.json()) as any)?.data?.nodeId;
@@ -358,6 +388,35 @@ async function tick(): Promise<void> {
     state.syncing = false;
     emit();
   }
+}
+
+function resetCursors(): void {
+  saveCursors({ lastPushOutboxId: 0, lastPullVersion: 0 });
+}
+
+/** Ask the local backend to wipe every synced table (company-switch clean slate). */
+async function resetLocalMirror(): Promise<void> {
+  const res = await fetch(`${LOCAL_API}/sync/reset`, { method: 'POST', headers: authHeaders(true) });
+  if (!res.ok) throw new Error(`local reset → ${res.status}`);
+}
+
+/**
+ * Guarantee the local mirror only ever holds ONE company's data. If we just minted a
+ * token for a different tenant than the mirror is bound to, wipe the local data and reset
+ * cursors BEFORE syncing, so a different company's login never merges with (or exposes)
+ * the previous company's data on a shared install. First login just binds; same company
+ * is a no-op. Offline logins never reach here (no fresh mint), so nothing is wiped blindly.
+ */
+async function enforceTenantIsolation(): Promise<void> {
+  if (!mintedTenantId) return; // only known right after a fresh mint
+  const bound = loadBoundTenant();
+  if (bound && bound !== mintedTenantId) {
+    console.warn(`[sync] company changed (${bound} → ${mintedTenantId}); wiping local mirror`);
+    await resetLocalMirror();
+    resetCursors();
+  }
+  saveBoundTenant(mintedTenantId);
+  mintedTenantId = null; // consumed
 }
 
 /** Turn a raw fetch/HTTP error into something a user can act on. */
