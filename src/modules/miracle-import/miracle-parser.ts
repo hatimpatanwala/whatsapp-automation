@@ -349,6 +349,26 @@ export class MiracleParser {
     return out;
   }
 
+  /**
+   * itemCode → name across ALL years' item masters (RKACCM21). The current-year master
+   * (items()) only has active items, but historical invoices reference discontinued
+   * items from earlier years — this recovers their names so line items never fall back
+   * to the raw code.
+   */
+  itemNamesAllYears(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const y of this.years()) {
+      const f = this.p(y, 'RKACCM21.DBF');
+      if (!existsSync(f)) continue;
+      for (const r of readDbfSafe(f).records) {
+        const code = s(r.FIELD01);
+        const name = s(r.FIELD02);
+        if (code && name) map.set(code, name);
+      }
+    }
+    return map;
+  }
+
   /** itemCode → modal GST rate, from the latest year's line items + T52 tax rows. */
   private deriveItemGst(y: string): Map<string, number> {
     const dir = this.p(y);

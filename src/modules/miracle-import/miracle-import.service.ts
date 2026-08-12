@@ -11,7 +11,7 @@ import { Tenant } from '../../database/entities/public/tenant.entity';
 import { TenantConnectionManager } from '../../database/tenant-connection.manager';
 import { backfillProductTaxonomy } from '../../database/taxonomy.util';
 import { TenantProvisioningService } from '../tenant/tenant-provisioning.service';
-import { MiracleParser, MiracleVoucher, MiracleCompany } from './miracle-parser';
+import { MiracleParser, MiracleVoucher, MiracleCompany, MiracleParty } from './miracle-parser';
 
 export interface ImportOptions {
   email: string;
@@ -515,6 +515,12 @@ export class MiracleImportService {
     const names = new Map<string, string>();
     for (const p of parser.parties()) names.set(p.code, p.name);
     for (const l of parser.ledgers()) names.set(l.code, l.name);
+    // Item names across ALL years so invoice line items resolve to the product name
+    // instead of falling back to the raw item code (historical/discontinued items).
+    for (const [code, name] of parser.itemNamesAllYears()) names.set(code, name);
+    // Party details (address/GSTIN) for invoice Bill To / Ship To.
+    const partyDetail = new Map<string, MiracleParty>();
+    for (const p of parser.parties()) partyDetail.set(p.code, p);
 
     const years = parser.years();
     for (const y of years) {
@@ -522,7 +528,7 @@ export class MiracleImportService {
       for (const v of vouchers) {
         try {
           if (v.kind === 'sale' || v.kind === 'sales_return') {
-            await this.importSale(qr, schema, v, y, map, names, led, company, postAccounting);
+            await this.importSale(qr, schema, v, y, map, names, led, company, postAccounting, partyDetail);
             c(v.kind === 'sale' ? 'invoices' : 'sales_returns');
           } else if (v.kind === 'purchase') {
             await this.importPurchase(qr, schema, v, y, map, names, led, postAccounting);
@@ -671,12 +677,26 @@ export class MiracleImportService {
   private async importSale(
     qr: any, schema: string, v: MiracleVoucher, year: string, map: Map<string, string>,
     names: Map<string, string>, led: Record<string, string>, company: { stateCode: string }, post: boolean,
+    partyDetail?: Map<string, MiracleParty>,
   ) {
     if (map.get(`invoice:${v.miracleId}`)) return; // already imported
     const number = this.invoiceNumber(v, year);
     const customerId = v.isCash ? null : map.get(`customer:${v.partyCode}`) || null;
     const customerName = names.get(v.partyCode) || (v.isCash ? 'Cash Sale' : v.partyCode);
     const interstate = v.igst > 0;
+    // Bill To / Ship To from the party master (address + GSTIN), for non-cash invoices.
+    const party = v.isCash ? undefined : partyDetail?.get(v.partyCode);
+    const billTo = party
+      ? {
+          name: party.name,
+          gstin: party.gstin || undefined,
+          phone: party.phone || undefined,
+          state: party.state || undefined,
+          stateCode: party.stateCode || undefined,
+          address: party.address || undefined,
+          pincode: party.pincode || undefined,
+        }
+      : null;
     const items = v.lines.map((l) => ({
       productId: map.get(`product:${l.itemCode}`) || null,
       description: names.get(l.itemCode) || l.itemCode,
@@ -691,14 +711,15 @@ export class MiracleImportService {
         `INSERT INTO "${schema}".invoices
            (invoice_number, doc_type, year, customer_id, customer_name, is_interstate, subtotal, discount,
             taxable_value, cgst, sgst, igst, total_tax, round_off, total, items, status, issued_at, is_cash,
-            amount_paid, balance_due, payment_status, notes, base_total, exchange_rate, currency)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,'issued',$16,$17,0,$14,'unpaid',$18,$14,1,'INR')
+            amount_paid, balance_due, payment_status, notes, base_total, exchange_rate, currency, bill_to, ship_to)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,'issued',$16,$17,0,$14,'unpaid',$18,$14,1,'INR',$19::jsonb,$19::jsonb)
          ON CONFLICT (invoice_number) DO NOTHING RETURNING id`,
         [
           num, v.kind === 'sales_return' ? 'credit_note' : 'tax_invoice', fyOf(year), customerId, customerName.slice(0, 250),
           interstate, v.taxable, v.taxable, v.cgst, v.sgst, v.igst, v.tax, v.roundOff, v.total,
           JSON.stringify(items), v.date || null, v.isCash,
           v.kind === 'sales_return' ? 'Sales Return (Miracle)' : null,
+          billTo ? JSON.stringify(billTo) : null,
         ],
       );
     // Miracle re-uses bill numbers across cash/counter sales, so on a clash keep
